@@ -186,13 +186,13 @@ services:
             retries: 3
             start_period: 30s
 
-    typesense:
-        image: typesense/typesense:30.2
-        ports:
-            - "8108:8108"
-        volumes:
-            - typesense_data:/data
-        command: --data-dir /data --api-key=kumbukum-dev-key
+    # typesense:
+    #     image: typesense/typesense:30.2
+    #     ports:
+    #         - "8108:8108"
+    #     volumes:
+    #         - typesense_data:/data
+    #     command: --data-dir /data --api-key=kumbukum-dev-key
 
     # ── Mailpit (dev mail catcher) ──────────────────────────────
     mailpit:
@@ -203,25 +203,25 @@ services:
         expose:
             - "1025"        # SMTP
 
-    caddy:
-        image: caddy:latest
-        cap_add:
-            - NET_ADMIN
-        ports:
-            - "80:80"
-            - "443:443"
-            - "443:443/udp"
-        volumes:
-            - ./docker/config/caddy/Caddyfile:/etc/caddy/Caddyfile
-            - caddy_data:/data
-            - caddy_config:/config
-            - /etc/hostname:/etc/hostname:ro
-        depends_on:
-            - app
-            - redis
-            - typesense
-        dns:
-            - 100.100.100.100
+    # caddy:
+    #     image: caddy:latest
+    #     cap_add:
+    #         - NET_ADMIN
+    #     ports:
+    #         - "80:80"
+    #         - "443:443"
+    #         - "443:443/udp"
+    #     volumes:
+    #         - ./docker/config/caddy/Caddyfile:/etc/caddy/Caddyfile
+    #         - caddy_data:/data
+    #         - caddy_config:/config
+    #         - /etc/hostname:/etc/hostname:ro
+    #     depends_on:
+    #         - app
+    #         - redis
+    #         - typesense
+    #     dns:
+    #         - 100.100.100.100
 
     screenshot:
         image: ghcr.io/kumbukum/screenshot:latest

@@ -7,8 +7,6 @@
 ## Knowledge Management
 This project uses Kumbukum as its knowledge store via MCP.
 
-For **Cursor** (global User Rules, `.cursor/rules`, MCP server naming such as `user-kumbukum`), see [docs/mcp/cursor-ide.md](docs/mcp/cursor-ide.md) in this repo — VitePress: **MCP → Cursor (IDE)**.
-
 ### Before Starting Any Task
 1. Make one specific retrieval call before work:
    - Default: `search_knowledge` with a task-focused query and `per_page: 3`
@@ -74,14 +72,24 @@ After saving a URL, use `create_link` to connect it to related notes or memories
 
 ## Implementation Conventions
 - Before adding new dependencies, verify they are compatible with Node 24 and consider whether an existing custom module already covers the need.
-- Do not write HTML directly into frontend JS files; use Pug templates in `views/ajax` instead.
-
-## Testing
-- Testing: compose.test.yml file
-- Within tests-app-1 the file ./test_app.sh tests runs the tests.
 
 ## IMPORTANT: Code Formatting
 - tab size: 4
 - Indent code
 - Never compress or “minify” code
 - Log lines or variables are always writen in a single line
+- PUG: Pug requires proper indendation with tabs and not spaces
+- PUG: Do NOT use pipe words (|) but rather use "span" text, e.g., span.ps-1 Settings
+- Do not write HTML directly into frontend JS files; use Pug templates in `views/ajax` instead.
+
+## Development
+- Use Docker compose only (Orbstack on macOS)
+- pnpm as package manager
+- To sign into the app you can use nitai@fastmail.com and the localhost:8025 (mailpit) to retrieve the magic link
+
+## Design
+- Forms: Right align: submit/save button, Left align: cancel/abort
+- Headers: Page header: h1, Page section: h2, Page subsection: h3, Title: h6
+- Form Fields: no placeholders, always use -sm variants for all form elements
+- By default use mb-5 between main elements, form elements mb-3, distance between button elements mx-3/ms-3/me-3
+- Always use cursor:pointer for clickable elements, if class doesn't have it already
