@@ -109,10 +109,10 @@ services:
                 condition: service_completed_successfully
             # mongo-init:
             #     condition: service_completed_successfully
-            redis:
-                condition: service_started
-            typesense:
-                condition: service_started
+            # redis:
+            #     condition: service_started
+            # typesense:
+            #     condition: service_started
 
     mcp:
         extends:
@@ -174,17 +174,17 @@ services:
     #         PERCONA_TELEMETRY_DISABLE: 1
     #         MONGO_HOST: mongo
 
-    redis:
-        image: redis:8
-        command: redis-server --appendonly yes --port 6379 --save ""
-        volumes:
-            - redis_data:/data
-        healthcheck:
-            test: ["CMD", "redis-cli", "ping"]
-            interval: 30s
-            timeout: 10s
-            retries: 3
-            start_period: 30s
+    # redis:
+    #     image: redis:8
+    #     command: redis-server --appendonly yes --port 6379 --save ""
+    #     volumes:
+    #         - redis_data:/data
+    #     healthcheck:
+    #         test: ["CMD", "redis-cli", "ping"]
+    #         interval: 30s
+    #         timeout: 10s
+    #         retries: 3
+    #         start_period: 30s
 
     # typesense:
     #     image: typesense/typesense:30.2
@@ -195,13 +195,13 @@ services:
     #     command: --data-dir /data --api-key=kumbukum-dev-key
 
     # ── Mailpit (dev mail catcher) ──────────────────────────────
-    mailpit:
-        image: axllent/mailpit:latest
-        restart: unless-stopped
-        ports:
-            - "8025:8025"   # Web UI
-        expose:
-            - "1025"        # SMTP
+    # mailpit:
+    #     image: axllent/mailpit:latest
+    #     restart: unless-stopped
+    #     ports:
+    #         - "8025:8025"   # Web UI
+    #     expose:
+    #         - "1025"        # SMTP
 
     # caddy:
     #     image: caddy:latest
@@ -223,16 +223,16 @@ services:
     #     dns:
     #         - 100.100.100.100
 
-    screenshot:
-        image: ghcr.io/kumbukum/screenshot:latest
-        restart: unless-stopped
-        init: true
-        ports:
-            - 3000
-        environment:
-            PORT: 3000
-        shm_size: '2g'
-        hostname: screenshot
+    # screenshot:
+    #     image: ghcr.io/kumbukum/screenshot:latest
+    #     restart: unless-stopped
+    #     init: true
+    #     ports:
+    #         - 3000
+    #     environment:
+    #         PORT: 3000
+    #     shm_size: '2g'
+    #     hostname: screenshot
 
 
 volumes:
