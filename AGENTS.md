@@ -93,3 +93,5 @@ After saving a URL, use `create_link` to connect it to related notes or memories
 - Form Fields: no placeholders, always use -sm variants for all form elements
 - By default use mb-5 between main elements, form elements mb-3, distance between button elements mx-3/ms-3/me-3
 - Always use cursor:pointer for clickable elements, if class doesn't have it already
+- Use sweetalert2 for notifications or questions.
+- Use Bootstrap modal for popups
