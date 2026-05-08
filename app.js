@@ -1,4 +1,3 @@
-import * as Sentry from '@sentry/node';
 import express from 'express';
 import session from 'express-session';
 import MongoStore from 'connect-mongo';
@@ -21,6 +20,7 @@ import { verifyScreenshotSignature, resolveScreenshotPath } from './modules/scre
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './swagger.js';
 import * as OtelRuntime from './modules/otel_runtime.js';
+import { loadSentry, setupExpressErrorHandler as setupSentryExpressErrorHandler } from './modules/sentry_runtime.js';
 import authRoutes from './routes/auth.js';
 import oauthRoutes from './routes/oauth.js';
 import apiRoutes from './routes/api.js';
@@ -33,6 +33,7 @@ import sentryTunnelRoutes from './routes/sentry_tunnel.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const SERVER_MODE = process.env.SERVER_MODE || 'app';
+await loadSentry();
 
 const app = express();
 
@@ -196,7 +197,7 @@ app.use('/', webRoutes);
 
 // Sentry error handler — after all controllers, before other error middleware
 OtelRuntime.setupExpressErrorHandler(app);
-Sentry.setupExpressErrorHandler(app);
+setupSentryExpressErrorHandler(app);
 
 } // end SERVER_MODE === 'app'
 
