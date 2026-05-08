@@ -3,7 +3,7 @@ x-env: &env
     KUMBUKUM_APP: web
     PORT: 3000
     MONGO_URI: ${DEV_KUMBUKUM_MONGODB_URI}
-    REDIS_URL: redis://redis:6379
+    REDIS_URL: ${DEV_REDIS_URL:-redis://redis:6379}
     TYPESENSE_HOST: ${DEV_TYPESENSE_HOST:-typesense}
     TYPESENSE_PORT: 8108
     TYPESENSE_API_KEY: ${DEV_TYPESENSE_KEY:-kumbukum-dev-key}
@@ -28,7 +28,7 @@ x-env: &env
     MCP_BASE_URL: http://localhost:3002
     WS_URL: ""
     API_BASE_URL: http://app:3000
-    SCREENSHOT_URL: http://screenshot:3000
+    SCREENSHOT_URL: ${DEV_SCREENSHOT_URL:-http://screenshot:3000}
     SCREENSHOT_SECRET: "${SCREENSHOT_SECRET:-change-me-screenshot-secret}" # openssl rand -hex 32
     SYSADMIN_EMAIL: "sysadmin@localhost"
     SYSADMIN_PASSWORD: "sysadminpassword"
@@ -38,8 +38,8 @@ x-env: &env
     OPENPANEL_API_URL: "${OPENPANEL_API_URL:-}"
     SENTRY_DSN_KUMBUKUM: "${SENTRY_DSN_KUMBUKUM:-}"
     SENTRY_DSN: "${SENTRY_DSN:-}"
-    ENABLE_SENTRY: "${ENABLE_SENTRY:-}"
-    SENTRY_ENABLED: "${SENTRY_ENABLED:-}"
+    ENABLE_SENTRY: "${ENABLE_SENTRY:-false}"
+    SENTRY_ENABLED: "${SENTRY_ENABLED:-false}"
     SENTRY_TUNNEL_PROJECT_IDS: "${SENTRY_TUNNEL_PROJECT_IDS:-}"
     ENABLE_OTEL: "${ENABLE_OTEL:-false}"
     OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
