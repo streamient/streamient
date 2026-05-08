@@ -5,7 +5,7 @@ import { User } from '../model/user.js';
 import { createTenant, initializeSessionTenant } from '../modules/tenancy.js';
 import { ensureCollections } from '../modules/typesense.js';
 import { generateToken } from '../middleware/auth.js';
-import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail } from '../services/email_service.js';
+import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail, sendTrialSignupNotificationEmail } from '../services/email_service.js';
 import { sendMagicLink, isMagicLinkValid, verifyMagicLink } from '../services/magic_link_service.js';
 import * as passkeyService from '../services/passkey_service.js';
 import * as teamService from '../services/team_service.js';
@@ -154,10 +154,17 @@ router.post('/verify', async (req, res) => {
 		user.tenant = tenant._id;
 		user.host_id = tenant.host_id;
 		user.is_active = true;
+		let createdHostedTrial = false;
 		if (is_hosted) {
 			Object.assign(user, buildHostedTrialFields());
+			createdHostedTrial = true;
 		}
 		await user.save();
+		if (createdHostedTrial) {
+			sendTrialSignupNotificationEmail(user.email).catch((e) =>
+				console.warn('Trial signup notification email failed:', e.message),
+			);
+		}
 
 		ensureCollections(tenant.host_id).catch((e) =>
 			console.warn('Typesense collection setup deferred:', e.message),

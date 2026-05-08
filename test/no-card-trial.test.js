@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import config from '../config.js';
 import { buildHostedTrialFields } from '../routes/auth.js';
 import { buildCheckoutSessionParams, buildSubscriptionUserUpdate, resolveCheckoutPriceId } from '../services/billing_service.js';
+import { formatSignupNotificationDate } from '../services/email_service.js';
 import { runTrialLifecycle } from '../modules/scheduler.js';
 import { deleteTenantData, getTenantTypesenseCollectionNames } from '../services/account_cleanup_service.js';
 import { formatTrialEndsIn, hasProductAccess, hasProFeatureAccess } from '../services/subscription_access_service.js';
@@ -16,6 +17,12 @@ describe('no-card trial signup and billing helpers', () => {
 		assert.equal(fields.subscription_status, 'trialing');
 		assert.equal(fields.trial_source, 'no_card');
 		assert.equal(fields.trial_ends_at.toISOString(), '2026-01-08T00:00:00.000Z');
+	});
+
+	it('formats signup notification dates with month and ordinal day', () => {
+		assert.equal(formatSignupNotificationDate(new Date(2026, 10, 12)), 'Nov. 12th 2026');
+		assert.equal(formatSignupNotificationDate(new Date(2026, 10, 1)), 'Nov. 1st 2026');
+		assert.equal(formatSignupNotificationDate(new Date(2026, 10, 22)), 'Nov. 22nd 2026');
 	});
 
 	it('creates paid Checkout params without adding a second Stripe trial', () => {

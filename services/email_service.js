@@ -44,7 +44,7 @@ function getTransporter(server) {
 	return transporters.get(key);
 }
 
-async function sendMail({ to, subject, html }) {
+async function sendMail({ to, subject, html, text, from, replyTo }) {
 	const servers = getConfiguredSmtpServers();
 	const picked = pickSmtpServer(servers, smtpRoundRobinIndex);
 	smtpRoundRobinIndex = picked.nextIndex;
@@ -55,7 +55,7 @@ async function sendMail({ to, subject, html }) {
 	}
 
 	const t = getTransporter(picked.server);
-	const mailOptions = { from: picked.server.from || config.smtp.from, to, subject, html };
+	const mailOptions = { from: from || picked.server.from || config.smtp.from, to, subject, html, text, replyTo };
 
 	return t.sendMail(mailOptions);
 }
@@ -155,6 +155,27 @@ export async function sendTrialEnding24HourEmail(email, name, trialEndDate) {
 
 export async function sendTrialExpiredEmail(email, name, trialEndDate) {
 	return sendTrialTemplateEmail('trial_expired', email, name, trialEndDate);
+}
+
+export function formatSignupNotificationDate(date = new Date()) {
+	const months = ['Jan.', 'Feb.', 'Mar.', 'Apr.', 'May', 'Jun.', 'Jul.', 'Aug.', 'Sep.', 'Oct.', 'Nov.', 'Dec.'];
+	const day = date.getDate();
+	const lastTwoDigits = day % 100;
+	const suffix = lastTwoDigits >= 11 && lastTwoDigits <= 13
+		? 'th'
+		: ({ 1: 'st', 2: 'nd', 3: 'rd' }[day % 10] || 'th');
+	return `${months[date.getMonth()]} ${day}${suffix} ${date.getFullYear()}`;
+}
+
+export async function sendTrialSignupNotificationEmail(email, signupDate = new Date()) {
+	return sendMail({
+		to: 'hi@kumbukum.com',
+		from: 'server@kumbukum.com',
+		replyTo: email,
+		subject: `Kumbukum signup: ${email} - Date ${formatSignupNotificationDate(signupDate)}`,
+		text: '',
+		html: '',
+	});
 }
 
 export async function sendExportReadyEmail(email, name, token) {
