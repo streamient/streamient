@@ -19,6 +19,23 @@ const memorySchema = new mongoose.Schema(
 			last_synced_at: { type: Date },
 			origin: { type: String, enum: ['import', 'push'] },
 		},
+		git_commit: {
+			repo_id: { type: mongoose.Schema.Types.ObjectId, ref: 'GitRepo' },
+			sha: { type: String },
+			short_sha: { type: String },
+			branch: { type: String },
+			author_name: { type: String },
+			author_email: { type: String },
+			authored_at: { type: Date },
+			committer_name: { type: String },
+			committer_email: { type: String },
+			committed_at: { type: Date },
+			files: [{
+				_id: false,
+				status: { type: String },
+				path: { type: String },
+			}],
+		},
 	},
 	{ timestamps: true },
 );
@@ -26,6 +43,7 @@ const memorySchema = new mongoose.Schema(
 memorySchema.index({ host_id: 1, in_trash: 1, project: 1 });
 memorySchema.index({ is_indexed: 1, in_trash: 1 });
 memorySchema.index({ 'git_source.repo_id': 1, 'git_source.file_path': 1 }, { sparse: true });
+memorySchema.index({ 'git_commit.repo_id': 1, 'git_commit.sha': 1 }, { sparse: true });
 memorySchema.index({ trashed_at: 1 }, { expireAfterSeconds: 2592000, partialFilterExpression: { trashed_at: { $type: 'date' }, in_trash: true } });
 
 export const Memory = mongoose.model('Memory', memorySchema);

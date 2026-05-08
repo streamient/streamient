@@ -557,6 +557,20 @@
           "trash_on_delete": {
             "type": "boolean"
           },
+          "commit_sync_enabled": {
+            "type": "boolean"
+          },
+          "commit_history_days": {
+            "type": "integer"
+          },
+          "last_commit_synced_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "last_commit_sha": {
+            "type": "string"
+          },
           "last_sync_status": {
             "type": "string",
             "enum": [
@@ -573,6 +587,51 @@
           },
           "last_sync_error": {
             "type": "string"
+          },
+          "last_sync_summary": {
+            "type": "object",
+            "properties": {
+              "imported_files": {
+                "type": "integer"
+              },
+              "exported_files": {
+                "type": "integer"
+              },
+              "trashed_items": {
+                "type": "integer"
+              },
+              "imported_commits": {
+                "type": "integer"
+              },
+              "conflicts": {
+                "type": "integer"
+              },
+              "skipped": {
+                "type": "integer"
+              },
+              "started_at": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true
+              },
+              "finished_at": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true
+              },
+              "duration_ms": {
+                "type": "integer"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          },
+          "sync_runs": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
           },
           "createdAt": {
             "type": "string",
@@ -4798,6 +4857,16 @@
                   "trash_on_delete": {
                     "type": "boolean",
                     "default": true
+                  },
+                  "commit_sync_enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Import git commits as memories"
+                  },
+                  "commit_history_days": {
+                    "type": "integer",
+                    "default": 90,
+                    "description": "Days of commit history to backfill on first sync"
                   }
                 },
                 "required": [
@@ -4941,6 +5010,12 @@
                   },
                   "trash_on_delete": {
                     "type": "boolean"
+                  },
+                  "commit_sync_enabled": {
+                    "type": "boolean"
+                  },
+                  "commit_history_days": {
+                    "type": "integer"
                   }
                 }
               }
@@ -5046,6 +5121,9 @@
                   "properties": {
                     "message": {
                       "type": "string"
+                    },
+                    "summary": {
+                      "type": "object"
                     }
                   }
                 }
@@ -5102,6 +5180,23 @@
                       "type": "string",
                       "format": "date-time",
                       "nullable": true
+                    },
+                    "last_commit_synced_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "last_commit_sha": {
+                      "type": "string"
+                    },
+                    "summary": {
+                      "type": "object"
+                    },
+                    "runs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
                     },
                     "error": {
                       "type": "string"

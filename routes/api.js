@@ -168,8 +168,8 @@ router.delete('/git-repos/:id', requireGitSyncAccess, async (req, res) => {
 
 router.post('/git-repos/:id/sync', requireGitSyncAccess, async (req, res) => {
 	try {
-		await gitSyncService.syncRepo(req.params.id, req.userId, req.host_id, auditCtx(req));
-		res.json({ message: 'Sync complete' });
+		const summary = await gitSyncService.syncRepo(req.params.id, req.userId, req.host_id, auditCtx(req));
+		res.json({ message: 'Sync complete', summary });
 	} catch (err) {
 		res.status(400).json({ error: err.message });
 	}
@@ -181,6 +181,10 @@ router.get('/git-repos/:id/status', requireGitSyncAccess, async (req, res) => {
 	res.json({
 		status: repo.last_sync_status,
 		last_synced_at: repo.last_synced_at,
+		last_commit_synced_at: repo.last_commit_synced_at,
+		last_commit_sha: repo.last_commit_sha,
+		summary: repo.last_sync_summary,
+		runs: repo.sync_runs || [],
 		error: repo.last_sync_error || undefined,
 	});
 });

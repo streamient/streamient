@@ -11,8 +11,6 @@ import striptags from 'striptags';
 import { GitRepo } from '../model/git_repo.js';
 import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
-import * as noteService from './note_service.js';
-import * as memoryService from './memory_service.js';
 import * as audit from './audit_service.js';
 import { encrypt, decrypt } from '../modules/encryption.js';
 import { getRedisClient } from '../modules/redis.js';
@@ -23,6 +21,8 @@ const GIT_REPOS_DIR = path.join(__dirname, '..', 'assets', 'git-repos');
 fs.mkdirSync(GIT_REPOS_DIR, { recursive: true });
 
 const turndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
+const LOCAL_CHANGE_GRACE_MS = 1000;
+const MAX_SYNC_RUNS = 10;
 
 // ── Helpers ──
 
@@ -40,6 +40,14 @@ function cloneUrl(repoUrl, token) {
 	} catch {
 		return repoUrl;
 	}
+}
+
+function repoAuthUrl(gitRepo, token) {
+	return cloneUrl(gitRepo.repo_url, token);
+}
+
+function stripAuthFromRemote(gitRepo) {
+	return gitRepo.repo_url;
 }
 
 function resolveType(filePath, gitRepo) {
@@ -80,6 +88,108 @@ function fileSha(content) {
 	return crypto.createHash('sha1').update(content, 'utf8').digest('hex');
 }
 
+function createSyncSummary() {
+	const startedAt = new Date();
+	return {
+		imported_files: 0,
+		exported_files: 0,
+		trashed_items: 0,
+		imported_commits: 0,
+		conflicts: 0,
+		skipped: 0,
+		started_at: startedAt,
+		finished_at: null,
+		duration_ms: 0,
+		message: '',
+		conflict_details: [],
+		conflict_paths: new Set(),
+	};
+}
+
+function finalizeSummary(summary, status, message = '') {
+	const finishedAt = new Date();
+	summary.finished_at = finishedAt;
+	summary.duration_ms = finishedAt.getTime() - new Date(summary.started_at).getTime();
+	summary.message = message;
+	return {
+		status,
+		started_at: summary.started_at,
+		finished_at: summary.finished_at,
+		duration_ms: summary.duration_ms,
+		imported_files: summary.imported_files,
+		exported_files: summary.exported_files,
+		trashed_items: summary.trashed_items,
+		imported_commits: summary.imported_commits,
+		conflicts: summary.conflicts,
+		skipped: summary.skipped,
+		message: summary.message,
+	};
+}
+
+function recordConflict(summary, type, filePath, reason) {
+	summary.conflicts++;
+	summary.conflict_details.push({ type, file_path: filePath, reason });
+	if (filePath) summary.conflict_paths.add(filePath);
+}
+
+function isLocalChangeNewer(doc) {
+	const lastSyncedAt = doc.git_source?.last_synced_at ? new Date(doc.git_source.last_synced_at).getTime() : 0;
+	const updatedAt = doc.updatedAt ? new Date(doc.updatedAt).getTime() : 0;
+	return updatedAt > lastSyncedAt + LOCAL_CHANGE_GRACE_MS;
+}
+
+function cleanRepoPath(value, fallback) {
+	const cleaned = (value || fallback).replace(/^\/|\/$/g, '');
+	return cleaned || fallback;
+}
+
+function cleanSyncBase(value) {
+	return (value || '/').replace(/^\/|\/$/g, '');
+}
+
+function safeFileName(value) {
+	return (value || 'Untitled').replace(/[<>:"/\\|?*]/g, '_').slice(0, 100);
+}
+
+function slugTag(value) {
+	return String(value || '')
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-+|-+$/g, '')
+		.slice(0, 80);
+}
+
+function compactRun(run) {
+	return {
+		status: run.status,
+		started_at: run.started_at,
+		finished_at: run.finished_at,
+		duration_ms: run.duration_ms,
+		imported_files: run.imported_files,
+		exported_files: run.exported_files,
+		trashed_items: run.trashed_items,
+		imported_commits: run.imported_commits,
+		conflicts: run.conflicts,
+		skipped: run.skipped,
+		message: run.message,
+	};
+}
+
+function syncSummaryForStorage(summary) {
+	return {
+		imported_files: summary.imported_files,
+		exported_files: summary.exported_files,
+		trashed_items: summary.trashed_items,
+		imported_commits: summary.imported_commits,
+		conflicts: summary.conflicts,
+		skipped: summary.skipped,
+		started_at: summary.started_at,
+		finished_at: summary.finished_at,
+		duration_ms: summary.duration_ms,
+		message: summary.message,
+	};
+}
+
 async function acquireLock(repoId, ttlSeconds = 600) {
 	const redis = getRedisClient();
 	const key = `git-sync:${repoId}`;
@@ -110,6 +220,8 @@ export async function createGitRepo(userId, hostId, data, ctx = {}) {
 		memories_path: data.memories_path || 'memories',
 		sync_path: data.sync_path || '/',
 		trash_on_delete: data.trash_on_delete !== false,
+		commit_sync_enabled: data.commit_sync_enabled !== false,
+		commit_history_days: data.commit_history_days || 90,
 	});
 	audit.log({ action: 'create', resource: 'git_repo', resource_id: repo._id.toString(), user_id: userId, host_id: hostId, ...ctx });
 	return repo;
@@ -140,6 +252,8 @@ export async function updateGitRepo(hostId, repoId, data, ctx = {}) {
 	if (data.memories_path !== undefined) update.memories_path = data.memories_path;
 	if (data.sync_path !== undefined) update.sync_path = data.sync_path;
 	if (data.trash_on_delete !== undefined) update.trash_on_delete = data.trash_on_delete;
+	if (data.commit_sync_enabled !== undefined) update.commit_sync_enabled = data.commit_sync_enabled;
+	if (data.commit_history_days !== undefined) update.commit_history_days = data.commit_history_days;
 
 	const repo = await GitRepo.findOneAndUpdate(
 		{ _id: repoId, host_id: hostId },
@@ -170,11 +284,13 @@ export async function syncRepo(repoId, userId, hostId, ctx = { channel: 'api' })
 	if (!gitRepoDoc) throw new Error('Git repo not found');
 	if (!gitRepoDoc.enabled) throw new Error('Git sync is disabled for this repo');
 
-	const locked = await acquireLock(repoId);
+	const locked = ctx.skip_lock ? true : await acquireLock(repoId);
 	if (!locked) throw new Error('Sync already in progress');
 
+	const summary = createSyncSummary();
 	gitRepoDoc.last_sync_status = 'in_progress';
 	gitRepoDoc.last_sync_error = '';
+	gitRepoDoc.last_sync_summary = syncSummaryForStorage(summary);
 	await gitRepoDoc.save();
 
 	try {
@@ -182,52 +298,59 @@ export async function syncRepo(repoId, userId, hostId, ctx = { channel: 'api' })
 		const dir = repoDir(hostId, repoId);
 		const branch = gitRepoDoc.branch || 'main';
 
-		// Clone or pull
 		const git = simpleGit();
 		if (!fs.existsSync(path.join(dir, '.git'))) {
 			fs.mkdirSync(dir, { recursive: true });
-			await git.clone(cloneUrl(gitRepoDoc.repo_url, token), dir, ['--depth', '1', '--branch', branch]);
+			await git.clone(repoAuthUrl(gitRepoDoc, token), dir, ['--branch', branch]);
+			const localGit = simpleGit(dir);
+			await localGit.remote(['set-url', 'origin', stripAuthFromRemote(gitRepoDoc)]);
 		} else {
 			const localGit = simpleGit(dir);
-			// Update remote URL in case token changed
-			await localGit.remote(['set-url', 'origin', cloneUrl(gitRepoDoc.repo_url, token)]);
-			await localGit.fetch('origin', branch);
-			await localGit.reset(['--hard', `origin/${branch}`]);
+			await localGit.remote(['set-url', 'origin', stripAuthFromRemote(gitRepoDoc)]);
+			await localGit.fetch(repoAuthUrl(gitRepoDoc, token), branch);
+			await localGit.reset(['--hard', 'FETCH_HEAD']);
 		}
 
 		const localGit = simpleGit(dir);
+		await localGit.checkout(branch).catch(() => {});
 
-		// Resolve sync_path base
-		const syncBase = (gitRepoDoc.sync_path || '/').replace(/^\//, '');
+		const syncBase = cleanSyncBase(gitRepoDoc.sync_path);
 
-		// Pull: import from git → Kumbukum
-		await pullFromGit(localGit, dir, syncBase, gitRepoDoc, userId, hostId, ctx);
+		await pullFromGit(localGit, dir, syncBase, gitRepoDoc, userId, hostId, ctx, summary);
 
-		// Push: export from Kumbukum → git
-		await pushToGit(localGit, dir, syncBase, gitRepoDoc, userId, hostId, token);
+		if (gitRepoDoc.commit_sync_enabled !== false) {
+			await importCommits(localGit, gitRepoDoc, userId, hostId, summary);
+		}
+
+		await pushToGit(localGit, dir, syncBase, gitRepoDoc, userId, hostId, token, summary);
 
 		gitRepoDoc.last_sync_status = 'success';
 		gitRepoDoc.last_synced_at = new Date();
 		gitRepoDoc.last_sync_error = '';
+		const run = finalizeSummary(summary, 'success', summary.conflicts ? 'Sync complete with conflicts' : 'Sync complete');
+		gitRepoDoc.last_sync_summary = syncSummaryForStorage(summary);
+		gitRepoDoc.sync_runs = [compactRun(run), ...(gitRepoDoc.sync_runs || [])].slice(0, MAX_SYNC_RUNS);
 		await gitRepoDoc.save();
 
 		emitToTenant(hostId, 'counts:refresh');
-		audit.log({ action: 'import', resource: 'git_repo', resource_id: repoId, user_id: userId, host_id: hostId, ...ctx });
+		if (!ctx.skip_audit) audit.log({ action: 'import', resource: 'git_repo', resource_id: repoId, user_id: userId, host_id: hostId, ...ctx });
+		return { ...syncSummaryForStorage(summary), conflict_details: summary.conflict_details };
 	} catch (err) {
+		finalizeSummary(summary, 'failed', err.message);
 		gitRepoDoc.last_sync_status = 'failed';
 		gitRepoDoc.last_sync_error = err.message;
+		gitRepoDoc.last_sync_summary = syncSummaryForStorage(summary);
+		gitRepoDoc.sync_runs = [compactRun({ ...summary, status: 'failed' }), ...(gitRepoDoc.sync_runs || [])].slice(0, MAX_SYNC_RUNS);
 		await gitRepoDoc.save();
 		throw err;
 	} finally {
-		await releaseLock(repoId);
+		if (!ctx.skip_lock) await releaseLock(repoId);
 	}
 }
 
-async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx) {
-	const notesDir = (gitRepo.notes_path || 'notes').replace(/^\/|\/$/g, '');
-	const memoriesDir = (gitRepo.memories_path || 'memories').replace(/^\/|\/$/g, '');
-
+async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, summary) {
 	const mdFiles = findMarkdownFiles(dir, syncBase);
+	const activeFilePaths = new Set(mdFiles);
 
 	for (const relPath of mdFiles) {
 		const absPath = path.join(dir, syncBase, relPath);
@@ -235,12 +358,10 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx) {
 		const sha = fileSha(raw);
 		const parsed = parseMarkdownFile(raw);
 
-		// Determine type: frontmatter overrides directory
-		let type = parsed.type || resolveType(relPath, gitRepo);
+		const type = parsed.type || resolveType(relPath, gitRepo);
 
 		const title = parsed.title || path.basename(relPath, '.md');
 
-		// Look up existing synced item
 		const existingNote = await Note.findOne({ 'git_source.repo_id': gitRepo._id, 'git_source.file_path': relPath, host_id: hostId });
 		const existingMemory = await Memory.findOne({ 'git_source.repo_id': gitRepo._id, 'git_source.file_path': relPath, host_id: hostId });
 		const existing = existingNote || existingMemory;
@@ -250,10 +371,9 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx) {
 		}
 
 		if (existing) {
-			// Last-write-wins: compare git file mtime vs item updatedAt
-			const gitMtime = fs.statSync(absPath).mtime;
-			if (existing.updatedAt > gitMtime && existing.updatedAt > (existing.git_source?.last_synced_at || new Date(0))) {
-				continue; // Kumbukum version is newer
+			if (isLocalChangeNewer(existing)) {
+				recordConflict(summary, existingNote ? 'note' : 'memory', relPath, 'Both Git and Kumbukum changed since the last sync');
+				continue;
 			}
 		}
 
@@ -272,6 +392,7 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx) {
 						is_indexed: false,
 					},
 				});
+				summary.imported_files++;
 			} else {
 				await Memory.create({
 					title,
@@ -282,6 +403,7 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx) {
 					host_id: hostId,
 					git_source: { repo_id: gitRepo._id, file_path: relPath, last_sha: sha, last_synced_at: now, origin: 'import' },
 				});
+				summary.imported_files++;
 			}
 		} else {
 			const html = marked.parse(parsed.body);
@@ -299,6 +421,7 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx) {
 						is_indexed: false,
 					},
 				});
+				summary.imported_files++;
 			} else {
 				await Note.create({
 					title,
@@ -310,82 +433,140 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx) {
 					host_id: hostId,
 					git_source: { repo_id: gitRepo._id, file_path: relPath, last_sha: sha, last_synced_at: now, origin: 'import' },
 				});
+				summary.imported_files++;
 			}
 		}
 	}
+
+	await trashDeletedGitItems(gitRepo, hostId, activeFilePaths, summary);
 }
 
-async function pushToGit(git, dir, syncBase, gitRepo, userId, hostId, token) {
-	const notesDir = (gitRepo.notes_path || 'notes').replace(/^\/|\/$/g, '');
-	const memoriesDir = (gitRepo.memories_path || 'memories').replace(/^\/|\/$/g, '');
-	const lastSync = gitRepo.last_synced_at || new Date(0);
+async function trashDeletedGitItems(gitRepo, hostId, activeFilePaths, summary) {
+	const query = {
+		host_id: hostId,
+		'git_source.repo_id': gitRepo._id,
+		in_trash: { $ne: true },
+	};
+	const [notes, memories] = await Promise.all([
+		Note.find(query),
+		Memory.find({ ...query, 'git_commit.repo_id': { $exists: false } }),
+	]);
+
+	for (const note of notes) {
+		const filePath = note.git_source?.file_path;
+		if (!filePath || activeFilePaths.has(filePath)) continue;
+		if (isLocalChangeNewer(note)) {
+			recordConflict(summary, 'note', filePath, 'Git deleted the file but Kumbukum has newer local edits');
+			continue;
+		}
+		if (!gitRepo.trash_on_delete) {
+			summary.skipped++;
+			continue;
+		}
+		await Note.findByIdAndUpdate(note._id, {
+			$set: { in_trash: true, trashed_at: new Date(), is_indexed: false },
+		});
+		summary.trashed_items++;
+	}
+
+	for (const memory of memories) {
+		const filePath = memory.git_source?.file_path;
+		if (!filePath || activeFilePaths.has(filePath)) continue;
+		if (isLocalChangeNewer(memory)) {
+			recordConflict(summary, 'memory', filePath, 'Git deleted the file but Kumbukum has newer local edits');
+			continue;
+		}
+		if (!gitRepo.trash_on_delete) {
+			summary.skipped++;
+			continue;
+		}
+		await Memory.findByIdAndUpdate(memory._id, {
+			$set: { in_trash: true, trashed_at: new Date(), is_indexed: false },
+		});
+		summary.trashed_items++;
+	}
+}
+
+async function pushToGit(git, dir, syncBase, gitRepo, userId, hostId, token, summary) {
+	const notesDir = cleanRepoPath(gitRepo.notes_path, 'notes');
+	const memoriesDir = cleanRepoPath(gitRepo.memories_path, 'memories');
 	let hasChanges = false;
 	const pendingUpdates = [];
+	const enabledRepoCount = await GitRepo.countDocuments({ host_id: hostId, project: gitRepo.project, enabled: true });
+	const allowLocalOnlyPush = enabledRepoCount <= 1;
 
-	// Notes: updated since last sync OR never successfully pushed
-	const notesToPush = await Note.find({
-		host_id: hostId,
-		project: gitRepo.project,
-		in_trash: { $ne: true },
-		$or: [
-			{ updatedAt: { $gt: lastSync } },
-			{ 'git_source.origin': { $ne: 'push' } },
-		],
-	});
+	const notesToPush = await findPushCandidates(Note, gitRepo, hostId, allowLocalOnlyPush);
+	const skippedLocalNotes = allowLocalOnlyPush ? 0 : await countLocalOnlyItems(Note, gitRepo, hostId);
+	summary.skipped += skippedLocalNotes;
 
 	for (const note of notesToPush) {
+		const repoLinked = !!note.git_source?.repo_id;
+		if (repoLinked && !isLocalChangeNewer(note)) {
+			summary.skipped++;
+			continue;
+		}
 		const md = noteToMarkdown(note);
 		const sha = fileSha(md);
 
 		let relPath = note.git_source?.file_path;
 		if (!relPath) {
-			const safeName = (note.title || 'Untitled').replace(/[<>:"/\\|?*]/g, '_').slice(0, 100);
-			relPath = `${notesDir}/${safeName}.md`;
+			relPath = `${notesDir}/${safeFileName(note.title)}.md`;
+		}
+		if (summary.conflict_paths.has(relPath)) {
+			summary.skipped++;
+			continue;
 		}
 
 		const absPath = path.join(dir, syncBase, relPath);
 
-		// Skip if unchanged AND file exists on disk (stale sha from failed push won't block)
-		if (note.git_source?.last_sha === sha && fs.existsSync(absPath)) continue;
+		if (note.git_source?.last_sha === sha && fs.existsSync(absPath)) {
+			summary.skipped++;
+			continue;
+		}
 
 		fs.mkdirSync(path.dirname(absPath), { recursive: true });
 		fs.writeFileSync(absPath, md, 'utf8');
 
-		// Defer DB update until after push succeeds
 		pendingUpdates.push({ model: 'Note', id: note._id, relPath, sha });
 		hasChanges = true;
 	}
 
-	// Memories: updated since last sync OR never successfully pushed
-	const memoriesToPush = await Memory.find({
-		host_id: hostId,
-		project: gitRepo.project,
-		in_trash: { $ne: true },
-		$or: [
-			{ updatedAt: { $gt: lastSync } },
-			{ 'git_source.origin': { $ne: 'push' } },
-		],
+	const memoriesToPush = await findPushCandidates(Memory, gitRepo, hostId, allowLocalOnlyPush, {
+		'git_commit.repo_id': { $exists: false },
 	});
+	const skippedLocalMemories = allowLocalOnlyPush ? 0 : await countLocalOnlyItems(Memory, gitRepo, hostId, {
+		'git_commit.repo_id': { $exists: false },
+	});
+	summary.skipped += skippedLocalMemories;
 
 	for (const mem of memoriesToPush) {
+		const repoLinked = !!mem.git_source?.repo_id;
+		if (repoLinked && !isLocalChangeNewer(mem)) {
+			summary.skipped++;
+			continue;
+		}
 		const md = memoryToMarkdown(mem);
 		const sha = fileSha(md);
 
 		let relPath = mem.git_source?.file_path;
 		if (!relPath) {
-			const safeName = (mem.title || 'Untitled').replace(/[<>:"/\\|?*]/g, '_').slice(0, 100);
-			relPath = `${memoriesDir}/${safeName}.md`;
+			relPath = `${memoriesDir}/${safeFileName(mem.title)}.md`;
+		}
+		if (summary.conflict_paths.has(relPath)) {
+			summary.skipped++;
+			continue;
 		}
 
 		const absPath = path.join(dir, syncBase, relPath);
 
-		// Skip if unchanged AND file exists on disk
-		if (mem.git_source?.last_sha === sha && fs.existsSync(absPath)) continue;
+		if (mem.git_source?.last_sha === sha && fs.existsSync(absPath)) {
+			summary.skipped++;
+			continue;
+		}
 
 		fs.mkdirSync(path.dirname(absPath), { recursive: true });
 		fs.writeFileSync(absPath, md, 'utf8');
 
-		// Defer DB update until after push succeeds
 		pendingUpdates.push({ model: 'Memory', id: mem._id, relPath, sha });
 		hasChanges = true;
 	}
@@ -398,10 +579,9 @@ async function pushToGit(git, dir, syncBase, gitRepo, userId, hostId, token) {
 		const status = await localGit.status();
 		if (status.files.length > 0) {
 			await localGit.commit(`Kumbukum sync ${new Date().toISOString()}`);
-			await localGit.push('origin', gitRepo.branch || 'main');
+			await localGit.push(repoAuthUrl(gitRepo, token), gitRepo.branch || 'main');
 		}
 
-		// Push succeeded — now persist git_source on all items
 		const now = new Date();
 		for (const upd of pendingUpdates) {
 			const Model = upd.model === 'Note' ? Note : Memory;
@@ -414,8 +594,160 @@ async function pushToGit(git, dir, syncBase, gitRepo, userId, hostId, token) {
 					'git_source.origin': 'push',
 				},
 			});
+			summary.exported_files++;
 		}
 	}
+}
+
+async function findPushCandidates(Model, gitRepo, hostId, allowLocalOnlyPush, extraQuery = {}) {
+	const localOnlyFilter = {
+		$or: [
+			{ 'git_source.repo_id': { $exists: false } },
+			{ 'git_source.repo_id': null },
+		],
+	};
+	const repoLinkedFilter = { 'git_source.repo_id': gitRepo._id };
+	const linkFilters = allowLocalOnlyPush ? [repoLinkedFilter, localOnlyFilter] : [repoLinkedFilter];
+	return Model.find({
+		host_id: hostId,
+		project: gitRepo.project,
+		in_trash: { $ne: true },
+		...extraQuery,
+		$or: linkFilters,
+	});
+}
+
+async function countLocalOnlyItems(Model, gitRepo, hostId, extraQuery = {}) {
+	return Model.countDocuments({
+		host_id: hostId,
+		project: gitRepo.project,
+		in_trash: { $ne: true },
+		...extraQuery,
+		$or: [
+			{ 'git_source.repo_id': { $exists: false } },
+			{ 'git_source.repo_id': null },
+		],
+	});
+}
+
+async function importCommits(git, gitRepo, userId, hostId, summary) {
+	const since = gitRepo.last_commit_synced_at
+		? new Date(gitRepo.last_commit_synced_at)
+		: new Date(Date.now() - (gitRepo.commit_history_days || 90) * 24 * 60 * 60 * 1000);
+	const raw = await git.raw([
+		'log',
+		`--since=${since.toISOString()}`,
+		'--reverse',
+		'--pretty=format:%H%x1f%h%x1f%an%x1f%ae%x1f%aI%x1f%cn%x1f%ce%x1f%cI%x1f%s',
+	]);
+	const lines = raw.split('\n').map((line) => line.trim()).filter(Boolean);
+	let latestCommit = null;
+
+	for (const line of lines) {
+		const parts = line.split('\x1f');
+		if (parts.length < 9) {
+			summary.skipped++;
+			continue;
+		}
+
+		const commit = {
+			sha: parts[0],
+			short_sha: parts[1],
+			author_name: parts[2],
+			author_email: parts[3],
+			authored_at: new Date(parts[4]),
+			committer_name: parts[5],
+			committer_email: parts[6],
+			committed_at: new Date(parts[7]),
+			subject: parts.slice(8).join(' '),
+		};
+
+		const existing = await Memory.findOne({
+			host_id: hostId,
+			'git_commit.repo_id': gitRepo._id,
+			'git_commit.sha': commit.sha,
+			in_trash: { $ne: true },
+		});
+		if (existing) {
+			latestCommit = commit;
+			summary.skipped++;
+			continue;
+		}
+
+		const [message, files] = await Promise.all([
+			git.raw(['show', '-s', '--format=%B', commit.sha]),
+			git.raw(['show', '--name-status', '--format=', '--no-renames', commit.sha]),
+		]);
+		const changedFiles = parseNameStatus(files);
+		const repoTag = slugTag(gitRepo.name || gitRepo.repo_url);
+		const branchTag = slugTag(gitRepo.branch || 'main');
+		const tags = ['git-sync', 'git-commit'];
+		if (repoTag) tags.push(`git-repo-${repoTag}`);
+		if (branchTag) tags.push(`git-branch-${branchTag}`);
+
+		await Memory.create({
+			title: `Commit ${commit.short_sha}: ${commit.subject || '(no subject)'}`,
+			content: commitMemoryContent(commit, message, changedFiles, gitRepo),
+			tags,
+			source: 'git-sync',
+			project: gitRepo.project,
+			owner: userId,
+			host_id: hostId,
+			git_commit: {
+				repo_id: gitRepo._id,
+				sha: commit.sha,
+				short_sha: commit.short_sha,
+				branch: gitRepo.branch || 'main',
+				author_name: commit.author_name,
+				author_email: commit.author_email,
+				authored_at: commit.authored_at,
+				committer_name: commit.committer_name,
+				committer_email: commit.committer_email,
+				committed_at: commit.committed_at,
+				files: changedFiles,
+			},
+		});
+		latestCommit = commit;
+		summary.imported_commits++;
+	}
+
+	if (latestCommit) {
+		gitRepo.last_commit_synced_at = latestCommit.committed_at;
+		gitRepo.last_commit_sha = latestCommit.sha;
+	}
+}
+
+function parseNameStatus(value) {
+	return value
+		.split('\n')
+		.map((line) => line.trim())
+		.filter(Boolean)
+		.map((line) => {
+			const [status, ...pathParts] = line.split(/\s+/);
+			return { status, path: pathParts.join(' ') };
+		})
+		.filter((file) => file.status && file.path);
+}
+
+function commitMemoryContent(commit, message, files, gitRepo) {
+	const changedFiles = files.length
+		? files.map((file) => `- ${file.status}\t${file.path}`).join('\n')
+		: '- No changed files reported';
+	return [
+		`Repository: ${gitRepo.name || gitRepo.repo_url}`,
+		`Branch: ${gitRepo.branch || 'main'}`,
+		`Commit: ${commit.sha}`,
+		`Author: ${commit.author_name} <${commit.author_email}>`,
+		`Authored: ${commit.authored_at.toISOString()}`,
+		`Committer: ${commit.committer_name} <${commit.committer_email}>`,
+		`Committed: ${commit.committed_at.toISOString()}`,
+		'',
+		'Message:',
+		(message || '').trim() || commit.subject || '(no message)',
+		'',
+		'Changed files:',
+		changedFiles,
+	].join('\n');
 }
 
 function findMarkdownFiles(baseDir, syncBase) {
