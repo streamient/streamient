@@ -2593,6 +2593,10 @@
                   },
                   "crawl_enabled": {
                     "type": "boolean"
+                  },
+                  "screenshot_data_url": {
+                    "type": "string",
+                    "description": "Optional browser-captured screenshot data URL for authenticated or paywalled pages."
                   }
                 },
                 "required": [

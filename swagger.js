@@ -910,7 +910,7 @@ const swaggerSpec = {
                 summary: 'Save a URL',
                 requestBody: {
                     required: true,
-                    content: { 'application/json': { schema: { type: 'object', properties: { url: { type: 'string', format: 'uri' }, title: { type: 'string' }, project: { type: 'string' }, crawl_enabled: { type: 'boolean' } }, required: ['url'] } } },
+                    content: { 'application/json': { schema: { type: 'object', properties: { url: { type: 'string', format: 'uri' }, title: { type: 'string' }, project: { type: 'string' }, crawl_enabled: { type: 'boolean' }, screenshot_data_url: { type: 'string', description: 'Optional browser-captured screenshot data URL for authenticated or paywalled pages.' } }, required: ['url'] } } },
                 },
                 responses: {
                     201: { description: 'Created', content: { 'application/json': { schema: { type: 'object', properties: { url: { $ref: '#/components/schemas/Url' } } } } } },
