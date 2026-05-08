@@ -77,6 +77,7 @@ const _getInstrumentations = function(getNodeAutoInstrumentations) {
 	return [getNodeAutoInstrumentations({
 		'@opentelemetry/instrumentation-dns': { enabled: false },
 		'@opentelemetry/instrumentation-fs': { enabled: false },
+		'@opentelemetry/instrumentation-router': { enabled: false },
 	})];
 };
 
