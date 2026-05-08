@@ -218,6 +218,8 @@ test('imports markdown notes, memories, and recent commit memories', async (t) =
 	fs.writeFileSync(path.join(remote.work, 'notes', 'recent.md'), '---\ntitle: Recent Note\ntags:\n  - alpha\n---\n\nRecent updated\n');
 	const recentUpdatedDate = now(-2 * 24 * 60 * 60 * 1000);
 	await commitAll(remote.work, 'update recent note', recentUpdatedDate);
+	fs.writeFileSync(path.join(remote.work, 'notes', 'recent.md'), '---\ntitle: Recent Note\ntags:\n  - alpha\n---\n\nRecent updated by sync\n');
+	await commitAll(remote.work, 'Kumbukum sync 2026-05-08T03:49:21.097Z', now(-1 * 24 * 60 * 60 * 1000));
 	await git(remote.work, ['push']);
 
 	const repo = makeRepo(remote);
@@ -236,6 +238,13 @@ test('imports markdown notes, memories, and recent commit memories', async (t) =
 	assert.equal(state.notes.find((note) => note.title === 'Recent Note').updatedAt.toISOString(), gitDate(recentUpdatedDate).toISOString());
 	assert.equal(state.memories.find((memory) => memory.title === 'Recent Memory').createdAt.toISOString(), gitDate(recentCreatedDate).toISOString());
 	assert.equal(state.memories.find((memory) => memory.title === 'Recent Memory').updatedAt.toISOString(), gitDate(recentCreatedDate).toISOString());
+
+	const recentNote = state.notes.find((note) => note.title === 'Recent Note');
+	recentNote.updatedAt = now(5000);
+	recentNote.is_indexed = true;
+	await syncRepo(repo._id.toString(), 'user-1', repo.host_id, { skip_lock: true, skip_audit: true });
+	assert.equal(recentNote.updatedAt.toISOString(), gitDate(recentUpdatedDate).toISOString());
+
 	for (const memory of state.memories.filter((candidate) => candidate.git_commit?.sha)) {
 		assert.equal(memory.createdAt.toISOString(), memory.git_commit.committed_at.toISOString());
 		assert.equal(memory.updatedAt.toISOString(), memory.git_commit.committed_at.toISOString());

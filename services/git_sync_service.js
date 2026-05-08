@@ -211,14 +211,22 @@ async function getFileGitDates(git, syncBase, relPath) {
 	const output = await git.raw([
 		'log',
 		'--follow',
-		'--format=%cI',
+		'--format=%cI%x1f%s',
 		'--',
 		gitRelativePath(syncBase, relPath),
 	]);
-	const dates = output
+	const entries = output
 		.split('\n')
-		.map((line) => validDateOrNull(line.trim()))
-		.filter(Boolean);
+		.map((line) => {
+			const [rawDate, ...subjectParts] = line.trim().split('\x1f');
+			return {
+				date: validDateOrNull(rawDate),
+				subject: subjectParts.join(' '),
+			};
+		})
+		.filter((entry) => entry.date);
+	const userEntries = entries.filter((entry) => !entry.subject.startsWith('Kumbukum sync '));
+	const dates = (userEntries.length ? userEntries : entries).map((entry) => entry.date);
 	const fallback = new Date();
 	return {
 		createdAt: dates.at(-1) || fallback,
@@ -239,6 +247,22 @@ async function normalizeImportedTimestamps(Model, doc, dates, { includeCreatedAt
 
 function commitDates(commitDate) {
 	return { createdAt: commitDate, updatedAt: commitDate };
+}
+
+function sameStringList(left = [], right = []) {
+	if (left.length !== right.length) return false;
+	return left.every((value, index) => value === right[index]);
+}
+
+function importedContentMatchesGit(doc, type, parsed, title) {
+	if (!doc) return false;
+	if (doc.title !== title) return false;
+	const expectedTags = parsed.tags?.length ? parsed.tags : ['git-sync'];
+	if (!sameStringList(doc.tags || [], expectedTags)) return false;
+	if (type === 'memory') return (doc.content || '') === (parsed.body || '');
+
+	const html = marked.parse(parsed.body);
+	return (doc.content || '') === html;
 }
 
 async function acquireLock(repoId, ttlSeconds = 600) {
@@ -419,7 +443,7 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, sum
 		const fileDates = await getFileGitDates(git, syncBase, relPath);
 
 		if (existing && existing.git_source?.last_sha === sha) {
-			if (!isLocalChangeNewer(existing)) {
+			if (!isLocalChangeNewer(existing) || importedContentMatchesGit(existing, existingNote ? 'note' : 'memory', parsed, title)) {
 				await normalizeImportedTimestamps(existingNote ? Note : Memory, existing, fileDates, { includeCreatedAt: existing.git_source?.origin === 'import' });
 			}
 			continue; // No change
