@@ -190,6 +190,57 @@ function syncSummaryForStorage(summary) {
 	};
 }
 
+function validDateOrNull(value) {
+	const date = value instanceof Date ? value : new Date(value);
+	return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function timestampsDiffer(left, right) {
+	const leftDate = validDateOrNull(left);
+	const rightDate = validDateOrNull(right);
+	if (!leftDate || !rightDate) return true;
+	return Math.abs(leftDate.getTime() - rightDate.getTime()) > 1000;
+}
+
+function gitRelativePath(syncBase, relPath) {
+	const normalizedBase = cleanSyncBase(syncBase);
+	return normalizedBase ? path.posix.join(normalizedBase, relPath) : relPath;
+}
+
+async function getFileGitDates(git, syncBase, relPath) {
+	const output = await git.raw([
+		'log',
+		'--follow',
+		'--format=%cI',
+		'--',
+		gitRelativePath(syncBase, relPath),
+	]);
+	const dates = output
+		.split('\n')
+		.map((line) => validDateOrNull(line.trim()))
+		.filter(Boolean);
+	const fallback = new Date();
+	return {
+		createdAt: dates.at(-1) || fallback,
+		updatedAt: dates[0] || fallback,
+	};
+}
+
+async function normalizeImportedTimestamps(Model, doc, dates, { includeCreatedAt = false } = {}) {
+	const createdAt = validDateOrNull(dates?.createdAt);
+	const updatedAt = validDateOrNull(dates?.updatedAt);
+	const $set = {};
+	if (updatedAt && timestampsDiffer(doc.updatedAt, updatedAt)) $set.updatedAt = updatedAt;
+	if (includeCreatedAt && createdAt && timestampsDiffer(doc.createdAt, createdAt)) $set.createdAt = createdAt;
+	if (Object.keys($set).length === 0) return;
+
+	await Model.findByIdAndUpdate(doc._id, { $set }, { timestamps: false, overwriteImmutable: includeCreatedAt });
+}
+
+function commitDates(commitDate) {
+	return { createdAt: commitDate, updatedAt: commitDate };
+}
+
 async function acquireLock(repoId, ttlSeconds = 600) {
 	const redis = getRedisClient();
 	const key = `git-sync:${repoId}`;
@@ -365,8 +416,12 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, sum
 		const existingNote = await Note.findOne({ 'git_source.repo_id': gitRepo._id, 'git_source.file_path': relPath, host_id: hostId });
 		const existingMemory = await Memory.findOne({ 'git_source.repo_id': gitRepo._id, 'git_source.file_path': relPath, host_id: hostId });
 		const existing = existingNote || existingMemory;
+		const fileDates = await getFileGitDates(git, syncBase, relPath);
 
 		if (existing && existing.git_source?.last_sha === sha) {
+			if (!isLocalChangeNewer(existing)) {
+				await normalizeImportedTimestamps(existingNote ? Note : Memory, existing, fileDates, { includeCreatedAt: existing.git_source?.origin === 'import' });
+			}
 			continue; // No change
 		}
 
@@ -381,17 +436,21 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, sum
 
 		if (type === 'memory') {
 			if (existingMemory) {
+				const update = {
+					title,
+					content: parsed.body,
+					tags: parsed.tags,
+					'git_source.last_sha': sha,
+					'git_source.last_synced_at': now,
+					'git_source.origin': 'import',
+					updatedAt: fileDates.updatedAt,
+					is_indexed: false,
+				};
+				const overwriteImmutable = existingMemory.git_source?.origin === 'import';
+				if (overwriteImmutable) update.createdAt = fileDates.createdAt;
 				await Memory.findByIdAndUpdate(existingMemory._id, {
-					$set: {
-						title,
-						content: parsed.body,
-						tags: parsed.tags,
-						'git_source.last_sha': sha,
-						'git_source.last_synced_at': now,
-						'git_source.origin': 'import',
-						is_indexed: false,
-					},
-				});
+					$set: update,
+				}, { timestamps: false, overwriteImmutable });
 				summary.imported_files++;
 			} else {
 				await Memory.create({
@@ -402,6 +461,8 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, sum
 					owner: userId,
 					host_id: hostId,
 					git_source: { repo_id: gitRepo._id, file_path: relPath, last_sha: sha, last_synced_at: now, origin: 'import' },
+					createdAt: fileDates.createdAt,
+					updatedAt: fileDates.updatedAt,
 				});
 				summary.imported_files++;
 			}
@@ -409,18 +470,22 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, sum
 			const html = marked.parse(parsed.body);
 			const text = striptags(html);
 			if (existingNote) {
+				const update = {
+					title,
+					content: html,
+					text_content: text,
+					tags: parsed.tags,
+					'git_source.last_sha': sha,
+					'git_source.last_synced_at': now,
+					'git_source.origin': 'import',
+					updatedAt: fileDates.updatedAt,
+					is_indexed: false,
+				};
+				const overwriteImmutable = existingNote.git_source?.origin === 'import';
+				if (overwriteImmutable) update.createdAt = fileDates.createdAt;
 				await Note.findByIdAndUpdate(existingNote._id, {
-					$set: {
-						title,
-						content: html,
-						text_content: text,
-						tags: parsed.tags,
-						'git_source.last_sha': sha,
-						'git_source.last_synced_at': now,
-						'git_source.origin': 'import',
-						is_indexed: false,
-					},
-				});
+					$set: update,
+				}, { timestamps: false, overwriteImmutable });
 				summary.imported_files++;
 			} else {
 				await Note.create({
@@ -432,6 +497,8 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, sum
 					owner: userId,
 					host_id: hostId,
 					git_source: { repo_id: gitRepo._id, file_path: relPath, last_sha: sha, last_synced_at: now, origin: 'import' },
+					createdAt: fileDates.createdAt,
+					updatedAt: fileDates.updatedAt,
 				});
 				summary.imported_files++;
 			}
@@ -669,6 +736,7 @@ async function importCommits(git, gitRepo, userId, hostId, summary) {
 			in_trash: { $ne: true },
 		});
 		if (existing) {
+			await normalizeImportedTimestamps(Memory, existing, commitDates(commit.committed_at), { includeCreatedAt: true });
 			latestCommit = commit;
 			summary.skipped++;
 			continue;
@@ -693,6 +761,8 @@ async function importCommits(git, gitRepo, userId, hostId, summary) {
 			project: gitRepo.project,
 			owner: userId,
 			host_id: hostId,
+			createdAt: commit.committed_at,
+			updatedAt: commit.committed_at,
 			git_commit: {
 				repo_id: gitRepo._id,
 				sha: commit.sha,

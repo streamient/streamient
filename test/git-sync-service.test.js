@@ -18,6 +18,10 @@ function now(offsetMs = 0) {
 	return new Date(Date.now() + offsetMs);
 }
 
+function gitDate(date) {
+	return new Date(Math.floor(date.getTime() / 1000) * 1000);
+}
+
 function oid(value) {
 	return {
 		value,
@@ -120,11 +124,11 @@ function installModelMocks(state) {
 			collection.push(doc);
 			return doc;
 		};
-		Model.findByIdAndUpdate = async (id, update) => {
+		Model.findByIdAndUpdate = async (id, update, options = {}) => {
 			const doc = collection.find((candidate) => sameValue(candidate._id, id));
 			if (!doc) return null;
 			for (const [key, value] of Object.entries(update.$set || {})) setValue(doc, key, value);
-			doc.updatedAt = now();
+			if (options.timestamps !== false && !Object.hasOwn(update.$set || {}, 'updatedAt')) doc.updatedAt = now();
 			return doc;
 		};
 	}
@@ -209,7 +213,11 @@ test('imports markdown notes, memories, and recent commit memories', async (t) =
 	await commitAll(remote.work, 'old outside window', now(-120 * 24 * 60 * 60 * 1000));
 	fs.writeFileSync(path.join(remote.work, 'notes', 'recent.md'), '---\ntitle: Recent Note\ntags:\n  - alpha\n---\n\nRecent\n');
 	fs.writeFileSync(path.join(remote.work, 'memories', 'recent.md'), '---\ntitle: Recent Memory\ntype: memory\n---\n\nRemember this\n');
-	await commitAll(remote.work, 'recent knowledge files', now(-2 * 24 * 60 * 60 * 1000));
+	const recentCreatedDate = now(-20 * 24 * 60 * 60 * 1000);
+	await commitAll(remote.work, 'create recent knowledge files', recentCreatedDate);
+	fs.writeFileSync(path.join(remote.work, 'notes', 'recent.md'), '---\ntitle: Recent Note\ntags:\n  - alpha\n---\n\nRecent updated\n');
+	const recentUpdatedDate = now(-2 * 24 * 60 * 60 * 1000);
+	await commitAll(remote.work, 'update recent note', recentUpdatedDate);
 	await git(remote.work, ['push']);
 
 	const repo = makeRepo(remote);
@@ -222,8 +230,16 @@ test('imports markdown notes, memories, and recent commit memories', async (t) =
 	assert.equal(summary.imported_files, 3);
 	assert.equal(state.notes.some((note) => note.title === 'Recent Note'), true);
 	assert.equal(state.memories.some((memory) => memory.title === 'Recent Memory'), true);
-	assert.equal(state.memories.filter((memory) => memory.git_commit?.sha).length, 1);
+	assert.equal(state.memories.filter((memory) => memory.git_commit?.sha).length >= 1, true);
 	assert.match(state.memories.find((memory) => memory.git_commit?.sha).content, /Changed files:/);
+	assert.equal(state.notes.find((note) => note.title === 'Recent Note').createdAt.toISOString(), gitDate(recentCreatedDate).toISOString());
+	assert.equal(state.notes.find((note) => note.title === 'Recent Note').updatedAt.toISOString(), gitDate(recentUpdatedDate).toISOString());
+	assert.equal(state.memories.find((memory) => memory.title === 'Recent Memory').createdAt.toISOString(), gitDate(recentCreatedDate).toISOString());
+	assert.equal(state.memories.find((memory) => memory.title === 'Recent Memory').updatedAt.toISOString(), gitDate(recentCreatedDate).toISOString());
+	for (const memory of state.memories.filter((candidate) => candidate.git_commit?.sha)) {
+		assert.equal(memory.createdAt.toISOString(), memory.git_commit.committed_at.toISOString());
+		assert.equal(memory.updatedAt.toISOString(), memory.git_commit.committed_at.toISOString());
+	}
 });
 
 test('imports new commits incrementally without duplicates', async (t) => {

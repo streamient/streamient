@@ -19,7 +19,7 @@
 			? memories
 				.map(function (m) {
 					var excerpt = m.content?.slice(0, 200) || '';
-					var date = new Date(m.updatedAt).toLocaleDateString();
+					var date = new Date(m.git_commit?.committed_at || m.updatedAt).toLocaleDateString();
 					return '<div class="list-group-item list-group-item-action memory-item" data-id="' + m._id + '">'
 						+ '<div class="d-flex align-items-start gap-2">'
 						+ '<div class="batch-cb-wrap"><input type="checkbox" class="form-check-input batch-cb" value="' + m._id + '"></div>'
