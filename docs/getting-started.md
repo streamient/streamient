@@ -33,6 +33,8 @@ GOOGLE_API_KEY=your-google-api-key \
 docker compose -f compose.prod.yml up -d
 ```
 
+To rotate outbound mail across several SMTP servers, set `SMTP_SERVERS` to a JSON array. When present, Kumbukum sends emails round-robin across those servers.
+
 [Installation guide →](/selfhosted/installation)
 :::
 

@@ -31,6 +31,10 @@ html(lang="en")
 						a.kk-navbtn(href="/graph" class={active: page === 'graph'}) Graph
 					.ms-auto.d-flex.align-items-center
 						if user
+							if is_trialing
+								a.btn.btn-warning.btn-sm.me-3(href="/billing/checkout?plan=pro" style="padding-top:0.45rem;padding-bottom:0.45rem;")
+									!= icon('creditCard', 'me-1')
+									span= trial_ends_text || 'Trial'
 							if accessible_tenants && accessible_tenants.length > 1
 								.dropdown.me-2
 									button.btn.btn-outline-light.btn-sm.dropdown-toggle.d-flex.align-items-center.gap-1(type="button" data-bs-toggle="dropdown")
@@ -163,7 +167,10 @@ html(lang="en")
 										img.rounded#rm-url-og-image(alt="" style="object-fit:cover")
 									.flex-grow-1
 										.mb-3
-											.form-text URL
+											.d-flex.justify-content-between.align-items-center
+												.form-text URL
+												a.form-text.text-decoration-none.d-none#rm-url-visit-link(href="#" target="_blank" rel="noopener")
+													span Visit
 											input.form-control#rm-url-input(type="url" autofocus)
 										.mb-3
 											.form-text Title (optional)

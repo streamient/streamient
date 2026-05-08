@@ -18,6 +18,14 @@ We accept:
 
 - Credit and debit cards (Visa, Mastercard, American Express)
 
+## Free Trial
+
+Kumbukum Cloud includes a 7-day free trial. You can start the trial after confirming your email address, without entering a credit card.
+
+Trial reminder emails are sent 3 days before the trial ends and again about 24 hours before the trial ends. When the trial ends, product access is locked until billing is added, and Kumbukum sends a trial-expired email.
+
+Accounts that do not add billing are deleted 3 days after the trial ends, including all workspace data.
+
 ## Invoices
 
 Invoices are generated automatically for each billing cycle. Download past invoices from **Settings > Billing > Invoices**.

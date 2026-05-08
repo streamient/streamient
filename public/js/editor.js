@@ -12164,7 +12164,7 @@ function keydownHandler(bindings) {
   };
 }
 
-// node_modules/.pnpm/@tiptap+core@3.22.5_@tiptap+pm@3.22.5/node_modules/@tiptap/core/dist/index.js
+// node_modules/.pnpm/@tiptap+core@3.23.1_@tiptap+pm@3.23.1/node_modules/@tiptap/core/dist/index.js
 var __defProp = Object.defineProperty;
 var __export = (target, all) => {
   for (var name in all)
@@ -14978,6 +14978,7 @@ var Extendable = class {
     });
     extension.name = this.name;
     extension.parent = this.parent;
+    this.child = null;
     return extension;
   }
   extend(extendedConfig = {}) {
@@ -15506,6 +15507,36 @@ var ExtensionManager = class {
     );
   }
   /**
+   * Destroy the extension manager and clean up all extension references
+   * to prevent memory leaks through parent/child extension chains.
+   *
+   * Walks each extension's full parent chain and nulls every forward
+   * `parent.child → current` link where the parent still points to the
+   * current node. This breaks the retention path from module-scope
+   * singleton roots through deep extend() chains.
+   *
+   * Only ancestor `.child` links matching the current chain are cleared.
+   * The `.parent` pointer on ancestors is never touched — extensions
+   * may be shared across live editors, so their own backward references
+   * and non-matching forward links must remain intact.
+   */
+  destroy() {
+    this.extensions.forEach((extension) => {
+      let current = extension;
+      while (current.parent) {
+        const parent = current.parent;
+        if (parent.child === current) {
+          parent.child = null;
+        }
+        current = parent;
+      }
+    });
+    this.extensions = [];
+    this.baseExtensions = [];
+    this.schema = null;
+    this.editor = null;
+  }
+  /**
    * Go through all extensions, create extension storages & setup marks
    * & bind editor event listener.
    */
@@ -15910,12 +15941,23 @@ var Paste = Extension.create({
 });
 var Tabindex = Extension.create({
   name: "tabindex",
+  addOptions() {
+    return {
+      value: void 0
+    };
+  },
   addProseMirrorPlugins() {
     return [
       new Plugin({
         key: new PluginKey("tabindex"),
         props: {
-          attributes: () => this.editor.isEditable ? { tabindex: "0" } : {}
+          attributes: () => {
+            var _a;
+            if (!this.editor.isEditable && this.options.value === void 0) {
+              return {};
+            }
+            return { tabindex: (_a = this.options.value) != null ? _a : "0" };
+          }
         }
       })
     ];
@@ -16246,6 +16288,7 @@ var Editor = class extends EventEmitter {
     this.className = "tiptap";
     this.editorView = null;
     this.isFocused = false;
+    this.destroyed = false;
     this.isInitialized = false;
     this.extensionStorage = {};
     this.instanceId = Math.random().toString(36).slice(2, 9);
@@ -16528,7 +16571,7 @@ var Editor = class extends EventEmitter {
    * Creates an extension manager.
    */
   createExtensionManager() {
-    var _a, _b;
+    var _a, _b, _c, _d;
     const coreExtensions = this.options.enableCoreExtensions ? [
       Editable,
       ClipboardTextSerializer.configure({
@@ -16537,7 +16580,9 @@ var Editor = class extends EventEmitter {
       Commands,
       FocusEvents,
       Keymap,
-      Tabindex,
+      Tabindex.configure({
+        value: (_d = (_c = this.options.coreExtensionOptions) == null ? void 0 : _c.tabindex) == null ? void 0 : _d.value
+      }),
       Drop,
       Paste,
       Delete,
@@ -16775,9 +16820,18 @@ var Editor = class extends EventEmitter {
    * Destroy the editor.
    */
   destroy() {
+    if (this.destroyed) {
+      return;
+    }
+    this.destroyed = true;
     this.emit("destroy");
     this.unmount();
     this.removeAllListeners();
+    this.extensionManager.destroy();
+    this.extensionManager = null;
+    this.schema = null;
+    this.commandManager = null;
+    this.extensionStorage = {};
   }
   /**
    * Check if the editor is already destroyed.
@@ -18042,7 +18096,7 @@ function markPasteRule(config) {
   });
 }
 
-// node_modules/.pnpm/@tiptap+core@3.22.5_@tiptap+pm@3.22.5/node_modules/@tiptap/core/dist/jsx-runtime/jsx-runtime.js
+// node_modules/.pnpm/@tiptap+core@3.23.1_@tiptap+pm@3.23.1/node_modules/@tiptap/core/dist/jsx-runtime/jsx-runtime.js
 var h = (tag, attributes) => {
   if (tag === "slot") {
     return 0;
@@ -18057,7 +18111,7 @@ var h = (tag, attributes) => {
   return [tag, rest, children];
 };
 
-// node_modules/.pnpm/@tiptap+extension-blockquote@3.22.5_@tiptap+core@3.22.5_@tiptap+pm@3.22.5_/node_modules/@tiptap/extension-blockquote/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-blockquote@3.23.1_@tiptap+core@3.23.1_@tiptap+pm@3.23.1_/node_modules/@tiptap/extension-blockquote/dist/index.js
 var inputRegex = /^\s*>\s$/;
 var Blockquote = Node3.create({
   name: "blockquote",
@@ -18130,7 +18184,7 @@ ${prefix}
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-bold@3.22.5_@tiptap+core@3.22.5_@tiptap+pm@3.22.5_/node_modules/@tiptap/extension-bold/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-bold@3.23.1_@tiptap+core@3.23.1_@tiptap+pm@3.23.1_/node_modules/@tiptap/extension-bold/dist/index.js
 var starInputRegex = /(?:^|\s)(\*\*(?!\s+\*\*)((?:[^*]+))\*\*(?!\s+\*\*))$/;
 var starPasteRegex = /(?:^|\s)(\*\*(?!\s+\*\*)((?:[^*]+))\*\*(?!\s+\*\*))/g;
 var underscoreInputRegex = /(?:^|\s)(__(?!\s+__)((?:[^_]+))__(?!\s+__))$/;
@@ -18222,7 +18276,7 @@ var Bold = Mark2.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-code@3.22.5_@tiptap+core@3.22.5_@tiptap+pm@3.22.5_/node_modules/@tiptap/extension-code/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-code@3.23.1_@tiptap+core@3.23.1_@tiptap+pm@3.23.1_/node_modules/@tiptap/extension-code/dist/index.js
 var inputRegex2 = /(^|[^`])`([^`]+)`(?!`)$/;
 var pasteRegex = /(^|[^`])`([^`]+)`(?!`)/g;
 var Code = Mark2.create({
@@ -18287,7 +18341,7 @@ var Code = Mark2.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-code-block@3.22.5_@tiptap+core@3.22.5_@tiptap+pm@3.22.5__@tiptap+pm@3.22.5/node_modules/@tiptap/extension-code-block/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-code-block@3.23.1_@tiptap+core@3.23.1_@tiptap+pm@3.23.1__@tiptap+pm@3.23.1/node_modules/@tiptap/extension-code-block/dist/index.js
 var DEFAULT_TAB_SIZE = 4;
 var backtickInputRegex = /^```([a-z]+)?[\s\n]$/;
 var tildeInputRegex = /^~~~([a-z]+)?[\s\n]$/;
@@ -18599,7 +18653,7 @@ var CodeBlock = Node3.create({
 });
 var index_default = CodeBlock;
 
-// node_modules/.pnpm/@tiptap+extension-document@3.22.5_@tiptap+core@3.22.5_@tiptap+pm@3.22.5_/node_modules/@tiptap/extension-document/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-document@3.23.1_@tiptap+core@3.23.1_@tiptap+pm@3.23.1_/node_modules/@tiptap/extension-document/dist/index.js
 var Document = Node3.create({
   name: "doc",
   topNode: true,
@@ -18612,7 +18666,7 @@ var Document = Node3.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-hard-break@3.22.5_@tiptap+core@3.22.5_@tiptap+pm@3.22.5_/node_modules/@tiptap/extension-hard-break/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-hard-break@3.23.1_@tiptap+core@3.23.1_@tiptap+pm@3.23.1_/node_modules/@tiptap/extension-hard-break/dist/index.js
 var HardBreak = Node3.create({
   name: "hardBreak",
   markdownTokenName: "br",
@@ -18675,7 +18729,7 @@ var HardBreak = Node3.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-heading@3.22.5_@tiptap+core@3.22.5_@tiptap+pm@3.22.5_/node_modules/@tiptap/extension-heading/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-heading@3.23.1_@tiptap+core@3.23.1_@tiptap+pm@3.23.1_/node_modules/@tiptap/extension-heading/dist/index.js
 var Heading = Node3.create({
   name: "heading",
   addOptions() {
@@ -18758,7 +18812,7 @@ var Heading = Node3.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-horizontal-rule@3.22.5_@tiptap+core@3.22.5_@tiptap+pm@3.22.5__@tiptap+pm@3.22.5/node_modules/@tiptap/extension-horizontal-rule/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-horizontal-rule@3.23.1_@tiptap+core@3.23.1_@tiptap+pm@3.23.1__@tiptap+pm@3.23.1/node_modules/@tiptap/extension-horizontal-rule/dist/index.js
 var HorizontalRule = Node3.create({
   name: "horizontalRule",
   addOptions() {
@@ -18835,7 +18889,7 @@ var HorizontalRule = Node3.create({
 });
 var index_default2 = HorizontalRule;
 
-// node_modules/.pnpm/@tiptap+extension-italic@3.22.5_@tiptap+core@3.22.5_@tiptap+pm@3.22.5_/node_modules/@tiptap/extension-italic/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-italic@3.23.1_@tiptap+core@3.23.1_@tiptap+pm@3.23.1_/node_modules/@tiptap/extension-italic/dist/index.js
 var starInputRegex2 = /(?:^|\s)(\*(?!\s+\*)((?:[^*]+))\*(?!\s+\*))$/;
 var starPasteRegex2 = /(?:^|\s)(\*(?!\s+\*)((?:[^*]+))\*(?!\s+\*))/g;
 var underscoreInputRegex2 = /(?:^|\s)(_(?!\s+_)((?:[^_]+))_(?!\s+_))$/;
@@ -20075,7 +20129,7 @@ function find(str, type = null, opts = null) {
   return filtered;
 }
 
-// node_modules/.pnpm/@tiptap+extension-link@3.22.5_@tiptap+core@3.22.5_@tiptap+pm@3.22.5__@tiptap+pm@3.22.5/node_modules/@tiptap/extension-link/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-link@3.23.1_@tiptap+core@3.23.1_@tiptap+pm@3.23.1__@tiptap+pm@3.23.1/node_modules/@tiptap/extension-link/dist/index.js
 var UNICODE_WHITESPACE_PATTERN = "[\0- \xA0\u1680\u180E\u2000-\u2029\u205F\u3000]";
 var UNICODE_WHITESPACE_REGEX = new RegExp(UNICODE_WHITESPACE_PATTERN);
 var UNICODE_WHITESPACE_REGEX_END = new RegExp(`${UNICODE_WHITESPACE_PATTERN}$`);
@@ -20490,7 +20544,7 @@ var Link = Mark2.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-list@3.22.5_@tiptap+core@3.22.5_@tiptap+pm@3.22.5__@tiptap+pm@3.22.5/node_modules/@tiptap/extension-list/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-list@3.23.1_@tiptap+core@3.23.1_@tiptap+pm@3.23.1__@tiptap+pm@3.23.1/node_modules/@tiptap/extension-list/dist/index.js
 var __defProp2 = Object.defineProperty;
 var __export2 = (target, all) => {
   for (var name in all)
@@ -20573,6 +20627,25 @@ var BulletList = Node3.create({
     return [inputRule];
   }
 });
+function isSameLineOrderedListToken(token) {
+  var _a, _b;
+  const nestedToken = (_a = token.tokens) == null ? void 0 : _a[0];
+  return Boolean(
+    token.text && ((_b = token.tokens) == null ? void 0 : _b.length) === 1 && (nestedToken == null ? void 0 : nestedToken.type) === "list" && nestedToken.ordered && nestedToken.raw === token.text
+  );
+}
+function parseSameLineOrderedListText(text, helpers) {
+  if (helpers.tokenizeInline) {
+    return helpers.parseInline(helpers.tokenizeInline(text));
+  }
+  return helpers.parseInline([
+    {
+      type: "text",
+      raw: text,
+      text
+    }
+  ]);
+}
 var ListItem = Node3.create({
   name: "listItem",
   addOptions() {
@@ -20603,6 +20676,17 @@ var ListItem = Node3.create({
     const parseBlockChildren = (_a = helpers.parseBlockChildren) != null ? _a : helpers.parseChildren;
     let content = [];
     if (token.tokens && token.tokens.length > 0) {
+      if (isSameLineOrderedListToken(token)) {
+        return {
+          type: "listItem",
+          content: [
+            {
+              type: "paragraph",
+              content: parseSameLineOrderedListText(token.text || "", helpers)
+            }
+          ]
+        };
+      }
       const hasParagraphTokens = token.tokens.some((t) => t.type === "paragraph");
       if (hasParagraphTokens) {
         content = parseBlockChildren(token.tokens);
@@ -21553,7 +21637,7 @@ var ListKit = Extension.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-paragraph@3.22.5_@tiptap+core@3.22.5_@tiptap+pm@3.22.5_/node_modules/@tiptap/extension-paragraph/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-paragraph@3.23.1_@tiptap+core@3.23.1_@tiptap+pm@3.23.1_/node_modules/@tiptap/extension-paragraph/dist/index.js
 var EMPTY_PARAGRAPH_MARKDOWN = "&nbsp;";
 var NBSP_CHAR = "\xA0";
 var Paragraph = Node3.create({
@@ -21611,7 +21695,7 @@ var Paragraph = Node3.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-strike@3.22.5_@tiptap+core@3.22.5_@tiptap+pm@3.22.5_/node_modules/@tiptap/extension-strike/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-strike@3.23.1_@tiptap+core@3.23.1_@tiptap+pm@3.23.1_/node_modules/@tiptap/extension-strike/dist/index.js
 var inputRegex4 = /(?:^|\s)(~~(?!\s+~~)((?:[^~]+))~~(?!\s+~~))$/;
 var pasteRegex2 = /(?:^|\s)(~~(?!\s+~~)((?:[^~]+))~~(?!\s+~~))/g;
 var Strike = Mark2.create({
@@ -21685,7 +21769,7 @@ var Strike = Mark2.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-text@3.22.5_@tiptap+core@3.22.5_@tiptap+pm@3.22.5_/node_modules/@tiptap/extension-text/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-text@3.23.1_@tiptap+core@3.23.1_@tiptap+pm@3.23.1_/node_modules/@tiptap/extension-text/dist/index.js
 var Text2 = Node3.create({
   name: "text",
   group: "inline",
@@ -21698,7 +21782,7 @@ var Text2 = Node3.create({
   renderMarkdown: (node) => node.text || ""
 });
 
-// node_modules/.pnpm/@tiptap+extension-underline@3.22.5_@tiptap+core@3.22.5_@tiptap+pm@3.22.5_/node_modules/@tiptap/extension-underline/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-underline@3.23.1_@tiptap+core@3.23.1_@tiptap+pm@3.23.1_/node_modules/@tiptap/extension-underline/dist/index.js
 var Underline = Mark2.create({
   name: "underline",
   addOptions() {
@@ -22652,7 +22736,7 @@ var redo = buildCommand(true, true);
 var undoNoScroll = buildCommand(false, false);
 var redoNoScroll = buildCommand(true, false);
 
-// node_modules/.pnpm/@tiptap+extensions@3.22.5_@tiptap+core@3.22.5_@tiptap+pm@3.22.5__@tiptap+pm@3.22.5/node_modules/@tiptap/extensions/dist/index.js
+// node_modules/.pnpm/@tiptap+extensions@3.23.1_@tiptap+core@3.23.1_@tiptap+pm@3.23.1__@tiptap+pm@3.23.1/node_modules/@tiptap/extensions/dist/index.js
 var CharacterCount = Extension.create({
   name: "characterCount",
   addOptions() {
@@ -23014,7 +23098,7 @@ var UndoRedo = Extension.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+starter-kit@3.22.5/node_modules/@tiptap/starter-kit/dist/index.js
+// node_modules/.pnpm/@tiptap+starter-kit@3.23.1/node_modules/@tiptap/starter-kit/dist/index.js
 var StarterKit = Extension.create({
   name: "starterKit",
   addExtensions() {
@@ -23091,16 +23175,16 @@ var StarterKit = Extension.create({
 });
 var index_default3 = StarterKit;
 
-// node_modules/.pnpm/@tiptap+extension-placeholder@3.22.5_@tiptap+extensions@3.22.5_@tiptap+core@3.22.5_@tiptap+pm@3.22.5__@tiptap+pm@3.22.5_/node_modules/@tiptap/extension-placeholder/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-placeholder@3.23.1_@tiptap+extensions@3.23.1_@tiptap+core@3.23.1_@tiptap+pm@3.23.1__@tiptap+pm@3.23.1_/node_modules/@tiptap/extension-placeholder/dist/index.js
 var index_default4 = Placeholder;
 
-// node_modules/.pnpm/@tiptap+extension-task-list@3.22.5_@tiptap+extension-list@3.22.5_@tiptap+core@3.22.5_@t_f3697b05d83584a31f7c5f0233c4ac80/node_modules/@tiptap/extension-task-list/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-task-list@3.23.1_@tiptap+extension-list@3.23.1_@tiptap+core@3.23.1_@t_a54ef0029b0542dfdd0f889cef8bb0a8/node_modules/@tiptap/extension-task-list/dist/index.js
 var index_default5 = TaskList;
 
-// node_modules/.pnpm/@tiptap+extension-task-item@3.22.5_@tiptap+extension-list@3.22.5_@tiptap+core@3.22.5_@t_1b0af0e4d31c93cbfdfa5e96f12ac3d4/node_modules/@tiptap/extension-task-item/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-task-item@3.23.1_@tiptap+extension-list@3.23.1_@tiptap+core@3.23.1_@t_8ef807c9a8a3af8279cfb1989c19e742/node_modules/@tiptap/extension-task-item/dist/index.js
 var index_default6 = TaskItem;
 
-// node_modules/.pnpm/@tiptap+extension-image@3.22.5_@tiptap+core@3.22.5_@tiptap+pm@3.22.5_/node_modules/@tiptap/extension-image/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-image@3.23.1_@tiptap+core@3.23.1_@tiptap+pm@3.23.1_/node_modules/@tiptap/extension-image/dist/index.js
 var inputRegex5 = /(?:^|\s)(!\[(.+|:?)]\((\S+)(?:(?:\s+)["'](\S+)["'])?\))$/;
 var Image = Node3.create({
   name: "image",

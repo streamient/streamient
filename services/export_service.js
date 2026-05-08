@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
-import archiver from 'archiver';
+import { ZipArchive } from 'archiver';
 import { Export } from '../model/export.js';
 import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
@@ -62,7 +62,7 @@ async function processExport(exportId, hostId, userEmail, userName) {
 
 		await new Promise((resolve, reject) => {
 			const output = fs.createWriteStream(filePath);
-			const archive = archiver('zip', { zlib: { level: 9 } });
+			const archive = new ZipArchive({ zlib: { level: 9 } });
 
 			output.on('close', resolve);
 			archive.on('error', reject);

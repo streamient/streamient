@@ -4,7 +4,7 @@ import { extractUrlContent } from '../modules/url_content_extractor.js';
 import { emitToTenant } from '../modules/socket.js';
 import { invalidateGraphCache, removeLinksForItem } from './graph_service.js';
 import * as audit from './audit_service.js';
-import { saveScreenshot, signScreenshotUrl } from '../modules/screenshot.js';
+import { saveScreenshot, saveScreenshotDataUrl, signScreenshotUrl } from '../modules/screenshot.js';
 import { normalizeUrl } from '../modules/screenshot.js';
 
 function attachScreenshotUrl(doc) {
@@ -35,9 +35,16 @@ export async function saveUrl(userId, host_id, data, ctx = {}) {
 	const existingUrl = await Url.findOne(duplicateQuery);
 
 	if (existingUrl) {
+		let shouldSaveExisting = false;
 		if (!existingUrl.normalized_url) {
 			existingUrl.normalized_url = normalizedUrl;
-			existingUrl.save().catch((err) => console.error('URL duplicate normalization update error:', err.message));
+			shouldSaveExisting = true;
+		}
+		if (await attachClientScreenshot(existingUrl, rawUrl, data.screenshot_data_url)) {
+			shouldSaveExisting = true;
+		}
+		if (shouldSaveExisting && typeof existingUrl.save === 'function') {
+			await existingUrl.save().catch((err) => console.error('URL duplicate update error:', err.message));
 		}
 		existingUrl.$locals = existingUrl.$locals || {};
 		existingUrl.$locals.wasDuplicate = true;
@@ -51,12 +58,15 @@ export async function saveUrl(userId, host_id, data, ctx = {}) {
 		console.error('URL extraction error:', err.message);
 	}
 
+	const screenshot = await saveClientScreenshot(rawUrl, data.screenshot_data_url);
+
 	const urlDoc = await Url.create({
 		url: rawUrl,
 		normalized_url: normalizedUrl,
 		title: data.title || extracted.title || rawUrl,
 		description: data.description || extracted.description || '',
 		og_image: extracted.og_image || '',
+		screenshot: screenshot || '',
 		text_content: extracted.text_content || '',
 		crawl_enabled: data.crawl_enabled || false,
 		project: data.project,
@@ -68,14 +78,38 @@ export async function saveUrl(userId, host_id, data, ctx = {}) {
 	invalidateGraphCache(host_id).catch(() => {});
 	audit.log({ action: 'create', resource: 'url', resource_id: urlDoc._id.toString(), user_id: userId, host_id, ...ctx });
 
-	// Fire-and-forget: capture screenshot in background
-	saveScreenshot(rawUrl).then((filename) => {
-		if (filename) {
-			Url.updateOne({ _id: urlDoc._id }, { $set: { screenshot: filename } }).catch(() => {});
-		}
-	}).catch((err) => console.error('Screenshot capture error:', err.message));
+	if (!screenshot) {
+		// Fire-and-forget: capture screenshot in background
+		saveScreenshot(rawUrl).then((filename) => {
+			if (filename) {
+				Url.updateOne({ _id: urlDoc._id }, { $set: { screenshot: filename } }).catch(() => {});
+			}
+		}).catch((err) => console.error('Screenshot capture error:', err.message));
+	}
 
 	return urlDoc;
+}
+
+async function attachClientScreenshot(urlDoc, rawUrl, dataUrl) {
+	const screenshot = await saveClientScreenshot(rawUrl, dataUrl);
+	if (screenshot) {
+		urlDoc.screenshot = screenshot;
+		return true;
+	}
+	return false;
+}
+
+async function saveClientScreenshot(rawUrl, dataUrl) {
+	if (!dataUrl) {
+		return '';
+	}
+
+	try {
+		return await saveScreenshotDataUrl(rawUrl, dataUrl);
+	} catch (err) {
+		console.error('Client screenshot save error:', err.message);
+		return '';
+	}
 }
 
 export async function listUrls(host_id, projectId, { page = 1, limit = 50 } = {}) {

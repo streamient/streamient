@@ -30,6 +30,11 @@ function repoDir(hostId, repoId) {
 	return path.join(GIT_REPOS_DIR, hostId, repoId.toString());
 }
 
+export function deleteGitRepoHostDirectory(hostId) {
+	const dir = path.join(GIT_REPOS_DIR, hostId);
+	fs.rm(dir, { recursive: true, force: true }, () => {});
+}
+
 function cloneUrl(repoUrl, token) {
 	if (!token) return repoUrl;
 	try {

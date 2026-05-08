@@ -1,0 +1,32 @@
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export function hasProductAccess(user, now = new Date()) {
+	if (!user) return false;
+	const status = user.subscription_status || 'incomplete';
+	if (status === 'active') return true;
+	if (status !== 'trialing') return false;
+	if (user.trial_source !== 'no_card') return true;
+	if (!user.trial_ends_at) return true;
+	return new Date(user.trial_ends_at).getTime() > now.getTime();
+}
+
+export function getTrialDaysRemaining(user, now = new Date()) {
+	if (!user?.trial_ends_at) return null;
+	const diff = new Date(user.trial_ends_at).getTime() - now.getTime();
+	if (!Number.isFinite(diff)) return null;
+	return Math.max(0, Math.ceil(diff / DAY_MS));
+}
+
+export function formatTrialEndsIn(user, now = new Date()) {
+	const days = getTrialDaysRemaining(user, now);
+	if (days === null) return 'Trial';
+	if (days === 0) return 'Trial ends today';
+	return `Trial ends in ${days} day${days === 1 ? '' : 's'}`;
+}
+
+export function hasProFeatureAccess(user, plan, isHosted, now = new Date()) {
+	if (!isHosted) return true;
+	if (plan === 'pro') return true;
+	if (!user) return false;
+	return user.subscription_status === 'trialing' && hasProductAccess(user, now);
+}
