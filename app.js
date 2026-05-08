@@ -20,6 +20,7 @@ import { createApiLimiter } from './middleware/rate_limit.js';
 import { verifyScreenshotSignature, resolveScreenshotPath } from './modules/screenshot.js';
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './swagger.js';
+import * as OtelRuntime from './modules/otel_runtime.js';
 import authRoutes from './routes/auth.js';
 import oauthRoutes from './routes/oauth.js';
 import apiRoutes from './routes/api.js';
@@ -194,6 +195,7 @@ app.get('/', (req, res) => {
 app.use('/', webRoutes);
 
 // Sentry error handler — after all controllers, before other error middleware
+OtelRuntime.setupExpressErrorHandler(app);
 Sentry.setupExpressErrorHandler(app);
 
 } // end SERVER_MODE === 'app'
@@ -218,9 +220,11 @@ async function start() {
 }
 
 process.on('unhandledRejection', (reason, promise) => {
+	OtelRuntime.recordException(reason instanceof Error ? reason : new Error(String(reason)));
 	console.error('Unhandled rejection at:', promise, 'reason:', reason);
 });
 process.on('uncaughtException', (err) => {
+	OtelRuntime.recordException(err);
 	console.error('Uncaught exception:', err);
 });
 

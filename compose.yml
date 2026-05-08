@@ -1,5 +1,6 @@
 x-env: &env
     NODE_ENV: development
+    KUMBUKUM_APP: web
     PORT: 3000
     MONGO_URI: ${DEV_KUMBUKUM_MONGODB_URI}
     REDIS_URL: redis://redis:6379
@@ -38,6 +39,20 @@ x-env: &env
     SENTRY_DSN_KUMBUKUM: "${SENTRY_DSN_KUMBUKUM:-}"
     SENTRY_DSN: "${SENTRY_DSN:-}"
     SENTRY_TUNNEL_PROJECT_IDS: "${SENTRY_TUNNEL_PROJECT_IDS:-}"
+    ENABLE_OTEL: "${ENABLE_OTEL:-false}"
+    OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
+    OTEL_EXPORTER_OTLP_INSECURE: "${OTEL_EXPORTER_OTLP_INSECURE:-}"
+    OTEL_EXPORTER_OTLP_PROTOCOL: "${OTEL_EXPORTER_OTLP_PROTOCOL:-}"
+    OTEL_TRACES_EXPORTER: "${OTEL_TRACES_EXPORTER:-}"
+    OTEL_METRICS_EXPORTER: "${OTEL_METRICS_EXPORTER:-}"
+    OTEL_LOGS_EXPORTER: "${OTEL_LOGS_EXPORTER:-}"
+    OTEL_EXPORTER_OTLP_TIMEOUT: "${OTEL_EXPORTER_OTLP_TIMEOUT:-}"
+    OTEL_BSP_EXPORT_TIMEOUT: "${OTEL_BSP_EXPORT_TIMEOUT:-}"
+    OTEL_BSP_SCHEDULE_DELAY: "${OTEL_BSP_SCHEDULE_DELAY:-}"
+    OTEL_BSP_MAX_QUEUE_SIZE: "${OTEL_BSP_MAX_QUEUE_SIZE:-}"
+    OTEL_BSP_MAX_EXPORT_BATCH_SIZE: "${OTEL_BSP_MAX_EXPORT_BATCH_SIZE:-}"
+    OTEL_TRACES_SAMPLER: "${OTEL_TRACES_SAMPLER:-}"
+    OTEL_TRACES_SAMPLER_ARG: "${OTEL_TRACES_SAMPLER_ARG:-}"
     STRIPE_SECRET_KEY: "${STRIPE_SECRET_KEY:-}"
     STRIPE_WEBHOOK_SECRET: "${STRIPE_WEBHOOK_SECRET:-}"
     STRIPE_STARTER_PRICE_ID: "${STRIPE_STARTER_PRICE_ID:-}"
@@ -109,6 +124,7 @@ services:
             - "3002:3002"
         environment:
             <<: *env
+            KUMBUKUM_APP: mcp
             PORT: 3002
         restart: unless-stopped
         healthcheck:
@@ -128,6 +144,7 @@ services:
         command: ["npm", "run", "start"]
         environment:
             <<: *env
+            KUMBUKUM_APP: scheduler
             SERVER_MODE: scheduler
         restart: unless-stopped
         depends_on:
