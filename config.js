@@ -1,3 +1,5 @@
+import { getSentryDsn, isSentryEnabled } from './modules/sentry_runtime.js';
+
 function parseTypesenseConfig() {
 	let nodesEnv = (process.env.TYPESENSE_NODES || '').trim();
 	// Strip wrapping single or double quotes (some orchestrators add them)
@@ -128,8 +130,8 @@ const config = {
 	},
 
 	sentry: {
-		dsn: process.env.SENTRY_DSN || '',
-		clientEnabled: !!(process.env.SENTRY_DSN),
+		dsn: getSentryDsn(),
+		clientEnabled: isSentryEnabled(),
 	},
 
 	gitEncryptionKey: process.env.GIT_ENCRYPTION_KEY || '',

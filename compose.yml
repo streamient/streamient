@@ -1,8 +1,9 @@
 x-env: &env
     NODE_ENV: development
+    KUMBUKUM_APP: web
     PORT: 3000
     MONGO_URI: ${DEV_KUMBUKUM_MONGODB_URI}
-    REDIS_URL: redis://redis:6379
+    REDIS_URL: ${DEV_REDIS_URL:-redis://redis:6379}
     TYPESENSE_HOST: ${DEV_TYPESENSE_HOST:-typesense}
     TYPESENSE_PORT: 8108
     TYPESENSE_API_KEY: ${DEV_TYPESENSE_KEY:-kumbukum-dev-key}
@@ -27,7 +28,7 @@ x-env: &env
     MCP_BASE_URL: http://localhost:3002
     WS_URL: ""
     API_BASE_URL: http://app:3000
-    SCREENSHOT_URL: http://screenshot:3000
+    SCREENSHOT_URL: ${DEV_SCREENSHOT_URL:-http://screenshot:3000}
     SCREENSHOT_SECRET: "${SCREENSHOT_SECRET:-change-me-screenshot-secret}" # openssl rand -hex 32
     SYSADMIN_EMAIL: "sysadmin@localhost"
     SYSADMIN_PASSWORD: "sysadminpassword"
@@ -37,7 +38,23 @@ x-env: &env
     OPENPANEL_API_URL: "${OPENPANEL_API_URL:-}"
     SENTRY_DSN_KUMBUKUM: "${SENTRY_DSN_KUMBUKUM:-}"
     SENTRY_DSN: "${SENTRY_DSN:-}"
+    ENABLE_SENTRY: "${ENABLE_SENTRY:-false}"
+    SENTRY_ENABLED: "${SENTRY_ENABLED:-false}"
     SENTRY_TUNNEL_PROJECT_IDS: "${SENTRY_TUNNEL_PROJECT_IDS:-}"
+    ENABLE_OTEL: "${ENABLE_OTEL:-false}"
+    OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
+    OTEL_EXPORTER_OTLP_INSECURE: "${OTEL_EXPORTER_OTLP_INSECURE:-}"
+    OTEL_EXPORTER_OTLP_PROTOCOL: "${OTEL_EXPORTER_OTLP_PROTOCOL:-}"
+    OTEL_TRACES_EXPORTER: "${OTEL_TRACES_EXPORTER:-}"
+    OTEL_METRICS_EXPORTER: "${OTEL_METRICS_EXPORTER:-}"
+    OTEL_LOGS_EXPORTER: "${OTEL_LOGS_EXPORTER:-}"
+    OTEL_EXPORTER_OTLP_TIMEOUT: "${OTEL_EXPORTER_OTLP_TIMEOUT:-}"
+    OTEL_BSP_EXPORT_TIMEOUT: "${OTEL_BSP_EXPORT_TIMEOUT:-}"
+    OTEL_BSP_SCHEDULE_DELAY: "${OTEL_BSP_SCHEDULE_DELAY:-}"
+    OTEL_BSP_MAX_QUEUE_SIZE: "${OTEL_BSP_MAX_QUEUE_SIZE:-}"
+    OTEL_BSP_MAX_EXPORT_BATCH_SIZE: "${OTEL_BSP_MAX_EXPORT_BATCH_SIZE:-}"
+    OTEL_TRACES_SAMPLER: "${OTEL_TRACES_SAMPLER:-}"
+    OTEL_TRACES_SAMPLER_ARG: "${OTEL_TRACES_SAMPLER_ARG:-}"
     STRIPE_SECRET_KEY: "${STRIPE_SECRET_KEY:-}"
     STRIPE_WEBHOOK_SECRET: "${STRIPE_WEBHOOK_SECRET:-}"
     STRIPE_STARTER_PRICE_ID: "${STRIPE_STARTER_PRICE_ID:-}"
@@ -94,10 +111,10 @@ services:
                 condition: service_completed_successfully
             # mongo-init:
             #     condition: service_completed_successfully
-            redis:
-                condition: service_started
-            typesense:
-                condition: service_started
+            # redis:
+            #     condition: service_started
+            # typesense:
+            #     condition: service_started
 
     mcp:
         extends:
@@ -109,6 +126,7 @@ services:
             - "3002:3002"
         environment:
             <<: *env
+            KUMBUKUM_APP: mcp
             PORT: 3002
         restart: unless-stopped
         healthcheck:
@@ -128,6 +146,7 @@ services:
         command: ["npm", "run", "start"]
         environment:
             <<: *env
+            KUMBUKUM_APP: scheduler
             SERVER_MODE: scheduler
         restart: unless-stopped
         depends_on:
@@ -157,65 +176,65 @@ services:
     #         PERCONA_TELEMETRY_DISABLE: 1
     #         MONGO_HOST: mongo
 
-    redis:
-        image: redis:8
-        command: redis-server --appendonly yes --port 6379 --save ""
-        volumes:
-            - redis_data:/data
-        healthcheck:
-            test: ["CMD", "redis-cli", "ping"]
-            interval: 30s
-            timeout: 10s
-            retries: 3
-            start_period: 30s
+    # redis:
+    #     image: redis:8
+    #     command: redis-server --appendonly yes --port 6379 --save ""
+    #     volumes:
+    #         - redis_data:/data
+    #     healthcheck:
+    #         test: ["CMD", "redis-cli", "ping"]
+    #         interval: 30s
+    #         timeout: 10s
+    #         retries: 3
+    #         start_period: 30s
 
-    typesense:
-        image: typesense/typesense:30.2
-        ports:
-            - "8108:8108"
-        volumes:
-            - typesense_data:/data
-        command: --data-dir /data --api-key=kumbukum-dev-key
+    # typesense:
+    #     image: typesense/typesense:30.2
+    #     ports:
+    #         - "8108:8108"
+    #     volumes:
+    #         - typesense_data:/data
+    #     command: --data-dir /data --api-key=kumbukum-dev-key
 
     # ── Mailpit (dev mail catcher) ──────────────────────────────
-    mailpit:
-        image: axllent/mailpit:latest
-        restart: unless-stopped
-        ports:
-            - "8025:8025"   # Web UI
-        expose:
-            - "1025"        # SMTP
+    # mailpit:
+    #     image: axllent/mailpit:latest
+    #     restart: unless-stopped
+    #     ports:
+    #         - "8025:8025"   # Web UI
+    #     expose:
+    #         - "1025"        # SMTP
 
-    caddy:
-        image: caddy:latest
-        cap_add:
-            - NET_ADMIN
-        ports:
-            - "80:80"
-            - "443:443"
-            - "443:443/udp"
-        volumes:
-            - ./docker/config/caddy/Caddyfile:/etc/caddy/Caddyfile
-            - caddy_data:/data
-            - caddy_config:/config
-            - /etc/hostname:/etc/hostname:ro
-        depends_on:
-            - app
-            - redis
-            - typesense
-        dns:
-            - 100.100.100.100
+    # caddy:
+    #     image: caddy:latest
+    #     cap_add:
+    #         - NET_ADMIN
+    #     ports:
+    #         - "80:80"
+    #         - "443:443"
+    #         - "443:443/udp"
+    #     volumes:
+    #         - ./docker/config/caddy/Caddyfile:/etc/caddy/Caddyfile
+    #         - caddy_data:/data
+    #         - caddy_config:/config
+    #         - /etc/hostname:/etc/hostname:ro
+    #     depends_on:
+    #         - app
+    #         - redis
+    #         - typesense
+    #     dns:
+    #         - 100.100.100.100
 
-    screenshot:
-        image: ghcr.io/kumbukum/screenshot:latest
-        restart: unless-stopped
-        init: true
-        ports:
-            - 3000
-        environment:
-            PORT: 3000
-        shm_size: '2g'
-        hostname: screenshot
+    # screenshot:
+    #     image: ghcr.io/kumbukum/screenshot:latest
+    #     restart: unless-stopped
+    #     init: true
+    #     ports:
+    #         - 3000
+    #     environment:
+    #         PORT: 3000
+    #     shm_size: '2g'
+    #     hostname: screenshot
 
 
 volumes:

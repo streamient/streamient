@@ -18,6 +18,7 @@ import { gitSyncTools } from './tools/git_sync.js';
 import { MCP_SERVER_INSTRUCTIONS } from './instructions.js';
 import { buildProtectedResourceMetadata } from '../../modules/oauth.js';
 import { captureException, flush, setupExpressErrorHandler } from './sentry.js';
+import { recordException, setupExpressErrorHandler as setupOtelExpressErrorHandler } from './tracing.js';
 
 const PORT = mcpConfig.port;
 const API_BASE_URL = mcpConfig.apiBaseUrl;
@@ -129,6 +130,7 @@ async function createServer(apiAuth, { projectId } = {}) {
         });
         return result;
       } catch (err) {
+        recordException(err);
         captureException(err, {
           tags: {
             phase: 'tool_call',
@@ -172,6 +174,7 @@ if (transportArg === '--stdio' || !transportArg) {
     const transport = new StdioServerTransport();
     await server.connect(transport);
   } catch (err) {
+    recordException(err);
     captureException(err, { tags: { phase: 'stdio_startup' } });
     console.error('Fatal error starting Kumbukum MCP stdio server:', err);
     await flush();
@@ -234,6 +237,7 @@ if (transportArg === '--stdio' || !transportArg) {
 
       await server.connect(transport);
     } catch (err) {
+      recordException(err);
       captureException(err, { tags: { phase: 'sse_connect' } });
       console.error('Error starting Kumbukum MCP SSE connection:', err);
       if (!res.headersSent) {
@@ -256,6 +260,7 @@ if (transportArg === '--stdio' || !transportArg) {
 	if (scopeResponse) return sendAuthResponse(res, scopeResponse);
       await session.transport.handlePostMessage(req, res);
     } catch (err) {
+      recordException(err);
       captureException(err, { tags: { phase: 'sse_message' } });
       console.error('Error handling Kumbukum MCP SSE message:', err);
       if (!res.headersSent) {
@@ -279,6 +284,7 @@ if (transportArg === '--stdio' || !transportArg) {
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
     } catch (err) {
+      recordException(err);
       captureException(err, { tags: { phase: 'streamable_http' } });
       console.error('Error handling Kumbukum MCP HTTP request:', err);
       if (!res.headersSent) {
@@ -291,6 +297,7 @@ if (transportArg === '--stdio' || !transportArg) {
   app.get('/mcp', handleMcp);
   app.delete('/mcp', handleMcp);
 
+  setupOtelExpressErrorHandler(app);
   setupExpressErrorHandler(app);
 
   app.listen(PORT, () => {

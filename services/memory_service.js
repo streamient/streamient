@@ -1,8 +1,14 @@
 import { Memory } from '../model/memory.js';
+import mongoose from 'mongoose';
 import { searchCollection, removeDocument } from '../modules/typesense.js';
 import { emitToTenant } from '../modules/socket.js';
 import { invalidateGraphCache, removeLinksForItem } from './graph_service.js';
 import * as audit from './audit_service.js';
+
+function maybeObjectId(value) {
+	if (!value || typeof value !== 'string' || !mongoose.Types.ObjectId.isValid(value)) return value;
+	return new mongoose.Types.ObjectId(value);
+}
 
 export async function storeMemory(userId, host_id, data, ctx = {}) {
 	const mem = await Memory.create({
@@ -23,12 +29,16 @@ export async function storeMemory(userId, host_id, data, ctx = {}) {
 
 export async function listMemories(host_id, projectId, { page = 1, limit = 50 } = {}) {
 	const query = { host_id, in_trash: { $ne: true } };
-	if (projectId) query.project = projectId;
+	if (projectId) query.project = maybeObjectId(projectId);
 
-	return Memory.find(query)
-		.sort({ updatedAt: -1 })
-		.skip((page - 1) * limit)
-		.limit(limit);
+	return Memory.aggregate([
+		{ $match: query },
+		{ $addFields: { list_date: { $ifNull: ['$git_commit.committed_at', '$updatedAt'] } } },
+		{ $sort: { list_date: -1, updatedAt: -1 } },
+		{ $skip: (page - 1) * limit },
+		{ $limit: limit },
+		{ $project: { list_date: 0 } },
+	]);
 }
 
 export async function getMemory(host_id, memoryId) {

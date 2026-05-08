@@ -819,7 +819,7 @@ export async function reindexHost(host_id, models) {
 
 		const query = { host_id, in_trash: { $ne: true } };
 		const total = await model.countDocuments(query);
-		await model.updateMany(query, { $set: { is_indexed: false } });
+		await model.updateMany(query, { $set: { is_indexed: false } }, { timestamps: false });
 		results[type] = { queued: total };
 		console.log(`Queued ${total} ${type} docs for scheduler reindex on host ${host_id}`);
 	}
@@ -991,7 +991,7 @@ export async function indexMissing(models) {
 
 			// Mark successful docs as indexed in one updateMany
 			if (successIds.length) {
-				await model.updateMany({ _id: { $in: successIds } }, { $set: { is_indexed: true } });
+				await model.updateMany({ _id: { $in: successIds } }, { $set: { is_indexed: true } }, { timestamps: false });
 				totalIndexed += successIds.length;
 				progress.indexed += successIds.length;
 				progress.by_type[type] += successIds.length;

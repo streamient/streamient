@@ -294,6 +294,8 @@ Add a git repository to sync with a project. Syncs markdown files as notes/memor
 | `memories_path` | string | no       | Directory in repo mapped to memories               |
 | `sync_path`     | string | no       | Subfolder within repo to sync (default: /)         |
 | `sync_interval` | number | no       | Sync interval in minutes (default: 10)             |
+| `commit_sync_enabled` | boolean | no | Import git commits as memories (default: true)     |
+| `commit_history_days` | number | no | Days of commit history to backfill (default: 90)   |
 | `project_id`    | string | no       | Project ID (default: auto)                         |
 
 ### `update_git_repo`
@@ -312,6 +314,8 @@ Update settings of a configured git repo.
 | `sync_path`      | string  | no       |
 | `sync_interval`  | number  | no       |
 | `trash_on_delete` | boolean | no       |
+| `commit_sync_enabled` | boolean | no |
+| `commit_history_days` | number | no |
 
 ### `remove_git_repo`
 Remove a git repo configuration and its local working copy.

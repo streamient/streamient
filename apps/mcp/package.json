@@ -9,15 +9,14 @@
     "node": ">=24"
   },
   "scripts": {
-    "start": "node --import ./sentry.js --optimize_for_size --max-old-space-size=4096 server.js --http"
+    "start": "node --import ./tracing.js --import ./sentry.js --optimize_for_size --max-old-space-size=4096 server.js --http"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@sentry/node": "^10.51.0",
     "express": "^5.2.1",
-    "express-rate-limit": "^8.4.1",
+    "express-rate-limit": "^8.5.1",
     "vitepress-plugin-tabs": "^0.9.0",
-    "zod": "^4.4.1"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"

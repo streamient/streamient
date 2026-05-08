@@ -1,18 +1,22 @@
-import * as Sentry from '@sentry/node';
-import { nodeProfilingIntegration } from '@sentry/profiling-node';
+import { getSentryDsn, isSentryEnabled, loadSentry } from './modules/sentry_runtime.js';
 
-if (process.env.SENTRY_DSN) {
-    Sentry.init({
-        dsn: process.env.SENTRY_DSN,
-        integrations: [
-            nodeProfilingIntegration(),
-            // send console.log, console.warn, and console.error calls as logs to Sentry
-            Sentry.consoleLoggingIntegration({ levels: ["log", "warn", "error"] }),
-        ],
-        enableLogs: true,
-        tracesSampleRate: 1.0,
-        profileSessionSampleRate: 1.0,
-        profileLifecycle: 'trace',
-        sendDefaultPii: true,
-    });
+if (isSentryEnabled()) {
+	const [Sentry, { nodeProfilingIntegration }] = await Promise.all([
+		loadSentry(),
+		import('@sentry/profiling-node'),
+	]);
+
+	Sentry.init({
+		dsn: getSentryDsn(),
+		integrations: [
+			nodeProfilingIntegration(),
+			// send console.log, console.warn, and console.error calls as logs to Sentry
+			Sentry.consoleLoggingIntegration({ levels: ["log", "warn", "error"] }),
+		],
+		enableLogs: true,
+		tracesSampleRate: 1.0,
+		profileSessionSampleRate: 1.0,
+		profileLifecycle: 'trace',
+		sendDefaultPii: true,
+	});
 }
