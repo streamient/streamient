@@ -1,11 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
+import config from '../config.js';
 import { buildHostedTrialFields } from '../routes/auth.js';
-import { buildCheckoutSessionParams, buildSubscriptionUserUpdate } from '../services/billing_service.js';
+import { buildCheckoutSessionParams, buildSubscriptionUserUpdate, resolveCheckoutPriceId } from '../services/billing_service.js';
 import { runTrialLifecycle } from '../modules/scheduler.js';
 import { deleteTenantData, getTenantTypesenseCollectionNames } from '../services/account_cleanup_service.js';
-import { hasProductAccess } from '../services/subscription_access_service.js';
+import { hasProductAccess, hasProFeatureAccess } from '../services/subscription_access_service.js';
 
 describe('no-card trial signup and billing helpers', () => {
 	it('builds hosted no-card trial fields from configured trial days', () => {
@@ -25,6 +26,26 @@ describe('no-card trial signup and billing helpers', () => {
 		assert.deepEqual(params.line_items, [{ price: 'price_123', quantity: 1 }]);
 		assert.equal(params.metadata.kumbukum_user_id, 'user-1');
 		assert.equal(Object.hasOwn(params, 'subscription_data'), false);
+	});
+
+	it('uses legacy Stripe price ID as the Starter checkout fallback', () => {
+		const original = {
+			priceId: config.stripe.priceId,
+			starterPriceId: config.stripe.starterPriceId,
+			proPriceId: config.stripe.proPriceId,
+		};
+		config.stripe.priceId = 'price_legacy';
+		config.stripe.starterPriceId = '';
+		config.stripe.proPriceId = 'price_pro';
+
+		try {
+			assert.equal(resolveCheckoutPriceId('starter'), 'price_legacy');
+			assert.equal(resolveCheckoutPriceId('pro'), 'price_pro');
+		} finally {
+			config.stripe.priceId = original.priceId;
+			config.stripe.starterPriceId = original.starterPriceId;
+			config.stripe.proPriceId = original.proPriceId;
+		}
 	});
 
 	it('clears no-card trial lock fields when Stripe subscription state is applied', () => {
@@ -135,6 +156,24 @@ describe('subscription product access', () => {
 			trial_ends_at: new Date('2026-01-08T00:00:00.000Z'),
 		}, now), false);
 		assert.equal(hasProductAccess({ subscription_status: 'trial_expired' }, now), false);
+	});
+
+	it('allows active trials to use Pro-gated features', () => {
+		const now = new Date('2026-01-07T00:00:00.000Z');
+		const trialUser = {
+			subscription_status: 'trialing',
+			trial_source: 'no_card',
+			trial_ends_at: new Date('2026-01-08T00:00:00.000Z'),
+		};
+		const expiredTrialUser = {
+			...trialUser,
+			trial_ends_at: new Date('2026-01-06T00:00:00.000Z'),
+		};
+
+		assert.equal(hasProFeatureAccess(trialUser, 'free', true, now), true);
+		assert.equal(hasProFeatureAccess(expiredTrialUser, 'free', true, now), false);
+		assert.equal(hasProFeatureAccess({ subscription_status: 'active' }, 'starter', true, now), false);
+		assert.equal(hasProFeatureAccess(null, 'free', false, now), true);
 	});
 });
 

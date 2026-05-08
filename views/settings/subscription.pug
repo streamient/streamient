@@ -13,6 +13,7 @@ block settings
 			- var noCardTrial = user.trial_source === 'no_card'
 			- var trialEnded = status === 'trial_expired' || (status === 'trialing' && noCardTrial && user.trial_ends_at && new Date(user.trial_ends_at).getTime() <= Date.now())
 			- var needsCheckout = status === 'incomplete' || status === 'canceled' || trialEnded || (status === 'trialing' && noCardTrial)
+			- var checkoutPlan = noCardTrial ? 'pro' : 'starter'
 
 			if status === 'trialing' && !trialEnded
 				.alert.alert-info.mb-3
@@ -66,7 +67,7 @@ block settings
 							td= new Date(user.trial_ends_at).toLocaleDateString()
 
 			if needsCheckout
-				a.btn.btn-primary(href="/billing/checkout")
+				a.btn.btn-primary(href=`/billing/checkout?plan=${checkoutPlan}`)
 					!= icon('creditCard')
 					span.ms-2 Add Billing
 			else

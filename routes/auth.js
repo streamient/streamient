@@ -11,7 +11,7 @@ import * as passkeyService from '../services/passkey_service.js';
 import * as teamService from '../services/team_service.js';
 import config from '../config.js';
 
-const is_hosted = new URL(config.appUrl).hostname.endsWith('kumbukum.com');
+const is_hosted = config.isHosted;
 import { createDefaultProject } from '../services/project_service.js';
 import { PendingSignup } from '../model/pending_signup.js';
 import { isSysadminCredentials, requireSysadmin } from '../middleware/sysadmin.js';

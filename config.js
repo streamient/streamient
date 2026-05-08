@@ -63,6 +63,20 @@ function parseRedisConfig() {
 	return process.env.REDIS_URL || 'redis://localhost:6379';
 }
 
+export function isHostedHostname(hostname) {
+	if (!hostname) return false;
+	const normalized = hostname.toLowerCase();
+	return normalized === 'app.kumbukum.local' || normalized.endsWith('kumbukum.com');
+}
+
+export function isHostedAppUrl(appUrl) {
+	try {
+		return isHostedHostname(new URL(appUrl).hostname);
+	} catch {
+		return false;
+	}
+}
+
 export function parseSmtpServersFromEnv(env = process.env) {
 	const defaultFrom = env.SMTP_FROM || 'noreply@localhost';
 	const serversEnv = (env.SMTP_SERVERS || '').trim();
@@ -111,6 +125,7 @@ export function parseSmtpServersFromEnv(env = process.env) {
 
 const smtpServers = parseSmtpServersFromEnv();
 const primarySmtp = smtpServers[0] || {};
+const appUrl = process.env.APP_URL || 'http://localhost:3000';
 
 const config = {
 	env: process.env.NODE_ENV || 'development',
@@ -122,7 +137,8 @@ const config = {
 	socketEmitDelay: parseInt(process.env.SOCKET_EMIT_DELAY, 10) || 500,
 	sessionSecret: process.env.SESSION_SECRET || 'change-me',
 	jwtSecret: process.env.JWT_SECRET || 'change-me',
-	appUrl: process.env.APP_URL || 'http://localhost:3000',
+	appUrl,
+	isHosted: isHostedAppUrl(appUrl),
 	mcpBaseUrl: (process.env.MCP_BASE_URL || 'http://localhost:3002').replace(/\/$/, ''),
 	wsUrl: process.env.WS_URL || '',
 

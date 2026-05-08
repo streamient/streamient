@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { requireTenant } from '../modules/tenancy.js';
 import { User } from '../model/user.js';
-import { applySubscriptionToUser, createCheckoutSession, createPortalSession, handleWebhook } from '../services/billing_service.js';
+import { applySubscriptionToUser, createCheckoutSession, createPortalSession, handleWebhook, resolveCheckoutPriceId } from '../services/billing_service.js';
 import express from 'express';
 
 const router = Router();
@@ -37,7 +37,14 @@ router.get('/billing/checkout', requireAuth, requireTenant, async (req, res) => 
             return res.redirect('/dashboard');
         }
 
-        const plan = req.query.plan === 'pro' ? 'pro' : 'starter';
+        const plan = req.query.plan === 'pro' || (user.subscription_status === 'trialing' && user.trial_source === 'no_card') ? 'pro' : 'starter';
+        if (!resolveCheckoutPriceId(plan)) {
+            return res.status(500).render('billing/checkout_cancel', {
+                title: 'Billing Setup Missing',
+                message: `Stripe price ID is not configured for the ${plan} plan.`,
+            });
+        }
+
         const checkoutUrl = await createCheckoutSession(user, plan);
         res.redirect(checkoutUrl);
     } catch (err) {

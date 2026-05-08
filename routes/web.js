@@ -4,10 +4,10 @@ import { requireTenant, Tenant } from '../modules/tenancy.js';
 import { User } from '../model/user.js';
 import { listProjects, getProject, getProjectCounts } from '../services/project_service.js';
 import { listGitRepos } from '../services/git_sync_service.js';
-import { hasProductAccess } from '../services/subscription_access_service.js';
+import { hasProductAccess, hasProFeatureAccess } from '../services/subscription_access_service.js';
 import config from '../config.js';
 
-const is_hosted = new URL(config.appUrl).hostname.endsWith('kumbukum.com');
+const is_hosted = config.isHosted;
 
 const router = Router();
 
@@ -30,7 +30,7 @@ router.use(async (req, res, next) => {
 	]);
 	const activeTenant = (req.accessibleTenants || []).find((item) => item.tenantId === req.tenantId) || null;
 	const plan = tenant?.plan || 'free';
-	const proOnlyFeatureEnabled = !is_hosted || plan === 'pro';
+	const proOnlyFeatureEnabled = hasProFeatureAccess(user, plan, is_hosted);
 	res.locals.user = user;
 	res.locals.projects = projects;
 	res.locals.plan = plan;
@@ -46,6 +46,7 @@ router.use(async (req, res, next) => {
 	res.locals.impersonating = req.session.impersonating || false;
 	res.locals.impersonatingName = req.session.impersonatingName || '';
 	res.locals.is_hosted = is_hosted;
+	res.locals.is_trialing = is_hosted && user?.subscription_status === 'trialing' && user?.trial_source === 'no_card' && hasProductAccess(user);
 	res.locals.hide_chat_sidebar = req.path === '/settings' || req.path.startsWith('/settings/');
 	next();
 });
@@ -114,7 +115,7 @@ router.get('/ajax/project-list', async (req, res) => {
 		Tenant.findOne({ host_id: req.host_id }).select('plan').lean(),
 	]);
 	const plan = tenant?.plan || 'free';
-	const emailFeatureEnabled = !is_hosted || plan === 'pro';
+	const emailFeatureEnabled = hasProFeatureAccess(res.locals.user, plan, is_hosted);
 	res.render('ajax/project_list', { projects, counts, activeProjectId: req.query.active || '', emailFeatureEnabled, is_hosted });
 });
 
@@ -127,7 +128,7 @@ router.get('/ajax/project-overview/:id', async (req, res) => {
 		]);
 		if (!project) return res.status(404).send('');
 		const plan = tenant?.plan || 'free';
-		const proOnlyFeatureEnabled = !is_hosted || plan === 'pro';
+		const proOnlyFeatureEnabled = hasProFeatureAccess(res.locals.user, plan, is_hosted);
 		const gitSyncEnabled = proOnlyFeatureEnabled;
 		const emailFeatureEnabled = proOnlyFeatureEnabled;
 		const gitRepos = await listGitRepos(req.host_id, req.params.id).catch(() => []);

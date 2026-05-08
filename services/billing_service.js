@@ -10,8 +10,13 @@ import config from '../config.js';
 function resolvePlanFromSubscription(subscription) {
     const priceId = subscription.items?.data?.[0]?.price?.id;
     if (priceId === config.stripe.proPriceId) return 'pro';
-    if (priceId === config.stripe.starterPriceId) return 'starter';
+    if (priceId === config.stripe.starterPriceId || priceId === config.stripe.priceId) return 'starter';
     return 'starter';
+}
+
+export function resolveCheckoutPriceId(plan = 'starter') {
+	if (plan === 'pro') return config.stripe.proPriceId;
+	return config.stripe.starterPriceId || config.stripe.priceId;
 }
 
 export async function applySubscriptionToUser(userId, subscription, stripeCustomerId = undefined) {
@@ -61,7 +66,7 @@ export function buildSubscriptionUserUpdate(subscription, stripeCustomerId = und
  * Returns the Checkout URL to redirect the user to.
  */
 export async function createCheckoutSession(user, plan = 'starter') {
-    const priceId = plan === 'pro' ? config.stripe.proPriceId : config.stripe.starterPriceId;
+    const priceId = resolveCheckoutPriceId(plan);
     if (!priceId) {
         throw new Error(`Stripe price ID is not configured for plan: ${plan}`);
     }
@@ -73,7 +78,11 @@ export async function createCheckoutSession(user, plan = 'starter') {
         const customer = await stripe.customers.create({
             email: user.email,
             name: user.name,
-            metadata: { kumbukum_user_id: user._id.toString() },
+            metadata: {
+                kumbukum_user_id: user._id.toString(),
+                host_id: user.host_id || '',
+                tenant_id: user.tenant?.toString?.() || '',
+            },
         });
         customerId = customer.id;
         await User.findByIdAndUpdate(user._id, { stripe_customer_id: customerId });

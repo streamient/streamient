@@ -33,12 +33,12 @@ import * as gitSyncService from '../services/git_sync_service.js';
 import * as oauthService from '../services/oauth_service.js';
 import * as teamService from '../services/team_service.js';
 import { createChatLimiter } from '../middleware/rate_limit.js';
-import { hasProductAccess } from '../services/subscription_access_service.js';
+import { hasProductAccess, hasProFeatureAccess } from '../services/subscription_access_service.js';
 import config from '../config.js';
 import crypto from 'node:crypto';
 
 const router = Router();
-const is_hosted = new URL(config.appUrl).hostname.endsWith('kumbukum.com');
+const is_hosted = config.isHosted;
 
 router.use(requireAuth, requireTenant);
 
@@ -46,6 +46,7 @@ if (is_hosted) {
 	router.use(async (req, res, next) => {
 		try {
 			const user = await User.findById(req.userId).select('subscription_status trial_source trial_ends_at');
+			req.billingUser = user;
 			if (hasProductAccess(user)) return next();
 			return res.status(402).json({
 				error: 'Subscription required',
@@ -102,7 +103,7 @@ router.get('/projects/:id', async (req, res) => {
 router.get('/features', async (req, res) => {
 	const tenant = await Tenant.findOne({ host_id: req.host_id }).select('plan').lean();
 	const plan = tenant?.plan || 'free';
-	const proOnlyFeatureEnabled = !is_hosted || plan === 'pro';
+	const proOnlyFeatureEnabled = hasProFeatureAccess(req.billingUser, plan, is_hosted);
 	res.json({ features: { email_ingest: proOnlyFeatureEnabled, git_sync: proOnlyFeatureEnabled } });
 });
 
@@ -127,21 +128,21 @@ router.delete('/projects/:id', async (req, res) => {
 async function requireGitSyncAccess(req, res, next) {
 	const tenant = await Tenant.findOne({ host_id: req.host_id }).select('plan').lean();
 	const plan = tenant?.plan || 'free';
-	const enabled = !is_hosted || plan === 'pro';
+	const enabled = hasProFeatureAccess(req.billingUser, plan, is_hosted);
 	if (!enabled) {
 		return res.status(403).json({ error: 'Git Sync is available on the Pro plan' });
 	}
 	next();
 }
 
-async function getEmailFeatureAccess(host_id) {
+async function getEmailFeatureAccess(host_id, user = null) {
 	if (!is_hosted) return true;
 	const tenant = await Tenant.findOne({ host_id }).select('plan').lean();
-	return tenant?.plan === 'pro';
+	return hasProFeatureAccess(user, tenant?.plan || 'free', is_hosted);
 }
 
 async function requireEmailFeatureAccess(req, res, next) {
-	const enabled = await getEmailFeatureAccess(req.host_id);
+	const enabled = await getEmailFeatureAccess(req.host_id, req.billingUser);
 	if (!enabled) {
 		return res.status(403).json({ error: 'Email ingestion is available on the Pro plan' });
 	}
@@ -481,7 +482,7 @@ router.get('/batch/count', async (req, res) => {
 	try {
 		const { type, project } = req.query;
 		if (!type || !BATCH_TYPES.includes(type)) return res.status(400).json({ error: 'valid type required' });
-		if (type === 'emails' && !(await getEmailFeatureAccess(req.host_id))) {
+		if (type === 'emails' && !(await getEmailFeatureAccess(req.host_id, req.billingUser))) {
 			return res.status(403).json({ error: 'Email ingestion is available on the Pro plan' });
 		}
 		const count = await getFilteredCount(req.host_id, TS_TYPE_MAP[type], project || null);
@@ -496,7 +497,7 @@ router.post('/batch/delete', async (req, res) => {
 	try {
 		const { type } = req.body;
 		if (!type || !BATCH_TYPES.includes(type)) return res.status(400).json({ error: 'Invalid type' });
-		if (type === 'emails' && !(await getEmailFeatureAccess(req.host_id))) {
+		if (type === 'emails' && !(await getEmailFeatureAccess(req.host_id, req.billingUser))) {
 			return res.status(403).json({ error: 'Email ingestion is available on the Pro plan' });
 		}
 
@@ -518,7 +519,7 @@ router.post('/batch/move', async (req, res) => {
 	try {
 		const { type, project } = req.body;
 		if (!type || !BATCH_TYPES.includes(type)) return res.status(400).json({ error: 'Invalid type' });
-		if (type === 'emails' && !(await getEmailFeatureAccess(req.host_id))) {
+		if (type === 'emails' && !(await getEmailFeatureAccess(req.host_id, req.billingUser))) {
 			return res.status(403).json({ error: 'Email ingestion is available on the Pro plan' });
 		}
 		if (!project) return res.status(400).json({ error: 'project required' });
@@ -542,7 +543,7 @@ router.post('/batch/copy', async (req, res) => {
 	try {
 		const { type, project } = req.body;
 		if (!type || !BATCH_TYPES.includes(type)) return res.status(400).json({ error: 'Invalid type' });
-		if (type === 'emails' && !(await getEmailFeatureAccess(req.host_id))) {
+		if (type === 'emails' && !(await getEmailFeatureAccess(req.host_id, req.billingUser))) {
 			return res.status(403).json({ error: 'Email ingestion is available on the Pro plan' });
 		}
 		if (!project) return res.status(400).json({ error: 'project required' });
@@ -580,7 +581,7 @@ router.post('/search/all', async (req, res) => {
 	try {
 		const query = req.body.query;
 		if (!query) return res.status(400).json({ error: 'query required' });
-		const emailEnabled = await getEmailFeatureAccess(req.host_id);
+		const emailEnabled = await getEmailFeatureAccess(req.host_id, req.billingUser);
 
 		const types = [
 			{ type: 'notes', queryBy: 'embedding' },
@@ -613,7 +614,7 @@ router.post('/search/all', async (req, res) => {
 router.post('/resolve', async (req, res) => {
 	const ids = req.body.ids;
 	if (!ids?.length) return res.json({ items: [] });
-	const emailEnabled = await getEmailFeatureAccess(req.host_id);
+	const emailEnabled = await getEmailFeatureAccess(req.host_id, req.billingUser);
 
 	const [notes, memories, urls, emails] = await Promise.all([
 		Note.find({ _id: { $in: ids }, host_id: req.host_id }, 'title').lean(),
@@ -719,7 +720,7 @@ router.post('/reindex', requireRestrictedSettingsAccess, async (req, res) => {
 // ---- Search / Knowledge ----
 
 router.post('/search/knowledge', async (req, res) => {
-	const emailEnabled = await getEmailFeatureAccess(req.host_id);
+	const emailEnabled = await getEmailFeatureAccess(req.host_id, req.billingUser);
 	const results = await searchKnowledge(req.host_id, req.body.query, {
 		projectId: req.body.project_id,
 		perPage: req.body.per_page,
@@ -735,7 +736,7 @@ router.post('/chat', createChatLimiter(), async (req, res) => {
 	try {
 		const { query, conversation_id, project_id } = req.body;
 		if (!query) return res.status(400).json({ error: 'query required' });
-		const emailEnabled = await getEmailFeatureAccess(req.host_id);
+		const emailEnabled = await getEmailFeatureAccess(req.host_id, req.billingUser);
 
 		const result = await processChat({
 			hostId: req.host_id,
@@ -787,7 +788,7 @@ router.post('/chat/stream', createChatLimiter(), async (req, res) => {
 			sendSSE('error', { error: 'query required' });
 			return res.end();
 		}
-		const emailEnabled = await getEmailFeatureAccess(req.host_id);
+		const emailEnabled = await getEmailFeatureAccess(req.host_id, req.billingUser);
 
 		const { stream, answer, metadata } = await processChatStream({
 			hostId: req.host_id,
