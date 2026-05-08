@@ -163,7 +163,10 @@ html(lang="en")
 										img.rounded#rm-url-og-image(alt="" style="object-fit:cover")
 									.flex-grow-1
 										.mb-3
-											.form-text URL
+											.d-flex.justify-content-between.align-items-center
+												.form-text URL
+												a.form-text.text-decoration-none.d-none#rm-url-visit-link(href="#" target="_blank" rel="noopener")
+													span Visit
 											input.form-control#rm-url-input(type="url" autofocus)
 										.mb-3
 											.form-text Title (optional)

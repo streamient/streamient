@@ -823,6 +823,7 @@ function rmPopulate(type, record) {
 		const urlInput = document.getElementById('rm-url-input');
 		urlInput.value = record.url || '';
 		urlInput.readOnly = !!rmCurrentId && !!record.url;
+		rmSetUrlVisitLink(record.url);
 		document.getElementById('rm-url-title').value = record.title || '';
 		document.getElementById('rm-url-description').value = record.description || '';
 		document.getElementById('rm-url-crawl').checked = !!record.crawl_enabled;
@@ -908,6 +909,21 @@ function rmSetUrlCrawlActionState() {
 	const canManage = rmCurrentType === 'urls' && !!rmCurrentId;
 	if (resyncBtn) resyncBtn.disabled = !canManage || !rmUrlCrawlEnabled;
 	if (deleteBtn) deleteBtn.disabled = !canManage || rmUrlPagesTotal <= 0;
+}
+
+function rmSetUrlVisitLink(url) {
+	const visitLink = document.getElementById('rm-url-visit-link');
+	if (!visitLink) return;
+
+	const href = (url || '').trim();
+	if (/^https?:\/\//i.test(href)) {
+		visitLink.href = href;
+		visitLink.classList.remove('d-none');
+		return;
+	}
+
+	visitLink.href = '#';
+	visitLink.classList.add('d-none');
 }
 
 function rmInitEditor(containerId, content) {
@@ -1108,6 +1124,7 @@ function rmCleanup() {
 	document.getElementById('result-modal-memory')?.classList.add('d-none');
 	document.getElementById('result-modal-url')?.classList.add('d-none');
 	document.getElementById('result-modal-email')?.classList.add('d-none');
+	rmSetUrlVisitLink('');
 	rmShowUrlDetails();
 }
 
@@ -1125,6 +1142,7 @@ function initResultModalHandlers() {
 	document.getElementById('rm-url-tab-details')?.addEventListener('click', rmShowUrlDetails);
 	document.getElementById('rm-url-tab-pages')?.addEventListener('click', rmShowUrlPages);
 	document.getElementById('rm-url-crawl')?.addEventListener('change', rmHandleUrlCrawlChange);
+	document.getElementById('rm-url-input')?.addEventListener('input', (e) => rmSetUrlVisitLink(e.target.value));
 	document.getElementById('rm-email-tab-details')?.addEventListener('click', rmShowEmailDetails);
 	document.getElementById('rm-email-tab-body')?.addEventListener('click', rmShowEmailBody);
 	document.getElementById('rm-url-crawl-load-more-btn')?.addEventListener('click', () => {
