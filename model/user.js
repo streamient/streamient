@@ -23,10 +23,14 @@ const userSchema = new mongoose.Schema(
 		stripe_subscription_id: { type: String, select: false },
 		subscription_status: {
 			type: String,
-			enum: ['incomplete', 'trialing', 'active', 'past_due', 'canceled', 'unpaid'],
+			enum: ['incomplete', 'trialing', 'trial_expired', 'active', 'past_due', 'canceled', 'unpaid'],
 			default: 'incomplete',
 		},
+		trial_source: { type: String, enum: ['no_card', 'stripe', null], default: null },
 		trial_ends_at: { type: Date },
+		trial_reminder_3d_sent_at: { type: Date },
+		trial_reminder_24h_sent_at: { type: Date },
+		trial_locked_at: { type: Date },
 		// Access tokens for API
 		access_tokens: [
 			{

@@ -18,6 +18,14 @@ import { isSysadminCredentials, requireSysadmin } from '../middleware/sysadmin.j
 
 const router = Router();
 
+export function buildHostedTrialFields(now = new Date(), trialDays = config.stripe.trialDays) {
+	return {
+		subscription_status: 'trialing',
+		trial_source: 'no_card',
+		trial_ends_at: new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000),
+	};
+}
+
 async function hydrateSessionForUser(req, user, preferredTenantId = null, preferredHostId = null) {
 	req.session.userId = user._id.toString();
 	return initializeSessionTenant(
@@ -146,6 +154,9 @@ router.post('/verify', async (req, res) => {
 		user.tenant = tenant._id;
 		user.host_id = tenant.host_id;
 		user.is_active = true;
+		if (is_hosted) {
+			Object.assign(user, buildHostedTrialFields());
+		}
 		await user.save();
 
 		ensureCollections(tenant.host_id).catch((e) =>
@@ -165,11 +176,6 @@ router.post('/verify', async (req, res) => {
 		// Sign the user in directly
 		await hydrateSessionForUser(req, user, tenant._id.toString(), tenant.host_id);
 		await recordSuccessfulLogin(req, user);
-
-		// Hosted edition: redirect to Stripe Checkout for trial subscription
-		if (is_hosted) {
-			return res.redirect('/billing/checkout');
-		}
 
 		res.redirect('/dashboard');
 	} catch (err) {

@@ -14,8 +14,49 @@ function resolvePlanFromSubscription(subscription) {
     return 'starter';
 }
 
+export async function applySubscriptionToUser(userId, subscription, stripeCustomerId = undefined) {
+	const plan = resolvePlanFromSubscription(subscription);
+	const user = await User.findByIdAndUpdate(
+		userId,
+		buildSubscriptionUserUpdate(subscription, stripeCustomerId),
+		{ returnDocument: 'after' },
+	);
+	if (user?.host_id) {
+		await Tenant.findOneAndUpdate({ host_id: user.host_id }, { plan });
+	}
+	return user;
+}
+
+export function buildCheckoutSessionParams(user, customerId, priceId) {
+	return {
+		customer: customerId,
+		mode: 'subscription',
+		payment_method_collection: 'always',
+		line_items: [{ price: priceId, quantity: 1 }],
+		success_url: `${config.appUrl}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
+		cancel_url: `${config.appUrl}/billing/cancel`,
+		metadata: { kumbukum_user_id: user._id.toString() },
+	};
+}
+
+export function buildSubscriptionUserUpdate(subscription, stripeCustomerId = undefined) {
+	const update = {
+		stripe_subscription_id: subscription.id,
+		subscription_status: subscription.status,
+		trial_source: subscription.trial_end ? 'stripe' : null,
+		trial_ends_at: subscription.trial_end ? new Date(subscription.trial_end * 1000) : null,
+		trial_reminder_3d_sent_at: null,
+		trial_reminder_24h_sent_at: null,
+		trial_locked_at: null,
+	};
+	if (stripeCustomerId) {
+		update.stripe_customer_id = stripeCustomerId;
+	}
+	return update;
+}
+
 /**
- * Create a Stripe Checkout session with a free trial that collects the card upfront.
+ * Create a Stripe Checkout session for a paid subscription.
  * Accepts an optional plan ('starter' or 'pro'); defaults to 'starter'.
  * Returns the Checkout URL to redirect the user to.
  */
@@ -38,18 +79,7 @@ export async function createCheckoutSession(user, plan = 'starter') {
         await User.findByIdAndUpdate(user._id, { stripe_customer_id: customerId });
     }
 
-    const session = await stripe.checkout.sessions.create({
-        customer: customerId,
-        mode: 'subscription',
-        payment_method_collection: 'always',
-        line_items: [{ price: priceId, quantity: 1 }],
-        subscription_data: {
-            trial_period_days: config.stripe.trialDays,
-        },
-        success_url: `${config.appUrl}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${config.appUrl}/billing/cancel`,
-        metadata: { kumbukum_user_id: user._id.toString() },
-    });
+    const session = await stripe.checkout.sessions.create(buildCheckoutSessionParams(user, customerId, priceId));
 
     return session.url;
 }
@@ -88,15 +118,7 @@ export async function handleWebhook(rawBody, sig) {
             const userId = session.metadata?.kumbukum_user_id;
             if (userId && session.subscription) {
                 const subscription = await stripe.subscriptions.retrieve(session.subscription);
-                const plan = resolvePlanFromSubscription(subscription);
-                const user = await User.findByIdAndUpdate(userId, {
-                    stripe_subscription_id: subscription.id,
-                    subscription_status: subscription.status,
-                    trial_ends_at: subscription.trial_end ? new Date(subscription.trial_end * 1000) : null,
-                }, { returnDocument: 'after' });
-                if (user?.host_id) {
-                    await Tenant.findOneAndUpdate({ host_id: user.host_id }, { plan });
-                }
+                await applySubscriptionToUser(userId, subscription);
             }
             break;
         }
@@ -105,8 +127,7 @@ export async function handleWebhook(rawBody, sig) {
             const subscription = event.data.object;
             const user = await User.findOne({ stripe_subscription_id: subscription.id });
             if (user) {
-                user.subscription_status = subscription.status;
-                user.trial_ends_at = subscription.trial_end ? new Date(subscription.trial_end * 1000) : null;
+                Object.assign(user, buildSubscriptionUserUpdate(subscription));
                 await user.save();
                 const plan = resolvePlanFromSubscription(subscription);
                 await Tenant.findOneAndUpdate({ host_id: user.host_id }, { plan });
@@ -119,6 +140,11 @@ export async function handleWebhook(rawBody, sig) {
             const user = await User.findOne({ stripe_subscription_id: subscription.id });
             if (user) {
                 user.subscription_status = 'canceled';
+                user.trial_source = null;
+                user.trial_ends_at = null;
+                user.trial_reminder_3d_sent_at = null;
+                user.trial_reminder_24h_sent_at = null;
+                user.trial_locked_at = null;
                 await user.save();
                 await Tenant.findOneAndUpdate({ host_id: user.host_id }, { plan: 'starter' });
             }

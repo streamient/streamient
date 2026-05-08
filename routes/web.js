@@ -4,6 +4,7 @@ import { requireTenant, Tenant } from '../modules/tenancy.js';
 import { User } from '../model/user.js';
 import { listProjects, getProject, getProjectCounts } from '../services/project_service.js';
 import { listGitRepos } from '../services/git_sync_service.js';
+import { hasProductAccess } from '../services/subscription_access_service.js';
 import config from '../config.js';
 
 const is_hosted = new URL(config.appUrl).hostname.endsWith('kumbukum.com');
@@ -51,8 +52,6 @@ router.use(async (req, res, next) => {
 
 // ---- Subscription gate (hosted edition only) ----
 // Users without an active/trialing subscription get redirected to checkout.
-// past_due gets a 3-day grace period before lockout.
-const GRACE_PERIOD_MS = 3 * 24 * 60 * 60 * 1000;
 if (is_hosted) {
 	router.use((req, res, next) => {
 		const user = res.locals.user;
@@ -61,18 +60,7 @@ if (is_hosted) {
 		// Settings/subscription page is always accessible so users can manage billing
 		if (req.path.startsWith('/settings/subscription')) return next();
 
-		const status = user.subscription_status || 'incomplete';
-
-		// Active or trialing — all good
-		if (status === 'trialing' || status === 'active') return next();
-
-		// past_due — allow 3-day grace
-		if (status === 'past_due') {
-			const sub = user.updatedAt || user.createdAt;
-			if (sub && (Date.now() - new Date(sub).getTime()) < GRACE_PERIOD_MS) {
-				return next();
-			}
-		}
+		if (hasProductAccess(user)) return next();
 
 		// Everything else — redirect to checkout
 		return res.redirect('/billing/checkout');

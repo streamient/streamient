@@ -33,6 +33,7 @@ import * as gitSyncService from '../services/git_sync_service.js';
 import * as oauthService from '../services/oauth_service.js';
 import * as teamService from '../services/team_service.js';
 import { createChatLimiter } from '../middleware/rate_limit.js';
+import { hasProductAccess } from '../services/subscription_access_service.js';
 import config from '../config.js';
 import crypto from 'node:crypto';
 
@@ -40,6 +41,22 @@ const router = Router();
 const is_hosted = new URL(config.appUrl).hostname.endsWith('kumbukum.com');
 
 router.use(requireAuth, requireTenant);
+
+if (is_hosted) {
+	router.use(async (req, res, next) => {
+		try {
+			const user = await User.findById(req.userId).select('subscription_status trial_source trial_ends_at');
+			if (hasProductAccess(user)) return next();
+			return res.status(402).json({
+				error: 'Subscription required',
+				redirect_to: '/settings/subscription',
+			});
+		} catch (err) {
+			console.error('Subscription access check error:', err);
+			return res.status(500).json({ error: 'Subscription access check failed' });
+		}
+	});
+}
 
 function auditCtx(req) {
 	return {

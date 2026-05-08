@@ -2,8 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { requireTenant } from '../modules/tenancy.js';
 import { User } from '../model/user.js';
-import { createCheckoutSession, createPortalSession, handleWebhook } from '../services/billing_service.js';
-import config from '../config.js';
+import { applySubscriptionToUser, createCheckoutSession, createPortalSession, handleWebhook } from '../services/billing_service.js';
 import express from 'express';
 
 const router = Router();
@@ -33,8 +32,8 @@ router.get('/billing/checkout', requireAuth, requireTenant, async (req, res) => 
         const user = await User.findById(req.userId).select('+stripe_customer_id');
         if (!user) return res.redirect('/login');
 
-        // Already has active subscription — skip checkout
-        if (['trialing', 'active'].includes(user.subscription_status)) {
+        // Paid or Stripe-trialing users already have a subscription.
+        if (user.subscription_status === 'active' || (user.subscription_status === 'trialing' && user.trial_source !== 'no_card')) {
             return res.redirect('/dashboard');
         }
 
@@ -54,7 +53,7 @@ router.get('/billing/success', requireAuth, requireTenant, async (req, res) => {
     // Stripe redirects here after successful checkout.
     // First check if webhook already updated the status.
     const user = await User.findById(req.userId).select('+stripe_customer_id');
-    if (user && ['trialing', 'active'].includes(user.subscription_status)) {
+    if (user && (user.subscription_status === 'active' || (user.subscription_status === 'trialing' && user.trial_source !== 'no_card'))) {
         return res.redirect('/dashboard');
     }
 
@@ -68,12 +67,7 @@ router.get('/billing/success', requireAuth, requireTenant, async (req, res) => {
 
             if (session.subscription) {
                 const subscription = await stripe.subscriptions.retrieve(session.subscription);
-                await User.findByIdAndUpdate(user._id, {
-                    stripe_customer_id: session.customer,
-                    stripe_subscription_id: subscription.id,
-                    subscription_status: subscription.status,
-                    trial_ends_at: subscription.trial_end ? new Date(subscription.trial_end * 1000) : null,
-                });
+                await applySubscriptionToUser(user._id, subscription, session.customer);
                 return res.redirect('/dashboard');
             }
         } catch (err) {

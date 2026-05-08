@@ -63,6 +63,55 @@ function parseRedisConfig() {
 	return process.env.REDIS_URL || 'redis://localhost:6379';
 }
 
+export function parseSmtpServersFromEnv(env = process.env) {
+	const defaultFrom = env.SMTP_FROM || 'noreply@localhost';
+	const serversEnv = (env.SMTP_SERVERS || '').trim();
+	if (serversEnv) {
+		try {
+			const parsed = JSON.parse(serversEnv);
+			if (!Array.isArray(parsed)) {
+				throw new Error('SMTP_SERVERS must be a JSON array');
+			}
+			return parsed
+				.map((server, index) => {
+					if (!server.host) {
+						throw new Error(`SMTP_SERVERS[${index}].host is required`);
+					}
+					const port = parseInt(server.port, 10) || 587;
+					return {
+						name: server.name || `smtp-${index + 1}`,
+						host: server.host,
+						port,
+						secure: server.secure !== undefined ? Boolean(server.secure) : port === 465,
+						user: server.user || '',
+						pass: server.pass || '',
+						from: server.from || defaultFrom,
+					};
+				})
+				.filter((server) => server.host);
+		} catch (err) {
+			console.error('Invalid SMTP_SERVERS JSON:', err.message);
+			console.error('SMTP_SERVERS raw value:', JSON.stringify(serversEnv));
+			process.exit(1);
+		}
+	}
+
+	if (!env.SMTP_HOST) return [];
+	const port = parseInt(env.SMTP_PORT, 10) || 587;
+	return [{
+		name: 'smtp-1',
+		host: env.SMTP_HOST,
+		port,
+		secure: port === 465,
+		user: env.SMTP_USER || '',
+		pass: env.SMTP_PASS || '',
+		from: defaultFrom,
+	}];
+}
+
+const smtpServers = parseSmtpServersFromEnv();
+const primarySmtp = smtpServers[0] || {};
+
 const config = {
 	env: process.env.NODE_ENV || 'development',
 	port: parseInt(process.env.PORT, 10) || 3000,
@@ -80,11 +129,12 @@ const config = {
 	typesense: parseTypesenseConfig(),
 
 	smtp: {
-		host: process.env.SMTP_HOST || '',
-		port: parseInt(process.env.SMTP_PORT, 10) || 587,
-		user: process.env.SMTP_USER || '',
-		pass: process.env.SMTP_PASS || '',
-		from: process.env.SMTP_FROM || 'noreply@localhost',
+		host: primarySmtp.host || '',
+		port: primarySmtp.port || 587,
+		user: primarySmtp.user || '',
+		pass: primarySmtp.pass || '',
+		from: primarySmtp.from || process.env.SMTP_FROM || 'noreply@localhost',
+		servers: smtpServers,
 	},
 
 	llm: {

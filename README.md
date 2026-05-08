@@ -110,6 +110,8 @@ GOOGLE_API_KEY=your-google-api-key \
 docker compose -f compose.prod.yml up -d
 ```
 
+For multiple outbound SMTP servers, set `SMTP_SERVERS` to a JSON array of server objects. Kumbukum sends through them round-robin.
+
 No `.env` file is required for this setup.
 
 Default service ports:
