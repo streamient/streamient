@@ -112,6 +112,42 @@ docker compose -f compose.prod.yml up -d
 
 For multiple outbound SMTP servers, set `SMTP_SERVERS` to a JSON array of server objects. Kumbukum sends through them round-robin.
 
+Example:
+
+```bash
+SMTP_SERVERS='[
+	{
+		"name": "smtp-1",
+		"host": "smtp1.example.com",
+		"port": 587,
+		"secure": false,
+		"user": "smtp-user-1",
+		"pass": "smtp-pass-1",
+		"from": "server@kumbukum.com"
+	},
+	{
+		"name": "smtp-2",
+		"host": "smtp2.example.com",
+		"port": 465,
+		"secure": true,
+		"user": "smtp-user-2",
+		"pass": "smtp-pass-2",
+		"from": "server@kumbukum.com"
+	}
+]'
+```
+
+In Docker Compose YAML, quote it as a single JSON string:
+
+```yaml
+environment:
+    SMTP_FROM: server@kumbukum.com
+    SMTP_SERVERS: >-
+        [{"name":"smtp-1","host":"smtp1.example.com","port":587,"secure":false,"user":"smtp-user-1","pass":"smtp-pass-1","from":"server@kumbukum.com"},{"name":"smtp-2","host":"smtp2.example.com","port":465,"secure":true,"user":"smtp-user-2","pass":"smtp-pass-2","from":"server@kumbukum.com"}]
+```
+
+Only `host` is required per server. `port` defaults to `587`, `secure` defaults to `true` only for port `465`, and `from` falls back to `SMTP_FROM`.
+
 No `.env` file is required for this setup.
 
 Default service ports:
