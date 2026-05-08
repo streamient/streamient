@@ -6,7 +6,7 @@ import { buildHostedTrialFields } from '../routes/auth.js';
 import { buildCheckoutSessionParams, buildSubscriptionUserUpdate, resolveCheckoutPriceId } from '../services/billing_service.js';
 import { runTrialLifecycle } from '../modules/scheduler.js';
 import { deleteTenantData, getTenantTypesenseCollectionNames } from '../services/account_cleanup_service.js';
-import { hasProductAccess, hasProFeatureAccess } from '../services/subscription_access_service.js';
+import { formatTrialEndsIn, hasProductAccess, hasProFeatureAccess } from '../services/subscription_access_service.js';
 
 describe('no-card trial signup and billing helpers', () => {
 	it('builds hosted no-card trial fields from configured trial days', () => {
@@ -174,6 +174,20 @@ describe('subscription product access', () => {
 		assert.equal(hasProFeatureAccess(expiredTrialUser, 'free', true, now), false);
 		assert.equal(hasProFeatureAccess({ subscription_status: 'active' }, 'starter', true, now), false);
 		assert.equal(hasProFeatureAccess(null, 'free', false, now), true);
+	});
+
+	it('formats trial end text as days remaining', () => {
+		const now = new Date('2026-01-01T00:00:00.000Z');
+
+		assert.equal(formatTrialEndsIn({
+			trial_ends_at: new Date('2026-01-08T00:00:00.000Z'),
+		}, now), 'Trial ends in 7 days');
+		assert.equal(formatTrialEndsIn({
+			trial_ends_at: new Date('2026-01-05T00:00:00.000Z'),
+		}, now), 'Trial ends in 4 days');
+		assert.equal(formatTrialEndsIn({
+			trial_ends_at: new Date('2026-01-02T00:00:00.000Z'),
+		}, now), 'Trial ends in 1 day');
 	});
 });
 

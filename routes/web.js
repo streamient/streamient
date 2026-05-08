@@ -4,7 +4,7 @@ import { requireTenant, Tenant } from '../modules/tenancy.js';
 import { User } from '../model/user.js';
 import { listProjects, getProject, getProjectCounts } from '../services/project_service.js';
 import { listGitRepos } from '../services/git_sync_service.js';
-import { hasProductAccess, hasProFeatureAccess } from '../services/subscription_access_service.js';
+import { formatTrialEndsIn, hasProductAccess, hasProFeatureAccess } from '../services/subscription_access_service.js';
 import config from '../config.js';
 
 const is_hosted = config.isHosted;
@@ -47,6 +47,7 @@ router.use(async (req, res, next) => {
 	res.locals.impersonatingName = req.session.impersonatingName || '';
 	res.locals.is_hosted = is_hosted;
 	res.locals.is_trialing = is_hosted && user?.subscription_status === 'trialing' && user?.trial_source === 'no_card' && hasProductAccess(user);
+	res.locals.trial_ends_text = res.locals.is_trialing ? formatTrialEndsIn(user) : '';
 	res.locals.hide_chat_sidebar = req.path === '/settings' || req.path.startsWith('/settings/');
 	next();
 });

@@ -34,10 +34,7 @@ html(lang="en")
 							if is_trialing
 								a.btn.btn-warning.btn-sm.me-3(href="/billing/checkout?plan=pro" style="padding-top:0.45rem;padding-bottom:0.45rem;")
 									!= icon('creditCard', 'me-1')
-									if user.trial_ends_at
-										span= 'Trial - ends on ' + new Date(user.trial_ends_at).toLocaleDateString()
-									else
-										span Trial
+									span= trial_ends_text || 'Trial'
 							if accessible_tenants && accessible_tenants.length > 1
 								.dropdown.me-2
 									button.btn.btn-outline-light.btn-sm.dropdown-toggle.d-flex.align-items-center.gap-1(type="button" data-bs-toggle="dropdown")
