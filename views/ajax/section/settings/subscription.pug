@@ -65,17 +65,21 @@
 								td= trial_ends_text
 
 				if needsCheckout
-					.d-flex.flex-wrap.justify-content-end.gap-3
-						a.btn.btn-outline-primary(href="/billing/checkout?plan=starter")
-							!= icon('creditCard')
-							span.ms-2 Starter
-						a.btn.btn-primary(href="/billing/checkout?plan=pro")
-							!= icon('creditCard')
-							span.ms-2 Pro
+					.d-flex.flex-wrap.gap-3.align-items-center
+						.pe-3
+							.fw-bold Subscribe today and keep your data. Choose your plan
+						.pe-2
+							a.btn.btn-outline-primary(href="/billing/checkout?plan=starter")
+								!= icon('creditCard')
+								span.ms-2 Starter
+						.pe-2
+							a.btn.btn-primary(href="/billing/checkout?plan=pro")
+								!= icon('creditCard')
+								span.ms-2 Pro
 				else
 					a.btn.btn-primary(href="/billing/portal")
 						!= icon('gear')
-						span.ms-2 Manage Subscription
+						span.ms-2 Manage My Subscription
 
 				.mt-3.text-muted.fs-9 Kumbukum is made by Helpmonks LLC.
 

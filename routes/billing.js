@@ -2,8 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { requireTenant } from '../modules/tenancy.js';
 import { User } from '../model/user.js';
-import { applySubscriptionToUser, createCheckoutSession, createPortalSession, handleWebhook, resolveCheckoutPlan, resolveCheckoutPriceId } from '../services/billing_service.js';
-import { hasProductAccess } from '../services/subscription_access_service.js';
+import { BILLING_SUBSCRIPTION_URL, applySubscriptionToUser, createCheckoutSession, createPortalSession, handleWebhook, resolveCheckoutPlan, resolveCheckoutPriceId } from '../services/billing_service.js';
 import express from 'express';
 
 const router = Router();
@@ -88,11 +87,7 @@ router.get('/billing/success', requireAuth, requireTenant, async (req, res) => {
 });
 
 router.get('/billing/cancel', requireAuth, requireTenant, async (req, res) => {
-    const user = await User.findById(req.userId);
-    if (hasProductAccess(user)) {
-        return res.redirect('/dashboard');
-    }
-    res.redirect('/settings/subscription');
+    res.redirect(BILLING_SUBSCRIPTION_URL);
 });
 
 router.get('/billing/portal', requireAuth, requireTenant, async (req, res) => {
