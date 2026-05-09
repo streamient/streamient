@@ -13,7 +13,6 @@ block settings
 			- var noCardTrial = user.trial_source === 'no_card'
 			- var trialEnded = status === 'trial_expired' || (status === 'trialing' && noCardTrial && user.trial_ends_at && new Date(user.trial_ends_at).getTime() <= Date.now())
 			- var needsCheckout = status === 'incomplete' || status === 'canceled' || trialEnded || (status === 'trialing' && noCardTrial)
-			- var checkoutPlan = noCardTrial ? 'pro' : 'starter'
 
 			if status === 'trialing' && !trialEnded
 				.alert.alert-info.mb-3
@@ -65,9 +64,13 @@ block settings
 							td= trial_ends_text
 
 			if needsCheckout
-				a.btn.btn-primary(href=`/billing/checkout?plan=${checkoutPlan}`)
-					!= icon('creditCard')
-					span.ms-2 Add Billing
+				.d-flex.flex-wrap.justify-content-end.gap-3
+					a.btn.btn-outline-primary(href="/billing/checkout?plan=starter")
+						!= icon('creditCard')
+						span.ms-2 Starter
+					a.btn.btn-primary(href="/billing/checkout?plan=pro")
+						!= icon('creditCard')
+						span.ms-2 Pro
 			else
 				a.btn.btn-primary(href="/billing/portal")
 					!= icon('gear')

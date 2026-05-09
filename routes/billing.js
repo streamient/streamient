@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { requireTenant } from '../modules/tenancy.js';
 import { User } from '../model/user.js';
-import { applySubscriptionToUser, createCheckoutSession, createPortalSession, handleWebhook, resolveCheckoutPriceId } from '../services/billing_service.js';
+import { applySubscriptionToUser, createCheckoutSession, createPortalSession, handleWebhook, resolveCheckoutPlan, resolveCheckoutPriceId } from '../services/billing_service.js';
+import { hasProductAccess } from '../services/subscription_access_service.js';
 import express from 'express';
 
 const router = Router();
@@ -37,7 +38,7 @@ router.get('/billing/checkout', requireAuth, requireTenant, async (req, res) => 
             return res.redirect('/dashboard');
         }
 
-        const plan = req.query.plan === 'pro' || (user.subscription_status === 'trialing' && user.trial_source === 'no_card') ? 'pro' : 'starter';
+        const plan = resolveCheckoutPlan(req.query.plan);
         if (!resolveCheckoutPriceId(plan)) {
             return res.status(500).render('billing/checkout_cancel', {
                 title: 'Billing Setup Missing',
@@ -86,11 +87,12 @@ router.get('/billing/success', requireAuth, requireTenant, async (req, res) => {
     res.redirect('/dashboard');
 });
 
-router.get('/billing/cancel', (req, res) => {
-    res.render('billing/checkout_cancel', {
-        title: 'Checkout Canceled',
-        message: 'You canceled the checkout. You can try again anytime.',
-    });
+router.get('/billing/cancel', requireAuth, requireTenant, async (req, res) => {
+    const user = await User.findById(req.userId);
+    if (hasProductAccess(user)) {
+        return res.redirect('/dashboard');
+    }
+    res.redirect('/settings/subscription');
 });
 
 router.get('/billing/portal', requireAuth, requireTenant, async (req, res) => {
