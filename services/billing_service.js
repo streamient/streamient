@@ -3,6 +3,8 @@ import { User } from '../model/user.js';
 import { Tenant } from '../modules/tenancy.js';
 import config from '../config.js';
 
+export const BILLING_SUBSCRIPTION_URL = 'https://app.kumbukum.com/settings/subscription';
+
 /**
  * Resolve plan name from a Stripe subscription's price ID.
  * Falls back to 'starter' if no matching price is configured.
@@ -43,8 +45,16 @@ export function buildCheckoutSessionParams(user, customerId, priceId) {
 		payment_method_collection: 'always',
 		line_items: [{ price: priceId, quantity: 1 }],
 		success_url: `${config.appUrl}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
-		cancel_url: `${config.appUrl}/billing/cancel`,
+		cancel_url: BILLING_SUBSCRIPTION_URL,
 		metadata: { kumbukum_user_id: user._id.toString() },
+	};
+}
+
+export function buildPortalSessionParams(user) {
+	return {
+		customer: user.stripe_customer_id,
+		return_url: BILLING_SUBSCRIPTION_URL,
+		...(config.stripe.portalConfigId && { configuration: config.stripe.portalConfigId }),
 	};
 }
 
@@ -108,11 +118,7 @@ export async function createPortalSession(user) {
         throw new Error('No Stripe customer linked to this account');
     }
 
-    const portalSession = await stripe.billingPortal.sessions.create({
-        customer: user.stripe_customer_id,
-        return_url: `${config.appUrl}/settings/subscription`,
-        ...(config.stripe.portalConfigId && { configuration: config.stripe.portalConfigId }),
-    });
+    const portalSession = await stripe.billingPortal.sessions.create(buildPortalSessionParams(user));
 
     return portalSession.url;
 }

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import config from '../config.js';
 import { buildHostedTrialFields } from '../routes/auth.js';
-import { buildCheckoutSessionParams, buildSubscriptionUserUpdate, resolveCheckoutPlan, resolveCheckoutPriceId } from '../services/billing_service.js';
+import { BILLING_SUBSCRIPTION_URL, buildCheckoutSessionParams, buildPortalSessionParams, buildSubscriptionUserUpdate, resolveCheckoutPlan, resolveCheckoutPriceId } from '../services/billing_service.js';
 import { formatSignupNotificationDate } from '../services/email_service.js';
 import { runTrialLifecycle } from '../modules/scheduler.js';
 import { deleteTenantData, getTenantTypesenseCollectionNames } from '../services/account_cleanup_service.js';
@@ -32,7 +32,15 @@ describe('no-card trial signup and billing helpers', () => {
 		assert.equal(params.payment_method_collection, 'always');
 		assert.deepEqual(params.line_items, [{ price: 'price_123', quantity: 1 }]);
 		assert.equal(params.metadata.kumbukum_user_id, 'user-1');
+		assert.equal(params.cancel_url, BILLING_SUBSCRIPTION_URL);
 		assert.equal(Object.hasOwn(params, 'subscription_data'), false);
+	});
+
+	it('returns from Stripe portal to the production subscription settings page', () => {
+		const params = buildPortalSessionParams({ stripe_customer_id: 'cus_123' });
+
+		assert.equal(params.customer, 'cus_123');
+		assert.equal(params.return_url, BILLING_SUBSCRIPTION_URL);
 	});
 
 	it('uses legacy Stripe price ID as the Starter checkout fallback', () => {
