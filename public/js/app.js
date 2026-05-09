@@ -754,16 +754,84 @@ async function deleteGitRepo(repoId) {
 	}
 }
 
+function escapeHtml(value) {
+	return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+		'&': '&amp;',
+		'<': '&lt;',
+		'>': '&gt;',
+		'"': '&quot;',
+		"'": '&#39;',
+	}[ch]));
+}
+
+function gitSyncSummaryText(summary = {}) {
+	return `${summary.imported_files || 0} imported, ${summary.exported_files || 0} exported, ${summary.imported_commits || 0} commits, ${summary.conflicts || 0} conflicts`;
+}
+
+function sleep(ms) {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForGitSync(repoId) {
+	const startedAt = Date.now();
+	while (Date.now() - startedAt < 10 * 60 * 1000) {
+		const status = await api('GET', `/git-repos/${repoId}/status`);
+		if (status.status !== 'in_progress') return status;
+		await sleep(2000);
+	}
+	throw new Error('Sync is still running. Check the sync log for progress.');
+}
+
 async function triggerGitSync(repoId) {
 	try {
 		Swal.fire({ title: 'Syncing…', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-		const result = await api('POST', `/git-repos/${repoId}/sync`);
+		await api('POST', `/git-repos/${repoId}/sync`, { background: true });
+		const result = await waitForGitSync(repoId);
 		const activeProject = document.querySelector('.project-item.active')?.dataset?.id;
 		if (activeProject) loadProjectOverview(activeProject);
 		const summary = result.summary || {};
-		const detail = `${summary.imported_files || 0} imported, ${summary.exported_files || 0} exported, ${summary.imported_commits || 0} commits, ${summary.conflicts || 0} conflicts`;
+		if (result.status === 'failed') {
+			Swal.fire('Sync failed', result.error || summary.message || 'Sync failed', 'error');
+			return;
+		}
+		const detail = gitSyncSummaryText(summary);
 		Swal.fire({ icon: 'success', title: 'Sync complete', text: detail, timer: 2500, showConfirmButton: false });
 	} catch (err) {
 		Swal.fire('Sync failed', err.message, 'error');
+	}
+}
+
+async function showGitSyncLogs(repoId) {
+	try {
+		const { logs } = await api('GET', `/git-repos/${repoId}/logs?limit=200`);
+		const rows = logs.map((log) => {
+			const date = new Date(log.createdAt).toLocaleString();
+			const details = log.details && Object.keys(log.details).length
+				? `<div class="text-muted small">${escapeHtml(JSON.stringify(log.details))}</div>`
+				: '';
+			const badgeClass = {
+				success: 'bg-success',
+				warning: 'bg-warning text-dark',
+				error: 'bg-danger',
+				info: 'bg-secondary',
+			}[log.level] || 'bg-secondary';
+			return `
+				<div class="border-bottom py-2 text-start">
+					<div class="d-flex justify-content-between gap-3">
+						<span><span class="badge ${badgeClass} me-2">${escapeHtml(log.level)}</span>${escapeHtml(log.message)}</span>
+						<span class="text-muted small text-nowrap">${escapeHtml(date)}</span>
+					</div>
+					${details}
+				</div>
+			`;
+		}).join('');
+		await Swal.fire({
+			title: 'Git Sync Log',
+			html: `<div style="max-height:60vh;overflow:auto">${rows || '<p class="text-muted text-start mb-0">No sync logs in the last 14 days.</p>'}</div>`,
+			width: 900,
+			confirmButtonText: 'Close',
+		});
+	} catch (err) {
+		Swal.fire('Error', err.message, 'error');
 	}
 }

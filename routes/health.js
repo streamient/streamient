@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { getRedisClient } from '../modules/redis.js';
 import { getTypesenseClient } from '../modules/typesense.js';
 import { getIO } from '../modules/socket.js';
+import * as OtelRuntime from '../modules/otel_runtime.js';
 
 const router = Router();
 
@@ -63,7 +64,13 @@ router.get('/typesense', async (_req, res) => {
 router.get('/websocket', (_req, res) => {
     const io = getIO();
     const ok = !!io;
-    res.status(ok ? 200 : 503).json({ status: ok ? 'ok' : 'not_initialized' });
+    res.status(ok ? 200 : 503).json({
+        status: ok ? 'ok' : 'not_initialized',
+        mode: process.env.SERVER_MODE || 'app',
+        app: process.env.KUMBUKUM_APP || 'web',
+        otel_enabled: OtelRuntime.isEnabled(),
+        clients: io?.engine?.clientsCount || 0,
+    });
 });
 
 export default router;

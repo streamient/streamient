@@ -202,11 +202,21 @@ router.delete('/git-repos/:id', requireGitSyncAccess, async (req, res) => {
 
 router.post('/git-repos/:id/sync', requireGitSyncAccess, async (req, res) => {
 	try {
+		if (req.body?.background === true) {
+			const summary = await gitSyncService.startSyncRepo(req.params.id, req.userId, req.host_id, auditCtx(req));
+			return res.status(202).json({ message: 'Sync started', summary });
+		}
 		const summary = await gitSyncService.syncRepo(req.params.id, req.userId, req.host_id, auditCtx(req));
 		res.json({ message: 'Sync complete', summary });
 	} catch (err) {
 		res.status(400).json({ error: err.message });
 	}
+});
+
+router.get('/git-repos/:id/logs', requireGitSyncAccess, async (req, res) => {
+	const logs = await gitSyncService.listSyncLogs(req.host_id, req.params.id, req.query.limit);
+	if (!logs) return res.status(404).json({ error: 'Git repo not found' });
+	res.json({ logs });
 });
 
 router.get('/git-repos/:id/status', requireGitSyncAccess, async (req, res) => {

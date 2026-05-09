@@ -3,6 +3,7 @@ import { createAdapter } from '@socket.io/redis-streams-adapter';
 import Redis from 'ioredis';
 import config from '../config.js';
 import { buildRedisConnectionOptions, isTransientRedisError } from './redis_options.js';
+import * as OtelRuntime from './otel_runtime.js';
 
 let io;
 let bridgePublisher;
@@ -84,54 +85,76 @@ export function getIO() {
 }
 
 export async function setupSocketIO(httpServer, sessionMiddleware) {
-	io = new Server(httpServer, {
-		cookie: false,
-		transports: ['websocket'],
-		pingInterval: 55000,
-		pingTimeout: 60000,
-		cleanupEmptyChildNamespaces: true,
-		cors: { origin: '*', credentials: true },
-		connectionStateRecovery: {
-			// the backup duration of the sessions and the packets
-			maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes
-			// whether to skip middlewares upon successful recovery
-			skipMiddlewares: true,
-		},
-		tls: { rejectUnauthorized: false },
-		perMessageDeflate: { threshold: 32768 },
-	});
+	return OtelRuntime.createCustomSpan('socketio.setup', async (span) => {
+		span.setAttribute('server.mode', process.env.SERVER_MODE || 'app');
+		span.setAttribute('service.app', process.env.KUMBUKUM_APP || 'web');
+		span.setAttribute('socket.redis.enabled', !!config.socketRedis);
 
-	// Redis streams adapter for horizontal scaling (multi-server only)
-	if (config.socketRedis) {
-		let redisClient;
-		try {
-			redisClient = createRedisClient();
-			attachRedisErrorHandler(redisClient, 'Socket.IO Redis client error');
-			await redisClient.connect();
-			io.adapter(createAdapter(redisClient, { streamCount: 4, blockTimeInMs: 10_000, heartbeatInterval: 30000, heartbeatTimeout: 90000 }));
-			console.log('Socket.IO Redis streams adapter connected');
-		} catch (err) {
-			console.warn('Socket.IO Redis adapter failed, using in-memory:', err.message);
-			if (redisClient) redisClient.disconnect();
+		io = new Server(httpServer, {
+			cookie: false,
+			transports: ['websocket'],
+			pingInterval: 55000,
+			pingTimeout: 60000,
+			cleanupEmptyChildNamespaces: true,
+			cors: { origin: '*', credentials: true },
+			connectionStateRecovery: {
+				// the backup duration of the sessions and the packets
+				maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes
+				// whether to skip middlewares upon successful recovery
+				skipMiddlewares: true,
+			},
+			tls: { rejectUnauthorized: false },
+			perMessageDeflate: { threshold: 32768 },
+		});
+
+		// Redis streams adapter for horizontal scaling (multi-server only)
+		if (config.socketRedis) {
+			let redisClient;
+			try {
+				redisClient = createRedisClient();
+				attachRedisErrorHandler(redisClient, 'Socket.IO Redis client error');
+				await redisClient.connect();
+				io.adapter(createAdapter(redisClient, { streamCount: 4, blockTimeInMs: 10_000, heartbeatInterval: 30000, heartbeatTimeout: 90000 }));
+				console.log('Socket.IO Redis streams adapter connected');
+			} catch (err) {
+				span.recordException(err);
+				console.warn('Socket.IO Redis adapter failed, using in-memory:', err.message);
+				if (redisClient) redisClient.disconnect();
+			}
 		}
-	}
 
-	await setupTenantEventBridge();
+		await setupTenantEventBridge();
 
-	io.on('connection', (socket) => {
-		// Client subscribes to a tenant room
-		socket.on('subscribe', (room) => {
-			if (!room) return;
-			socket.join(room);
+		io.on('connection', (socket) => {
+			OtelRuntime.createCustomSpan('socketio.connection', (connectionSpan) => {
+				connectionSpan.setAttribute('socket.id', socket.id);
+				connectionSpan.setAttribute('server.mode', process.env.SERVER_MODE || 'app');
+				connectionSpan.setAttribute('service.app', process.env.KUMBUKUM_APP || 'web');
+			});
+			console.log(`Socket.IO client connected ${socket.id} [${process.env.KUMBUKUM_APP || 'web'}]`);
+
+			// Client subscribes to a tenant room
+			socket.on('subscribe', (room) => {
+				if (!room) return;
+				OtelRuntime.createCustomSpan('socketio.subscribe', (subscribeSpan) => {
+					subscribeSpan.setAttribute('socket.id', socket.id);
+					subscribeSpan.setAttribute('socket.room', room);
+					socket.join(room);
+				});
+			});
+
+			socket.on('disconnect', () => {
+				OtelRuntime.createCustomSpan('socketio.disconnect', (disconnectSpan) => {
+					disconnectSpan.setAttribute('socket.id', socket.id);
+					disconnectSpan.setAttribute('server.mode', process.env.SERVER_MODE || 'app');
+				});
+				console.log(`Socket.IO client disconnected ${socket.id} [${process.env.KUMBUKUM_APP || 'web'}]`);
+			});
 		});
 
-		socket.on('disconnect', () => {
-			// cleanup if needed
-		});
+		console.log(`Socket.IO initialized mode=${process.env.SERVER_MODE || 'app'} app=${process.env.KUMBUKUM_APP || 'web'} otel=${OtelRuntime.isEnabled() ? 'enabled' : 'disabled'}`);
+		return io;
 	});
-
-	console.log('Socket.IO initialized');
-	return io;
 }
 
 /**

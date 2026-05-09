@@ -90,17 +90,19 @@ if gitSyncEnabled
 									span= `${gs.imported_files || 0} imported · ${gs.exported_files || 0} exported · ${gs.imported_commits || 0} commits · ${gs.trashed_items || 0} trashed · ${gs.conflicts || 0} conflicts`
 							if repo.commit_sync_enabled !== false && repo.last_commit_synced_at
 								.text-muted.small= 'Commits synced ' + new Date(repo.last_commit_synced_at).toLocaleString()
-							.d-flex.gap-1
-								button.btn.btn-sm.btn-outline-primary(onclick=`triggerGitSync('${repo._id}')` title="Sync now")
-									!= icon('sync')
-								button.btn.btn-sm.btn-outline-secondary(onclick=`editGitRepo('${repo._id}')` title="Settings")
-									!= icon('gear')
-								button.btn.btn-sm.btn-outline-secondary(onclick=`deleteGitRepo('${repo._id}')` title="Remove")
-									!= icon('delete')
-		else
-			p.text-muted.small No git repos configured. Add one to sync markdown files.
+						.d-flex.gap-1
+							button.btn.btn-sm.btn-outline-primary(onclick=`triggerGitSync('${repo._id}')` title="Sync now")
+								!= icon('sync')
+							button.btn.btn-sm.btn-outline-secondary(onclick=`showGitSyncLogs('${repo._id}')` title="Sync log")
+								!= icon('history')
+							button.btn.btn-sm.btn-outline-secondary(onclick=`editGitRepo('${repo._id}')` title="Settings")
+								!= icon('gear')
+							button.btn.btn-sm.btn-outline-secondary(onclick=`deleteGitRepo('${repo._id}')` title="Remove")
+								!= icon('delete')
+	else
+		p.text-muted.small No git repos configured. Add one to sync markdown files.
 else
-	.my-5
+	.my-4
 		.card.border-warning-subtle
 			.card-body
 				h5.mb-2
