@@ -28,6 +28,8 @@ export function gitSyncTools(api, defaultProjectId) {
 				memories_path: z.string().optional().describe('Directory in repo mapped to memories (default: memories)'),
 				sync_path: z.string().optional().describe('Subfolder within repo to sync (default: /)'),
 				sync_interval: z.number().optional().describe('Sync interval in minutes (default: 10)'),
+				commit_sync_enabled: z.boolean().optional().describe('Import git commits as memories (default: true)'),
+				commit_history_days: z.number().optional().describe('Days of commit history to backfill on first sync (default: 90)'),
 				project_id: z.string().optional().describe('Project ID (defaults to the default project)'),
 			},
 			handler: async (args) => {
@@ -52,6 +54,8 @@ export function gitSyncTools(api, defaultProjectId) {
 				sync_path: z.string().optional(),
 				sync_interval: z.number().optional(),
 				trash_on_delete: z.boolean().optional(),
+				commit_sync_enabled: z.boolean().optional(),
+				commit_history_days: z.number().optional(),
 			},
 			handler: async (args) => {
 				const { id, ...rest } = args;

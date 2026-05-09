@@ -5,18 +5,26 @@ import { User } from '../model/user.js';
 import { createTenant, initializeSessionTenant } from '../modules/tenancy.js';
 import { ensureCollections } from '../modules/typesense.js';
 import { generateToken } from '../middleware/auth.js';
-import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail } from '../services/email_service.js';
+import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail, sendTrialSignupNotificationEmail } from '../services/email_service.js';
 import { sendMagicLink, isMagicLinkValid, verifyMagicLink } from '../services/magic_link_service.js';
 import * as passkeyService from '../services/passkey_service.js';
 import * as teamService from '../services/team_service.js';
 import config from '../config.js';
 
-const is_hosted = new URL(config.appUrl).hostname.endsWith('kumbukum.com');
+const is_hosted = config.isHosted;
 import { createDefaultProject } from '../services/project_service.js';
 import { PendingSignup } from '../model/pending_signup.js';
 import { isSysadminCredentials, requireSysadmin } from '../middleware/sysadmin.js';
 
 const router = Router();
+
+export function buildHostedTrialFields(now = new Date(), trialDays = config.stripe.trialDays) {
+	return {
+		subscription_status: 'trialing',
+		trial_source: 'no_card',
+		trial_ends_at: new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000),
+	};
+}
 
 async function hydrateSessionForUser(req, user, preferredTenantId = null, preferredHostId = null) {
 	req.session.userId = user._id.toString();
@@ -146,7 +154,17 @@ router.post('/verify', async (req, res) => {
 		user.tenant = tenant._id;
 		user.host_id = tenant.host_id;
 		user.is_active = true;
+		let createdHostedTrial = false;
+		if (is_hosted) {
+			Object.assign(user, buildHostedTrialFields());
+			createdHostedTrial = true;
+		}
 		await user.save();
+		if (createdHostedTrial) {
+			sendTrialSignupNotificationEmail(user.email).catch((e) =>
+				console.warn('Trial signup notification email failed:', e.message),
+			);
+		}
 
 		ensureCollections(tenant.host_id).catch((e) =>
 			console.warn('Typesense collection setup deferred:', e.message),
@@ -165,11 +183,6 @@ router.post('/verify', async (req, res) => {
 		// Sign the user in directly
 		await hydrateSessionForUser(req, user, tenant._id.toString(), tenant.host_id);
 		await recordSuccessfulLogin(req, user);
-
-		// Hosted edition: redirect to Stripe Checkout for trial subscription
-		if (is_hosted) {
-			return res.redirect('/billing/checkout');
-		}
 
 		res.redirect('/dashboard');
 	} catch (err) {

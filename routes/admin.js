@@ -5,12 +5,12 @@ import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
 import { Url } from '../model/url.js';
 import { Project } from '../model/project.js';
-import { getTypesenseClient } from '../modules/typesense.js';
 import { isSysadminCredentials, requireAdmin } from '../middleware/sysadmin.js';
 import emailTemplates from '../config/email_templates.js';
 import { getByCategory, setSetting, deleteSetting } from '../services/system_settings_service.js';
 import { sendTestEmail } from '../services/email_service.js';
 import * as auditService from '../services/audit_service.js';
+import { deleteAccountDataForUser } from '../services/account_cleanup_service.js';
 
 const router = Router();
 
@@ -149,30 +149,7 @@ router.delete('/api/accounts/:id', async (req, res) => {
         const user = await User.findById(req.params.id);
         if (!user) return res.status(404).json({ error: 'Not found' });
 
-        const host_id = user.host_id;
-
-        // Delete all MongoDB data for this tenant
-        await Promise.all([
-            Note.deleteMany({ host_id }),
-            Memory.deleteMany({ host_id }),
-            Url.deleteMany({ host_id }),
-            Project.deleteMany({ host_id }),
-        ]);
-
-        // Delete Typesense collections
-        const ts = getTypesenseClient();
-        const collectionTypes = ['notes', 'memory', 'urls', 'pages'];
-        for (const type of collectionTypes) {
-            try {
-                await ts.collections(`${type}_${host_id}`).delete();
-            } catch (e) {
-                if (e.httpStatus !== 404) console.error(`Failed to delete Typesense collection ${type}_${host_id}:`, e.message);
-            }
-        }
-
-        // Delete tenant and user
-        if (user.tenant) await Tenant.findByIdAndDelete(user.tenant);
-        await User.findByIdAndDelete(user._id);
+        await deleteAccountDataForUser(user);
 
         res.json({ ok: true });
     } catch (err) {

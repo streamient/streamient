@@ -1,3 +1,5 @@
+import { getSentryDsn, isSentryEnabled } from './modules/sentry_runtime.js';
+
 function parseTypesenseConfig() {
 	let nodesEnv = (process.env.TYPESENSE_NODES || '').trim();
 	// Strip wrapping single or double quotes (some orchestrators add them)
@@ -61,6 +63,70 @@ function parseRedisConfig() {
 	return process.env.REDIS_URL || 'redis://localhost:6379';
 }
 
+export function isHostedHostname(hostname) {
+	if (!hostname) return false;
+	const normalized = hostname.toLowerCase();
+	return normalized === 'app.kumbukum.local' || normalized.endsWith('kumbukum.com');
+}
+
+export function isHostedAppUrl(appUrl) {
+	try {
+		return isHostedHostname(new URL(appUrl).hostname);
+	} catch {
+		return false;
+	}
+}
+
+export function parseSmtpServersFromEnv(env = process.env) {
+	const defaultFrom = env.SMTP_FROM || 'noreply@localhost';
+	const serversEnv = (env.SMTP_SERVERS || '').trim();
+	if (serversEnv) {
+		try {
+			const parsed = JSON.parse(serversEnv);
+			if (!Array.isArray(parsed)) {
+				throw new Error('SMTP_SERVERS must be a JSON array');
+			}
+			return parsed
+				.map((server, index) => {
+					if (!server.host) {
+						throw new Error(`SMTP_SERVERS[${index}].host is required`);
+					}
+					const port = parseInt(server.port, 10) || 587;
+					return {
+						name: server.name || `smtp-${index + 1}`,
+						host: server.host,
+						port,
+						secure: server.secure !== undefined ? Boolean(server.secure) : port === 465,
+						user: server.user || '',
+						pass: server.pass || '',
+						from: server.from || defaultFrom,
+					};
+				})
+				.filter((server) => server.host);
+		} catch (err) {
+			console.error('Invalid SMTP_SERVERS JSON:', err.message);
+			console.error('SMTP_SERVERS raw value:', JSON.stringify(serversEnv));
+			process.exit(1);
+		}
+	}
+
+	if (!env.SMTP_HOST) return [];
+	const port = parseInt(env.SMTP_PORT, 10) || 587;
+	return [{
+		name: 'smtp-1',
+		host: env.SMTP_HOST,
+		port,
+		secure: port === 465,
+		user: env.SMTP_USER || '',
+		pass: env.SMTP_PASS || '',
+		from: defaultFrom,
+	}];
+}
+
+const smtpServers = parseSmtpServersFromEnv();
+const primarySmtp = smtpServers[0] || {};
+const appUrl = process.env.APP_URL || 'http://localhost:3000';
+
 const config = {
 	env: process.env.NODE_ENV || 'development',
 	port: parseInt(process.env.PORT, 10) || 3000,
@@ -71,18 +137,20 @@ const config = {
 	socketEmitDelay: parseInt(process.env.SOCKET_EMIT_DELAY, 10) || 500,
 	sessionSecret: process.env.SESSION_SECRET || 'change-me',
 	jwtSecret: process.env.JWT_SECRET || 'change-me',
-	appUrl: process.env.APP_URL || 'http://localhost:3000',
+	appUrl,
+	isHosted: isHostedAppUrl(appUrl),
 	mcpBaseUrl: (process.env.MCP_BASE_URL || 'http://localhost:3002').replace(/\/$/, ''),
 	wsUrl: process.env.WS_URL || '',
 
 	typesense: parseTypesenseConfig(),
 
 	smtp: {
-		host: process.env.SMTP_HOST || '',
-		port: parseInt(process.env.SMTP_PORT, 10) || 587,
-		user: process.env.SMTP_USER || '',
-		pass: process.env.SMTP_PASS || '',
-		from: process.env.SMTP_FROM || 'noreply@localhost',
+		host: primarySmtp.host || '',
+		port: primarySmtp.port || 587,
+		user: primarySmtp.user || '',
+		pass: primarySmtp.pass || '',
+		from: primarySmtp.from || process.env.SMTP_FROM || 'noreply@localhost',
+		servers: smtpServers,
 	},
 	emailForwardDomain: process.env.EMAIL_FORWARD_DOMAIN || '',
 
@@ -129,8 +197,8 @@ const config = {
 	},
 
 	sentry: {
-		dsn: process.env.SENTRY_DSN || '',
-		clientEnabled: !!(process.env.SENTRY_DSN),
+		dsn: getSentryDsn(),
+		clientEnabled: isSentryEnabled(),
 	},
 
 	gitEncryptionKey: process.env.GIT_ENCRYPTION_KEY || '',

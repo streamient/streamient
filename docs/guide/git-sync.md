@@ -1,6 +1,6 @@
 # Git Sync
 
-Kumbukum can synchronize markdown files from Git repositories, keeping your notes and memories in sync with a version-controlled repo. Changes flow both ways: edits in the repo appear in Kumbukum, and edits in Kumbukum are pushed back as commits.
+Kumbukum can synchronize markdown files and read commit messages from Git repositories, keeping your notes, memories, and project history in sync with a version-controlled repo. Changes flow both ways: edits in the repo appear in Kumbukum, and edits in Kumbukum are pushed back as commits.
 
 ::: info Availability
 Git Sync requires the **Pro** plan or a **self-hosted** (open-source) installation.
@@ -13,10 +13,27 @@ Git Sync requires the **Pro** plan or a **self-hosted** (open-source) installati
 3. Files in the **notes directory** become Notes; files in the **memories directory** become Memories
 4. A scheduler re-syncs every 10 minutes (configurable per repo)
 5. Items edited in Kumbukum are converted back to Markdown and pushed as commits
+6. Git commits are imported as searchable Memories by default
 
 ### Conflict Resolution
 
-Git Sync uses **last-write-wins**. If the same item was changed in both Kumbukum and the repo since the last sync, the newer change takes precedence.
+Git Sync uses guarded conflict handling. If the same item changed in both Kumbukum and Git since the last sync, Kumbukum skips the overwrite and records a conflict in the sync summary.
+
+### Deleted Files
+
+When a previously synced Markdown file is deleted from Git, Kumbukum moves the linked Note or Memory to trash by default. If the Kumbukum item has newer local edits, the item is kept and a conflict is recorded.
+
+### Commit Memories
+
+Git Sync can import commit history as Memories. New repo connections import commits from the last 90 days by default, then continue importing new commits on later syncs.
+
+Each commit Memory includes:
+
+- Full commit message
+- Author and committer details
+- Authored and committed dates
+- Branch and repository
+- Changed files with Git status codes
 
 ## Directory Mapping
 
@@ -104,6 +121,8 @@ auth_token: ghp_xxxx
 | `memories_path` | `memories` | Directory in repo mapped to Memories                     |
 | `sync_path`     | `/`        | Subfolder within the repo to sync (for monorepos)        |
 | `trash_on_delete`| `true`    | Move items to trash when their `.md` file is deleted     |
+| `commit_sync_enabled`| `true` | Import Git commits as searchable Memories                |
+| `commit_history_days`| `90`   | Days of commit history to backfill on first sync         |
 | `enabled`       | `true`     | Enable/disable automatic sync                            |
 
 ## Manual Sync

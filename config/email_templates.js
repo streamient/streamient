@@ -65,17 +65,44 @@ const emailTemplates = {
 			{ key: 'url', description: 'Invite acceptance URL' },
 		],
 	},
-	trial_ending: {
-		subject: 'Your Kumbukum trial ends in {{daysLeft}} days',
+	trial_ending_3_days: {
+		subject: 'Your Kumbukum trial ends in 3 days',
 		html: `<p>Hi {{name}},</p>
-<p>Your free trial ends on <strong>{{trialEndDate}}</strong> (in {{daysLeft}} days).</p>
-<p>To keep using Kumbukum without interruption, make sure your payment method is up to date.</p>
+<p>Your free trial ends on <strong>{{trialEndDate}}</strong>.</p>
+<p>To keep using Kumbukum without interruption, add billing before your trial ends.</p>
 <p><a href="{{subscriptionUrl}}">Manage your subscription</a></p>
 <p>If you have any questions, just reply to this email.</p>
 <p></p>`,
 		variables: [
 			{ key: 'name', description: 'User name' },
-			{ key: 'daysLeft', description: 'Days remaining in trial' },
+			{ key: 'trialEndDate', description: 'Trial end date' },
+			{ key: 'subscriptionUrl', description: 'Subscription settings URL' },
+		],
+	},
+	trial_ending_24_hours: {
+		subject: 'Your Kumbukum trial ends in 24 hours',
+		html: `<p>Hi {{name}},</p>
+<p>Your free trial ends on <strong>{{trialEndDate}}</strong>.</p>
+<p>Add billing now to keep your Kumbukum account active. If the trial ends without billing, your account will be locked.</p>
+<p><a href="{{subscriptionUrl}}">Add billing</a></p>
+<p>Accounts without billing are deleted 3 days after the trial ends.</p>
+<p></p>`,
+		variables: [
+			{ key: 'name', description: 'User name' },
+			{ key: 'trialEndDate', description: 'Trial end date' },
+			{ key: 'subscriptionUrl', description: 'Subscription settings URL' },
+		],
+	},
+	trial_expired: {
+		subject: 'Your Kumbukum trial has ended',
+		html: `<p>Hi {{name}},</p>
+<p>Your Kumbukum free trial ended on <strong>{{trialEndDate}}</strong>, and your account is now locked.</p>
+<p>Add billing to unlock your account and keep using Kumbukum.</p>
+<p><a href="{{subscriptionUrl}}">Add billing</a></p>
+<p>If billing is not added, this account and all workspace data will be deleted 3 days after the trial end date.</p>
+<p></p>`,
+		variables: [
+			{ key: 'name', description: 'User name' },
 			{ key: 'trialEndDate', description: 'Trial end date' },
 			{ key: 'subscriptionUrl', description: 'Subscription settings URL' },
 		],

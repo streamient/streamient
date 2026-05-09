@@ -84,6 +84,12 @@ if gitSyncEnabled
 										span.badge.bg-warning Syncing…
 									if repo.last_synced_at
 										span.text-muted.small= 'Synced ' + new Date(repo.last_synced_at).toLocaleString()
+							if repo.last_sync_summary
+								- const gs = repo.last_sync_summary
+								.text-muted.small.mt-1
+									span= `${gs.imported_files || 0} imported · ${gs.exported_files || 0} exported · ${gs.imported_commits || 0} commits · ${gs.trashed_items || 0} trashed · ${gs.conflicts || 0} conflicts`
+							if repo.commit_sync_enabled !== false && repo.last_commit_synced_at
+								.text-muted.small= 'Commits synced ' + new Date(repo.last_commit_synced_at).toLocaleString()
 							.d-flex.gap-1
 								button.btn.btn-sm.btn-outline-primary(onclick=`triggerGitSync('${repo._id}')` title="Sync now")
 									!= icon('sync')
@@ -100,7 +106,7 @@ else
 				h5.mb-2
 					!= icon('lock', 'me-2')
 					| Git Sync (Pro)
-				p.text-muted.mb-2 Sync markdown files from your repository into project notes and memories.
+				p.text-muted.mb-2 Sync commit messages, markdown files, and more from your repository into your project.
 				if is_hosted
 					a.btn.btn-sm.btn-outline-warning(href="/settings/subscription") Upgrade to Pro
 

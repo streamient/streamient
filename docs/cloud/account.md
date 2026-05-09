@@ -9,6 +9,8 @@ Create your Kumbukum Cloud account at [app.kumbukum.com](https://app.kumbukum.co
 
 After signup, you land in your first account and can create projects, store knowledge, and connect AI tools.
 
+On Kumbukum Cloud, new accounts start with a 7-day free trial after email confirmation. No credit card is required to start the trial.
+
 Account owners and admins can also invite teammates from **Settings > My Team**. Accepting an invite adds that user to the existing account — it does not create a separate copy of the workspace.
 
 ## Multiple accounts

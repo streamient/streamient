@@ -3,6 +3,7 @@ x-environment: &environment
   MCP_BASE_URL: ${MCP_BASE_URL}
   WS_URL: ${WS_URL:-}
   API_BASE_URL: http://app:3000
+  KUMBUKUM_APP: web
   MONGO_URI: mongodb://mongo:27017/kumbukum
   REDIS_URL: ${REDIS_URL:-redis://redis:6379}
   REDIS_SENTINEL: ${REDIS_SENTINEL:-}
@@ -31,7 +32,23 @@ x-environment: &environment
   OPENPANEL_CLIENT_SECRET: ${OPENPANEL_CLIENT_SECRET:-}
   OPENPANEL_API_URL: ${OPENPANEL_API_URL:-}
   SENTRY_DSN: ${SENTRY_DSN:-}
+  ENABLE_SENTRY: ${ENABLE_SENTRY:-}
+  SENTRY_ENABLED: ${SENTRY_ENABLED:-}
   SENTRY_TUNNEL_PROJECT_IDS: ${SENTRY_TUNNEL_PROJECT_IDS:-}
+  ENABLE_OTEL: ${ENABLE_OTEL:-false}
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE:-}
+  OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-}
+  OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-}
+  OTEL_METRICS_EXPORTER: ${OTEL_METRICS_EXPORTER:-}
+  OTEL_LOGS_EXPORTER: ${OTEL_LOGS_EXPORTER:-}
+  OTEL_EXPORTER_OTLP_TIMEOUT: ${OTEL_EXPORTER_OTLP_TIMEOUT:-}
+  OTEL_BSP_EXPORT_TIMEOUT: ${OTEL_BSP_EXPORT_TIMEOUT:-}
+  OTEL_BSP_SCHEDULE_DELAY: ${OTEL_BSP_SCHEDULE_DELAY:-}
+  OTEL_BSP_MAX_QUEUE_SIZE: ${OTEL_BSP_MAX_QUEUE_SIZE:-}
+  OTEL_BSP_MAX_EXPORT_BATCH_SIZE: ${OTEL_BSP_MAX_EXPORT_BATCH_SIZE:-}
+  OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-}
+  OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-}
   NODE_ENV: production
   PORT: 3000
   GIT_ENCRYPTION_KEY: ${GIT_ENCRYPTION_KEY:-}
@@ -66,6 +83,7 @@ services:
       - "3001:3001"
     environment:
       <<: *environment
+      KUMBUKUM_APP: ws
       PORT: 3001
       SERVER_MODE: ws
     healthcheck:
@@ -82,12 +100,13 @@ services:
 
   mcp:
     image: ghcr.io/kumbukum/kumbukum:latest
-    workdir: /opt/kumbukum/apps/mcp
+    working_dir: /opt/kumbukum/apps/mcp
     command: ["npm", "run", "start"]
     ports:
       - "3002:3002"
     environment:
       <<: *environment
+      KUMBUKUM_APP: mcp
       PORT: 3002
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:3002/health"]
@@ -102,6 +121,7 @@ services:
     command: ["npm", "run", "start"]
     environment:
       <<: *environment
+      KUMBUKUM_APP: scheduler
       SERVER_MODE: scheduler
     volumes:
       - assets_data:/opt/kumbukum/assets

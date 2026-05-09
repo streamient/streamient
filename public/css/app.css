@@ -489,6 +489,10 @@ small,
 	max-height: 80px;
 }
 
+.navbar-brand {
+	padding-top: 0;
+}
+
 .navbar-brand img {
 	max-height: 20px;
 	margin-left: 0.3rem;

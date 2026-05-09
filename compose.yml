@@ -1,5 +1,6 @@
 x-env: &env
     NODE_ENV: development
+    KUMBUKUM_APP: web
     PORT: 3000
     MONGO_URI: ${DEV_KUMBUKUM_MONGODB_URI}
     REDIS_URL: ${DEV_REDIS_URL:-redis://redis:6379}
@@ -23,7 +24,7 @@ x-env: &env
     TS_CONVERSATION_MODEL_PROVIDER: google
     GOOGLE_API_KEY: "${GOOGLE_API_KEY:-}"
     OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
-    APP_URL: http://localhost:3000
+    APP_URL: http://app.kumbukum.local:3000
     MCP_BASE_URL: http://localhost:3002
     WS_URL: ""
     EMAIL_FORWARD_DOMAIN: "email.kumbukum.com"
@@ -38,9 +39,26 @@ x-env: &env
     OPENPANEL_API_URL: "${OPENPANEL_API_URL:-}"
     SENTRY_DSN_KUMBUKUM: "${SENTRY_DSN_KUMBUKUM:-}"
     SENTRY_DSN: "${SENTRY_DSN:-}"
+    ENABLE_SENTRY: "${ENABLE_SENTRY:-false}"
+    SENTRY_ENABLED: "${SENTRY_ENABLED:-false}"
     SENTRY_TUNNEL_PROJECT_IDS: "${SENTRY_TUNNEL_PROJECT_IDS:-}"
+    ENABLE_OTEL: "${ENABLE_OTEL:-false}"
+    OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
+    OTEL_EXPORTER_OTLP_INSECURE: "${OTEL_EXPORTER_OTLP_INSECURE:-}"
+    OTEL_EXPORTER_OTLP_PROTOCOL: "${OTEL_EXPORTER_OTLP_PROTOCOL:-}"
+    OTEL_TRACES_EXPORTER: "${OTEL_TRACES_EXPORTER:-}"
+    OTEL_METRICS_EXPORTER: "${OTEL_METRICS_EXPORTER:-}"
+    OTEL_LOGS_EXPORTER: "${OTEL_LOGS_EXPORTER:-}"
+    OTEL_EXPORTER_OTLP_TIMEOUT: "${OTEL_EXPORTER_OTLP_TIMEOUT:-}"
+    OTEL_BSP_EXPORT_TIMEOUT: "${OTEL_BSP_EXPORT_TIMEOUT:-}"
+    OTEL_BSP_SCHEDULE_DELAY: "${OTEL_BSP_SCHEDULE_DELAY:-}"
+    OTEL_BSP_MAX_QUEUE_SIZE: "${OTEL_BSP_MAX_QUEUE_SIZE:-}"
+    OTEL_BSP_MAX_EXPORT_BATCH_SIZE: "${OTEL_BSP_MAX_EXPORT_BATCH_SIZE:-}"
+    OTEL_TRACES_SAMPLER: "${OTEL_TRACES_SAMPLER:-}"
+    OTEL_TRACES_SAMPLER_ARG: "${OTEL_TRACES_SAMPLER_ARG:-}"
     STRIPE_SECRET_KEY: "${STRIPE_SECRET_KEY:-}"
     STRIPE_WEBHOOK_SECRET: "${STRIPE_WEBHOOK_SECRET:-}"
+    STRIPE_PRICE_ID: "${STRIPE_PRICE_ID:-}"
     STRIPE_STARTER_PRICE_ID: "${STRIPE_STARTER_PRICE_ID:-}"
     STRIPE_PRO_PRICE_ID: "${STRIPE_PRO_PRICE_ID:-}"
     STRIPE_PORTAL_CONFIG_ID: "${STRIPE_PORTAL_CONFIG_ID:-}"
@@ -72,6 +90,8 @@ services:
                 echo '[init] Dependencies up to date';
             fi
         "]
+        networks:
+          - hmnet16
 
     app:
         extends:
@@ -99,6 +119,8 @@ services:
             #     condition: service_started
             # typesense:
             #     condition: service_started
+        networks:
+          - hmnet16
 
     mcp:
         extends:
@@ -110,6 +132,7 @@ services:
             - "3002:3002"
         environment:
             <<: *env
+            KUMBUKUM_APP: mcp
             PORT: 3002
         restart: unless-stopped
         healthcheck:
@@ -121,6 +144,8 @@ services:
         depends_on:
             init:
                 condition: service_completed_successfully
+        networks:
+          - hmnet16
 
     scheduler:
         extends:
@@ -129,11 +154,14 @@ services:
         command: ["npm", "run", "start"]
         environment:
             <<: *env
+            KUMBUKUM_APP: scheduler
             SERVER_MODE: scheduler
         restart: unless-stopped
         depends_on:
             init:
                 condition: service_completed_successfully
+        networks:
+          - hmnet16
 
     # mongodb:
     #     image: percona/percona-server-mongodb:6.0
@@ -227,3 +255,7 @@ volumes:
     redis_data:
     caddy_data:
     caddy_config:
+
+networks:
+  hmnet16:
+    external: true

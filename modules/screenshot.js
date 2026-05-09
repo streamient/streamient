@@ -73,14 +73,44 @@ export async function saveScreenshot(url) {
     const buffer = await captureScreenshot(url);
     if (!buffer) return null;
 
-	// Create the small 400x400 thumbnail
+	return writeScreenshotThumbnail(url, buffer, { overwrite: false });
+}
+
+/**
+ * Save a client-provided screenshot data URL for the given URL.
+ * Used by browser extensions when the logged-in user's session can see paywalled pages.
+ */
+export async function saveScreenshotDataUrl(url, dataUrl) {
+	if (!dataUrl) return null;
+
+	const match = String(dataUrl).match(/^data:image\/(?:png|jpe?g|webp);base64,([a-z0-9+/=]+)$/i);
+	if (!match) {
+		throw new Error('Invalid screenshot data URL');
+	}
+
+	const buffer = Buffer.from(match[1], 'base64');
+	return writeScreenshotThumbnail(url, buffer, { overwrite: true });
+}
+
+async function writeScreenshotThumbnail(url, buffer, { overwrite = false } = {}) {
+	const filename = urlToFilename(url);
+	const filePath = path.join(SCREENSHOTS_DIR, filename);
+
+	if (!overwrite) {
+		try {
+			await fs.promises.access(filePath);
+			return filename;
+		} catch {
+			// File doesn't exist — proceed with write
+		}
+	}
+
 	await sharp(buffer)
 		.resize(400, null, { fit: 'contain', position: 'top' })
-		.jpeg({ quality: 85, progressive: true })
+		.png()
 		.toFile(filePath);
 
-    // await fs.promises.writeFile(filePath, buffer);
-    return filename;
+	return filename;
 }
 
 /**

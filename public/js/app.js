@@ -635,6 +635,11 @@ async function addGitRepo(projectId) {
 			<label class="swal-label" for="swal-git-memories">Memories directory</label>
 			<input id="swal-git-memories" class="swal2-input">
 			<span class="swal-hint">Default: memories</span>
+			<div class="swal2-checkbox-container mt-2" style="margin:0 1em">
+				<label><input type="checkbox" id="swal-git-commit-sync" checked> Import commits as memories</label>
+			</div>
+			<label class="swal-label" for="swal-git-commit-days">Commit history days</label>
+			<input id="swal-git-commit-days" class="swal2-input" type="number" min="1" value="90">
 		`,
 		focusConfirm: false,
 		showCancelButton: true,
@@ -650,6 +655,8 @@ async function addGitRepo(projectId) {
 				auth_token: document.getElementById('swal-git-token').value.trim(),
 				notes_path: document.getElementById('swal-git-notes').value.trim() || 'notes',
 				memories_path: document.getElementById('swal-git-memories').value.trim() || 'memories',
+				commit_sync_enabled: document.getElementById('swal-git-commit-sync').checked,
+				commit_history_days: parseInt(document.getElementById('swal-git-commit-days').value, 10) || 90,
 			};
 		},
 	});
@@ -689,6 +696,11 @@ async function editGitRepo(repoId) {
 				<input id="swal-git-memories" class="swal2-input" value="${repo.memories_path || 'memories'}">
 				<span class="swal-hint">Default: memories</span>
 				<div class="swal2-checkbox-container mt-2" style="margin:0 1em">
+					<label><input type="checkbox" id="swal-git-commit-sync" ${repo.commit_sync_enabled !== false ? 'checked' : ''}> Import commits as memories</label>
+				</div>
+				<label class="swal-label" for="swal-git-commit-days">Commit history days</label>
+				<input id="swal-git-commit-days" class="swal2-input" type="number" min="1" value="${repo.commit_history_days || 90}">
+				<div class="swal2-checkbox-container mt-2" style="margin:0 1em">
 					<label><input type="checkbox" id="swal-git-enabled" ${repo.enabled ? 'checked' : ''}> Enabled</label>
 				</div>
 			`,
@@ -704,6 +716,8 @@ async function editGitRepo(repoId) {
 					branch: document.getElementById('swal-git-branch').value.trim(),
 					notes_path: document.getElementById('swal-git-notes').value.trim(),
 					memories_path: document.getElementById('swal-git-memories').value.trim(),
+					commit_sync_enabled: document.getElementById('swal-git-commit-sync').checked,
+					commit_history_days: parseInt(document.getElementById('swal-git-commit-days').value, 10) || 90,
 					enabled: document.getElementById('swal-git-enabled').checked,
 				};
 				const tok = document.getElementById('swal-git-token').value.trim();
@@ -743,10 +757,12 @@ async function deleteGitRepo(repoId) {
 async function triggerGitSync(repoId) {
 	try {
 		Swal.fire({ title: 'Syncing…', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-		await api('POST', `/git-repos/${repoId}/sync`);
+		const result = await api('POST', `/git-repos/${repoId}/sync`);
 		const activeProject = document.querySelector('.project-item.active')?.dataset?.id;
 		if (activeProject) loadProjectOverview(activeProject);
-		Swal.fire({ icon: 'success', title: 'Sync complete', timer: 1500, showConfirmButton: false });
+		const summary = result.summary || {};
+		const detail = `${summary.imported_files || 0} imported, ${summary.exported_files || 0} exported, ${summary.imported_commits || 0} commits, ${summary.conflicts || 0} conflicts`;
+		Swal.fire({ icon: 'success', title: 'Sync complete', text: detail, timer: 2500, showConfirmButton: false });
 	} catch (err) {
 		Swal.fire('Sync failed', err.message, 'error');
 	}

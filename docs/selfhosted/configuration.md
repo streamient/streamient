@@ -90,6 +90,16 @@ At least one API key is required for AI chat to function.
 | `SMTP_USER` | SMTP username | Yes | — |
 | `SMTP_PASS` | SMTP password | Yes | — |
 | `SMTP_FROM` | Sender email address | Yes | — |
+| `SMTP_SERVERS` | JSON array of SMTP servers for round-robin sending. Overrides `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, and `SMTP_PASS` when set. | No | — |
+
+`SMTP_SERVERS` example:
+
+```json
+[
+	{ "name": "smtp-1", "host": "smtp1.example.com", "port": 587, "user": "user1", "pass": "pass1", "from": "noreply@example.com" },
+	{ "name": "smtp-2", "host": "smtp2.example.com", "port": 587, "user": "user2", "pass": "pass2", "from": "noreply@example.com" }
+]
+```
 
 ### Email Forwarding
 
