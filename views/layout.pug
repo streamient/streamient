@@ -32,7 +32,7 @@ html(lang="en")
 					.ms-auto.d-flex.align-items-center
 						if user
 							if is_trialing
-								a.btn.btn-warning.btn-sm.me-3(href="/billing/checkout?plan=pro" style="padding-top:0.45rem;padding-bottom:0.45rem;")
+								a.btn.btn-warning.btn-sm.me-3(href="/settings/subscription" style="padding-top:0.45rem;padding-bottom:0.45rem;")
 									!= icon('creditCard', 'me-1')
 									span= trial_ends_text || 'Trial'
 							if accessible_tenants && accessible_tenants.length > 1

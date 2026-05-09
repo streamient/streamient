@@ -19,6 +19,10 @@ export function resolveCheckoutPriceId(plan = 'starter') {
 	return config.stripe.starterPriceId || config.stripe.priceId;
 }
 
+export function resolveCheckoutPlan(requestedPlan = 'starter') {
+	return requestedPlan === 'pro' ? 'pro' : 'starter';
+}
+
 export async function applySubscriptionToUser(userId, subscription, stripeCustomerId = undefined) {
 	const plan = resolvePlanFromSubscription(subscription);
 	const user = await User.findByIdAndUpdate(

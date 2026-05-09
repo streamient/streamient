@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import config from '../config.js';
 import { buildHostedTrialFields } from '../routes/auth.js';
-import { buildCheckoutSessionParams, buildSubscriptionUserUpdate, resolveCheckoutPriceId } from '../services/billing_service.js';
+import { buildCheckoutSessionParams, buildSubscriptionUserUpdate, resolveCheckoutPlan, resolveCheckoutPriceId } from '../services/billing_service.js';
 import { formatSignupNotificationDate } from '../services/email_service.js';
 import { runTrialLifecycle } from '../modules/scheduler.js';
 import { deleteTenantData, getTenantTypesenseCollectionNames } from '../services/account_cleanup_service.js';
@@ -53,6 +53,13 @@ describe('no-card trial signup and billing helpers', () => {
 			config.stripe.starterPriceId = original.starterPriceId;
 			config.stripe.proPriceId = original.proPriceId;
 		}
+	});
+
+	it('defaults Checkout to Starter unless Pro is explicitly requested', () => {
+		assert.equal(resolveCheckoutPlan(), 'starter');
+		assert.equal(resolveCheckoutPlan('starter'), 'starter');
+		assert.equal(resolveCheckoutPlan('pro'), 'pro');
+		assert.equal(resolveCheckoutPlan('enterprise'), 'starter');
 	});
 
 	it('clears no-card trial lock fields when Stripe subscription state is applied', () => {
