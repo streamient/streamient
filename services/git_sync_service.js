@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
+import mongoose from 'mongoose';
 import simpleGit from 'simple-git';
 import matter from 'gray-matter';
 import { marked } from 'marked';
@@ -9,6 +10,7 @@ import TurndownService from 'turndown';
 import striptags from 'striptags';
 
 import { GitRepo } from '../model/git_repo.js';
+import { GitSyncLog } from '../model/git_sync_log.js';
 import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
 import * as audit from './audit_service.js';
@@ -23,6 +25,7 @@ fs.mkdirSync(GIT_REPOS_DIR, { recursive: true });
 const turndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
 const LOCAL_CHANGE_GRACE_MS = 1000;
 const MAX_SYNC_RUNS = 10;
+const SYNC_LOG_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
 
 // ── Helpers ──
 
@@ -180,6 +183,40 @@ function compactRun(run) {
 	};
 }
 
+function syncLogDetails(summary) {
+	if (!summary) return {};
+	return {
+		imported_files: summary.imported_files || 0,
+		exported_files: summary.exported_files || 0,
+		trashed_items: summary.trashed_items || 0,
+		imported_commits: summary.imported_commits || 0,
+		conflicts: summary.conflicts || 0,
+		skipped: summary.skipped || 0,
+		duration_ms: summary.duration_ms || 0,
+	};
+}
+
+async function logSyncEvent(gitRepo, level, message, details = {}) {
+	if (mongoose.connection.readyState !== 1) return;
+	try {
+		await GitSyncLog.create({
+			repo: gitRepo._id,
+			project: gitRepo.project,
+			host_id: gitRepo.host_id,
+			level,
+			message,
+			details,
+		});
+		await GitSyncLog.deleteMany({
+			host_id: gitRepo.host_id,
+			repo: gitRepo._id,
+			createdAt: { $lt: new Date(Date.now() - SYNC_LOG_RETENTION_MS) },
+		});
+	} catch (err) {
+		console.warn(`Git sync log failed for repo ${gitRepo._id}:`, err.message);
+	}
+}
+
 function syncSummaryForStorage(summary) {
 	return {
 		imported_files: summary.imported_files,
@@ -320,6 +357,21 @@ export async function getGitRepo(hostId, repoId) {
 	return repo;
 }
 
+export async function listSyncLogs(hostId, repoId, limit = 200) {
+	const repo = await GitRepo.findOne({ _id: repoId, host_id: hostId }).select('_id').lean();
+	if (!repo) return null;
+
+	const since = new Date(Date.now() - SYNC_LOG_RETENTION_MS);
+	return GitSyncLog.find({
+		host_id: hostId,
+		repo: repoId,
+		createdAt: { $gte: since },
+	})
+		.sort({ createdAt: -1 })
+		.limit(Math.min(Math.max(parseInt(limit, 10) || 200, 1), 500))
+		.lean();
+}
+
 export async function updateGitRepo(hostId, repoId, data, ctx = {}) {
 	const update = {};
 	if (data.name !== undefined) update.name = data.name;
@@ -352,6 +404,7 @@ export async function deleteGitRepo(hostId, repoId, ctx = {}) {
 		// Cleanup working directory
 		const dir = repoDir(hostId, repoId);
 		fs.rm(dir, { recursive: true, force: true }, () => {});
+		if (mongoose.connection.readyState === 1) await GitSyncLog.deleteMany({ host_id: hostId, repo: repo._id });
 		audit.log({ action: 'delete', resource: 'git_repo', resource_id: repoId, host_id: hostId, ...ctx });
 	}
 	return repo;
@@ -359,7 +412,7 @@ export async function deleteGitRepo(hostId, repoId, ctx = {}) {
 
 // ── Sync ──
 
-export async function syncRepo(repoId, userId, hostId, ctx = { channel: 'api' }) {
+async function prepareSyncRepo(repoId, userId, hostId, ctx = { channel: 'api' }) {
 	const gitRepoDoc = await GitRepo.findOne({ _id: repoId, host_id: hostId });
 	if (!gitRepoDoc) throw new Error('Git repo not found');
 	if (!gitRepoDoc.enabled) throw new Error('Git sync is disabled for this repo');
@@ -367,12 +420,47 @@ export async function syncRepo(repoId, userId, hostId, ctx = { channel: 'api' })
 	const locked = ctx.skip_lock ? true : await acquireLock(repoId);
 	if (!locked) throw new Error('Sync already in progress');
 
-	const summary = createSyncSummary();
-	gitRepoDoc.last_sync_status = 'in_progress';
-	gitRepoDoc.last_sync_error = '';
-	gitRepoDoc.last_sync_summary = syncSummaryForStorage(summary);
-	await gitRepoDoc.save();
+	try {
+		const summary = createSyncSummary();
+		gitRepoDoc.last_sync_status = 'in_progress';
+		gitRepoDoc.last_sync_error = '';
+		gitRepoDoc.last_sync_summary = syncSummaryForStorage(summary);
+		await gitRepoDoc.save();
+		await logSyncEvent(gitRepoDoc, 'info', 'Sync started', { channel: ctx.channel || 'api', user_id: userId });
 
+		return { gitRepoDoc, summary };
+	} catch (err) {
+		if (!ctx.skip_lock) await releaseLock(repoId);
+		throw err;
+	}
+}
+
+export async function startSyncRepo(repoId, userId, hostId, ctx = { channel: 'api' }) {
+	const prepared = await prepareSyncRepo(repoId, userId, hostId, ctx);
+
+	setImmediate(async () => {
+		try {
+			await executeSyncRepo(repoId, userId, hostId, ctx, prepared.gitRepoDoc, prepared.summary);
+		} catch (err) {
+			console.error(`Git sync failed for repo ${repoId}:`, err.message);
+		} finally {
+			if (!ctx.skip_lock) await releaseLock(repoId);
+		}
+	});
+
+	return syncSummaryForStorage(prepared.summary);
+}
+
+export async function syncRepo(repoId, userId, hostId, ctx = { channel: 'api' }) {
+	const prepared = await prepareSyncRepo(repoId, userId, hostId, ctx);
+	try {
+		return await executeSyncRepo(repoId, userId, hostId, ctx, prepared.gitRepoDoc, prepared.summary);
+	} finally {
+		if (!ctx.skip_lock) await releaseLock(repoId);
+	}
+}
+
+async function executeSyncRepo(repoId, userId, hostId, ctx, gitRepoDoc, summary) {
 	try {
 		const token = gitRepoDoc.auth_token ? decrypt(gitRepoDoc.auth_token) : '';
 		const dir = repoDir(hostId, repoId);
@@ -380,11 +468,13 @@ export async function syncRepo(repoId, userId, hostId, ctx = { channel: 'api' })
 
 		const git = simpleGit();
 		if (!fs.existsSync(path.join(dir, '.git'))) {
+			await logSyncEvent(gitRepoDoc, 'info', 'Cloning repository', { branch });
 			fs.mkdirSync(dir, { recursive: true });
 			await git.clone(repoAuthUrl(gitRepoDoc, token), dir, ['--branch', branch]);
 			const localGit = simpleGit(dir);
 			await localGit.remote(['set-url', 'origin', stripAuthFromRemote(gitRepoDoc)]);
 		} else {
+			await logSyncEvent(gitRepoDoc, 'info', 'Fetching repository updates', { branch });
 			const localGit = simpleGit(dir);
 			await localGit.remote(['set-url', 'origin', stripAuthFromRemote(gitRepoDoc)]);
 			await localGit.fetch(repoAuthUrl(gitRepoDoc, token), branch);
@@ -396,13 +486,33 @@ export async function syncRepo(repoId, userId, hostId, ctx = { channel: 'api' })
 
 		const syncBase = cleanSyncBase(gitRepoDoc.sync_path);
 
+		await logSyncEvent(gitRepoDoc, 'info', 'Importing markdown files', { sync_path: syncBase || '/' });
+		const beforePull = syncLogDetails(summary);
 		await pullFromGit(localGit, dir, syncBase, gitRepoDoc, userId, hostId, ctx, summary);
+		await logSyncEvent(gitRepoDoc, 'info', 'Markdown import complete', {
+			imported_files: summary.imported_files - beforePull.imported_files,
+			trashed_items: summary.trashed_items - beforePull.trashed_items,
+			conflicts: summary.conflicts - beforePull.conflicts,
+			skipped: summary.skipped - beforePull.skipped,
+		});
 
 		if (gitRepoDoc.commit_sync_enabled !== false) {
+			await logSyncEvent(gitRepoDoc, 'info', 'Importing git commits');
+			const beforeCommits = syncLogDetails(summary);
 			await importCommits(localGit, gitRepoDoc, userId, hostId, summary);
+			await logSyncEvent(gitRepoDoc, 'info', 'Commit import complete', {
+				imported_commits: summary.imported_commits - beforeCommits.imported_commits,
+				skipped: summary.skipped - beforeCommits.skipped,
+			});
 		}
 
+		await logSyncEvent(gitRepoDoc, 'info', 'Exporting local changes to Git');
+		const beforePush = syncLogDetails(summary);
 		await pushToGit(localGit, dir, syncBase, gitRepoDoc, userId, hostId, token, summary);
+		await logSyncEvent(gitRepoDoc, 'info', 'Git export complete', {
+			exported_files: summary.exported_files - beforePush.exported_files,
+			skipped: summary.skipped - beforePush.skipped,
+		});
 
 		gitRepoDoc.last_sync_status = 'success';
 		gitRepoDoc.last_synced_at = new Date();
@@ -411,6 +521,7 @@ export async function syncRepo(repoId, userId, hostId, ctx = { channel: 'api' })
 		gitRepoDoc.last_sync_summary = syncSummaryForStorage(summary);
 		gitRepoDoc.sync_runs = [compactRun(run), ...(gitRepoDoc.sync_runs || [])].slice(0, MAX_SYNC_RUNS);
 		await gitRepoDoc.save();
+		await logSyncEvent(gitRepoDoc, summary.conflicts ? 'warning' : 'success', run.message, syncLogDetails(summary));
 
 		emitToTenant(hostId, 'counts:refresh');
 		if (!ctx.skip_audit) audit.log({ action: 'import', resource: 'git_repo', resource_id: repoId, user_id: userId, host_id: hostId, ...ctx });
@@ -422,9 +533,8 @@ export async function syncRepo(repoId, userId, hostId, ctx = { channel: 'api' })
 		gitRepoDoc.last_sync_summary = syncSummaryForStorage(summary);
 		gitRepoDoc.sync_runs = [compactRun({ ...summary, status: 'failed' }), ...(gitRepoDoc.sync_runs || [])].slice(0, MAX_SYNC_RUNS);
 		await gitRepoDoc.save();
+		await logSyncEvent(gitRepoDoc, 'error', `Sync failed: ${err.message}`, syncLogDetails(summary));
 		throw err;
-	} finally {
-		if (!ctx.skip_lock) await releaseLock(repoId);
 	}
 }
 

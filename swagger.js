@@ -255,6 +255,20 @@ const swaggerSpec = {
                     updatedAt: { type: 'string', format: 'date-time' },
                 },
             },
+            GitSyncLog: {
+                type: 'object',
+                properties: {
+                    _id: { type: 'string' },
+                    repo: { type: 'string' },
+                    project: { type: 'string' },
+                    host_id: { type: 'string' },
+                    level: { type: 'string', enum: ['info', 'success', 'warning', 'error'] },
+                    message: { type: 'string' },
+                    details: { type: 'object' },
+                    createdAt: { type: 'string', format: 'date-time' },
+                    updatedAt: { type: 'string', format: 'date-time' },
+                },
+            },
             GraphLink: {
                 type: 'object',
                 properties: {
@@ -1406,8 +1420,8 @@ const swaggerSpec = {
                 description: 'Returns 200 if Socket.IO is initialized, 503 otherwise. No auth required.',
                 security: [],
                 responses: {
-                    200: { description: 'WebSocket healthy', content: { 'application/json': { schema: { type: 'object', properties: { status: { type: 'string', example: 'ok' } } } } } },
-                    503: { description: 'WebSocket unavailable', content: { 'application/json': { schema: { type: 'object', properties: { status: { type: 'string', example: 'not_initialized' } } } } } },
+                    200: { description: 'WebSocket healthy', content: { 'application/json': { schema: { type: 'object', properties: { status: { type: 'string', example: 'ok' }, mode: { type: 'string' }, app: { type: 'string' }, otel_enabled: { type: 'boolean' }, clients: { type: 'integer' } } } } } },
+                    503: { description: 'WebSocket unavailable', content: { 'application/json': { schema: { type: 'object', properties: { status: { type: 'string', example: 'not_initialized' }, mode: { type: 'string' }, app: { type: 'string' }, otel_enabled: { type: 'boolean' }, clients: { type: 'integer' } } } } } },
                 },
             },
         },
@@ -1620,11 +1634,40 @@ const swaggerSpec = {
             post: {
                 tags: ['Git Sync'],
                 summary: 'Trigger manual sync',
-                description: 'Immediately syncs the git repo (pull + push). Returns when complete.',
+                description: 'Immediately syncs the git repo (pull + push). Returns when complete unless background is true.',
                 parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+                requestBody: {
+                    required: false,
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    background: { type: 'boolean', default: false, description: 'Start sync in the background and return immediately' },
+                                },
+                            },
+                        },
+                    },
+                },
                 responses: {
                     200: { description: 'Sync complete', content: { 'application/json': { schema: { type: 'object', properties: { message: { type: 'string' }, summary: { type: 'object' } } } } } },
+                    202: { description: 'Sync started', content: { 'application/json': { schema: { type: 'object', properties: { message: { type: 'string' }, summary: { type: 'object' } } } } } },
                     400: { description: 'Sync failed or in progress', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+                },
+            },
+        },
+        '/git-repos/{id}/logs': {
+            get: {
+                tags: ['Git Sync'],
+                summary: 'Get sync logs',
+                description: 'Returns git sync log entries retained for the last 14 days.',
+                parameters: [
+                    { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+                    { name: 'limit', in: 'query', required: false, schema: { type: 'integer', default: 200, maximum: 500 } },
+                ],
+                responses: {
+                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { logs: { type: 'array', items: { $ref: '#/components/schemas/GitSyncLog' } } } } } } },
+                    404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
                 },
             },
         },

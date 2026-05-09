@@ -89,6 +89,8 @@ if gitSyncEnabled
 						.d-flex.gap-1
 							button.btn.btn-sm.btn-outline-primary(onclick=`triggerGitSync('${repo._id}')` title="Sync now")
 								!= icon('sync')
+							button.btn.btn-sm.btn-outline-secondary(onclick=`showGitSyncLogs('${repo._id}')` title="Sync log")
+								!= icon('history')
 							button.btn.btn-sm.btn-outline-secondary(onclick=`editGitRepo('${repo._id}')` title="Settings")
 								!= icon('gear')
 							button.btn.btn-sm.btn-outline-secondary(onclick=`deleteGitRepo('${repo._id}')` title="Remove")
