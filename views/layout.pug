@@ -12,7 +12,7 @@ html(lang="en")
 		link(href=`/static/v-${v}/css/kumbukum-template1-strict.css` rel="stylesheet")
 		include includes/sentry
 		block head
-	body.kk-template1(class=(hide_chat_sidebar ? 'kk-no-chat-sidebar' : ''))
+	body.kk-template1(class=((hide_chat_sidebar ? 'kk-no-chat-sidebar ' : '') + (page === 'ecc' ? 'kk-ecc-page' : '')))
 		block body
 			include includes/avatar
 			if impersonating
@@ -27,8 +27,9 @@ html(lang="en")
 					a.navbar-brand(href="/dashboard")
 						include includes/logo_white
 					nav.kk-topnav
-						a.kk-navbtn(href="/dashboard" class={active: page !== 'graph'}) Projects
+						a.kk-navbtn(href="/dashboard" class={active: page !== 'graph' && page !== 'ecc'}) Projects
 						a.kk-navbtn(href="/graph" class={active: page === 'graph'}) Graph
+						a.kk-navbtn(href="/ecc" class={active: page === 'ecc'}) Email
 					.ms-auto.d-flex.align-items-center
 						if user
 							if is_trialing
@@ -280,6 +281,7 @@ html(lang="en")
 		script(src=`/static/v-${v}/js/memories.js`)
 		script(src=`/static/v-${v}/js/urls.js`)
 		script(src=`/static/v-${v}/js/emails.js`)
+		script(src=`/static/v-${v}/js/ecc.js`)
 		script(src=`/static/v-${v}/js/trash.js`)
 		script(src=`/static/v-${v}/js/batch.js`)
 		include includes/openpanel

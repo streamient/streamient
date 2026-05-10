@@ -20,6 +20,13 @@ function baseByoAi() {
 	};
 }
 
+function baseAiInstructions() {
+	return {
+		global: '',
+		email: '',
+	};
+}
+
 function setPath(obj, path, value) {
 	const parts = path.split('.');
 	let ref = obj;
@@ -44,7 +51,7 @@ describe('BYO AI service', () => {
 		config.appUrl = 'https://app.kumbukum.com';
 		config.llm.googleApiKey = 'env-gemini';
 		config.llm.openaiApiKey = 'env-openai';
-		tenant = { host_id: 'host-1', plan: 'pro', settings: { byo_ai: baseByoAi() } };
+		tenant = { host_id: 'host-1', plan: 'pro', settings: { byo_ai: baseByoAi(), ai_instructions: baseAiInstructions() } };
 
 		Tenant.findOne = () => ({
 			select: () => ({
@@ -179,6 +186,22 @@ describe('BYO AI service', () => {
 			updateByoAiSettings('host-1', { global: { anthropic_api_key: 'x' } }),
 			/Unknown BYO AI provider key/,
 		);
+	});
+
+	it('stores global and email AI instructions as plain tenant settings', async () => {
+		const settings = await updateByoAiSettings('host-1', {
+			instructions: {
+				global: 'Use account context.',
+				email: 'Prioritize support replies.',
+			},
+		});
+
+		assert.equal(tenant.settings.ai_instructions.global, 'Use account context.');
+		assert.equal(tenant.settings.ai_instructions.email, 'Prioritize support replies.');
+		assert.deepEqual(settings.instructions, {
+			global: 'Use account context.',
+			email: 'Prioritize support replies.',
+		});
 	});
 
 	it('uses distinct Typesense conversation model IDs per LLM scope', () => {

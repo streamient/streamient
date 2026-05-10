@@ -214,6 +214,26 @@ body.kk-template1 #main-content .list-group-item .text-muted.small:last-child {
   margin-top: 6px;
 }
 
+body.kk-template1 .ecc-left .list-group-item,
+body.kk-template1 .ecc-ai .list-group-item,
+body.kk-template1 .ecc-email-item {
+  color: var(--text) !important;
+}
+
+body.kk-template1 .ecc-left .list-group-item.active,
+body.kk-template1 .ecc-email-item.is-active {
+  color: #fff !important;
+  border-color: #6f61ff !important;
+  box-shadow: inset 0 0 0 1px #6f61ff;
+}
+
+body.kk-template1 .ecc-ai-section,
+body.kk-template1 .ecc-ai-empty {
+  border-color: #1e2d56 !important;
+  background: #0f1731;
+  color: var(--text);
+}
+
 /* ── Settings cards & misc overrides ── */
 body.kk-template1 .bg-light {
   background: #0f1731 !important;

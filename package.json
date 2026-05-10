@@ -42,7 +42,7 @@
     "exec": "node build.js && node --import ./tracing.js --import ./instrument.js app.js"
   },
   "dependencies": {
-    "@fontsource-variable/material-symbols-outlined": "^5.2.43",
+    "@fontsource-variable/material-symbols-outlined": "^5.2.44",
     "@fontsource-variable/noto-sans": "^5.2.10",
     "@fontsource-variable/noto-sans-mono": "^5.2.10",
     "@keyv/valkey": "^1.0.11",

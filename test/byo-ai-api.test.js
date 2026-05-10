@@ -20,6 +20,13 @@ function baseByoAi() {
 	};
 }
 
+function baseAiInstructions() {
+	return {
+		global: '',
+		email: '',
+	};
+}
+
 function setPath(obj, path, value) {
 	const parts = path.split('.');
 	let ref = obj;
@@ -57,6 +64,7 @@ async function request(server, method, path, body) {
 
 describe('BYO AI API', () => {
 	const originalAppUrl = config.appUrl;
+	const originalIsHosted = config.isHosted;
 	const originalEnv = config.env;
 	const originalEncryptionKey = config.gitEncryptionKey;
 	const originalUserFindById = User.findById;
@@ -70,6 +78,7 @@ describe('BYO AI API', () => {
 
 	beforeEach(() => {
 		config.appUrl = 'https://app.kumbukum.com';
+		config.isHosted = true;
 		config.env = 'development';
 		config.gitEncryptionKey = '12345678901234567890123456789012';
 		memberRole = 'owner';
@@ -79,7 +88,7 @@ describe('BYO AI API', () => {
 			name: 'Test Account',
 			is_active: true,
 			plan: 'pro',
-			settings: { byo_ai: baseByoAi() },
+			settings: { byo_ai: baseByoAi(), ai_instructions: baseAiInstructions() },
 		};
 
 		User.findById = () => ({
@@ -87,6 +96,9 @@ describe('BYO AI API', () => {
 				_id: { toString: () => '507f1f77bcf86cd799439011' },
 				tenant: tenant._id,
 				host_id: tenant.host_id,
+				subscription_status: 'active',
+				trial_source: '',
+				trial_ends_at: null,
 			}),
 		});
 		User.findByIdAndUpdate = async () => null;
@@ -119,6 +131,7 @@ describe('BYO AI API', () => {
 
 	afterEach(() => {
 		config.appUrl = originalAppUrl;
+		config.isHosted = originalIsHosted;
 		config.env = originalEnv;
 		config.gitEncryptionKey = originalEncryptionKey;
 		User.findById = originalUserFindById;
@@ -154,6 +167,25 @@ describe('BYO AI API', () => {
 		}
 	});
 
+	it('lets hosted Pro account admins save AI instructions', async () => {
+		const server = await createServer();
+		try {
+			const saveResponse = await request(server, 'PUT', '/settings/byo-ai', {
+				instructions: {
+					global: 'Use company policy.',
+					email: 'Triage support first.',
+				},
+			});
+			const saveJson = await saveResponse.json();
+
+			assert.equal(saveResponse.status, 200);
+			assert.equal(saveJson.settings.instructions.global, 'Use company policy.');
+			assert.equal(saveJson.settings.instructions.email, 'Triage support first.');
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
 	it('blocks non-Pro hosted accounts', async () => {
 		tenant.plan = 'starter';
 		const server = await createServer();
@@ -184,6 +216,7 @@ describe('BYO AI API', () => {
 
 	it('blocks self-hosted installs from database BYO AI settings', async () => {
 		config.appUrl = 'http://localhost:3000';
+		config.isHosted = false;
 		config.env = 'production';
 		const server = await createServer();
 		try {
@@ -199,6 +232,7 @@ describe('BYO AI API', () => {
 
 	it('allows non-production self-hosted access for browser testing', async () => {
 		config.appUrl = 'http://localhost:3000';
+		config.isHosted = false;
 		config.env = 'development';
 		tenant.plan = 'free';
 		const server = await createServer();

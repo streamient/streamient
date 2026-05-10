@@ -298,6 +298,7 @@ var ROUTES = {
 	'/memories': { section: 'memories', title: 'Memories', partial: '/ajax/section/memories', batch: true },
 	'/urls': { section: 'urls', title: 'URLs', partial: '/ajax/section/urls', batch: true },
 	'/emails': { section: 'emails', title: 'Emails', partial: '/ajax/section/emails', batch: true },
+	'/ecc': { section: 'ecc', title: 'Email Command Center', partial: '/ajax/section/ecc' },
 	'/trash': { section: 'trash', title: 'Trash', partial: '/ajax/section/trash' },
 	'/settings/profile': { title: 'Profile', partial: '/ajax/section/settings/profile' },
 	'/settings/security': { title: 'Security', partial: '/ajax/section/settings/security' },
@@ -316,6 +317,7 @@ function shouldHideChatSidebar(path) {
 
 function syncLayoutForPath(path) {
 	document.body.classList.toggle('kk-no-chat-sidebar', shouldHideChatSidebar(path));
+	document.body.classList.toggle('kk-ecc-page', path === '/ecc');
 }
 
 // Dashboard section — managed here since it depends on app.js functions

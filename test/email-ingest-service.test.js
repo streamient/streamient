@@ -1,9 +1,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread } from '../services/email_ingest_service.js';
+import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, listEmails, parseTriageResult, triageInboxEmails } from '../services/email_ingest_service.js';
 import { Email } from '../model/email.js';
+import { EmailLabel } from '../model/email_label.js';
 import { GraphLink } from '../model/graph_link.js';
+import { Tenant } from '../modules/tenancy.js';
 import { toTypesenseDoc } from '../modules/typesense.js';
 
 describe('Email ingest service', () => {
@@ -147,7 +149,7 @@ describe('Email ingest service', () => {
 					subject: 'Duplicate',
 					text: 'Updated text',
 				},
-			}, { channel: 'api' });
+			}, { channel: 'api', skipSideEffects: true });
 
 			assert.deepEqual(updateQuery, { _id: 'email-1', host_id: 'host-1' });
 			assert.equal(createCalled, false);
@@ -197,7 +199,7 @@ describe('Email ingest service', () => {
 				to: '507f1f77bcf86cd799439011@email.kumbukum.com',
 				subject: 'Reply',
 				text: 'Reply text',
-			}, { channel: 'emailforwarding' });
+			}, { channel: 'emailforwarding', skipSideEffects: true });
 
 			assert.equal(graphLinkQuery.host_id, 'host-1');
 			assert.equal(graphLinkQuery.source_id, linkedId);
@@ -280,5 +282,103 @@ describe('Email ingest service', () => {
 		assert.deepEqual(doc.from, ['sender@example.com']);
 		assert.deepEqual(doc.to, ['to@example.com']);
 		assert.equal(doc.subject, 'Hello from sender test');
+	});
+
+	it('lists default ECC inbox as untriaged emails across projects', async () => {
+		let findQuery = null;
+		const originalFind = Email.find;
+
+		Email.find = (query) => {
+			findQuery = query;
+			return {
+				sort: () => ({
+					skip: () => ({
+						limit: async () => [],
+					}),
+				}),
+			};
+		};
+
+		try {
+			await listEmails('host-1', null, { mailbox: 'inbox', triaged: false });
+
+			assert.equal(findQuery.host_id, 'host-1');
+			assert.equal(findQuery.project, undefined);
+			assert.equal(findQuery.mailbox, 'inbox');
+			assert.deepEqual(findQuery.in_trash, { $ne: true });
+			assert.deepEqual(findQuery.$or, [{ triaged_at: null }, { triaged_at: { $exists: false } }]);
+		} finally {
+			Email.find = originalFind;
+		}
+	});
+
+	it('normalizes AI triage JSON to supported labels', () => {
+		const triage = parseTriageResult('```json\n{"labels":["Reply Required","unknown"],"summary":"Needs reply","reason":"Customer asked a question"}\n```');
+
+		assert.deepEqual(triage.labels, ['reply-required', 'triaged']);
+		assert.equal(triage.summary, 'Needs reply');
+		assert.equal(triage.reason, 'Customer asked a question');
+	});
+
+	it('triages inbox emails and persists labels', async () => {
+		const emailId = { toString: () => 'email-1' };
+		let updatePayload = null;
+		const originalBulkWrite = EmailLabel.bulkWrite;
+		const originalLabelFind = EmailLabel.find;
+		const originalEmailFind = Email.find;
+		const originalFindOneAndUpdate = Email.findOneAndUpdate;
+		const originalTenantFindOne = Tenant.findOne;
+
+		EmailLabel.bulkWrite = async () => ({});
+		EmailLabel.find = () => ({
+			sort: () => ({
+				lean: async () => [],
+			}),
+		});
+		Email.find = () => ({
+			sort: () => ({
+				limit: () => ({
+					lean: async () => [{
+						_id: emailId,
+						subject: 'Question',
+						from: ['sender@example.com'],
+						to: ['team@example.com'],
+						text_content: 'Can you help?',
+						labels: [],
+						updatedAt: '2026-01-01T10:00:00.000Z',
+					}],
+				}),
+			}),
+		});
+		Email.findOneAndUpdate = async (query, update) => {
+			assert.equal(query._id, emailId);
+			updatePayload = update.$set;
+			return { _id: emailId, ...update.$set };
+		};
+		Tenant.findOne = () => ({
+			select: () => ({
+				lean: async () => ({ settings: { ai_instructions: { global: 'Be concise', email: 'Prioritize support' } } }),
+			}),
+		});
+
+		try {
+			const result = await triageInboxEmails('host-1', userId, {
+				skipSideEffects: true,
+				completionFn: async () => '{"labels":["human-do"],"summary":"Needs help","reason":"Requires human action"}',
+			});
+
+			assert.equal(result.processed, 1);
+			assert.equal(result.triaged, 1);
+			assert.deepEqual(updatePayload.labels, ['human-do', 'triaged']);
+			assert.equal(updatePayload.triage_summary, 'Needs help');
+			assert.equal(updatePayload.triage_reason, 'Requires human action');
+			assert.ok(updatePayload.triaged_at instanceof Date);
+		} finally {
+			EmailLabel.bulkWrite = originalBulkWrite;
+			EmailLabel.find = originalLabelFind;
+			Email.find = originalEmailFind;
+			Email.findOneAndUpdate = originalFindOneAndUpdate;
+			Tenant.findOne = originalTenantFindOne;
+		}
 	});
 });

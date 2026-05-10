@@ -22,6 +22,9 @@ block settings
 								input.form-control#byo-global-gemini(type="password" autocomplete="off" placeholder="Leave blank to keep current key" data-scope="global" data-field="gemini_api_key")
 								button.btn.btn-outline-secondary(type="button" data-clear-byo="global:gemini_api_key") Clear
 							.form-text(data-status="global:gemini_api_key") Loading...
+						.mb-3
+							label.form-label(for="byo-global-instructions") Global AI instructions
+							textarea.form-control.form-control-sm#byo-global-instructions(rows="5" data-instruction-scope="global")
 					.col-md-6
 						h5.mb-3 Email
 						p.text-muted.small Used only when a prompt is explicitly scoped to emails.
@@ -37,6 +40,9 @@ block settings
 								input.form-control#byo-email-gemini(type="password" autocomplete="off" placeholder="Leave blank to keep current key" data-scope="email" data-field="gemini_api_key")
 								button.btn.btn-outline-secondary(type="button" data-clear-byo="email:gemini_api_key") Clear
 							.form-text(data-status="email:gemini_api_key") Loading...
+						.mb-3
+							label.form-label(for="byo-email-instructions") Email AI instructions
+							textarea.form-control.form-control-sm#byo-email-instructions(rows="5" data-instruction-scope="email")
 				button.btn.btn-primary(type="submit") Save Changes
 			#byo-ai-result.d-none.mt-3
 

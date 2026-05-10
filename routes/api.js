@@ -320,8 +320,19 @@ router.get('/emails', requireEmailFeatureAccess, async (req, res) => {
 	const emails = await emailIngestService.listEmails(req.host_id, req.query.project, {
 		page: parseInt(req.query.page, 10) || 1,
 		limit: parseInt(req.query.limit, 10) || 50,
+		mailbox: req.query.mailbox,
+		label: req.query.label,
+		triaged: req.query.triaged,
 	});
 	res.json({ emails });
+});
+
+router.get('/email-labels', requireEmailFeatureAccess, async (req, res) => {
+	const data = await emailIngestService.listEmailLabels(req.host_id, {
+		project: req.query.project,
+		mailbox: req.query.mailbox,
+	});
+	res.json(data);
 });
 
 router.post('/emails', requireEmailFeatureAccess, async (req, res) => {
@@ -359,6 +370,20 @@ router.delete('/emails/:id', requireEmailFeatureAccess, async (req, res) => {
 router.post('/emails/search', requireEmailFeatureAccess, async (req, res) => {
 	const results = await emailIngestService.searchEmails(req.host_id, req.body.query, req.body.options);
 	res.json({ results });
+});
+
+router.post('/emails/triage-inbox', requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const result = await emailIngestService.triageInboxEmails(req.host_id, req.userId, {
+			project: req.body?.project,
+			limit: req.body?.limit,
+			ctx: auditCtx(req),
+		});
+		res.json(result);
+	} catch (err) {
+		console.error('Email inbox triage error:', err);
+		res.status(400).json({ error: err.message || 'Inbox triage failed' });
+	}
 });
 
 // ---- URLs ----

@@ -53,11 +53,15 @@ export function summarizeByoAiSettings(tenant) {
 			summary[scope][PROVIDER_FIELDS[provider]] = summarizeProvider(tenant, scope, provider);
 		}
 	}
+	summary.instructions = {
+		global: tenant?.settings?.ai_instructions?.global || '',
+		email: tenant?.settings?.ai_instructions?.email || '',
+	};
 	return summary;
 }
 
 export async function getByoAiSettings(hostId) {
-	const tenant = await Tenant.findOne({ host_id: hostId }).select('settings.byo_ai').lean();
+	const tenant = await Tenant.findOne({ host_id: hostId }).select('settings.byo_ai settings.ai_instructions').lean();
 	return summarizeByoAiSettings(tenant);
 }
 
@@ -68,6 +72,7 @@ export async function updateByoAiSettings(hostId, payload = {}) {
 
 	const update = {};
 	for (const key of Object.keys(payload)) {
+		if (key === 'instructions') continue;
 		if (!BYO_AI_SCOPES.includes(key)) {
 			throw new Error(`Unknown BYO AI scope: ${key}`);
 		}
@@ -101,6 +106,22 @@ export async function updateByoAiSettings(hostId, payload = {}) {
 		}
 	}
 
+	if (payload.instructions !== undefined) {
+		if (!payload.instructions || typeof payload.instructions !== 'object' || Array.isArray(payload.instructions)) {
+			throw new Error('AI instructions payload must be an object');
+		}
+		for (const key of Object.keys(payload.instructions)) {
+			if (!BYO_AI_SCOPES.includes(key)) {
+				throw new Error(`Unknown AI instructions scope: ${key}`);
+			}
+			const value = payload.instructions[key];
+			if (value !== null && typeof value !== 'string') {
+				throw new Error(`${key} instructions must be a string`);
+			}
+			update[`settings.ai_instructions.${key}`] = value ? value.trim() : '';
+		}
+	}
+
 	if (Object.keys(update).length === 0) {
 		return getByoAiSettings(hostId);
 	}
@@ -109,9 +130,17 @@ export async function updateByoAiSettings(hostId, payload = {}) {
 		{ host_id: hostId },
 		{ $set: update },
 		{ returnDocument: 'after' },
-	).select('settings.byo_ai').lean();
+	).select('settings.byo_ai settings.ai_instructions').lean();
 
 	return summarizeByoAiSettings(tenant);
+}
+
+export async function getAiInstructions(hostId) {
+	const tenant = await Tenant.findOne({ host_id: hostId }).select('settings.ai_instructions').lean();
+	return {
+		global: tenant?.settings?.ai_instructions?.global || '',
+		email: tenant?.settings?.ai_instructions?.email || '',
+	};
 }
 
 export async function resolveLlmApiKey({ hostId = null, provider, scope = 'global' } = {}) {

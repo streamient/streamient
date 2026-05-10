@@ -6,6 +6,7 @@ import striptags from 'striptags';
 import { simpleParser } from 'mailparser';
 
 import { Email } from '../model/email.js';
+import { EmailLabel } from '../model/email_label.js';
 import { GraphLink } from '../model/graph_link.js';
 import { extractText } from './import_service.js';
 import { detectFileType } from '../modules/file_detect.js';
@@ -13,8 +14,20 @@ import { searchCollection, removeDocument } from '../modules/typesense.js';
 import { emitToTenant } from '../modules/socket.js';
 import { invalidateGraphCache, removeLinksForItem } from './graph_service.js';
 import * as audit from './audit_service.js';
+import { chatCompletion } from '../modules/llm_client.js';
+import { getAiInstructions } from './byo_ai_service.js';
 
 const MAX_ATTACHMENT_SIZE = 50 * 1024 * 1024;
+const DEFAULT_EMAIL_LABELS = [
+	{ slug: 'waiting', name: 'Waiting', color: '#0d6efd' },
+	{ slug: 'triaged', name: 'Triaged', color: '#198754' },
+	{ slug: 'human-do', name: 'Human do', color: '#fd7e14' },
+	{ slug: 'reply-required', name: 'Reply required', color: '#dc3545' },
+	{ slug: 'no-action', name: 'No action', color: '#6c757d' },
+	{ slug: 'spam', name: 'Spam', color: '#212529' },
+];
+const SYSTEM_LABEL_SLUGS = DEFAULT_EMAIL_LABELS.map((label) => label.slug);
+const PRIMARY_TRIAGE_LABELS = ['waiting', 'human-do', 'reply-required', 'no-action', 'spam'];
 
 function canonicalMessageId(value) {
 	const raw = String(value || '').trim();
@@ -100,6 +113,32 @@ function normalizeRecipientList(value) {
 	}
 	if (value?.address) return [extractEmailAddress(value.address)].filter(Boolean);
 	return [];
+}
+
+function normalizeSlug(value) {
+	return String(value || '')
+		.trim()
+		.toLowerCase()
+		.replace(/[_\s]+/g, '-')
+		.replace(/[^a-z0-9-]/g, '')
+		.replace(/-+/g, '-')
+		.replace(/^-|-$/g, '');
+}
+
+function normalizeLabels(labels = []) {
+	if (!Array.isArray(labels)) return [];
+	return [...new Set(labels.map(normalizeSlug).filter(Boolean))];
+}
+
+function normalizeMailbox(mailbox) {
+	if (['inbox', 'archived', 'sent'].includes(mailbox)) return mailbox;
+	return 'inbox';
+}
+
+function parseBooleanFilter(value) {
+	if (value === true || value === 'true' || value === '1') return true;
+	if (value === false || value === 'false' || value === '0') return false;
+	return null;
 }
 
 function normalizeBodyText(parsed) {
@@ -221,7 +260,7 @@ export function parseForwardedEmailInput(data) {
 	};
 }
 
-async function createEmailThreadLinks(email, userId, host_id) {
+async function createEmailThreadLinks(email, userId, host_id, options = {}) {
 	const referencedMessageIds = [...new Set([...(email.references || []), email.in_reply_to].map(canonicalMessageId).filter(Boolean))];
 	if (referencedMessageIds.length === 0) return;
 
@@ -258,7 +297,7 @@ async function createEmailThreadLinks(email, userId, host_id) {
 		if (result.upsertedCount > 0) created = true;
 	}
 
-	if (created) invalidateGraphCache(host_id).catch(() => {});
+	if (created && !options.skipSideEffects) invalidateGraphCache(host_id).catch(() => {});
 }
 
 async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
@@ -269,6 +308,11 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 	const payload = {
 		...normalized,
 		source: data.source === 'emailforwarding' ? 'emailforwarding' : 'api',
+		mailbox: normalizeMailbox(data.mailbox),
+		labels: normalizeLabels(data.labels),
+		triaged_at: data.triaged_at || null,
+		triage_summary: String(data.triage_summary || ''),
+		triage_reason: String(data.triage_reason || ''),
 		project: data.project,
 		owner: userId,
 		host_id,
@@ -296,11 +340,13 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 		email = await Email.create(payload);
 	}
 
-	await createEmailThreadLinks(email, userId, host_id);
-	emitToTenant(host_id, 'email:created', email);
-	invalidateGraphCache(host_id).catch(() => {});
-	audit.log({ action: 'create', resource: 'email', resource_id: email._id.toString(), user_id: userId, host_id, ...ctx });
-	removeDocument(host_id, 'emails', email._id.toString()).catch((err) => console.error('Typesense remove error:', err.message));
+	await createEmailThreadLinks(email, userId, host_id, { skipSideEffects: ctx.skipSideEffects });
+	if (!ctx.skipSideEffects) {
+		emitToTenant(host_id, 'email:created', email);
+		invalidateGraphCache(host_id).catch(() => {});
+		audit.log({ action: 'create', resource: 'email', resource_id: email._id.toString(), user_id: userId, host_id, ...ctx });
+		removeDocument(host_id, 'emails', email._id.toString()).catch((err) => console.error('Typesense remove error:', err.message));
+	}
 	return email;
 }
 
@@ -314,14 +360,89 @@ export async function ingestForwardedEmail(userId, host_id, data, ctx = {}) {
 	return persistEmail(userId, host_id, normalized, { ...data, source: 'emailforwarding' }, ctx);
 }
 
-export async function listEmails(host_id, projectId, { page = 1, limit = 50 } = {}) {
+export async function ensureDefaultEmailLabels(host_id) {
+	const ops = DEFAULT_EMAIL_LABELS.map((label) => ({
+		updateOne: {
+			filter: { host_id, slug: label.slug },
+			update: {
+				$setOnInsert: {
+					...label,
+					host_id,
+					is_system: true,
+					is_active: true,
+				},
+			},
+			upsert: true,
+		},
+	}));
+
+	if (ops.length) await EmailLabel.bulkWrite(ops, { ordered: false });
+	return EmailLabel.find({ host_id, is_active: { $ne: false } }).sort({ is_system: -1, name: 1 }).lean();
+}
+
+function buildEmailListQuery(host_id, projectId, filters = {}) {
 	const query = { host_id, in_trash: { $ne: true } };
 	if (projectId) query.project = projectId;
+	if (filters.mailbox === 'trash') {
+		query.in_trash = true;
+		delete query.mailbox;
+	} else if (filters.mailbox) {
+		query.mailbox = normalizeMailbox(filters.mailbox);
+	}
+	if (filters.label) query.labels = normalizeSlug(filters.label);
+	const triaged = parseBooleanFilter(filters.triaged);
+	if (triaged === true) {
+		query.triaged_at = { $ne: null };
+	} else if (triaged === false) {
+		query.$or = [{ triaged_at: null }, { triaged_at: { $exists: false } }];
+	}
+	return query;
+}
+
+export async function listEmails(host_id, projectId, { page = 1, limit = 50, mailbox, label, triaged } = {}) {
+	const query = buildEmailListQuery(host_id, projectId, { mailbox, label, triaged });
 
 	return Email.find(query)
 		.sort({ updatedAt: -1 })
 		.skip((page - 1) * limit)
 		.limit(limit);
+}
+
+export async function listEmailLabels(host_id, filters = {}) {
+	const labels = await ensureDefaultEmailLabels(host_id);
+	const projectId = filters.project || null;
+	const baseQuery = { host_id, in_trash: { $ne: true }, ...(projectId ? { project: projectId } : {}) };
+
+	const [mailboxCounts, labelCounts] = await Promise.all([
+		Promise.all([
+			Email.countDocuments(buildEmailListQuery(host_id, projectId, { mailbox: 'inbox', triaged: false })),
+			Email.countDocuments(buildEmailListQuery(host_id, projectId, { mailbox: 'archived' })),
+			Email.countDocuments(buildEmailListQuery(host_id, projectId, { mailbox: 'sent' })),
+			Email.countDocuments({ host_id, in_trash: true, ...(projectId ? { project: projectId } : {}) }),
+		]),
+		Promise.all(labels.map(async (label) => ({
+			slug: label.slug,
+			count: await Email.countDocuments({ ...baseQuery, labels: label.slug }),
+		}))),
+	]);
+
+	const labelCountMap = Object.fromEntries(labelCounts.map((item) => [item.slug, item.count]));
+	return {
+		mailboxes: [
+			{ slug: 'inbox', name: 'Inbox', count: mailboxCounts[0] },
+			{ slug: 'archived', name: 'Archived', count: mailboxCounts[1] },
+			{ slug: 'sent', name: 'Sent', count: mailboxCounts[2] },
+			{ slug: 'trash', name: 'Trash', count: mailboxCounts[3] },
+		],
+		labels: labels.map((label) => ({
+			_id: label._id,
+			slug: label.slug,
+			name: label.name,
+			color: label.color,
+			is_system: label.is_system,
+			count: labelCountMap[label.slug] || 0,
+		})),
+	};
 }
 
 export async function getEmail(host_id, emailId) {
@@ -337,6 +458,11 @@ export async function updateEmail(host_id, emailId, data, ctx = {}) {
 	if (data.cc !== undefined) update.cc = normalizeRecipientList(data.cc);
 	if (data.bcc !== undefined) update.bcc = normalizeRecipientList(data.bcc);
 	if (data.project !== undefined) update.project = data.project;
+	if (data.mailbox !== undefined) update.mailbox = normalizeMailbox(data.mailbox);
+	if (data.labels !== undefined) update.labels = normalizeLabels(data.labels);
+	if (data.triaged_at !== undefined) update.triaged_at = data.triaged_at;
+	if (data.triage_summary !== undefined) update.triage_summary = String(data.triage_summary || '');
+	if (data.triage_reason !== undefined) update.triage_reason = String(data.triage_reason || '');
 	update.is_indexed = false;
 
 	const before = ctx.user_id ? await Email.findOne({ _id: emailId, host_id }).lean() : null;
@@ -384,6 +510,134 @@ export async function searchEmails(host_id, query, options = {}) {
 
 export async function countEmails(host_id) {
 	return Email.countDocuments({ host_id, in_trash: { $ne: true } });
+}
+
+function extractJsonObject(text) {
+	const raw = String(text || '').trim();
+	if (!raw) throw new Error('Triage response was empty');
+	const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+	if (fenced?.[1]) return fenced[1].trim();
+	const start = raw.indexOf('{');
+	const end = raw.lastIndexOf('}');
+	if (start >= 0 && end > start) return raw.slice(start, end + 1);
+	return raw;
+}
+
+export function parseTriageResult(text) {
+	let parsed;
+	try {
+		parsed = JSON.parse(extractJsonObject(text));
+	} catch {
+		throw new Error('Triage response was not valid JSON');
+	}
+
+	const labels = normalizeLabels(parsed.labels || []);
+	const validLabels = labels.filter((label) => SYSTEM_LABEL_SLUGS.includes(label));
+	if (!validLabels.includes('triaged')) validLabels.push('triaged');
+
+	const primaryLabels = validLabels.filter((label) => PRIMARY_TRIAGE_LABELS.includes(label));
+	if (primaryLabels.length === 0) validLabels.push('no-action');
+
+	return {
+		labels: [...new Set(validLabels)],
+		summary: String(parsed.summary || '').trim().slice(0, 500),
+		reason: String(parsed.reason || '').trim().slice(0, 1000),
+	};
+}
+
+function buildTriagePrompt(email, instructions) {
+	const body = [email.text_content, email.attachment_text_content].filter(Boolean).join('\n\n').slice(0, 8000);
+	return [
+		'Classify this email for an email command center.',
+		'Return JSON only with this shape: {"labels":["reply-required"],"summary":"short summary","reason":"short reason"}.',
+		`Allowed labels: ${SYSTEM_LABEL_SLUGS.join(', ')}.`,
+		'Always include exactly one best action label from reply-required, human-do, waiting, no-action, spam.',
+		'Do not include triaged; it will be added automatically.',
+		instructions.global ? `Global instructions:\n${instructions.global}` : '',
+		instructions.email ? `Email instructions:\n${instructions.email}` : '',
+		`Subject: ${email.subject || '(No subject)'}`,
+		`From: ${(email.from || []).join(', ') || '(unknown)'}`,
+		`To: ${(email.to || []).join(', ') || '(unknown)'}`,
+		`Body:\n${body || '(empty)'}`,
+	].filter(Boolean).join('\n\n');
+}
+
+export async function triageInboxEmails(host_id, userId, options = {}) {
+	await ensureDefaultEmailLabels(host_id);
+	const limit = Math.min(parseInt(options.limit, 10) || 25, 100);
+	const projectId = options.project || null;
+	const query = buildEmailListQuery(host_id, projectId, { mailbox: 'inbox', triaged: false });
+	const emails = await Email.find(query)
+		.sort({ updatedAt: -1 })
+		.limit(limit)
+		.lean();
+
+	const completionFn = options.completionFn || chatCompletion;
+	const instructions = await getAiInstructions(host_id);
+	const results = [];
+	const errors = [];
+
+	for (const email of emails) {
+		try {
+			const content = await completionFn({
+				hostId: host_id,
+				scope: 'email',
+				maxTokens: 800,
+				messages: [
+					{
+						role: 'system',
+						content: 'You are an email triage classifier. Return compact JSON only.',
+					},
+					{
+						role: 'user',
+						content: buildTriagePrompt(email, instructions),
+					},
+				],
+			});
+			const triage = parseTriageResult(content);
+			const labels = [...new Set([...(email.labels || []), ...triage.labels])];
+			const updated = await Email.findOneAndUpdate(
+				{ _id: email._id, host_id },
+				{
+					$set: {
+						labels,
+						triaged_at: new Date(),
+						triage_summary: triage.summary,
+						triage_reason: triage.reason,
+						is_indexed: false,
+					},
+				},
+				{ returnDocument: 'after' },
+			);
+
+			if (updated) {
+				if (!options.skipSideEffects) {
+					removeDocument(host_id, 'emails', email._id.toString()).catch((err) => console.error('Typesense remove error:', err.message));
+					emitToTenant(host_id, 'email:updated', updated);
+				}
+				results.push({ email_id: email._id.toString(), labels: updated.labels, summary: updated.triage_summary });
+			}
+		} catch (err) {
+			errors.push({ email_id: email._id.toString(), error: err.message });
+		}
+	}
+
+	if (results.length && !options.skipSideEffects) invalidateGraphCache(host_id).catch(() => {});
+	if (results.length && userId && !options.skipSideEffects) {
+		audit.log({
+			action: 'update',
+			resource: 'email',
+			resource_id: 'triage-inbox',
+			user_id: userId,
+			host_id,
+			details: { triaged: results.length, errors: errors.length },
+			channel: options.ctx?.channel || 'web',
+			ip: options.ctx?.ip,
+			user_agent: options.ctx?.user_agent,
+		});
+	}
+
+	return { processed: emails.length, triaged: results.length, errors, results };
 }
 
 export async function getEmailThread(host_id, emailId) {

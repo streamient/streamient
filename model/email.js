@@ -17,6 +17,11 @@ const emailSchema = new mongoose.Schema(
 
 		source: { type: String, enum: ['api', 'emailforwarding'], default: 'api' },
 		raw_hash: { type: String, default: '' },
+		mailbox: { type: String, enum: ['inbox', 'archived', 'sent'], default: 'inbox' },
+		labels: [{ type: String, trim: true }],
+		triaged_at: { type: Date, default: null },
+		triage_summary: { type: String, default: '' },
+		triage_reason: { type: String, default: '' },
 
 		project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true },
 		owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
@@ -29,6 +34,8 @@ const emailSchema = new mongoose.Schema(
 );
 
 emailSchema.index({ host_id: 1, in_trash: 1, project: 1 });
+emailSchema.index({ host_id: 1, in_trash: 1, mailbox: 1, triaged_at: 1 });
+emailSchema.index({ host_id: 1, in_trash: 1, labels: 1 });
 emailSchema.index({ is_indexed: 1, in_trash: 1 });
 emailSchema.index({ message_id: 1 }, { unique: true, partialFilterExpression: { message_id: { $type: 'string', $ne: '' } } });
 emailSchema.index({ host_id: 1, references: 1 });

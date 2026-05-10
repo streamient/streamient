@@ -67,40 +67,41 @@ if gitSyncEnabled
 			.list-group
 				each repo in gitRepos
 					.list-group-item
-						.d-flex.justify-content-between.align-items-start
-							div
-								.fw-bold= repo.name || repo.repo_url
-								.text-muted.small= repo.repo_url
-								.d-flex.gap-2.mt-1
-									if repo.enabled
-										span.badge.bg-success Enabled
-									else
-										span.badge.bg-secondary Disabled
-									if repo.last_sync_status === 'success'
-										span.badge.bg-info Last sync: success
-									else if repo.last_sync_status === 'failed'
-										span.badge.bg-danger.cursor-pointer(title=repo.last_sync_error) Last sync: failed
-									else if repo.last_sync_status === 'in_progress'
-										span.badge.bg-warning Syncing…
-									if repo.last_synced_at
-										span.text-muted.small= 'Synced ' + new Date(repo.last_synced_at).toLocaleString()
-							if repo.last_sync_summary
-								- const gs = repo.last_sync_summary
-								.text-muted.small.mt-1
-									span= `${gs.imported_files || 0} imported · ${gs.exported_files || 0} exported · ${gs.imported_commits || 0} commits · ${gs.trashed_items || 0} trashed · ${gs.conflicts || 0} conflicts`
-							if repo.commit_sync_enabled !== false && repo.last_commit_synced_at
-								.text-muted.small= 'Commits synced ' + new Date(repo.last_commit_synced_at).toLocaleString()
-						.d-flex.gap-1
-							button.btn.btn-sm.btn-outline-primary(onclick=`triggerGitSync('${repo._id}')` title="Sync now")
-								!= icon('sync')
-							button.btn.btn-sm.btn-outline-secondary(onclick=`showGitSyncLogs('${repo._id}')` title="Sync log")
-								!= icon('history')
-							button.btn.btn-sm.btn-outline-secondary(onclick=`editGitRepo('${repo._id}')` title="Settings")
-								!= icon('gear')
-							button.btn.btn-sm.btn-outline-secondary(onclick=`deleteGitRepo('${repo._id}')` title="Remove")
-								!= icon('delete')
-	else
-		p.text-muted.small No git repos configured. Add one to sync markdown files.
+						.d-flex.align-items-start.mb-3
+							.d-flex.flex-column
+								.mb-2
+									.fw-bold= repo.name || repo.repo_url
+									.text-muted.small= repo.repo_url
+								if repo.last_sync_summary
+									- const gs = repo.last_sync_summary
+									.text-muted.small.mt-1
+										span= `${gs.imported_files || 0} imported · ${gs.exported_files || 0} exported · ${gs.imported_commits || 0} commits · ${gs.trashed_items || 0} trashed · ${gs.conflicts || 0} conflicts`
+							.ms-auto
+								button.btn.btn-sm.btn-outline-primary.me-1(onclick=`triggerGitSync('${repo._id}')` title="Sync now")
+									!= icon('sync')
+								button.btn.btn-sm.btn-outline-secondary.me-1(onclick=`showGitSyncLogs('${repo._id}')` title="Sync log")
+									!= icon('history')
+								button.btn.btn-sm.btn-outline-secondary.me-1(onclick=`editGitRepo('${repo._id}')` title="Settings")
+									!= icon('gear')
+								button.btn.btn-sm.btn-outline-secondary(onclick=`deleteGitRepo('${repo._id}')` title="Remove")
+									!= icon('delete')
+						.d-flex.align-items-center
+							if repo.enabled
+								span.badge.bg-success.me-2 Enabled
+							else
+								span.badge.bg-secondary.me-2 Disabled
+							if repo.last_sync_status === 'success'
+								span.badge.bg-info Last sync: success
+							else if repo.last_sync_status === 'failed'
+								span.badge.bg-danger.cursor-pointer(title=repo.last_sync_error) Last sync: failed
+							else if repo.last_sync_status === 'in_progress'
+								span.badge.bg-warning Syncing…
+							//- if repo.last_synced_at
+							//- 	span.text-muted.small.fs-9= 'Last synced ' + new Date(repo.last_synced_at).toLocaleString()
+							//- if repo.commit_sync_enabled !== false && repo.last_commit_synced_at
+							//- 	span.text-muted.small.ps-3.fs-9= 'Last commits synced ' + new Date(repo.last_commit_synced_at).toLocaleString()
+		else
+			p.text-muted.small No git repos configured. Add one to sync markdown files.
 else
 	.my-4
 		.card.border-warning-subtle

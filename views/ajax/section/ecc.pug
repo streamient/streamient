@@ -1,0 +1,68 @@
+.d-flex.justify-content-between.align-items-center.mb-3
+	div
+		h4.mb-1 Email Command Center
+		p.text-muted.small.mb-0 AI-assisted email triage across projects.
+	if email_feature_enabled
+		button.btn.btn-primary.btn-sm#ecc-triage-btn(type="button")
+			!= icon('sparkle', 'me-1')
+			span Triage Inbox
+
+if !email_feature_enabled
+	.card.border-warning-subtle
+		.card-body
+			h5.mb-2
+				!= icon('lock', 'me-2')
+				span Email Command Center (Pro)
+			p.text-muted.mb-2 Hosted email command center features are available on the Pro plan.
+			if is_hosted
+				a.btn.btn-sm.btn-outline-warning(href="/settings/subscription") Upgrade to Pro
+else
+	.ecc-shell
+		.ecc-left
+			.mb-3
+				label.form-label.small(for="ecc-project-select") Project
+				select.form-select.form-select-sm#ecc-project-select
+					option(value="") All projects
+					each project in projects
+						option(value=project._id.toString())= project.name
+			h6.mb-2 Mailboxes
+			.list-group.mb-4#ecc-mailboxes
+				button.list-group-item.list-group-item-action.d-flex.align-items-center.active(type="button" data-mailbox="inbox")
+					!= icon('email', 'me-2')
+					span Inbox
+					span.badge.text-bg-secondary.ms-auto 0
+				button.list-group-item.list-group-item-action.d-flex.align-items-center(type="button" data-mailbox="archived")
+					!= icon('archive', 'me-2')
+					span Archived
+					span.badge.text-bg-secondary.ms-auto 0
+				button.list-group-item.list-group-item-action.d-flex.align-items-center(type="button" data-mailbox="sent")
+					!= icon('send', 'me-2')
+					span Sent
+					span.badge.text-bg-secondary.ms-auto 0
+				button.list-group-item.list-group-item-action.d-flex.align-items-center(type="button" data-mailbox="trash")
+					!= icon('delete', 'me-2')
+					span Trash
+					span.badge.text-bg-secondary.ms-auto 0
+			h6.mb-2 Labels
+			.list-group#ecc-labels
+				.list-group-item.text-muted.small Loading labels...
+		.ecc-main
+			.d-flex.justify-content-between.align-items-center.mb-3
+				div
+					h5.mb-1#ecc-view-title Inbox
+					p.text-muted.small.mb-0#ecc-view-subtitle All untriaged emails across projects.
+				button.btn.btn-outline-secondary.btn-sm#ecc-refresh-btn(type="button" title="Refresh")
+					!= icon('sync')
+			#ecc-list.list-group
+		.ecc-ai
+			.d-flex.justify-content-between.align-items-center.mb-3
+				div
+					h5.mb-1 Email AI
+					p.text-muted.small.mb-0#ecc-ai-subtitle Select an email to work with AI.
+				button.btn.btn-outline-secondary.btn-sm#ecc-open-email-btn.d-none(type="button" title="Open full email")
+					!= icon('openInNew')
+			#ecc-ai-panel
+				.ecc-ai-empty
+					!= icon('sparkle', 'mb-2')
+					h6.mb-2 No email selected
+					p.text-muted.small.mb-0 Select an email from the inbox to show the AI context and triage result.

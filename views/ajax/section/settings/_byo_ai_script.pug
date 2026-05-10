@@ -22,6 +22,9 @@ script.
 				el.classList.toggle('text-success', configured);
 				el.classList.toggle('text-muted', !configured);
 			});
+			document.querySelectorAll('[data-instruction-scope]').forEach(function(el) {
+				el.value = settings?.instructions?.[el.dataset.instructionScope] || '';
+			});
 		}
 
 		async function loadSettings() {
@@ -36,7 +39,7 @@ script.
 			}
 		}
 
-		form.addEventListener('submit', async function(e) {
+			form.addEventListener('submit', async function(e) {
 			e.preventDefault();
 			var payload = {};
 			form.querySelectorAll('input[data-scope][data-field]').forEach(function(input) {
@@ -45,6 +48,11 @@ script.
 				payload[input.dataset.scope] = payload[input.dataset.scope] || {};
 				payload[input.dataset.scope][input.dataset.field] = value;
 			});
+			var instructionPayload = {};
+			form.querySelectorAll('[data-instruction-scope]').forEach(function(input) {
+				instructionPayload[input.dataset.instructionScope] = input.value.trim();
+			});
+			payload.instructions = instructionPayload;
 
 			if (Object.keys(payload).length === 0) {
 				showSuccess('No BYO AI changes');

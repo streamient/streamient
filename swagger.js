@@ -203,7 +203,27 @@ const swaggerSpec = {
                     text_content: { type: 'string' },
                     attachment_text_content: { type: 'string' },
                     source: { type: 'string', enum: ['api', 'emailforwarding'] },
+                    mailbox: { type: 'string', enum: ['inbox', 'archived', 'sent'] },
+                    labels: { type: 'array', items: { type: 'string' } },
+                    triaged_at: { type: 'string', format: 'date-time', nullable: true },
+                    triage_summary: { type: 'string' },
+                    triage_reason: { type: 'string' },
                     project: { type: 'string' },
+                    host_id: { type: 'string' },
+                    createdAt: { type: 'string', format: 'date-time' },
+                    updatedAt: { type: 'string', format: 'date-time' },
+                },
+            },
+            EmailLabel: {
+                type: 'object',
+                properties: {
+                    _id: { type: 'string' },
+                    slug: { type: 'string' },
+                    name: { type: 'string' },
+                    color: { type: 'string' },
+                    is_system: { type: 'boolean' },
+                    is_active: { type: 'boolean' },
+                    count: { type: 'integer' },
                     host_id: { type: 'string' },
                     createdAt: { type: 'string', format: 'date-time' },
                     updatedAt: { type: 'string', format: 'date-time' },
@@ -894,6 +914,9 @@ const swaggerSpec = {
                     { $ref: '#/components/parameters/page' },
                     { $ref: '#/components/parameters/limit' },
                     { $ref: '#/components/parameters/project' },
+                    { name: 'mailbox', in: 'query', schema: { type: 'string', enum: ['inbox', 'archived', 'sent', 'trash'] } },
+                    { name: 'label', in: 'query', schema: { type: 'string' } },
+                    { name: 'triaged', in: 'query', schema: { type: 'boolean' } },
                 ],
                 responses: {
                     200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { emails: { type: 'array', items: { $ref: '#/components/schemas/Email' } } } } } } },
@@ -939,7 +962,7 @@ const swaggerSpec = {
                 parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
                 requestBody: {
                     required: true,
-                    content: { 'application/json': { schema: { type: 'object', properties: { subject: { type: 'string' }, text_content: { type: 'string' }, from: { type: 'array', items: { type: 'string' } }, to: { type: 'array', items: { type: 'string' } }, cc: { type: 'array', items: { type: 'string' } }, bcc: { type: 'array', items: { type: 'string' } }, project: { type: 'string' } } } } },
+                    content: { 'application/json': { schema: { type: 'object', properties: { subject: { type: 'string' }, text_content: { type: 'string' }, from: { type: 'array', items: { type: 'string' } }, to: { type: 'array', items: { type: 'string' } }, cc: { type: 'array', items: { type: 'string' } }, bcc: { type: 'array', items: { type: 'string' } }, project: { type: 'string' }, mailbox: { type: 'string', enum: ['inbox', 'archived', 'sent'] }, labels: { type: 'array', items: { type: 'string' } } } } } },
                 },
                 responses: {
                     200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { email: { $ref: '#/components/schemas/Email' } } } } } },
@@ -976,6 +999,80 @@ const swaggerSpec = {
                 },
                 responses: {
                     200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { results: { type: 'array', items: { $ref: '#/components/schemas/Email' } } } } } } },
+                },
+            },
+        },
+        '/email-labels': {
+            get: {
+                tags: ['Emails'],
+                summary: 'List email labels and command center counts',
+                parameters: [
+                    { $ref: '#/components/parameters/project' },
+                    { name: 'mailbox', in: 'query', schema: { type: 'string', enum: ['inbox', 'archived', 'sent', 'trash'] } },
+                ],
+                responses: {
+                    200: {
+                        description: 'OK',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        mailboxes: {
+                                            type: 'array',
+                                            items: {
+                                                type: 'object',
+                                                properties: {
+                                                    slug: { type: 'string' },
+                                                    name: { type: 'string' },
+                                                    count: { type: 'integer' },
+                                                },
+                                            },
+                                        },
+                                        labels: { type: 'array', items: { $ref: '#/components/schemas/EmailLabel' } },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        '/emails/triage-inbox': {
+            post: {
+                tags: ['Emails'],
+                summary: 'Run AI triage over untriaged inbox emails',
+                requestBody: {
+                    required: false,
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    project: { type: 'string', description: 'Optional project filter' },
+                                    limit: { type: 'integer', default: 25, maximum: 100 },
+                                },
+                            },
+                        },
+                    },
+                },
+                responses: {
+                    200: {
+                        description: 'Triage result',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        processed: { type: 'integer' },
+                                        triaged: { type: 'integer' },
+                                        errors: { type: 'array', items: { type: 'object' } },
+                                        results: { type: 'array', items: { type: 'object' } },
+                                    },
+                                },
+                            },
+                        },
+                    },
                 },
             },
         },

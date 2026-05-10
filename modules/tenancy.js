@@ -21,6 +21,10 @@ const tenantSchema = new mongoose.Schema(
 					gemini_api_key: { type: String, default: '' },
 				},
 			},
+			ai_instructions: {
+				global: { type: String, default: '' },
+				email: { type: String, default: '' },
+			},
 		},
 	},
 	{ timestamps: true },
