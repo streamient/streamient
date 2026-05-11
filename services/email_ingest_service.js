@@ -28,6 +28,19 @@ const DEFAULT_EMAIL_LABELS = [
 ];
 const SYSTEM_LABEL_SLUGS = DEFAULT_EMAIL_LABELS.map((label) => label.slug);
 const PRIMARY_TRIAGE_LABELS = ['waiting', 'human-do', 'reply-required', 'no-action', 'spam'];
+const DEFAULT_EMAIL_TRIAGE_INSTRUCTIONS = [
+	'Classify email by the next operational action.',
+	'Use reply-required when a human should answer the sender.',
+	'Use human-do when work is required outside a reply.',
+	'Use waiting when the team is blocked on someone else.',
+	'Use no-action for receipts, notifications, confirmations, and FYI messages.',
+	'Use spam only for unwanted or suspicious messages.',
+].join(' ');
+const DEFAULT_EMAIL_AI_INSTRUCTIONS = [
+	'Answer as an email assistant for the selected message.',
+	'Use only the provided email context unless the user asks for general guidance.',
+	'Be concise and call out uncertainty when the email context is insufficient.',
+].join(' ');
 
 function canonicalMessageId(value) {
 	const raw = String(value || '').trim();
@@ -139,6 +152,12 @@ function parseBooleanFilter(value) {
 	if (value === true || value === 'true' || value === '1') return true;
 	if (value === false || value === 'false' || value === '0') return false;
 	return null;
+}
+
+function normalizeTriaged(value, fallback = false) {
+	const parsed = parseBooleanFilter(value);
+	if (parsed !== null) return parsed;
+	return fallback;
 }
 
 function normalizeBodyText(parsed) {
@@ -310,6 +329,7 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 		source: data.source === 'emailforwarding' ? 'emailforwarding' : 'api',
 		mailbox: normalizeMailbox(data.mailbox),
 		labels: normalizeLabels(data.labels),
+		triaged: normalizeTriaged(data.triaged, Boolean(data.triaged_at)),
 		triaged_at: data.triaged_at || null,
 		triage_summary: String(data.triage_summary || ''),
 		triage_reason: String(data.triage_reason || ''),
@@ -381,7 +401,7 @@ export async function ensureDefaultEmailLabels(host_id) {
 }
 
 function buildEmailListQuery(host_id, projectId, filters = {}) {
-	const query = { host_id, in_trash: { $ne: true } };
+	const query = { host_id, in_trash: false };
 	if (projectId) query.project = projectId;
 	if (filters.mailbox === 'trash') {
 		query.in_trash = true;
@@ -392,9 +412,9 @@ function buildEmailListQuery(host_id, projectId, filters = {}) {
 	if (filters.label) query.labels = normalizeSlug(filters.label);
 	const triaged = parseBooleanFilter(filters.triaged);
 	if (triaged === true) {
-		query.triaged_at = { $ne: null };
+		query.triaged = true;
 	} else if (triaged === false) {
-		query.$or = [{ triaged_at: null }, { triaged_at: { $exists: false } }];
+		query.triaged = false;
 	}
 	return query;
 }
@@ -411,7 +431,7 @@ export async function listEmails(host_id, projectId, { page = 1, limit = 50, mai
 export async function listEmailLabels(host_id, filters = {}) {
 	const labels = await ensureDefaultEmailLabels(host_id);
 	const projectId = filters.project || null;
-	const baseQuery = { host_id, in_trash: { $ne: true }, ...(projectId ? { project: projectId } : {}) };
+	const baseQuery = { host_id, in_trash: false, ...(projectId ? { project: projectId } : {}) };
 
 	const [mailboxCounts, labelCounts] = await Promise.all([
 		Promise.all([
@@ -460,7 +480,11 @@ export async function updateEmail(host_id, emailId, data, ctx = {}) {
 	if (data.project !== undefined) update.project = data.project;
 	if (data.mailbox !== undefined) update.mailbox = normalizeMailbox(data.mailbox);
 	if (data.labels !== undefined) update.labels = normalizeLabels(data.labels);
-	if (data.triaged_at !== undefined) update.triaged_at = data.triaged_at;
+	if (data.triaged !== undefined) update.triaged = normalizeTriaged(data.triaged);
+	if (data.triaged_at !== undefined) {
+		update.triaged_at = data.triaged_at;
+		if (data.triaged === undefined) update.triaged = Boolean(data.triaged_at);
+	}
 	if (data.triage_summary !== undefined) update.triage_summary = String(data.triage_summary || '');
 	if (data.triage_reason !== undefined) update.triage_reason = String(data.triage_reason || '');
 	update.is_indexed = false;
@@ -508,8 +532,93 @@ export async function searchEmails(host_id, query, options = {}) {
 	});
 }
 
+function buildEmailContext(email) {
+	const body = [email.text_content, email.attachment_text_content].filter(Boolean).join('\n\n').slice(0, 12000);
+	return [
+		`Subject: ${email.subject || '(No subject)'}`,
+		`From: ${(email.from || []).join(', ') || '(unknown)'}`,
+		`To: ${(email.to || []).join(', ') || '(unknown)'}`,
+		email.cc?.length ? `Cc: ${email.cc.join(', ')}` : '',
+		email.labels?.length ? `Labels: ${email.labels.join(', ')}` : '',
+		email.triage_summary ? `Triage summary: ${email.triage_summary}` : '',
+		email.triage_reason ? `Triage reason: ${email.triage_reason}` : '',
+		`Body:\n${body || '(empty)'}`,
+	].filter(Boolean).join('\n\n');
+}
+
+export async function askEmailAi(host_id, emailId, query, options = {}) {
+	const prompt = String(query || '').trim();
+	if (!prompt) throw new Error('query required');
+
+	const email = await Email.findOne({ _id: emailId, host_id, in_trash: false }).lean();
+	if (!email) return null;
+
+	const completionFn = options.completionFn || chatCompletion;
+	const instructions = await getAiInstructions(host_id);
+	const content = await completionFn({
+		hostId: host_id,
+		scope: 'email',
+		maxTokens: 1200,
+		messages: [
+			{
+				role: 'system',
+				content: [
+					DEFAULT_EMAIL_AI_INSTRUCTIONS,
+					instructions.global ? `Global instructions:\n${instructions.global}` : '',
+					instructions.email ? `Email AI instructions:\n${instructions.email}` : '',
+				].filter(Boolean).join('\n\n'),
+			},
+			{
+				role: 'user',
+				content: [
+					`Email context:\n${buildEmailContext(email)}`,
+					`User request:\n${prompt}`,
+				].join('\n\n'),
+			},
+		],
+	});
+
+	return { answer: String(content || '').trim() };
+}
+
 export async function countEmails(host_id) {
-	return Email.countDocuments({ host_id, in_trash: { $ne: true } });
+	return Email.countDocuments({ host_id, in_trash: false });
+}
+
+export async function backfillEmailTriageState() {
+	const [mailboxResult, trashResult, triagedTrueResult, triagedFalseResult] = await Promise.all([
+		Email.updateMany(
+			{ mailbox: { $exists: false } },
+			{ $set: { mailbox: 'inbox' } },
+			{ timestamps: false },
+		),
+		Email.updateMany(
+			{ in_trash: { $exists: false } },
+			{ $set: { in_trash: false } },
+			{ timestamps: false },
+		),
+		Email.updateMany(
+			{ triaged: { $exists: false }, triaged_at: { $type: 'date' } },
+			{ $set: { triaged: true } },
+			{ timestamps: false },
+		),
+		Email.updateMany(
+			{ triaged: { $exists: false }, $or: [{ triaged_at: null }, { triaged_at: { $exists: false } }] },
+			{ $set: { triaged: false } },
+			{ timestamps: false },
+		),
+	]);
+
+	const modified = [mailboxResult, trashResult, triagedTrueResult, triagedFalseResult]
+		.reduce((sum, result) => sum + (result?.modifiedCount || 0), 0);
+	if (modified > 0) console.log(`Email triage state backfilled: ${modified} updates`);
+
+	return {
+		mailbox: mailboxResult?.modifiedCount || 0,
+		in_trash: trashResult?.modifiedCount || 0,
+		triaged_true: triagedTrueResult?.modifiedCount || 0,
+		triaged_false: triagedFalseResult?.modifiedCount || 0,
+	};
 }
 
 function extractJsonObject(text) {
@@ -546,20 +655,17 @@ export function parseTriageResult(text) {
 }
 
 function buildTriagePrompt(email, instructions) {
-	const body = [email.text_content, email.attachment_text_content].filter(Boolean).join('\n\n').slice(0, 8000);
 	return [
 		'Classify this email for an email command center.',
 		'Return JSON only with this shape: {"labels":["reply-required"],"summary":"short summary","reason":"short reason"}.',
 		`Allowed labels: ${SYSTEM_LABEL_SLUGS.join(', ')}.`,
 		'Always include exactly one best action label from reply-required, human-do, waiting, no-action, spam.',
 		'Do not include triaged; it will be added automatically.',
+		`Default triage instructions:\n${DEFAULT_EMAIL_TRIAGE_INSTRUCTIONS}`,
 		instructions.global ? `Global instructions:\n${instructions.global}` : '',
 		instructions.email ? `Email instructions:\n${instructions.email}` : '',
 		instructions.email_triage ? `Email triage instructions:\n${instructions.email_triage}` : '',
-		`Subject: ${email.subject || '(No subject)'}`,
-		`From: ${(email.from || []).join(', ') || '(unknown)'}`,
-		`To: ${(email.to || []).join(', ') || '(unknown)'}`,
-		`Body:\n${body || '(empty)'}`,
+		buildEmailContext(email).slice(0, 10000),
 	].filter(Boolean).join('\n\n');
 }
 
@@ -602,6 +708,7 @@ export async function triageInboxEmails(host_id, userId, options = {}) {
 				{
 					$set: {
 						labels,
+						triaged: true,
 						triaged_at: new Date(),
 						triage_summary: triage.summary,
 						triage_reason: triage.reason,

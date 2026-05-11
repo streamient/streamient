@@ -53,16 +53,27 @@ else
 					p.text-muted.small.mb-0#ecc-view-subtitle All untriaged emails across projects.
 				button.btn.btn-outline-secondary.btn-sm#ecc-refresh-btn(type="button" title="Refresh")
 					!= icon('sync')
+			.d-none.align-items-center.justify-content-between.mb-3#ecc-action-bar
+				span.badge.text-bg-secondary#ecc-action-count 0 selected
+				.d-flex.align-items-center.gap-2
+					.dropdown
+						button.btn.btn-outline-secondary.btn-sm.dropdown-toggle#ecc-move-btn(type="button" data-bs-toggle="dropdown" aria-expanded="false")
+							!= icon('drive_file_move', 'me-1')
+							span Move
+						ul.dropdown-menu.dropdown-menu-end#ecc-move-menu(aria-labelledby="ecc-move-btn")
+					button.btn.btn-outline-danger.btn-sm#ecc-trash-btn(type="button")
+						!= icon('delete', 'me-1')
+						span Trash
 			#ecc-list.list-group
 		.ecc-ai
 			.d-flex.justify-content-between.align-items-center.mb-3
 				div
 					h5.mb-1 Email AI
-					p.text-muted.small.mb-0#ecc-ai-subtitle Select an email to work with AI.
+					p.text-muted.small.mb-0#ecc-ai-subtitle No email active.
 				button.btn.btn-outline-secondary.btn-sm#ecc-open-email-btn.d-none(type="button" title="Open full email")
 					!= icon('openInNew')
-			#ecc-ai-panel
+			#ecc-ai-panel.ecc-ai-panel
 				.ecc-ai-empty
 					!= icon('sparkle', 'mb-2')
-					h6.mb-2 No email selected
-					p.text-muted.small.mb-0 Select an email from the inbox to show the AI context and triage result.
+					h6.mb-2 AI idle
+					p.text-muted.small.mb-0 Email selection will not start AI.

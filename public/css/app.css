@@ -349,30 +349,53 @@ small,
 
 .ecc-shell {
 	display: grid;
-	grid-template-columns: minmax(190px, 240px) minmax(320px, 1fr) minmax(280px, 360px);
+	grid-template-columns: minmax(180px, 220px) minmax(0, 1fr) minmax(320px, 380px);
 	gap: 1rem;
 	min-height: calc(100vh - 170px);
+	overflow: hidden;
 }
 
 .ecc-left {
 	border-right: 1px solid var(--bs-border-color);
 	padding-right: 1rem;
+	min-width: 0;
 }
 
 .ecc-main {
 	min-width: 0;
+	overflow: hidden;
 }
 
 .ecc-ai {
 	border-left: 1px solid var(--bs-border-color);
 	padding-left: 1rem;
 	min-width: 0;
+	overflow: hidden;
+}
+
+.min-w-0 {
+	min-width: 0 !important;
 }
 
 .ecc-left .list-group-item,
 .ecc-ai .list-group-item,
 .ecc-email-item {
 	cursor: pointer;
+	width: 100%;
+	overflow: hidden;
+	text-align: left;
+}
+
+.ecc-email-select-wrap {
+	flex: 0 0 auto;
+	margin-bottom: 0;
+	min-height: auto;
+	padding-left: 0;
+}
+
+.ecc-email-select {
+	cursor: pointer;
+	margin-left: 0 !important;
 }
 
 .ecc-label-dot {
@@ -385,6 +408,14 @@ small,
 
 .ecc-email-item.is-active {
 	background: var(--bs-light);
+}
+
+.ecc-email-item.is-selected {
+	box-shadow: inset 3px 0 0 var(--bs-primary);
+}
+
+.ecc-email-item.is-selected.is-active {
+	box-shadow: inset 3px 0 0 var(--bs-primary);
 }
 
 .ecc-email-label {
@@ -400,11 +431,49 @@ small,
 	text-align: center;
 }
 
+.ecc-ai-panel {
+	min-width: 0;
+	overflow: hidden;
+}
+
 .ecc-ai-section {
 	border: 1px solid var(--bs-border-color);
 	border-radius: 0.5rem;
 	padding: 0.85rem;
 	margin-bottom: 0.75rem;
+	min-width: 0;
+	overflow: hidden;
+}
+
+.ecc-email-ai-messages {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	max-height: 260px;
+	overflow-y: auto;
+	margin-bottom: 0.75rem;
+}
+
+.ecc-email-ai-message {
+	border-radius: 0.5rem;
+	padding: 0.55rem 0.7rem;
+	font-size: 0.85rem;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.ecc-email-ai-message.user {
+	align-self: flex-end;
+	max-width: 88%;
+	background: var(--bs-primary);
+	color: #fff;
+}
+
+.ecc-email-ai-message.assistant {
+	align-self: flex-start;
+	max-width: 100%;
+	background: var(--bs-light);
+	color: var(--bs-body-color);
 }
 
 @media (max-width: 991.98px) {

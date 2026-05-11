@@ -205,6 +205,7 @@ const swaggerSpec = {
                     source: { type: 'string', enum: ['api', 'emailforwarding'] },
                     mailbox: { type: 'string', enum: ['inbox', 'archived', 'sent'] },
                     labels: { type: 'array', items: { type: 'string' } },
+                    triaged: { type: 'boolean' },
                     triaged_at: { type: 'string', format: 'date-time', nullable: true },
                     triage_summary: { type: 'string' },
                     triage_reason: { type: 'string' },
@@ -943,6 +944,7 @@ const swaggerSpec = {
                                     project: { type: 'string' },
                                     raw_email: { type: 'string', description: 'Raw RFC822 email content' },
                                     parsed_email: { type: 'object', description: 'Mailparser-like JSON payload' },
+                                    triaged: { type: 'boolean', default: false },
                                 },
                             },
                         },
@@ -970,7 +972,7 @@ const swaggerSpec = {
                 parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
                 requestBody: {
                     required: true,
-                    content: { 'application/json': { schema: { type: 'object', properties: { subject: { type: 'string' }, text_content: { type: 'string' }, from: { type: 'array', items: { type: 'string' } }, to: { type: 'array', items: { type: 'string' } }, cc: { type: 'array', items: { type: 'string' } }, bcc: { type: 'array', items: { type: 'string' } }, project: { type: 'string' }, mailbox: { type: 'string', enum: ['inbox', 'archived', 'sent'] }, labels: { type: 'array', items: { type: 'string' } } } } } },
+                    content: { 'application/json': { schema: { type: 'object', properties: { subject: { type: 'string' }, text_content: { type: 'string' }, from: { type: 'array', items: { type: 'string' } }, to: { type: 'array', items: { type: 'string' } }, cc: { type: 'array', items: { type: 'string' } }, bcc: { type: 'array', items: { type: 'string' } }, project: { type: 'string' }, mailbox: { type: 'string', enum: ['inbox', 'archived', 'sent'] }, labels: { type: 'array', items: { type: 'string' } }, triaged: { type: 'boolean' } } } } },
                 },
                 responses: {
                     200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { email: { $ref: '#/components/schemas/Email' } } } } } },
@@ -994,6 +996,21 @@ const swaggerSpec = {
                 parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
                 responses: {
                     200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { thread: { type: 'array', items: { $ref: '#/components/schemas/Email' } } } } } } },
+                },
+            },
+        },
+        '/emails/{id}/ai': {
+            post: {
+                tags: ['Emails'],
+                summary: 'Ask Email AI about one email',
+                parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+                requestBody: {
+                    required: true,
+                    content: { 'application/json': { schema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] } } },
+                },
+                responses: {
+                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { answer: { type: 'string' } } } } } },
+                    404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
                 },
             },
         },

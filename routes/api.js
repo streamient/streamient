@@ -355,6 +355,16 @@ router.get('/emails/:id/thread', requireEmailFeatureAccess, async (req, res) => 
 	res.json({ thread });
 });
 
+router.post('/emails/:id/ai', requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const result = await emailIngestService.askEmailAi(req.host_id, req.params.id, req.body?.query);
+		if (!result) return res.status(404).json({ error: 'Email not found' });
+		res.json(result);
+	} catch (err) {
+		res.status(400).json({ error: err.message || 'Email AI failed' });
+	}
+});
+
 router.put('/emails/:id', requireEmailFeatureAccess, async (req, res) => {
 	const email = await emailIngestService.updateEmail(req.host_id, req.params.id, req.body, auditCtx(req));
 	if (!email) return res.status(404).json({ error: 'Email not found' });

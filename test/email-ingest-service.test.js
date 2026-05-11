@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, listEmails, parseTriageResult, triageInboxEmails } from '../services/email_ingest_service.js';
+import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, listEmails, parseTriageResult, triageInboxEmails, backfillEmailTriageState, askEmailAi } from '../services/email_ingest_service.js';
 import { Email } from '../model/email.js';
 import { EmailLabel } from '../model/email_label.js';
 import { GraphLink } from '../model/graph_link.js';
@@ -109,6 +109,82 @@ describe('Email ingest service', () => {
 		assert.deepEqual(normalized.from, ['sender@example.com']);
 		assert.deepEqual(normalized.to, ['507f1f77bcf86cd799439011@email.kumbukum.com']);
 		assert.equal(normalized.text_content, 'Session body');
+	});
+
+	it('defaults parsed email ingest to untriaged inbox with no labels', async () => {
+		let createdPayload = null;
+		const originalFindOne = Email.findOne;
+		const originalCreate = Email.create;
+		const originalFind = Email.find;
+
+		Email.findOne = async () => null;
+		Email.create = async (payload) => {
+			createdPayload = payload;
+			return { _id: { toString: () => 'email-1' }, ...payload };
+		};
+		Email.find = () => ({
+			select: () => ({
+				lean: async () => [],
+			}),
+		});
+
+		try {
+			await ingestEmail(userId, 'host-1', {
+				project: '507f1f77bcf86cd799439011',
+				parsed_email: {
+					message_id: '<default-parsed@example.com>',
+					from: 'sender@example.com',
+					to: 'to@example.com',
+					subject: 'Defaults',
+					text: 'Default body',
+				},
+			}, { channel: 'api', skipSideEffects: true });
+
+			assert.equal(createdPayload.mailbox, 'inbox');
+			assert.equal(createdPayload.triaged, false);
+			assert.deepEqual(createdPayload.labels, []);
+		} finally {
+			Email.findOne = originalFindOne;
+			Email.create = originalCreate;
+			Email.find = originalFind;
+		}
+	});
+
+	it('defaults forwarded email ingest to untriaged inbox with no labels', async () => {
+		let createdPayload = null;
+		const originalFindOne = Email.findOne;
+		const originalCreate = Email.create;
+		const originalFind = Email.find;
+
+		Email.findOne = async () => null;
+		Email.create = async (payload) => {
+			createdPayload = payload;
+			return { _id: { toString: () => 'email-2' }, ...payload };
+		};
+		Email.find = () => ({
+			select: () => ({
+				lean: async () => [],
+			}),
+		});
+
+		try {
+			await ingestForwardedEmail(userId, 'host-1', {
+				project: '507f1f77bcf86cd799439011',
+				message_id: '<default-forwarded@example.com>',
+				from: 'sender@example.com',
+				to: '507f1f77bcf86cd799439011@email.kumbukum.com',
+				subject: 'Forwarded defaults',
+				text: 'Forwarded default body',
+			}, { channel: 'emailforwarding', skipSideEffects: true });
+
+			assert.equal(createdPayload.mailbox, 'inbox');
+			assert.equal(createdPayload.triaged, false);
+			assert.deepEqual(createdPayload.labels, []);
+		} finally {
+			Email.findOne = originalFindOne;
+			Email.create = originalCreate;
+			Email.find = originalFind;
+		}
 	});
 
 	it('updates duplicates by message_id only within the same host', async () => {
@@ -305,10 +381,51 @@ describe('Email ingest service', () => {
 			assert.equal(findQuery.host_id, 'host-1');
 			assert.equal(findQuery.project, undefined);
 			assert.equal(findQuery.mailbox, 'inbox');
-			assert.deepEqual(findQuery.in_trash, { $ne: true });
-			assert.deepEqual(findQuery.$or, [{ triaged_at: null }, { triaged_at: { $exists: false } }]);
+			assert.equal(findQuery.in_trash, false);
+			assert.equal(findQuery.triaged, false);
 		} finally {
 			Email.find = originalFind;
+		}
+	});
+
+	it('backfills legacy email triage state fields', async () => {
+		const calls = [];
+		const originalUpdateMany = Email.updateMany;
+
+		Email.updateMany = async (query, update, options) => {
+			calls.push({ query, update, options });
+			return { modifiedCount: 1 };
+		};
+
+		try {
+			const result = await backfillEmailTriageState();
+
+			assert.equal(result.mailbox, 1);
+			assert.equal(result.in_trash, 1);
+			assert.equal(result.triaged_true, 1);
+			assert.equal(result.triaged_false, 1);
+			assert.deepEqual(calls[0], {
+				query: { mailbox: { $exists: false } },
+				update: { $set: { mailbox: 'inbox' } },
+				options: { timestamps: false },
+			});
+			assert.deepEqual(calls[1], {
+				query: { in_trash: { $exists: false } },
+				update: { $set: { in_trash: false } },
+				options: { timestamps: false },
+			});
+			assert.deepEqual(calls[2], {
+				query: { triaged: { $exists: false }, triaged_at: { $type: 'date' } },
+				update: { $set: { triaged: true } },
+				options: { timestamps: false },
+			});
+			assert.deepEqual(calls[3], {
+				query: { triaged: { $exists: false }, $or: [{ triaged_at: null }, { triaged_at: { $exists: false } }] },
+				update: { $set: { triaged: false } },
+				options: { timestamps: false },
+			});
+		} finally {
+			Email.updateMany = originalUpdateMany;
 		}
 	});
 
@@ -373,9 +490,11 @@ describe('Email ingest service', () => {
 
 			assert.match(prompt, /Email instructions:\nUse warm reply tone/);
 			assert.match(prompt, /Email triage instructions:\nPrioritize support/);
+			assert.match(prompt, /Default triage instructions:\nClassify email by the next operational action/);
 			assert.equal(result.processed, 1);
 			assert.equal(result.triaged, 1);
 			assert.deepEqual(updatePayload.labels, ['human-do', 'triaged']);
+			assert.equal(updatePayload.triaged, true);
 			assert.equal(updatePayload.triage_summary, 'Needs help');
 			assert.equal(updatePayload.triage_reason, 'Requires human action');
 			assert.ok(updatePayload.triaged_at instanceof Date);
@@ -384,6 +503,58 @@ describe('Email ingest service', () => {
 			EmailLabel.find = originalLabelFind;
 			Email.find = originalEmailFind;
 			Email.findOneAndUpdate = originalFindOneAndUpdate;
+			Tenant.findOne = originalTenantFindOne;
+		}
+	});
+
+	it('answers selected email AI requests with email instructions and context', async () => {
+		const originalEmailFindOne = Email.findOne;
+		const originalTenantFindOne = Tenant.findOne;
+		let systemPrompt = '';
+		let userPrompt = '';
+
+		Email.findOne = (query) => {
+			assert.deepEqual(query, { _id: 'email-1', host_id: 'host-1', in_trash: false });
+			return {
+				lean: async () => ({
+					_id: 'email-1',
+					subject: 'Contract question',
+					from: ['sender@example.com'],
+					to: ['team@example.com'],
+					text_content: 'Can we update the contract?',
+					attachment_text_content: '',
+					labels: ['reply-required'],
+					triage_summary: 'Needs contract reply',
+					triage_reason: 'Sender asked a question',
+				}),
+			};
+		};
+		Tenant.findOne = () => ({
+			select: () => ({
+				lean: async () => ({ settings: { ai_instructions: { global: 'Be direct', email: 'Use customer context', email_triage: 'Escalate legal' } } }),
+			}),
+		});
+
+		try {
+			const result = await askEmailAi('host-1', 'email-1', 'Draft the key points', {
+				completionFn: async ({ messages, scope }) => {
+					assert.equal(scope, 'email');
+					systemPrompt = messages[0].content;
+					userPrompt = messages[1].content;
+					return 'Mention the contract update and ask for preferred terms.';
+				},
+			});
+
+			assert.equal(result.answer, 'Mention the contract update and ask for preferred terms.');
+			assert.match(systemPrompt, /Answer as an email assistant for the selected message/);
+			assert.match(systemPrompt, /Global instructions:\nBe direct/);
+			assert.match(systemPrompt, /Email AI instructions:\nUse customer context/);
+			assert.doesNotMatch(systemPrompt, /Escalate legal/);
+			assert.match(userPrompt, /Subject: Contract question/);
+			assert.match(userPrompt, /Can we update the contract/);
+			assert.match(userPrompt, /User request:\nDraft the key points/);
+		} finally {
+			Email.findOne = originalEmailFindOne;
 			Tenant.findOne = originalTenantFindOne;
 		}
 	});

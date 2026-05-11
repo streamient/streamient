@@ -19,6 +19,7 @@ const emailSchema = new mongoose.Schema(
 		raw_hash: { type: String, default: '' },
 		mailbox: { type: String, enum: ['inbox', 'archived', 'sent'], default: 'inbox' },
 		labels: [{ type: String, trim: true }],
+		triaged: { type: Boolean, default: false },
 		triaged_at: { type: Date, default: null },
 		triage_summary: { type: String, default: '' },
 		triage_reason: { type: String, default: '' },
@@ -35,6 +36,7 @@ const emailSchema = new mongoose.Schema(
 
 emailSchema.index({ host_id: 1, in_trash: 1, project: 1 });
 emailSchema.index({ host_id: 1, in_trash: 1, mailbox: 1, triaged_at: 1 });
+emailSchema.index({ host_id: 1, in_trash: 1, mailbox: 1, triaged: 1, updatedAt: -1 });
 emailSchema.index({ host_id: 1, in_trash: 1, labels: 1 });
 emailSchema.index({ is_indexed: 1, in_trash: 1 });
 emailSchema.index({ message_id: 1 }, { unique: true, partialFilterExpression: { message_id: { $type: 'string', $ne: '' } } });
