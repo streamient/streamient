@@ -371,6 +371,12 @@ router.put('/emails/:id', requireEmailFeatureAccess, async (req, res) => {
 	res.json({ email });
 });
 
+router.post('/emails/:id/reset-triage', requireEmailFeatureAccess, async (req, res) => {
+	const email = await emailIngestService.resetEmailTriage(req.host_id, req.params.id, auditCtx(req));
+	if (!email) return res.status(404).json({ error: 'Email not found' });
+	res.json({ email });
+});
+
 router.delete('/emails/:id', requireEmailFeatureAccess, async (req, res) => {
 	const email = await emailIngestService.deleteEmail(req.host_id, req.params.id, auditCtx(req));
 	if (!email) return res.status(404).json({ error: 'Email not found' });

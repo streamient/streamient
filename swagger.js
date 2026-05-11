@@ -1065,6 +1065,18 @@ const swaggerSpec = {
                 },
             },
         },
+        '/emails/{id}/reset-triage': {
+            post: {
+                tags: ['Emails'],
+                summary: 'Reset email triage state',
+                description: 'Moves the email back to inbox, restores it from trash, clears labels, and clears triage metadata.',
+                parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+                responses: {
+                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { email: { $ref: '#/components/schemas/Email' } } } } } },
+                    404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+                },
+            },
+        },
         '/emails/search': {
             post: {
                 tags: ['Emails'],

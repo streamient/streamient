@@ -533,6 +533,56 @@ export async function updateEmail(host_id, emailId, data, ctx = {}) {
 	return email;
 }
 
+export async function resetEmailTriage(host_id, emailId, ctx = {}) {
+	const before = ctx.user_id ? await Email.findOne({ _id: emailId, host_id }).lean() : null;
+	const email = await Email.findOneAndUpdate(
+		{ _id: emailId, host_id },
+		{
+			$set: {
+				mailbox: 'inbox',
+				labels: [],
+				triaged: false,
+				triaged_at: null,
+				triage_summary: '',
+				triage_reason: '',
+				triage_primary_action: '',
+				triage_confidence: null,
+				triage_action_points: [],
+				triage_related_context: [],
+				triage_mailbox_action: 'none',
+				triage_status: '',
+				triage_error: '',
+				triage_run_id: '',
+				triage_draft_id: null,
+				in_trash: false,
+				trashed_at: null,
+				is_indexed: false,
+			},
+		},
+		{ returnDocument: 'after' },
+	);
+
+	if (email) {
+		await Promise.all([
+			EmailDraft.updateMany(
+				{ host_id, source_email: email._id, generated_by_triage: true, status: { $ne: 'discarded' } },
+				{ $set: { status: 'discarded' } },
+			),
+			GraphLink.deleteMany({ host_id, source_id: email._id, source_type: 'emails', label: 'triage-context' }),
+		]);
+		removeDocument(host_id, 'emails', emailId).catch((err) => console.error('Typesense remove error:', err.message));
+		emitToTenant(host_id, 'email:updated', email);
+		emitToTenant(host_id, 'counts:refresh');
+		invalidateGraphCache(host_id).catch(() => {});
+		if (ctx.user_id) {
+			const details = audit.diffSnapshot(before, email);
+			audit.log({ action: 'update', resource: 'email', resource_id: emailId, host_id, details: { ...details, reset_triage: true }, ...ctx });
+		}
+	}
+
+	return email;
+}
+
 export async function deleteEmail(host_id, emailId, ctx = {}) {
 	const email = await Email.findOneAndUpdate(
 		{ _id: emailId, host_id, in_trash: { $ne: true } },

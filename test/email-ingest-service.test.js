@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, listEmails, parseTriageResult, triageInboxEmails, backfillEmailTriageState, askEmailAi, buildTriageContext } from '../services/email_ingest_service.js';
+import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, listEmails, parseTriageResult, triageInboxEmails, backfillEmailTriageState, askEmailAi, buildTriageContext, resetEmailTriage } from '../services/email_ingest_service.js';
 import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
 import { EmailLabel } from '../model/email_label.js';
@@ -427,6 +427,52 @@ describe('Email ingest service', () => {
 			});
 		} finally {
 			Email.updateMany = originalUpdateMany;
+		}
+	});
+
+	it('resets email triage state back to untriaged inbox', async () => {
+		const emailId = { toString: () => 'email-reset-1' };
+		let updateQuery = null;
+		let updatePayload = null;
+		let draftQuery = null;
+		let linkQuery = null;
+		const originalFindOneAndUpdate = Email.findOneAndUpdate;
+		const originalDraftUpdateMany = EmailDraft.updateMany;
+		const originalGraphDeleteMany = GraphLink.deleteMany;
+
+		Email.findOneAndUpdate = async (query, update) => {
+			updateQuery = query;
+			updatePayload = update.$set;
+			return { _id: emailId, host_id: 'host-1', ...update.$set };
+		};
+		EmailDraft.updateMany = async (query, update) => {
+			draftQuery = { query, update };
+			return { modifiedCount: 1 };
+		};
+		GraphLink.deleteMany = async (query) => {
+			linkQuery = query;
+			return { deletedCount: 1 };
+		};
+
+		try {
+			const result = await resetEmailTriage('host-1', 'email-reset-1');
+
+			assert.equal(result.mailbox, 'inbox');
+			assert.deepEqual(result.labels, []);
+			assert.equal(result.triaged, false);
+			assert.equal(result.in_trash, false);
+			assert.equal(result.triage_primary_action, '');
+			assert.equal(result.triage_draft_id, null);
+			assert.deepEqual(updateQuery, { _id: 'email-reset-1', host_id: 'host-1' });
+			assert.deepEqual(updatePayload.triage_action_points, []);
+			assert.deepEqual(updatePayload.triage_related_context, []);
+			assert.equal(draftQuery.query.source_email, emailId);
+			assert.equal(draftQuery.update.$set.status, 'discarded');
+			assert.deepEqual(linkQuery, { host_id: 'host-1', source_id: emailId, source_type: 'emails', label: 'triage-context' });
+		} finally {
+			Email.findOneAndUpdate = originalFindOneAndUpdate;
+			EmailDraft.updateMany = originalDraftUpdateMany;
+			GraphLink.deleteMany = originalGraphDeleteMany;
 		}
 	});
 
