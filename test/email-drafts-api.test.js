@@ -5,6 +5,7 @@ import express from 'express';
 import config from '../config.js';
 import { User } from '../model/user.js';
 import { TenantMember } from '../model/tenant_member.js';
+import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
 
 async function createServer() {
@@ -44,6 +45,8 @@ describe('Email draft API', () => {
 	const originalUserFindByIdAndUpdate = User.findByIdAndUpdate;
 	const originalTenantMemberFind = TenantMember.find;
 	const originalTenantMemberFindOneAndUpdate = TenantMember.findOneAndUpdate;
+	const originalEmailFind = Email.find;
+	const originalEmailFindOne = Email.findOne;
 	const originalDraftFind = EmailDraft.find;
 	const originalDraftFindOne = EmailDraft.findOne;
 	const originalDraftFindOneAndUpdate = EmailDraft.findOneAndUpdate;
@@ -81,6 +84,8 @@ describe('Email draft API', () => {
 		User.findByIdAndUpdate = originalUserFindByIdAndUpdate;
 		TenantMember.find = originalTenantMemberFind;
 		TenantMember.findOneAndUpdate = originalTenantMemberFindOneAndUpdate;
+		Email.find = originalEmailFind;
+		Email.findOne = originalEmailFindOne;
 		EmailDraft.find = originalDraftFind;
 		EmailDraft.findOne = originalDraftFindOne;
 		EmailDraft.findOneAndUpdate = originalDraftFindOneAndUpdate;
@@ -132,6 +137,98 @@ describe('Email draft API', () => {
 			assert.equal(updatePayload.query.host_id, 'host-1');
 			assert.equal(updateJson.draft.status, 'ready');
 			assert.equal(updateJson.draft.body_text, 'Updated draft');
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
+	it('returns email triage status with optional email and draft payloads', async () => {
+		let listQuery = null;
+		let singleQuery = null;
+		let draftQuery = null;
+		const email = {
+			_id: 'email-1',
+			message_id: 'external@example.com',
+			subject: 'Need setup help',
+			from: ['sender@example.com'],
+			to: ['support@example.com'],
+			text_content: 'Can you help with setup?',
+			project: 'project-1',
+			mailbox: 'inbox',
+			labels: ['reply-required', 'triaged'],
+			triaged: true,
+			triaged_at: new Date('2026-05-11T07:00:00.000Z'),
+			triage_status: 'complete',
+			triage_primary_action: 'reply-required',
+			triage_summary: 'Needs setup help',
+			triage_reason: 'Sender asked a support question',
+			triage_confidence: 0.88,
+			triage_action_points: [{ text: 'Reply with setup steps', type: 'reply', due_at: null }],
+			triage_related_context: [],
+			triage_mailbox_action: 'keep-inbox',
+			triage_error: '',
+			triage_run_id: 'run-1',
+			triage_draft_id: 'draft-1',
+			createdAt: new Date('2026-05-11T06:00:00.000Z'),
+			updatedAt: new Date('2026-05-11T07:00:00.000Z'),
+		};
+		const draft = {
+			_id: 'draft-1',
+			source_email: 'email-1',
+			subject: 'Re: Need setup help',
+			body_text: 'Here are the setup steps.',
+			status: 'draft',
+		};
+
+		Email.find = (query) => {
+			listQuery = query;
+			return {
+				sort: () => ({
+					skip: () => ({
+						limit: () => ({
+							lean: async () => [email],
+						}),
+					}),
+				}),
+			};
+		};
+		Email.findOne = (query) => {
+			singleQuery = query;
+			return {
+				lean: async () => email,
+			};
+		};
+		EmailDraft.find = (query) => {
+			draftQuery = query;
+			return {
+				lean: async () => [draft],
+			};
+		};
+
+		const server = await createServer();
+		try {
+			const listResponse = await request(server, 'GET', '/emails/triage-status?message_id=%3CExternal%40Example.COM%3E&status=complete&primary_action=reply-required&include=email,draft');
+			const listJson = await readJson(listResponse);
+
+			assert.equal(listResponse.status, 200);
+			assert.equal(listQuery.host_id, 'host-1');
+			assert.equal(listQuery.message_id, 'external@example.com');
+			assert.equal(listQuery.triage_status, 'complete');
+			assert.equal(listQuery.triage_primary_action, 'reply-required');
+			assert.deepEqual(draftQuery._id.$in, ['draft-1']);
+			assert.equal(listJson.statuses[0].email_id, 'email-1');
+			assert.equal(listJson.statuses[0].triage_status, 'complete');
+			assert.equal(listJson.statuses[0].email.text_content, 'Can you help with setup?');
+			assert.equal(listJson.statuses[0].draft.body_text, 'Here are the setup steps.');
+
+			const singleResponse = await request(server, 'GET', '/emails/email-1/triage-status?include=draft');
+			const singleJson = await readJson(singleResponse);
+
+			assert.equal(singleResponse.status, 200);
+			assert.deepEqual(singleQuery, { _id: 'email-1', host_id: 'host-1', in_trash: false });
+			assert.equal(singleJson.status.triage_primary_action, 'reply-required');
+			assert.equal(singleJson.status.email, undefined);
+			assert.equal(singleJson.status.draft._id, 'draft-1');
 		} finally {
 			await new Promise((resolve) => server.close(resolve));
 		}

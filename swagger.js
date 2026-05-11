@@ -266,6 +266,57 @@ const swaggerSpec = {
 	                    updatedAt: { type: 'string', format: 'date-time' },
 	                },
 	            },
+	            EmailTriageStatus: {
+	                type: 'object',
+	                properties: {
+	                    email_id: { type: 'string' },
+	                    message_id: { type: 'string' },
+	                    subject: { type: 'string' },
+	                    from: { type: 'array', items: { type: 'string' } },
+	                    to: { type: 'array', items: { type: 'string' } },
+	                    project: { type: 'string', nullable: true },
+	                    mailbox: { type: 'string', enum: ['inbox', 'archived', 'sent', 'spam'] },
+	                    labels: { type: 'array', items: { type: 'string' } },
+	                    triaged: { type: 'boolean' },
+	                    triaged_at: { type: 'string', format: 'date-time', nullable: true },
+	                    triage_status: { type: 'string', enum: ['', 'pending', 'complete', 'failed'] },
+	                    triage_primary_action: { type: 'string', enum: ['', 'reply-required', 'human-do', 'waiting', 'no-action', 'spam'] },
+	                    triage_summary: { type: 'string' },
+	                    triage_reason: { type: 'string' },
+	                    triage_confidence: { type: 'number', nullable: true },
+	                    triage_action_points: {
+	                        type: 'array',
+	                        items: {
+	                            type: 'object',
+	                            properties: {
+	                                text: { type: 'string' },
+	                                type: { type: 'string' },
+	                                due_at: { type: 'string', format: 'date-time', nullable: true },
+	                            },
+	                        },
+	                    },
+	                    triage_related_context: {
+	                        type: 'array',
+	                        items: {
+	                            type: 'object',
+	                            properties: {
+	                                item_id: { type: 'string' },
+	                                item_type: { type: 'string' },
+	                                title: { type: 'string' },
+	                                reason: { type: 'string' },
+	                            },
+	                        },
+	                    },
+	                    triage_mailbox_action: { type: 'string', enum: ['none', 'keep-inbox', 'archive', 'spam'] },
+	                    triage_error: { type: 'string' },
+	                    triage_run_id: { type: 'string' },
+	                    triage_draft_id: { type: 'string', nullable: true },
+	                    createdAt: { type: 'string', format: 'date-time', nullable: true },
+	                    updatedAt: { type: 'string', format: 'date-time', nullable: true },
+	                    email: { $ref: '#/components/schemas/Email' },
+	                    draft: { $ref: '#/components/schemas/EmailDraft' },
+	                },
+	            },
             EmailLabel: {
                 type: 'object',
                 properties: {
@@ -1007,6 +1058,45 @@ const swaggerSpec = {
                 },
             },
         },
+        '/emails/triage-status': {
+            get: {
+                tags: ['Emails'],
+                summary: 'List email triage statuses',
+                description: 'Returns compact triage status records. Use include=email,draft to retrieve the full source email and generated triage draft in the same response.',
+                parameters: [
+                    { $ref: '#/components/parameters/page' },
+                    { $ref: '#/components/parameters/limit' },
+                    { $ref: '#/components/parameters/project' },
+                    { name: 'ids', in: 'query', description: 'Comma-separated email IDs', schema: { type: 'string' } },
+                    { name: 'message_id', in: 'query', description: 'Single message-id or comma-separated message IDs. Angle brackets are accepted.', schema: { type: 'string' } },
+                    { name: 'mailbox', in: 'query', schema: { type: 'string', enum: ['inbox', 'archived', 'sent', 'spam', 'trash'] } },
+                    { name: 'label', in: 'query', schema: { type: 'string' } },
+                    { name: 'triaged', in: 'query', schema: { type: 'boolean' } },
+                    { name: 'status', in: 'query', description: 'Comma-separated triage statuses', schema: { type: 'string', enum: ['pending', 'complete', 'failed'] } },
+                    { name: 'primary_action', in: 'query', description: 'Comma-separated primary actions', schema: { type: 'string', enum: ['reply-required', 'human-do', 'waiting', 'no-action', 'spam'] } },
+                    { name: 'run_id', in: 'query', schema: { type: 'string' } },
+                    { name: 'include', in: 'query', description: 'Comma-separated related payloads to embed. Supported values: email,draft', schema: { type: 'string', example: 'email,draft' } },
+                ],
+                responses: {
+                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { statuses: { type: 'array', items: { $ref: '#/components/schemas/EmailTriageStatus' } } } } } } },
+                },
+            },
+        },
+        '/emails/{id}/triage-status': {
+            get: {
+                tags: ['Emails'],
+                summary: 'Get one email triage status',
+                description: 'Returns compact triage status for one email. Use include=email,draft to retrieve the full source email and generated triage draft in the same response.',
+                parameters: [
+                    { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+                    { name: 'include', in: 'query', description: 'Comma-separated related payloads to embed. Supported values: email,draft', schema: { type: 'string', example: 'email,draft' } },
+                ],
+                responses: {
+                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { status: { $ref: '#/components/schemas/EmailTriageStatus' } } } } } },
+                    404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+                },
+            },
+        },
         '/emails/{id}': {
             get: {
                 tags: ['Emails'],
@@ -1139,6 +1229,7 @@ const swaggerSpec = {
                                 properties: {
                                     project: { type: 'string', description: 'Optional project filter' },
                                     limit: { type: 'integer', default: 25, maximum: 100 },
+                                    run_id: { type: 'string', description: 'Optional client-generated triage run ID for correlating socket progress events' },
                                 },
                             },
                         },
@@ -1153,12 +1244,33 @@ const swaggerSpec = {
                                     type: 'object',
                                     properties: {
 	                                        processed: { type: 'integer' },
+	                                        run_id: { type: 'string' },
 	                                        triaged: { type: 'integer' },
 	                                        drafted: { type: 'integer' },
 	                                        linked: { type: 'integer' },
 	                                        moved: { type: 'integer' },
-	                                        errors: { type: 'array', items: { type: 'object' } },
-	                                        results: { type: 'array', items: { type: 'object' } },
+	                                        errors: {
+	                                            type: 'array',
+	                                            items: {
+	                                                type: 'object',
+	                                                properties: {
+	                                                    email_id: { type: 'string' },
+	                                                    error: { type: 'string' },
+	                                                },
+	                                            },
+	                                        },
+	                                        results: {
+	                                            type: 'array',
+	                                            items: {
+	                                                type: 'object',
+	                                                properties: {
+	                                                    email_id: { type: 'string' },
+	                                                    action: { type: 'string' },
+	                                                    summary: { type: 'string' },
+	                                                    mailbox: { type: 'string' },
+	                                                },
+	                                            },
+	                                        },
 	                                    },
 	                                },
                             },

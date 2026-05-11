@@ -344,6 +344,35 @@ router.post('/emails', requireEmailFeatureAccess, async (req, res) => {
 	}
 });
 
+router.get('/emails/triage-status', requireEmailFeatureAccess, async (req, res) => {
+	const statuses = await emailIngestService.listEmailTriageStatuses(req.host_id, {
+		page: parseInt(req.query.page, 10) || 1,
+		limit: parseInt(req.query.limit, 10) || 50,
+		project: req.query.project,
+		mailbox: req.query.mailbox,
+		label: req.query.label,
+		triaged: req.query.triaged,
+		ids: req.query.ids,
+		message_id: req.query.message_id,
+		status: req.query.status,
+		triage_status: req.query.triage_status,
+		primary_action: req.query.primary_action,
+		triage_primary_action: req.query.triage_primary_action,
+		run_id: req.query.run_id,
+		triage_run_id: req.query.triage_run_id,
+		include: req.query.include,
+	});
+	res.json({ statuses });
+});
+
+router.get('/emails/:id/triage-status', requireEmailFeatureAccess, async (req, res) => {
+	const status = await emailIngestService.getEmailTriageStatus(req.host_id, req.params.id, {
+		include: req.query.include,
+	});
+	if (!status) return res.status(404).json({ error: 'Email not found' });
+	res.json({ status });
+});
+
 router.get('/emails/:id', requireEmailFeatureAccess, async (req, res) => {
 	const email = await emailIngestService.getEmail(req.host_id, req.params.id);
 	if (!email) return res.status(404).json({ error: 'Email not found' });

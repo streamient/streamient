@@ -102,6 +102,7 @@ export default defineConfig({
                         { text: 'Notes', link: '/api/notes' },
                         { text: 'Memories', link: '/api/memories' },
                         { text: 'URLs', link: '/api/urls' },
+                        { text: 'Emails', link: '/api/emails' },
                         { text: 'Search', link: '/api/search' },
                     ],
                 },

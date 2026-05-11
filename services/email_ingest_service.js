@@ -31,6 +31,8 @@ const SYSTEM_LABEL_SLUGS = DEFAULT_EMAIL_LABELS.map((label) => label.slug);
 const PRIMARY_TRIAGE_LABELS = ['waiting', 'human-do', 'reply-required', 'no-action', 'spam'];
 const TRIAGE_ACTIONS = PRIMARY_TRIAGE_LABELS;
 const MAILBOX_ACTIONS = ['none', 'keep-inbox', 'archive', 'spam'];
+const TRIAGE_STATUSES = ['pending', 'complete', 'failed'];
+const TRIAGE_STATUS_INCLUDES = ['email', 'draft'];
 const LINKABLE_CONTEXT_TYPES = ['notes', 'memory', 'urls', 'emails'];
 const DEFAULT_EMAIL_TRIAGE_INSTRUCTIONS = [
 	'Classify email by the next operational action.',
@@ -157,6 +159,21 @@ function parseBooleanFilter(value) {
 	if (value === true || value === 'true' || value === '1') return true;
 	if (value === false || value === 'false' || value === '0') return false;
 	return null;
+}
+
+function parseCsvFilter(value) {
+	if (!value) return [];
+	const items = Array.isArray(value) ? value : String(value).split(',');
+	return [...new Set(items.map((item) => String(item || '').trim()).filter(Boolean))];
+}
+
+function normalizeTriageStatus(value) {
+	const status = normalizeSlug(value);
+	return TRIAGE_STATUSES.includes(status) ? status : '';
+}
+
+function parseTriageStatusIncludes(value) {
+	return new Set(parseCsvFilter(value).map(normalizeSlug).filter((item) => TRIAGE_STATUS_INCLUDES.includes(item)));
 }
 
 function normalizeTriaged(value, fallback = false) {
@@ -439,6 +456,129 @@ export async function listEmails(host_id, projectId, { page = 1, limit = 50, mai
 		.sort({ updatedAt: -1 })
 		.skip((page - 1) * limit)
 		.limit(limit);
+}
+
+function applyTriageStatusFilters(query, filters = {}) {
+	const ids = parseCsvFilter(filters.ids);
+	if (ids.length === 1) query._id = ids[0];
+	if (ids.length > 1) query._id = { $in: ids };
+
+	const messageIds = parseCsvFilter(filters.message_id).map(canonicalMessageId).filter(Boolean);
+	if (messageIds.length === 1) query.message_id = messageIds[0];
+	if (messageIds.length > 1) query.message_id = { $in: messageIds };
+
+	const statuses = parseCsvFilter(filters.status || filters.triage_status).map(normalizeTriageStatus).filter(Boolean);
+	if (statuses.length === 1) query.triage_status = statuses[0];
+	if (statuses.length > 1) query.triage_status = { $in: statuses };
+
+	const actions = parseCsvFilter(filters.primary_action || filters.triage_primary_action).map(normalizePrimaryAction).filter(Boolean);
+	if (actions.length === 1) query.triage_primary_action = actions[0];
+	if (actions.length > 1) query.triage_primary_action = { $in: actions };
+
+	if (filters.run_id || filters.triage_run_id) query.triage_run_id = String(filters.run_id || filters.triage_run_id);
+}
+
+function stringifyObjectId(value) {
+	if (!value) return null;
+	return value.toString ? value.toString() : String(value);
+}
+
+function formatEmailTriageStatus(email, { includeEmail = false, draft = undefined } = {}) {
+	const status = {
+		email_id: stringifyObjectId(email._id),
+		message_id: email.message_id || '',
+		subject: email.subject || '',
+		from: email.from || [],
+		to: email.to || [],
+		project: stringifyObjectId(email.project),
+		mailbox: email.mailbox || 'inbox',
+		labels: email.labels || [],
+		triaged: Boolean(email.triaged),
+		triaged_at: email.triaged_at || null,
+		triage_status: email.triage_status || '',
+		triage_primary_action: email.triage_primary_action || '',
+		triage_summary: email.triage_summary || '',
+		triage_reason: email.triage_reason || '',
+		triage_confidence: email.triage_confidence ?? null,
+		triage_action_points: email.triage_action_points || [],
+		triage_related_context: email.triage_related_context || [],
+		triage_mailbox_action: email.triage_mailbox_action || 'none',
+		triage_error: email.triage_error || '',
+		triage_run_id: email.triage_run_id || '',
+		triage_draft_id: stringifyObjectId(email.triage_draft_id),
+		createdAt: email.createdAt || null,
+		updatedAt: email.updatedAt || null,
+	};
+
+	if (includeEmail) status.email = email;
+	if (draft !== undefined) status.draft = draft || null;
+	return status;
+}
+
+async function formatEmailTriageStatuses(host_id, emails, includeValue) {
+	const includes = parseTriageStatusIncludes(includeValue);
+	const includeDraft = includes.has('draft');
+	const draftMap = new Map();
+
+	if (includeDraft) {
+		const draftIds = emails.map((email) => stringifyObjectId(email.triage_draft_id)).filter(Boolean);
+		if (draftIds.length) {
+			const drafts = await EmailDraft.find({
+				_id: { $in: draftIds },
+				host_id,
+				status: { $ne: 'discarded' },
+			}).lean();
+			for (const draft of drafts) draftMap.set(stringifyObjectId(draft._id), draft);
+		}
+	}
+
+	return emails.map((email) => formatEmailTriageStatus(email, {
+		includeEmail: includes.has('email'),
+		draft: includeDraft ? (draftMap.get(stringifyObjectId(email.triage_draft_id)) || null) : undefined,
+	}));
+}
+
+export async function listEmailTriageStatuses(host_id, {
+	page = 1,
+	limit = 50,
+	project,
+	mailbox,
+	label,
+	triaged,
+	ids,
+	message_id,
+	status,
+	triage_status,
+	primary_action,
+	triage_primary_action,
+	run_id,
+	triage_run_id,
+	include,
+} = {}) {
+	const query = buildEmailListQuery(host_id, project, { mailbox, label, triaged });
+	applyTriageStatusFilters(query, {
+		ids,
+		message_id,
+		status,
+		triage_status,
+		primary_action,
+		triage_primary_action,
+		run_id,
+		triage_run_id,
+	});
+	const emails = await Email.find(query)
+		.sort({ updatedAt: -1 })
+		.skip((page - 1) * limit)
+		.limit(limit)
+		.lean();
+	return formatEmailTriageStatuses(host_id, emails, include);
+}
+
+export async function getEmailTriageStatus(host_id, emailId, { include } = {}) {
+	const email = await Email.findOne({ _id: emailId, host_id, in_trash: false }).lean();
+	if (!email) return null;
+	const statuses = await formatEmailTriageStatuses(host_id, [email], include);
+	return statuses[0];
 }
 
 export async function listEmailLabels(host_id, filters = {}) {
