@@ -4,6 +4,7 @@ import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
 import { Url } from '../model/url.js';
 import { Email } from '../model/email.js';
+import { EmailDraft } from '../model/email_draft.js';
 import { Project } from '../model/project.js';
 import { GraphLink } from '../model/graph_link.js';
 import { GitRepo } from '../model/git_repo.js';
@@ -68,6 +69,7 @@ export async function deleteTenantData(hostId, tenantId = null, deps = {}) {
 		Memory,
 		Url,
 		Email,
+		EmailDraft,
 		Project,
 		GraphLink,
 		GitRepo,
@@ -105,6 +107,7 @@ export async function deleteTenantData(hostId, tenantId = null, deps = {}) {
 		models.Memory.deleteMany({ host_id: hostId }),
 		models.Url.deleteMany({ host_id: hostId }),
 		models.Email.deleteMany({ host_id: hostId }),
+		models.EmailDraft.deleteMany({ host_id: hostId }),
 		models.Project.deleteMany({ host_id: hostId }),
 		models.GraphLink.deleteMany({ host_id: hostId }),
 		models.GitRepo.deleteMany({ host_id: hostId }),

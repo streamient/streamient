@@ -203,18 +203,69 @@ const swaggerSpec = {
                     text_content: { type: 'string' },
                     attachment_text_content: { type: 'string' },
                     source: { type: 'string', enum: ['api', 'emailforwarding'] },
-                    mailbox: { type: 'string', enum: ['inbox', 'archived', 'sent'] },
-                    labels: { type: 'array', items: { type: 'string' } },
-                    triaged: { type: 'boolean' },
-                    triaged_at: { type: 'string', format: 'date-time', nullable: true },
-                    triage_summary: { type: 'string' },
-                    triage_reason: { type: 'string' },
-                    project: { type: 'string' },
-                    host_id: { type: 'string' },
-                    createdAt: { type: 'string', format: 'date-time' },
-                    updatedAt: { type: 'string', format: 'date-time' },
-                },
-            },
+	                    mailbox: { type: 'string', enum: ['inbox', 'archived', 'sent', 'spam'] },
+	                    labels: { type: 'array', items: { type: 'string' } },
+	                    triaged: { type: 'boolean' },
+	                    triaged_at: { type: 'string', format: 'date-time', nullable: true },
+	                    triage_summary: { type: 'string' },
+	                    triage_reason: { type: 'string' },
+	                    triage_primary_action: { type: 'string', enum: ['reply-required', 'human-do', 'waiting', 'no-action', 'spam'] },
+	                    triage_confidence: { type: 'number' },
+	                    triage_action_points: {
+	                        type: 'array',
+	                        items: {
+	                            type: 'object',
+	                            properties: {
+	                                text: { type: 'string' },
+	                                type: { type: 'string' },
+	                                due_at: { type: 'string', format: 'date-time', nullable: true },
+	                            },
+	                        },
+	                    },
+	                    triage_related_context: {
+	                        type: 'array',
+	                        items: {
+	                            type: 'object',
+	                            properties: {
+	                                item_id: { type: 'string' },
+	                                item_type: { type: 'string', enum: ['notes', 'memory', 'urls', 'emails', 'pages'] },
+	                                title: { type: 'string' },
+	                                reason: { type: 'string' },
+	                            },
+	                        },
+	                    },
+	                    triage_mailbox_action: { type: 'string', enum: ['none', 'keep-inbox', 'archive', 'spam'] },
+	                    triage_status: { type: 'string', enum: ['pending', 'complete', 'failed'] },
+	                    triage_error: { type: 'string' },
+	                    triage_run_id: { type: 'string' },
+	                    triage_draft_id: { type: 'string', nullable: true },
+	                    project: { type: 'string' },
+	                    host_id: { type: 'string' },
+	                    createdAt: { type: 'string', format: 'date-time' },
+	                    updatedAt: { type: 'string', format: 'date-time' },
+	                },
+	            },
+	            EmailDraft: {
+	                type: 'object',
+	                properties: {
+	                    _id: { type: 'string' },
+	                    source_email: { type: 'string' },
+	                    from: { type: 'string' },
+	                    to: { type: 'array', items: { type: 'string' } },
+	                    cc: { type: 'array', items: { type: 'string' } },
+	                    bcc: { type: 'array', items: { type: 'string' } },
+	                    subject: { type: 'string' },
+	                    body_text: { type: 'string' },
+	                    body_html: { type: 'string' },
+	                    status: { type: 'string', enum: ['draft', 'ready', 'discarded'] },
+	                    generated_by_triage: { type: 'boolean' },
+	                    confidence: { type: 'number' },
+	                    project: { type: 'string' },
+	                    host_id: { type: 'string' },
+	                    createdAt: { type: 'string', format: 'date-time' },
+	                    updatedAt: { type: 'string', format: 'date-time' },
+	                },
+	            },
             EmailLabel: {
                 type: 'object',
                 properties: {
@@ -923,7 +974,7 @@ const swaggerSpec = {
                     { $ref: '#/components/parameters/page' },
                     { $ref: '#/components/parameters/limit' },
                     { $ref: '#/components/parameters/project' },
-                    { name: 'mailbox', in: 'query', schema: { type: 'string', enum: ['inbox', 'archived', 'sent', 'trash'] } },
+	                    { name: 'mailbox', in: 'query', schema: { type: 'string', enum: ['inbox', 'archived', 'sent', 'spam', 'trash'] } },
                     { name: 'label', in: 'query', schema: { type: 'string' } },
                     { name: 'triaged', in: 'query', schema: { type: 'boolean' } },
                 ],
@@ -970,10 +1021,10 @@ const swaggerSpec = {
                 tags: ['Emails'],
                 summary: 'Update an email',
                 parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-                requestBody: {
-                    required: true,
-                    content: { 'application/json': { schema: { type: 'object', properties: { subject: { type: 'string' }, text_content: { type: 'string' }, from: { type: 'array', items: { type: 'string' } }, to: { type: 'array', items: { type: 'string' } }, cc: { type: 'array', items: { type: 'string' } }, bcc: { type: 'array', items: { type: 'string' } }, project: { type: 'string' }, mailbox: { type: 'string', enum: ['inbox', 'archived', 'sent'] }, labels: { type: 'array', items: { type: 'string' } }, triaged: { type: 'boolean' } } } } },
-                },
+	                requestBody: {
+	                    required: true,
+	                    content: { 'application/json': { schema: { type: 'object', properties: { subject: { type: 'string' }, text_content: { type: 'string' }, from: { type: 'array', items: { type: 'string' } }, to: { type: 'array', items: { type: 'string' } }, cc: { type: 'array', items: { type: 'string' } }, bcc: { type: 'array', items: { type: 'string' } }, project: { type: 'string' }, mailbox: { type: 'string', enum: ['inbox', 'archived', 'sent', 'spam'] }, labels: { type: 'array', items: { type: 'string' } }, triaged: { type: 'boolean' }, triage_action_points: { type: 'array', items: { type: 'object' } } } } } },
+	                },
                 responses: {
                     200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { email: { $ref: '#/components/schemas/Email' } } } } } },
                     404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
@@ -1033,7 +1084,7 @@ const swaggerSpec = {
                 summary: 'List email labels and command center counts',
                 parameters: [
                     { $ref: '#/components/parameters/project' },
-                    { name: 'mailbox', in: 'query', schema: { type: 'string', enum: ['inbox', 'archived', 'sent', 'trash'] } },
+	                    { name: 'mailbox', in: 'query', schema: { type: 'string', enum: ['inbox', 'archived', 'sent', 'spam', 'drafts', 'trash'] } },
                 ],
                 responses: {
                     200: {
@@ -1089,20 +1140,62 @@ const swaggerSpec = {
                                 schema: {
                                     type: 'object',
                                     properties: {
-                                        processed: { type: 'integer' },
-                                        triaged: { type: 'integer' },
-                                        errors: { type: 'array', items: { type: 'object' } },
-                                        results: { type: 'array', items: { type: 'object' } },
-                                    },
-                                },
+	                                        processed: { type: 'integer' },
+	                                        triaged: { type: 'integer' },
+	                                        drafted: { type: 'integer' },
+	                                        linked: { type: 'integer' },
+	                                        moved: { type: 'integer' },
+	                                        errors: { type: 'array', items: { type: 'object' } },
+	                                        results: { type: 'array', items: { type: 'object' } },
+	                                    },
+	                                },
                             },
                         },
                     },
                 },
-            },
-        },
+	            },
+	        },
+	        '/email-drafts': {
+	            get: {
+	                tags: ['Emails'],
+	                summary: 'List generated email drafts',
+	                parameters: [
+	                    { $ref: '#/components/parameters/page' },
+	                    { $ref: '#/components/parameters/limit' },
+	                    { $ref: '#/components/parameters/project' },
+	                    { name: 'status', in: 'query', schema: { type: 'string', enum: ['draft', 'ready', 'discarded'] } },
+	                ],
+	                responses: {
+	                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { drafts: { type: 'array', items: { $ref: '#/components/schemas/EmailDraft' } } } } } } },
+	                },
+	            },
+	        },
+	        '/email-drafts/{id}': {
+	            get: {
+	                tags: ['Emails'],
+	                summary: 'Get an email draft',
+	                parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+	                responses: {
+	                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { draft: { $ref: '#/components/schemas/EmailDraft' } } } } } },
+	                    404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+	                },
+	            },
+	            put: {
+	                tags: ['Emails'],
+	                summary: 'Update an email draft',
+	                parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+	                requestBody: {
+	                    required: true,
+	                    content: { 'application/json': { schema: { type: 'object', properties: { to: { type: 'array', items: { type: 'string' } }, cc: { type: 'array', items: { type: 'string' } }, bcc: { type: 'array', items: { type: 'string' } }, subject: { type: 'string' }, body_text: { type: 'string' }, body_html: { type: 'string' }, status: { type: 'string', enum: ['draft', 'ready', 'discarded'] } } } } },
+	                },
+	                responses: {
+	                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { draft: { $ref: '#/components/schemas/EmailDraft' } } } } } },
+	                    404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+	                },
+	            },
+	        },
 
-        // ---- URLs ----
+	        // ---- URLs ----
         '/urls': {
             get: {
                 tags: ['URLs'],

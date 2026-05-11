@@ -6,13 +6,14 @@ import striptags from 'striptags';
 import { simpleParser } from 'mailparser';
 
 import { Email } from '../model/email.js';
+import { EmailDraft } from '../model/email_draft.js';
 import { EmailLabel } from '../model/email_label.js';
 import { GraphLink } from '../model/graph_link.js';
 import { extractText } from './import_service.js';
 import { detectFileType } from '../modules/file_detect.js';
-import { searchCollection, removeDocument } from '../modules/typesense.js';
+import { searchCollection, searchAll, removeDocument } from '../modules/typesense.js';
 import { emitToTenant } from '../modules/socket.js';
-import { invalidateGraphCache, removeLinksForItem } from './graph_service.js';
+import { getConnectionsForItem, invalidateGraphCache, removeLinksForItem } from './graph_service.js';
 import * as audit from './audit_service.js';
 import { chatCompletion } from '../modules/llm_client.js';
 import { getAiInstructions } from './byo_ai_service.js';
@@ -28,6 +29,9 @@ const DEFAULT_EMAIL_LABELS = [
 ];
 const SYSTEM_LABEL_SLUGS = DEFAULT_EMAIL_LABELS.map((label) => label.slug);
 const PRIMARY_TRIAGE_LABELS = ['waiting', 'human-do', 'reply-required', 'no-action', 'spam'];
+const TRIAGE_ACTIONS = PRIMARY_TRIAGE_LABELS;
+const MAILBOX_ACTIONS = ['none', 'keep-inbox', 'archive', 'spam'];
+const LINKABLE_CONTEXT_TYPES = ['notes', 'memory', 'urls', 'emails'];
 const DEFAULT_EMAIL_TRIAGE_INSTRUCTIONS = [
 	'Classify email by the next operational action.',
 	'Use reply-required when a human should answer the sender.',
@@ -35,6 +39,7 @@ const DEFAULT_EMAIL_TRIAGE_INSTRUCTIONS = [
 	'Use waiting when the team is blocked on someone else.',
 	'Use no-action for receipts, notifications, confirmations, and FYI messages.',
 	'Use spam only for unwanted or suspicious messages.',
+	'Create draft_reply only for reply-required emails. Never send emails.',
 ].join(' ');
 const DEFAULT_EMAIL_AI_INSTRUCTIONS = [
 	'Answer as an email assistant for the selected message.',
@@ -144,7 +149,7 @@ function normalizeLabels(labels = []) {
 }
 
 function normalizeMailbox(mailbox) {
-	if (['inbox', 'archived', 'sent'].includes(mailbox)) return mailbox;
+	if (['inbox', 'archived', 'sent', 'spam'].includes(mailbox)) return mailbox;
 	return 'inbox';
 }
 
@@ -330,10 +335,18 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 		mailbox: normalizeMailbox(data.mailbox),
 		labels: normalizeLabels(data.labels),
 		triaged: normalizeTriaged(data.triaged, Boolean(data.triaged_at)),
-		triaged_at: data.triaged_at || null,
-		triage_summary: String(data.triage_summary || ''),
-		triage_reason: String(data.triage_reason || ''),
-		project: data.project,
+			triaged_at: data.triaged_at || null,
+			triage_summary: String(data.triage_summary || ''),
+			triage_reason: String(data.triage_reason || ''),
+			triage_primary_action: normalizePrimaryAction(data.triage_primary_action),
+			triage_confidence: data.triage_confidence === undefined ? null : Number(data.triage_confidence),
+			triage_action_points: normalizeActionPoints(data.triage_action_points || []),
+			triage_related_context: normalizeRelatedContext(data.triage_related_context || []),
+			triage_mailbox_action: MAILBOX_ACTIONS.includes(data.triage_mailbox_action) ? data.triage_mailbox_action : 'none',
+			triage_status: data.triage_status || '',
+			triage_error: String(data.triage_error || ''),
+			triage_run_id: String(data.triage_run_id || ''),
+			project: data.project,
 		owner: userId,
 		host_id,
 		is_indexed: false,
@@ -438,6 +451,8 @@ export async function listEmailLabels(host_id, filters = {}) {
 			Email.countDocuments(buildEmailListQuery(host_id, projectId, { mailbox: 'inbox', triaged: false })),
 			Email.countDocuments(buildEmailListQuery(host_id, projectId, { mailbox: 'archived' })),
 			Email.countDocuments(buildEmailListQuery(host_id, projectId, { mailbox: 'sent' })),
+			Email.countDocuments(buildEmailListQuery(host_id, projectId, { mailbox: 'spam' })),
+			EmailDraft.countDocuments({ host_id, status: { $ne: 'discarded' }, ...(projectId ? { project: projectId } : {}) }),
 			Email.countDocuments({ host_id, in_trash: true, ...(projectId ? { project: projectId } : {}) }),
 		]),
 		Promise.all(labels.map(async (label) => ({
@@ -449,11 +464,13 @@ export async function listEmailLabels(host_id, filters = {}) {
 	const labelCountMap = Object.fromEntries(labelCounts.map((item) => [item.slug, item.count]));
 	return {
 		mailboxes: [
-			{ slug: 'inbox', name: 'Inbox', count: mailboxCounts[0] },
-			{ slug: 'archived', name: 'Archived', count: mailboxCounts[1] },
-			{ slug: 'sent', name: 'Sent', count: mailboxCounts[2] },
-			{ slug: 'trash', name: 'Trash', count: mailboxCounts[3] },
-		],
+				{ slug: 'inbox', name: 'Inbox', count: mailboxCounts[0] },
+				{ slug: 'archived', name: 'Archived', count: mailboxCounts[1] },
+				{ slug: 'sent', name: 'Sent', count: mailboxCounts[2] },
+				{ slug: 'spam', name: 'Spam', count: mailboxCounts[3] },
+				{ slug: 'drafts', name: 'Drafts', count: mailboxCounts[4] },
+				{ slug: 'trash', name: 'Trash', count: mailboxCounts[5] },
+			],
 		labels: labels.map((label) => ({
 			_id: label._id,
 			slug: label.slug,
@@ -487,6 +504,13 @@ export async function updateEmail(host_id, emailId, data, ctx = {}) {
 	}
 	if (data.triage_summary !== undefined) update.triage_summary = String(data.triage_summary || '');
 	if (data.triage_reason !== undefined) update.triage_reason = String(data.triage_reason || '');
+	if (data.triage_primary_action !== undefined) update.triage_primary_action = normalizePrimaryAction(data.triage_primary_action);
+	if (data.triage_confidence !== undefined) update.triage_confidence = clampConfidence(data.triage_confidence);
+	if (data.triage_action_points !== undefined) update.triage_action_points = normalizeActionPoints(data.triage_action_points);
+	if (data.triage_related_context !== undefined) update.triage_related_context = normalizeRelatedContext(data.triage_related_context);
+	if (data.triage_mailbox_action !== undefined) update.triage_mailbox_action = normalizeMailboxAction(data.triage_mailbox_action, update.triage_primary_action);
+	if (data.triage_status !== undefined) update.triage_status = String(data.triage_status || '');
+	if (data.triage_error !== undefined) update.triage_error = String(data.triage_error || '');
 	update.is_indexed = false;
 
 	const before = ctx.user_id ? await Email.findOne({ _id: emailId, host_id }).lean() : null;
@@ -640,33 +664,312 @@ export function parseTriageResult(text) {
 		throw new Error('Triage response was not valid JSON');
 	}
 
+	const primaryAction = normalizePrimaryAction(parsed.primary_action);
+	if (!primaryAction) throw new Error('Triage response primary_action was invalid');
 	const labels = normalizeLabels(parsed.labels || []);
 	const validLabels = labels.filter((label) => SYSTEM_LABEL_SLUGS.includes(label));
+	if (!validLabels.includes(primaryAction)) validLabels.push(primaryAction);
 	if (!validLabels.includes('triaged')) validLabels.push('triaged');
 
-	const primaryLabels = validLabels.filter((label) => PRIMARY_TRIAGE_LABELS.includes(label));
-	if (primaryLabels.length === 0) validLabels.push('no-action');
-
 	return {
+		primary_action: primaryAction,
 		labels: [...new Set(validLabels)],
 		summary: String(parsed.summary || '').trim().slice(0, 500),
 		reason: String(parsed.reason || '').trim().slice(0, 1000),
+		confidence: clampConfidence(parsed.confidence),
+		action_points: normalizeActionPoints(parsed.action_points || []),
+		related_context: normalizeRelatedContext(parsed.related_context || []),
+		draft_reply: normalizeDraftReply(parsed.draft_reply, primaryAction),
+		mailbox_action: normalizeMailboxAction(parsed.mailbox_action, primaryAction),
 	};
 }
 
-function buildTriagePrompt(email, instructions) {
+function normalizePrimaryAction(value) {
+	const action = normalizeSlug(value);
+	return TRIAGE_ACTIONS.includes(action) ? action : '';
+}
+
+function clampConfidence(value) {
+	const number = Number(value);
+	if (!Number.isFinite(number)) return 0;
+	if (number < 0) return 0;
+	if (number > 1) return 1;
+	return number;
+}
+
+function normalizeMailboxAction(value, primaryAction = '') {
+	const normalized = normalizeSlug(value);
+	if (normalized === 'archived') return 'archive';
+	if (MAILBOX_ACTIONS.includes(normalized)) return normalized;
+	if (primaryAction === 'no-action') return 'archive';
+	if (primaryAction === 'spam') return 'spam';
+	return 'keep-inbox';
+}
+
+function normalizeActionPoints(items = []) {
+	if (!Array.isArray(items)) return [];
+	return items
+		.map((item) => {
+			if (typeof item === 'string') {
+				return { text: item.trim().slice(0, 300), type: '', due_at: null };
+			}
+			if (!item || typeof item !== 'object') return null;
+			const dueAt = item.due_at ? new Date(item.due_at) : null;
+			return {
+				text: String(item.text || item.title || '').trim().slice(0, 300),
+				type: normalizeSlug(item.type || item.kind || '').slice(0, 50),
+				due_at: dueAt && !Number.isNaN(dueAt.getTime()) ? dueAt : null,
+			};
+		})
+		.filter((item) => item?.text)
+		.slice(0, 10);
+}
+
+function normalizeContextType(value) {
+	const type = normalizeSlug(value);
+	if (type === 'url') return 'urls';
+	if (type === 'note') return 'notes';
+	if (type === 'email') return 'emails';
+	if (type === 'page') return 'pages';
+	return ['notes', 'memory', 'urls', 'emails', 'pages'].includes(type) ? type : '';
+}
+
+function normalizeRelatedContext(items = []) {
+	if (!Array.isArray(items)) return [];
+	return items
+		.map((item) => {
+			if (!item || typeof item !== 'object') return null;
+			const itemType = normalizeContextType(item.item_type || item.type || item._type);
+			const itemId = String(item.item_id || item.id || item.source_id || item._id || '').trim();
+			return {
+				item_id: itemId,
+				item_type: itemType,
+				title: String(item.title || item.name || '').trim().slice(0, 200),
+				reason: String(item.reason || item.summary || '').trim().slice(0, 300),
+			};
+		})
+		.filter((item) => item.item_id && item.item_type)
+		.slice(0, 8);
+}
+
+function normalizeDraftReply(value, primaryAction) {
+	if (primaryAction !== 'reply-required' || !value || typeof value !== 'object') return null;
+	const bodyText = String(value.body_text || value.text || value.body || '').trim();
+	const bodyHtml = String(value.body_html || value.html || '').trim();
+	if (!bodyText && !bodyHtml) return null;
+	return {
+		to: normalizeRecipientList(value.to || []),
+		cc: normalizeRecipientList(value.cc || []),
+		bcc: normalizeRecipientList(value.bcc || []),
+		subject: String(value.subject || '').trim().slice(0, 300),
+		body_text: bodyText.slice(0, 12000),
+		body_html: bodyHtml.slice(0, 20000),
+	};
+}
+
+function triageSearchQuery(email) {
 	return [
-		'Classify this email for an email command center.',
-		'Return JSON only with this shape: {"labels":["reply-required"],"summary":"short summary","reason":"short reason"}.',
+		email.subject || '',
+		(email.from || []).join(' '),
+		(email.to || []).join(' '),
+		String(email.text_content || '').slice(0, 800),
+	].filter(Boolean).join('\n').slice(0, 1600) || '*';
+}
+
+function resultDocument(hit) {
+	return hit?.document || hit || {};
+}
+
+function contextTitle(type, doc) {
+	if (type === 'emails') return doc.subject || '(No subject)';
+	if (type === 'urls' || type === 'pages') return doc.title || doc.url || '(Untitled)';
+	return doc.title || '(Untitled)';
+}
+
+function contextExcerpt(type, doc) {
+	if (type === 'memory') return doc.content || '';
+	if (type === 'urls' || type === 'pages') return doc.description || doc.text_content || '';
+	if (type === 'emails') return doc.triage_summary || doc.text_content || '';
+	return doc.text_content || doc.content || '';
+}
+
+function flattenKnowledgeResults(results, currentEmailId) {
+	const items = [];
+	for (const [type, result] of Object.entries(results || {})) {
+		for (const hit of result?.hits || []) {
+			const doc = resultDocument(hit);
+			const id = String(doc.source_id || doc.id || doc._id || '').trim();
+			if (!id || (type === 'emails' && id === currentEmailId)) continue;
+			items.push({
+				item_id: id,
+				item_type: normalizeContextType(type),
+				title: contextTitle(type, doc),
+				excerpt: String(contextExcerpt(type, doc) || '').slice(0, 500),
+			});
+		}
+	}
+	return items.slice(0, 12);
+}
+
+function formatTriageContext(context = {}) {
+	const lines = [];
+	if (context.thread?.length) {
+		lines.push('THREAD EMAILS:');
+		for (const item of context.thread.slice(0, 5)) {
+			lines.push(`- [emails:${item.item_id}] ${item.title}: ${item.excerpt}`);
+		}
+	}
+	if (context.knowledge?.length) {
+		lines.push('ALL-PROJECT KNOWLEDGE SEARCH:');
+		for (const item of context.knowledge.slice(0, 10)) {
+			lines.push(`- [${item.item_type}:${item.item_id}] ${item.title}: ${item.excerpt}`);
+		}
+	}
+	if (context.graph_connections?.length) {
+		lines.push('GRAPH CONNECTIONS:');
+		for (const item of context.graph_connections.slice(0, 8)) {
+			lines.push(`- [${item.item_type}:${item.item_id}] ${item.title}: ${item.reason || ''}`);
+		}
+	}
+	return lines.join('\n').slice(0, 8000);
+}
+
+export async function buildTriageContext(host_id, email, options = {}) {
+	const currentEmailId = email._id?.toString();
+	const searchKnowledgeFn = options.searchKnowledgeFn || ((hostId, query, searchOptions) => searchAll(hostId, query, searchOptions));
+	const getConnectionsFn = options.getConnectionsFn || getConnectionsForItem;
+	const getThreadFn = options.getThreadFn || getEmailThread;
+	const [knowledgeResults, thread, graph] = await Promise.all([
+		searchKnowledgeFn(host_id, triageSearchQuery(email), {
+			perPage: 4,
+			includeEmails: true,
+			group: true,
+			exclude_fields: 'embedding',
+		}).catch(() => ({})),
+		getThreadFn(host_id, currentEmailId).catch(() => []),
+		getConnectionsFn(host_id, currentEmailId).catch(() => ({ links: [], tag_connections: [] })),
+	]);
+
+	const threadItems = (thread || [])
+		.filter((item) => item?._id?.toString() !== currentEmailId)
+		.map((item) => ({
+			item_id: item._id.toString(),
+			item_type: 'emails',
+			title: item.subject || '(No subject)',
+			excerpt: String(item.triage_summary || item.text_content || '').slice(0, 500),
+		}))
+		.slice(0, 6);
+
+	const graphItems = [
+		...(graph?.links || []).map((link) => {
+			const sourceId = link.source_id?.toString();
+			const isSource = sourceId === currentEmailId;
+			return {
+				item_id: (isSource ? link.target_id : link.source_id)?.toString() || '',
+				item_type: isSource ? link.target_type : link.source_type,
+				title: link.label || 'Linked item',
+				reason: link.label || '',
+			};
+		}),
+		...(graph?.tag_connections || []).map((item) => ({
+			item_id: item.id,
+			item_type: item.type,
+			title: item.title,
+			reason: item.shared_tags?.length ? `Shared tags: ${item.shared_tags.join(', ')}` : '',
+		})),
+	].filter((item) => item.item_id && item.item_id !== currentEmailId);
+
+	const knowledge = flattenKnowledgeResults(knowledgeResults, currentEmailId);
+	return {
+		knowledge,
+		prior_emails: knowledge.filter((item) => item.item_type === 'emails'),
+		thread: threadItems,
+		graph_connections: normalizeRelatedContext(graphItems),
+	};
+}
+
+function buildTriagePrompt(email, instructions, context) {
+	return [
+		'Classify and triage this email for an email command center.',
+		'Return JSON only. Do not include markdown.',
+		'Required shape: {"primary_action":"reply-required","labels":["reply-required"],"summary":"short summary","reason":"short reason","confidence":0.8,"action_points":[{"text":"what to do","type":"reply"}],"related_context":[{"item_type":"notes","item_id":"id","title":"title","reason":"why relevant"}],"draft_reply":{"to":["sender@example.com"],"cc":[],"bcc":[],"subject":"Re: subject","body_text":"draft"},"mailbox_action":"keep-inbox"}.',
 		`Allowed labels: ${SYSTEM_LABEL_SLUGS.join(', ')}.`,
+		`primary_action must be exactly one of ${TRIAGE_ACTIONS.join(', ')}.`,
 		'Always include exactly one best action label from reply-required, human-do, waiting, no-action, spam.',
 		'Do not include triaged; it will be added automatically.',
+		'Use draft_reply only when primary_action is reply-required. Never send email.',
+		'Use related_context only for context IDs shown below.',
+		'Use mailbox_action archive for no-action, spam for spam, and keep-inbox otherwise unless custom instructions clearly require a different internal move.',
 		`Default triage instructions:\n${DEFAULT_EMAIL_TRIAGE_INSTRUCTIONS}`,
 		instructions.global ? `Global instructions:\n${instructions.global}` : '',
 		instructions.email ? `Email instructions:\n${instructions.email}` : '',
 		instructions.email_triage ? `Email triage instructions:\n${instructions.email_triage}` : '',
-		buildEmailContext(email).slice(0, 10000),
+		`Email context:\n${buildEmailContext(email).slice(0, 10000)}`,
+		`Retrieved Kumbukum context:\n${formatTriageContext(context) || 'No related context found.'}`,
 	].filter(Boolean).join('\n\n');
+}
+
+async function createTriageLinks(host_id, userId, email, relatedContext, options = {}) {
+	let linked = 0;
+	const emailId = email._id.toString();
+	for (const item of relatedContext || []) {
+		if (!LINKABLE_CONTEXT_TYPES.includes(item.item_type)) continue;
+		if (item.item_type === 'emails' && item.item_id === emailId) continue;
+		try {
+			const result = await GraphLink.updateOne(
+				{
+					host_id,
+					source_id: email._id,
+					source_type: 'emails',
+					target_id: item.item_id,
+					target_type: item.item_type,
+				},
+				{
+					$setOnInsert: {
+						source_id: email._id,
+						source_type: 'emails',
+						target_id: item.item_id,
+						target_type: item.item_type,
+						label: 'triage-context',
+						owner: userId,
+						host_id,
+					},
+				},
+				{ upsert: true },
+			);
+			if (result.upsertedCount > 0) linked += 1;
+		} catch {
+			// Ignore stale or invalid AI-selected references.
+		}
+	}
+	if (linked && !options.skipSideEffects) invalidateGraphCache(host_id).catch(() => {});
+	return linked;
+}
+
+async function upsertTriageDraft(host_id, userId, email, triage) {
+	if (triage.primary_action !== 'reply-required' || !triage.draft_reply) return null;
+	const draft = triage.draft_reply;
+	return EmailDraft.findOneAndUpdate(
+		{ host_id, source_email: email._id, generated_by_triage: true },
+		{
+			$set: {
+				from: (email.to || [])[0] || '',
+				to: draft.to.length ? draft.to : (email.from || []),
+				cc: draft.cc,
+				bcc: draft.bcc,
+				subject: draft.subject || `Re: ${email.subject || '(No subject)'}`,
+				body_text: draft.body_text,
+				body_html: draft.body_html,
+				status: 'draft',
+				confidence: triage.confidence,
+				project: email.project,
+				owner: userId || email.owner,
+				host_id,
+				generated_by_triage: true,
+			},
+		},
+		{ upsert: true, returnDocument: 'after' },
+	);
 }
 
 export async function triageInboxEmails(host_id, userId, options = {}) {
@@ -683,35 +986,57 @@ export async function triageInboxEmails(host_id, userId, options = {}) {
 	const instructions = await getAiInstructions(host_id);
 	const results = [];
 	const errors = [];
+	const runId = crypto.randomUUID();
+	let drafted = 0;
+	let linked = 0;
+	let moved = 0;
 
 	for (const email of emails) {
 		try {
+			const context = await buildTriageContext(host_id, email, options);
 			const content = await completionFn({
 				hostId: host_id,
 				scope: 'email',
-				maxTokens: 800,
+				maxTokens: 1800,
 				messages: [
 					{
 						role: 'system',
-						content: 'You are an email triage classifier. Return compact JSON only.',
+						content: 'You are an email triage workflow engine. Return compact JSON only. Never send email.',
 					},
 					{
 						role: 'user',
-						content: buildTriagePrompt(email, instructions),
+						content: buildTriagePrompt(email, instructions, context),
 					},
 				],
 			});
 			const triage = parseTriageResult(content);
 			const labels = [...new Set([...(email.labels || []), ...triage.labels])];
+			const targetMailbox = triage.mailbox_action === 'archive'
+				? 'archived'
+				: triage.mailbox_action === 'spam'
+					? 'spam'
+					: email.mailbox || 'inbox';
+			const draft = await upsertTriageDraft(host_id, userId, email, triage);
+			const linkedCount = await createTriageLinks(host_id, userId, email, triage.related_context, { skipSideEffects: options.skipSideEffects });
 			const updated = await Email.findOneAndUpdate(
 				{ _id: email._id, host_id },
 				{
 					$set: {
+						mailbox: targetMailbox,
 						labels,
 						triaged: true,
 						triaged_at: new Date(),
 						triage_summary: triage.summary,
 						triage_reason: triage.reason,
+						triage_primary_action: triage.primary_action,
+						triage_confidence: triage.confidence,
+						triage_action_points: triage.action_points,
+						triage_related_context: triage.related_context,
+						triage_mailbox_action: triage.mailbox_action,
+						triage_status: 'complete',
+						triage_error: '',
+						triage_run_id: runId,
+						triage_draft_id: draft?._id || null,
 						is_indexed: false,
 					},
 				},
@@ -719,13 +1044,35 @@ export async function triageInboxEmails(host_id, userId, options = {}) {
 			);
 
 			if (updated) {
+				if (draft) drafted += 1;
+				if (linkedCount) linked += linkedCount;
+				if ((email.mailbox || 'inbox') !== updated.mailbox) moved += 1;
 				if (!options.skipSideEffects) {
 					removeDocument(host_id, 'emails', email._id.toString()).catch((err) => console.error('Typesense remove error:', err.message));
 					emitToTenant(host_id, 'email:updated', updated);
 				}
-				results.push({ email_id: email._id.toString(), labels: updated.labels, summary: updated.triage_summary });
+				results.push({
+					email_id: email._id.toString(),
+					action: updated.triage_primary_action,
+					labels: updated.labels,
+					summary: updated.triage_summary,
+					confidence: updated.triage_confidence,
+					draft_id: draft?._id?.toString() || null,
+					context_refs: updated.triage_related_context || [],
+					mailbox: updated.mailbox,
+				});
 			}
 		} catch (err) {
+			await Email.findOneAndUpdate(
+				{ _id: email._id, host_id },
+				{
+					$set: {
+						triage_status: 'failed',
+						triage_error: err.message,
+						triage_run_id: runId,
+					},
+				},
+			).catch(() => {});
 			errors.push({ email_id: email._id.toString(), error: err.message });
 		}
 	}
@@ -735,17 +1082,57 @@ export async function triageInboxEmails(host_id, userId, options = {}) {
 		audit.log({
 			action: 'update',
 			resource: 'email',
-			resource_id: 'triage-inbox',
-			user_id: userId,
-			host_id,
-			details: { triaged: results.length, errors: errors.length },
-			channel: options.ctx?.channel || 'web',
-			ip: options.ctx?.ip,
-			user_agent: options.ctx?.user_agent,
-		});
-	}
+				resource_id: 'triage-inbox',
+				user_id: userId,
+				host_id,
+				details: { triaged: results.length, drafted, linked, moved, errors: errors.length },
+				channel: options.ctx?.channel || 'web',
+				ip: options.ctx?.ip,
+				user_agent: options.ctx?.user_agent,
+			});
+		}
 
-	return { processed: emails.length, triaged: results.length, errors, results };
+	return { processed: emails.length, triaged: results.length, drafted, linked, moved, errors, results };
+}
+
+export async function listEmailDrafts(host_id, { project, status, page = 1, limit = 50 } = {}) {
+	const query = { host_id };
+	if (project) query.project = project;
+	if (status) query.status = status;
+	else query.status = { $ne: 'discarded' };
+	return EmailDraft.find(query)
+		.sort({ updatedAt: -1 })
+		.skip((page - 1) * limit)
+		.limit(limit)
+		.lean();
+}
+
+export async function getEmailDraft(host_id, draftId) {
+	return EmailDraft.findOne({ _id: draftId, host_id }).lean();
+}
+
+export async function updateEmailDraft(host_id, draftId, data, ctx = {}) {
+	const update = {};
+	if (data.to !== undefined) update.to = normalizeRecipientList(data.to);
+	if (data.cc !== undefined) update.cc = normalizeRecipientList(data.cc);
+	if (data.bcc !== undefined) update.bcc = normalizeRecipientList(data.bcc);
+	if (data.subject !== undefined) update.subject = String(data.subject || '').trim();
+	if (data.body_text !== undefined) update.body_text = String(data.body_text || '');
+	if (data.body_html !== undefined) update.body_html = String(data.body_html || '');
+	if (data.status !== undefined && ['draft', 'ready', 'discarded'].includes(data.status)) update.status = data.status;
+	if (Object.keys(update).length === 0) return getEmailDraft(host_id, draftId);
+
+	const before = ctx.user_id ? await EmailDraft.findOne({ _id: draftId, host_id }).lean() : null;
+	const draft = await EmailDraft.findOneAndUpdate(
+		{ _id: draftId, host_id },
+		{ $set: update },
+		{ returnDocument: 'after' },
+	).lean();
+	if (draft && ctx.user_id) {
+		const details = audit.diffSnapshot(before, draft);
+		audit.log({ action: 'update', resource: 'email_draft', resource_id: draftId, host_id, details, ...ctx });
+	}
+	return draft;
 }
 
 export async function getEmailThread(host_id, emailId) {

@@ -8,6 +8,7 @@ import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
 import { Url } from '../model/url.js';
 import { Email } from '../model/email.js';
+import { EmailDraft } from '../model/email_draft.js';
 import { GraphLink } from '../model/graph_link.js';
 import { sendExportReadyEmail } from './email_service.js';
 
@@ -52,11 +53,12 @@ async function processExport(exportId, hostId, userEmail, userName) {
 	const filePath = path.join(EXPORT_DIR, filename);
 
 	try {
-		const [notes, memories, urls, emails, links] = await Promise.all([
+		const [notes, memories, urls, emails, drafts, links] = await Promise.all([
 			Note.find({ host_id: hostId, in_trash: false }).lean(),
 			Memory.find({ host_id: hostId, in_trash: false }).lean(),
 			Url.find({ host_id: hostId, in_trash: false }).lean(),
 			Email.find({ host_id: hostId, in_trash: false }).lean(),
+			EmailDraft.find({ host_id: hostId }).lean(),
 			GraphLink.find({ host_id: hostId }).lean(),
 		]);
 
@@ -72,6 +74,7 @@ async function processExport(exportId, hostId, userEmail, userName) {
 			archive.append(JSON.stringify(memories, null, 2), { name: 'memories.json' });
 			archive.append(JSON.stringify(urls, null, 2), { name: 'urls.json' });
 			archive.append(JSON.stringify(emails, null, 2), { name: 'emails.json' });
+			archive.append(JSON.stringify(drafts, null, 2), { name: 'email-drafts.json' });
 			archive.append(JSON.stringify(links, null, 2), { name: 'links.json' });
 			archive.finalize();
 		});

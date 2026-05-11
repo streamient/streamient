@@ -1,8 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, listEmails, parseTriageResult, triageInboxEmails, backfillEmailTriageState, askEmailAi } from '../services/email_ingest_service.js';
+import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, listEmails, parseTriageResult, triageInboxEmails, backfillEmailTriageState, askEmailAi, buildTriageContext } from '../services/email_ingest_service.js';
 import { Email } from '../model/email.js';
+import { EmailDraft } from '../model/email_draft.js';
 import { EmailLabel } from '../model/email_label.js';
 import { GraphLink } from '../model/graph_link.js';
 import { Tenant } from '../modules/tenancy.js';
@@ -429,22 +430,65 @@ describe('Email ingest service', () => {
 		}
 	});
 
-	it('normalizes AI triage JSON to supported labels', () => {
-		const triage = parseTriageResult('```json\n{"labels":["Reply Required","unknown"],"summary":"Needs reply","reason":"Customer asked a question"}\n```');
+		it('normalizes AI triage JSON to supported structured fields', () => {
+			const triage = parseTriageResult('```json\n{"primary_action":"reply required","labels":["Reply Required","unknown"],"summary":"Needs reply","reason":"Customer asked a question","confidence":1.2,"action_points":[{"text":"Reply with setup details","type":"Reply"}],"related_context":[{"item_type":"note","item_id":"note-1","title":"Setup"}],"draft_reply":{"to":["sender@example.com"],"subject":"Re: Question","body_text":"Thanks"}}\n```');
 
-		assert.deepEqual(triage.labels, ['reply-required', 'triaged']);
-		assert.equal(triage.summary, 'Needs reply');
-		assert.equal(triage.reason, 'Customer asked a question');
-	});
+			assert.equal(triage.primary_action, 'reply-required');
+			assert.deepEqual(triage.labels, ['reply-required', 'triaged']);
+			assert.equal(triage.summary, 'Needs reply');
+			assert.equal(triage.reason, 'Customer asked a question');
+			assert.equal(triage.confidence, 1);
+			assert.deepEqual(triage.action_points, [{ text: 'Reply with setup details', type: 'reply', due_at: null }]);
+			assert.deepEqual(triage.related_context, [{ item_id: 'note-1', item_type: 'notes', title: 'Setup', reason: '' }]);
+			assert.equal(triage.draft_reply.body_text, 'Thanks');
+		});
 
-	it('triages inbox emails and persists labels', async () => {
-		const emailId = { toString: () => 'email-1' };
-		let updatePayload = null;
-		const originalBulkWrite = EmailLabel.bulkWrite;
-		const originalLabelFind = EmailLabel.find;
-		const originalEmailFind = Email.find;
-		const originalFindOneAndUpdate = Email.findOneAndUpdate;
-		const originalTenantFindOne = Tenant.findOne;
+		it('rejects triage JSON without a valid primary action', () => {
+			assert.throws(() => parseTriageResult('{"labels":["reply-required"]}'), /primary_action/);
+			assert.throws(() => parseTriageResult('{"primary_action":"unknown"}'), /primary_action/);
+		});
+
+		it('builds all-project triage context without including the current email as prior email', async () => {
+			const context = await buildTriageContext('host-1', {
+				_id: { toString: () => 'email-1' },
+				subject: 'Billing question',
+				from: ['sender@example.com'],
+				to: ['team@example.com'],
+				text_content: 'Can you explain billing?',
+			}, {
+				searchKnowledgeFn: async (hostId, query, options) => {
+					assert.equal(hostId, 'host-1');
+					assert.match(query, /Billing question/);
+					assert.equal(options.includeEmails, true);
+					assert.equal(options.projectId, undefined);
+					return {
+						notes: { hits: [{ document: { id: 'note-1', title: 'Billing policy', text_content: 'Policy text' } }] },
+						emails: { hits: [{ document: { id: 'email-1', subject: 'Current' } }, { document: { id: 'email-2', subject: 'Prior', text_content: 'Prior reply' } }] },
+					};
+				},
+				getThreadFn: async () => [{ _id: { toString: () => 'email-3' }, subject: 'Thread item', text_content: 'Thread body' }],
+				getConnectionsFn: async () => ({ links: [], tag_connections: [{ id: 'note-2', type: 'notes', title: 'Shared tag', shared_tags: ['billing'] }] }),
+			});
+
+			assert.deepEqual(context.knowledge.map((item) => item.item_id), ['note-1', 'email-2']);
+			assert.deepEqual(context.prior_emails.map((item) => item.item_id), ['email-2']);
+			assert.deepEqual(context.thread.map((item) => item.item_id), ['email-3']);
+			assert.deepEqual(context.graph_connections.map((item) => item.item_id), ['note-2']);
+		});
+
+		it('triages inbox emails, persists actions, creates drafts, and links context', async () => {
+			const emailId = { toString: () => 'email-1' };
+			const draftId = { toString: () => 'draft-1' };
+			let updatePayload = null;
+			let draftPayload = null;
+			let linkPayload = null;
+			const originalBulkWrite = EmailLabel.bulkWrite;
+			const originalLabelFind = EmailLabel.find;
+			const originalEmailFind = Email.find;
+			const originalFindOneAndUpdate = Email.findOneAndUpdate;
+			const originalDraftFindOneAndUpdate = EmailDraft.findOneAndUpdate;
+			const originalGraphUpdateOne = GraphLink.updateOne;
+			const originalTenantFindOne = Tenant.findOne;
 
 		EmailLabel.bulkWrite = async () => ({});
 		EmailLabel.find = () => ({
@@ -459,21 +503,33 @@ describe('Email ingest service', () => {
 						_id: emailId,
 						subject: 'Question',
 						from: ['sender@example.com'],
-						to: ['team@example.com'],
-						text_content: 'Can you help?',
-						labels: [],
-						updatedAt: '2026-01-01T10:00:00.000Z',
-					}],
-				}),
+							to: ['team@example.com'],
+							text_content: 'Can you help?',
+							labels: [],
+							mailbox: 'inbox',
+							project: 'project-1',
+							owner: userId,
+							updatedAt: '2026-01-01T10:00:00.000Z',
+						}],
+					}),
 			}),
 		});
 		Email.findOneAndUpdate = async (query, update) => {
-			assert.equal(query._id, emailId);
-			updatePayload = update.$set;
-			return { _id: emailId, ...update.$set };
-		};
-		let prompt;
-		Tenant.findOne = () => ({
+				assert.equal(query._id, emailId);
+				updatePayload = update.$set;
+				return { _id: emailId, ...update.$set };
+			};
+			EmailDraft.findOneAndUpdate = async (query, update) => {
+				assert.equal(query.source_email, emailId);
+				draftPayload = update.$set;
+				return { _id: draftId, ...update.$set };
+			};
+			GraphLink.updateOne = async (query, update, options) => {
+				linkPayload = { query, update, options };
+				return { upsertedCount: 1 };
+			};
+			let prompt;
+			Tenant.findOne = () => ({
 			select: () => ({
 				lean: async () => ({ settings: { ai_instructions: { global: 'Be concise', email: 'Use warm reply tone', email_triage: 'Prioritize support' } } }),
 			}),
@@ -481,31 +537,48 @@ describe('Email ingest service', () => {
 
 		try {
 			const result = await triageInboxEmails('host-1', userId, {
-				skipSideEffects: true,
-				completionFn: async ({ messages }) => {
-					prompt = messages[1].content;
-					return '{"labels":["human-do"],"summary":"Needs help","reason":"Requires human action"}';
-				},
-			});
+					skipSideEffects: true,
+					searchKnowledgeFn: async () => ({
+						notes: { hits: [{ document: { id: 'note-1', title: 'Support policy', text_content: 'Useful policy' } }] },
+					}),
+					getThreadFn: async () => [],
+					getConnectionsFn: async () => ({ links: [], tag_connections: [] }),
+					completionFn: async ({ messages }) => {
+						prompt = messages[1].content;
+						return '{"primary_action":"reply-required","labels":["reply-required"],"summary":"Needs help","reason":"Requires reply","confidence":0.8,"action_points":[{"text":"Answer the support question","type":"reply"}],"related_context":[{"item_type":"notes","item_id":"note-1","title":"Support policy","reason":"Relevant"}],"draft_reply":{"body_text":"Thanks for reaching out."},"mailbox_action":"keep-inbox"}';
+					},
+				});
 
 			assert.match(prompt, /Email instructions:\nUse warm reply tone/);
-			assert.match(prompt, /Email triage instructions:\nPrioritize support/);
-			assert.match(prompt, /Default triage instructions:\nClassify email by the next operational action/);
-			assert.equal(result.processed, 1);
-			assert.equal(result.triaged, 1);
-			assert.deepEqual(updatePayload.labels, ['human-do', 'triaged']);
-			assert.equal(updatePayload.triaged, true);
-			assert.equal(updatePayload.triage_summary, 'Needs help');
-			assert.equal(updatePayload.triage_reason, 'Requires human action');
-			assert.ok(updatePayload.triaged_at instanceof Date);
-		} finally {
-			EmailLabel.bulkWrite = originalBulkWrite;
-			EmailLabel.find = originalLabelFind;
-			Email.find = originalEmailFind;
-			Email.findOneAndUpdate = originalFindOneAndUpdate;
-			Tenant.findOne = originalTenantFindOne;
-		}
-	});
+				assert.match(prompt, /Email triage instructions:\nPrioritize support/);
+				assert.match(prompt, /Default triage instructions:\nClassify email by the next operational action/);
+				assert.match(prompt, /ALL-PROJECT KNOWLEDGE SEARCH/);
+				assert.equal(result.processed, 1);
+				assert.equal(result.triaged, 1);
+				assert.equal(result.drafted, 1);
+				assert.equal(result.linked, 1);
+				assert.deepEqual(updatePayload.labels, ['reply-required', 'triaged']);
+				assert.equal(updatePayload.triaged, true);
+				assert.equal(updatePayload.triage_summary, 'Needs help');
+				assert.equal(updatePayload.triage_reason, 'Requires reply');
+				assert.equal(updatePayload.triage_primary_action, 'reply-required');
+				assert.equal(updatePayload.triage_confidence, 0.8);
+				assert.deepEqual(updatePayload.triage_action_points, [{ text: 'Answer the support question', type: 'reply', due_at: null }]);
+				assert.equal(updatePayload.triage_draft_id, draftId);
+				assert.equal(draftPayload.to[0], 'sender@example.com');
+				assert.equal(draftPayload.body_text, 'Thanks for reaching out.');
+				assert.equal(linkPayload.query.target_id, 'note-1');
+				assert.ok(updatePayload.triaged_at instanceof Date);
+			} finally {
+				EmailLabel.bulkWrite = originalBulkWrite;
+				EmailLabel.find = originalLabelFind;
+				Email.find = originalEmailFind;
+				Email.findOneAndUpdate = originalFindOneAndUpdate;
+				EmailDraft.findOneAndUpdate = originalDraftFindOneAndUpdate;
+				GraphLink.updateOne = originalGraphUpdateOne;
+				Tenant.findOne = originalTenantFindOne;
+			}
+		});
 
 	it('answers selected email AI requests with email instructions and context', async () => {
 		const originalEmailFindOne = Email.findOne;

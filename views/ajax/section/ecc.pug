@@ -35,13 +35,21 @@ else
 					!= icon('archive', 'me-2')
 					span Archived
 					span.badge.text-bg-secondary.ms-auto 0
-				button.list-group-item.list-group-item-action.d-flex.align-items-center(type="button" data-mailbox="sent")
-					!= icon('send', 'me-2')
-					span Sent
-					span.badge.text-bg-secondary.ms-auto 0
-				button.list-group-item.list-group-item-action.d-flex.align-items-center(type="button" data-mailbox="trash")
-					!= icon('delete', 'me-2')
-					span Trash
+					button.list-group-item.list-group-item-action.d-flex.align-items-center(type="button" data-mailbox="sent")
+						!= icon('send', 'me-2')
+						span Sent
+						span.badge.text-bg-secondary.ms-auto 0
+					button.list-group-item.list-group-item-action.d-flex.align-items-center(type="button" data-mailbox="spam")
+						!= icon('warning', 'me-2')
+						span Spam
+						span.badge.text-bg-secondary.ms-auto 0
+					button.list-group-item.list-group-item-action.d-flex.align-items-center(type="button" data-mailbox="drafts")
+						!= icon('draft', 'me-2')
+						span Drafts
+						span.badge.text-bg-secondary.ms-auto 0
+					button.list-group-item.list-group-item-action.d-flex.align-items-center(type="button" data-mailbox="trash")
+						!= icon('delete', 'me-2')
+						span Trash
 					span.badge.text-bg-secondary.ms-auto 0
 			h6.mb-2 Labels
 			.list-group#ecc-labels

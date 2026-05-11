@@ -25,11 +25,12 @@
 	var selectedIds = new Set();
 	var emailAiMessages = [];
 	var windowListeners = [];
-	var MAILBOX_ACTIONS = [
-		{ slug: 'inbox', name: 'Inbox', icon: 'email' },
-		{ slug: 'archived', name: 'Archived', icon: 'archive' },
-		{ slug: 'sent', name: 'Sent', icon: 'send' },
-	];
+		var MAILBOX_ACTIONS = [
+			{ slug: 'inbox', name: 'Inbox', icon: 'email' },
+			{ slug: 'archived', name: 'Archived', icon: 'archive' },
+			{ slug: 'sent', name: 'Sent', icon: 'send' },
+			{ slug: 'spam', name: 'Spam', icon: 'warning' },
+		];
 
 	function addWindowListener(event, handler) {
 		window.addEventListener(event, handler);
@@ -51,8 +52,8 @@
 		return selectedProject ? '&project=' + encodeURIComponent(selectedProject) : '';
 	}
 
-	function emailsPath() {
-		var params = [];
+		function emailsPath() {
+			var params = [];
 		if (activeLabel) {
 			params.push('label=' + encodeURIComponent(activeLabel));
 		} else if (activeMailbox) {
@@ -60,8 +61,14 @@
 			if (activeMailbox === 'inbox') params.push('triaged=false');
 		}
 		if (selectedProject) params.push('project=' + encodeURIComponent(selectedProject));
-		return '/emails' + (params.length ? '?' + params.join('&') : '');
-	}
+			return '/emails' + (params.length ? '?' + params.join('&') : '');
+		}
+
+		function draftsPath() {
+			var params = [];
+			if (selectedProject) params.push('project=' + encodeURIComponent(selectedProject));
+			return '/email-drafts' + (params.length ? '?' + params.join('&') : '');
+		}
 
 	function labelsPath() {
 		var params = [];
@@ -86,12 +93,12 @@
 
 	function updateActionBar() {
 		if (!actionBar || !actionCount) return;
-		var count = selectedIds.size;
-		actionCount.textContent = count + ' selected';
-		actionBar.classList.toggle('d-none', count === 0);
-		actionBar.classList.toggle('d-flex', count > 0);
-		if (trashBtn) trashBtn.classList.toggle('d-none', activeMailbox === 'trash');
-	}
+			var count = selectedIds.size;
+			actionCount.textContent = count + ' selected';
+			actionBar.classList.toggle('d-none', count === 0 || activeMailbox === 'drafts');
+			actionBar.classList.toggle('d-flex', count > 0 && activeMailbox !== 'drafts');
+			if (trashBtn) trashBtn.classList.toggle('d-none', activeMailbox === 'trash');
+		}
 
 	function renderMoveMenu() {
 		if (!moveMenu) return;
@@ -238,12 +245,12 @@
 			viewSubtitle.textContent = 'Emails labeled ' + viewTitle.textContent + ' in ' + projectName + '.';
 			return;
 		}
-		var names = { inbox: 'Inbox', archived: 'Archived', sent: 'Sent', trash: 'Trash' };
-		viewTitle.textContent = names[activeMailbox] || 'Inbox';
-		viewSubtitle.textContent = activeMailbox === 'inbox'
-			? 'All untriaged emails in ' + projectName + '.'
-			: (names[activeMailbox] || 'Emails') + ' in ' + projectName + '.';
-	}
+			var names = { inbox: 'Inbox', archived: 'Archived', sent: 'Sent', spam: 'Spam', drafts: 'Drafts', trash: 'Trash' };
+			viewTitle.textContent = names[activeMailbox] || 'Inbox';
+			viewSubtitle.textContent = activeMailbox === 'inbox'
+				? 'All untriaged emails in ' + projectName + '.'
+				: (names[activeMailbox] || 'Emails') + ' in ' + projectName + '.';
+		}
 
 	function renderLabels(labels) {
 		if (!labelsEl) return;
@@ -279,7 +286,7 @@
 		});
 	}
 
-	function renderEmails(emails) {
+		function renderEmails(emails) {
 		if (!listEl) return;
 		selectedIds.clear();
 		updateActionBar();
@@ -298,22 +305,31 @@
 			var subject = email.subject || '(No subject)';
 			var senders = (email.from || []).slice(0, 2).join(', ') || '(unknown sender)';
 			var recipients = (email.to || []).slice(0, 2).join(', ') || '(no recipients)';
-			var body = (email.triage_summary || email.text_content || email.attachment_text_content || '').slice(0, 180);
-			var labels = (email.labels || []).map(function (label) {
-				return '<span class="badge ecc-email-label me-1">' + escapeHtml(label) + '</span>';
-			}).join('');
-			return '<div class="list-group-item list-group-item-action ecc-email-item" role="button" tabindex="0" data-id="' + escapeHtml(email._id) + '">'
-				+ '<div class="d-flex justify-content-between align-items-start gap-3 min-w-0">'
+				var body = (email.triage_summary || email.text_content || email.attachment_text_content || '').slice(0, 180);
+				var actionPoints = (email.triage_action_points || []).slice(0, 2).map(function (item) {
+					return item.text;
+				}).filter(Boolean).join(' - ');
+				var labels = (email.labels || []).map(function (label) {
+					return '<span class="badge ecc-email-label me-1">' + escapeHtml(label) + '</span>';
+				}).join('');
+				var triageMeta = [
+					email.triage_primary_action ? '<span class="badge text-bg-light me-1">' + escapeHtml(email.triage_primary_action) + '</span>' : '',
+					email.triage_draft_id ? '<span class="badge text-bg-info me-1">Draft</span>' : '',
+				].filter(Boolean).join('');
+				return '<div class="list-group-item list-group-item-action ecc-email-item" role="button" tabindex="0" data-id="' + escapeHtml(email._id) + '">'
+					+ '<div class="d-flex justify-content-between align-items-start gap-3 min-w-0">'
 				+ '<div class="form-check ecc-email-select-wrap">'
 				+ '<input class="form-check-input ecc-email-select" type="checkbox" value="' + escapeHtml(email._id) + '" aria-label="Select email">'
 				+ '</div>'
 				+ '<div class="min-w-0 flex-grow-1">'
 				+ '<div class="fw-semibold text-truncate">' + escapeHtml(subject) + '</div>'
 				+ '<div class="small text-muted text-truncate">' + kkIcon('user', 'me-1') + escapeHtml(senders) + '</div>'
-				+ '<div class="small text-muted text-truncate">' + kkIcon('email', 'me-1') + escapeHtml(recipients) + '</div>'
-				+ (body ? '<div class="small text-muted text-truncate mt-1">' + escapeHtml(body) + '</div>' : '')
-				+ (labels ? '<div class="mt-2">' + labels + '</div>' : '')
-				+ '</div>'
+					+ '<div class="small text-muted text-truncate">' + kkIcon('email', 'me-1') + escapeHtml(recipients) + '</div>'
+					+ (body ? '<div class="small text-muted text-truncate mt-1">' + escapeHtml(body) + '</div>' : '')
+					+ (actionPoints ? '<div class="small text-body text-truncate mt-1">' + escapeHtml(actionPoints) + '</div>' : '')
+					+ (triageMeta ? '<div class="mt-2">' + triageMeta + '</div>' : '')
+					+ (labels ? '<div class="mt-2">' + labels + '</div>' : '')
+					+ '</div>'
 				+ '<small class="text-muted text-nowrap">' + escapeHtml(formatDate(email.updatedAt)) + '</small>'
 				+ '</div>'
 				+ '</div>';
@@ -338,8 +354,37 @@
 			checkbox.addEventListener('change', function () {
 				setEmailSelected(checkbox, checkbox.checked);
 			});
-		});
-	}
+			});
+		}
+
+		function renderDrafts(drafts) {
+			if (!listEl) return;
+			selectedIds.clear();
+			updateActionBar();
+			renderMoveMenu();
+			selectedEmail = null;
+			emailAiMessages = [];
+			renderEmailAi(null);
+			if (!drafts.length) {
+				listEl.innerHTML = '<div class="list-group-item text-muted">No drafts for this view.</div>';
+				return;
+			}
+			listEl.innerHTML = drafts.map(function (draft) {
+				var recipients = (draft.to || []).slice(0, 2).join(', ') || '(no recipients)';
+				var body = (draft.body_text || '').slice(0, 180);
+				return '<div class="list-group-item">'
+					+ '<div class="d-flex justify-content-between align-items-start gap-3 min-w-0">'
+					+ '<div class="min-w-0 flex-grow-1">'
+					+ '<div class="fw-semibold text-truncate">' + escapeHtml(draft.subject || '(No subject)') + '</div>'
+					+ '<div class="small text-muted text-truncate">' + kkIcon('email', 'me-1') + escapeHtml(recipients) + '</div>'
+					+ (body ? '<div class="small text-muted text-truncate mt-1">' + escapeHtml(body) + '</div>' : '')
+					+ '<div class="mt-2"><span class="badge text-bg-light me-1">' + escapeHtml(draft.status || 'draft') + '</span></div>'
+					+ '</div>'
+					+ '<small class="text-muted text-nowrap">' + escapeHtml(formatDate(draft.updatedAt)) + '</small>'
+					+ '</div>'
+					+ '</div>';
+			}).join('');
+		}
 
 	async function selectEmail(emailId) {
 		try {
@@ -412,12 +457,17 @@
 		renderLabels(data.labels || []);
 	}
 
-	async function loadEmails() {
-		if (!listEl) return;
-		listEl.innerHTML = '<div class="list-group-item text-muted">Loading emails...</div>';
-		var data = await api('GET', emailsPath());
-		renderEmails(data.emails || []);
-	}
+		async function loadEmails() {
+			if (!listEl) return;
+			listEl.innerHTML = '<div class="list-group-item text-muted">Loading emails...</div>';
+			if (activeMailbox === 'drafts') {
+				var draftData = await api('GET', draftsPath());
+				renderDrafts(draftData.drafts || []);
+				return;
+			}
+			var data = await api('GET', emailsPath());
+			renderEmails(data.emails || []);
+		}
 
 	async function loadAll() {
 		updateViewText();

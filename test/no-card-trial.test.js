@@ -229,9 +229,10 @@ describe('no-card trial tenant cleanup', () => {
 		for (const name of [
 			'Note',
 			'Memory',
-			'Url',
-			'Email',
-			'Project',
+				'Url',
+				'Email',
+				'EmailDraft',
+				'Project',
 			'GraphLink',
 			'GitRepo',
 			'OAuthAuthorizationCode',

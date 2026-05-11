@@ -396,6 +396,28 @@ router.post('/emails/triage-inbox', requireEmailFeatureAccess, async (req, res) 
 	}
 });
 
+router.get('/email-drafts', requireEmailFeatureAccess, async (req, res) => {
+	const drafts = await emailIngestService.listEmailDrafts(req.host_id, {
+		project: req.query.project,
+		status: req.query.status,
+		page: parseInt(req.query.page, 10) || 1,
+		limit: parseInt(req.query.limit, 10) || 50,
+	});
+	res.json({ drafts });
+});
+
+router.get('/email-drafts/:id', requireEmailFeatureAccess, async (req, res) => {
+	const draft = await emailIngestService.getEmailDraft(req.host_id, req.params.id);
+	if (!draft) return res.status(404).json({ error: 'Email draft not found' });
+	res.json({ draft });
+});
+
+router.put('/email-drafts/:id', requireEmailFeatureAccess, async (req, res) => {
+	const draft = await emailIngestService.updateEmailDraft(req.host_id, req.params.id, req.body || {}, auditCtx(req));
+	if (!draft) return res.status(404).json({ error: 'Email draft not found' });
+	res.json({ draft });
+});
+
 // ---- URLs ----
 
 router.get('/urls', async (req, res) => {

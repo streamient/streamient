@@ -282,6 +282,8 @@ export function toTypesenseDoc(type, doc) {
 				mailbox: doc.mailbox || 'inbox',
 				labels: doc.labels || [],
 				triage_summary: doc.triage_summary || '',
+				triage_primary_action: doc.triage_primary_action || '',
+				triage_action_points: (doc.triage_action_points || []).map((item) => item.text || '').filter(Boolean),
 				message_id: doc.message_id || '',
 				references: doc.references || [],
 			};
@@ -391,6 +393,8 @@ const schemas = {
 			{ name: 'mailbox', type: 'string', facet: true, optional: true },
 			{ name: 'labels', type: 'string[]', facet: true, optional: true },
 			{ name: 'triage_summary', type: 'string', optional: true },
+			{ name: 'triage_primary_action', type: 'string', facet: true, optional: true },
+			{ name: 'triage_action_points', type: 'string[]', optional: true },
 			{ name: 'message_id', type: 'string', optional: true },
 			{ name: 'references', type: 'string[]', optional: true },
 			{ name: 'project_id', type: 'string', facet: true },
@@ -451,9 +455,9 @@ export async function ensureCollections(host_id) {
 		try {
 			const existing = await ts.collections(schema.name).retrieve();
 			const existingFields = new Set((existing.fields || []).map((field) => field.name));
-			const missingChunkFields = chunkMetadataFields().filter((field) => !existingFields.has(field.name));
-			if (missingChunkFields.length) {
-				await ts.collections(schema.name).update({ fields: missingChunkFields });
+			const missingFields = schema.fields.filter((field) => !existingFields.has(field.name));
+			if (missingFields.length) {
+				await ts.collections(schema.name).update({ fields: missingFields });
 				console.log(`Updated Typesense collection fields: ${schema.name}`);
 			}
 		} catch (err) {
