@@ -4,6 +4,7 @@ import { encrypt, decrypt } from '../modules/encryption.js';
 
 export const BYO_AI_SCOPES = ['global', 'email'];
 export const BYO_AI_PROVIDERS = ['openai', 'gemini'];
+export const AI_INSTRUCTION_SCOPES = ['global', 'email', 'email_triage'];
 
 const PROVIDER_FIELDS = {
 	openai: 'openai_api_key',
@@ -56,6 +57,7 @@ export function summarizeByoAiSettings(tenant) {
 	summary.instructions = {
 		global: tenant?.settings?.ai_instructions?.global || '',
 		email: tenant?.settings?.ai_instructions?.email || '',
+		email_triage: tenant?.settings?.ai_instructions?.email_triage || '',
 	};
 	return summary;
 }
@@ -111,7 +113,7 @@ export async function updateByoAiSettings(hostId, payload = {}) {
 			throw new Error('AI instructions payload must be an object');
 		}
 		for (const key of Object.keys(payload.instructions)) {
-			if (!BYO_AI_SCOPES.includes(key)) {
+			if (!AI_INSTRUCTION_SCOPES.includes(key)) {
 				throw new Error(`Unknown AI instructions scope: ${key}`);
 			}
 			const value = payload.instructions[key];
@@ -140,6 +142,7 @@ export async function getAiInstructions(hostId) {
 	return {
 		global: tenant?.settings?.ai_instructions?.global || '',
 		email: tenant?.settings?.ai_instructions?.email || '',
+		email_triage: tenant?.settings?.ai_instructions?.email_triage || '',
 	};
 }
 

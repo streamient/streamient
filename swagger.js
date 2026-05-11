@@ -256,6 +256,14 @@ const swaggerSpec = {
                     gemini_api_key: { type: 'string', nullable: true, description: 'New Gemini API key. Use null or empty string to clear.' },
                 },
             },
+            ByoAiInstructions: {
+                type: 'object',
+                properties: {
+                    global: { type: 'string', description: 'General AI behavior instructions.' },
+                    email: { type: 'string', description: 'General email handling instructions.' },
+                    email_triage: { type: 'string', description: 'Email triage and classification instructions.' },
+                },
+            },
             GitRepo: {
                 type: 'object',
                 properties: {
@@ -1334,6 +1342,7 @@ const swaggerSpec = {
                                             properties: {
                                                 global: { $ref: '#/components/schemas/ByoAiScopeSettings' },
                                                 email: { $ref: '#/components/schemas/ByoAiScopeSettings' },
+                                                instructions: { $ref: '#/components/schemas/ByoAiInstructions' },
                                             },
                                         },
                                     },
@@ -1357,6 +1366,7 @@ const swaggerSpec = {
                                 properties: {
                                     global: { $ref: '#/components/schemas/ByoAiScopeUpdate' },
                                     email: { $ref: '#/components/schemas/ByoAiScopeUpdate' },
+                                    instructions: { $ref: '#/components/schemas/ByoAiInstructions' },
                                 },
                             },
                         },
@@ -1375,6 +1385,7 @@ const swaggerSpec = {
                                             properties: {
                                                 global: { $ref: '#/components/schemas/ByoAiScopeSettings' },
                                                 email: { $ref: '#/components/schemas/ByoAiScopeSettings' },
+                                                instructions: { $ref: '#/components/schemas/ByoAiInstructions' },
                                             },
                                         },
                                     },

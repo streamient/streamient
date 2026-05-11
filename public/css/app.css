@@ -93,6 +93,137 @@ body.kk-ecc-page #chat-results-panel {
 	display: none !important;
 }
 
+body.kk-template1 #settingsModal {
+	--bs-body-color: var(--text);
+	--bs-body-bg: var(--panel);
+	--bs-border-color: var(--line);
+	--bs-secondary-color: var(--muted);
+	--bs-tertiary-bg: #0f1731;
+	color: var(--text);
+}
+
+body.kk-template1 #settingsModal .kk-settings-modal-dialog {
+	width: min(96vw, 1500px);
+	max-width: min(96vw, 1500px);
+	margin-right: auto;
+	margin-left: auto;
+}
+
+body.kk-template1 #settingsModal .modal-content {
+	min-height: calc(100vh - 3rem);
+	background: var(--panel) !important;
+	border-color: var(--line) !important;
+	color: var(--text) !important;
+}
+
+body.kk-template1 #settingsModal .modal-header {
+	background: var(--panel) !important;
+	border-bottom-color: var(--line) !important;
+	color: var(--text) !important;
+}
+
+body.kk-template1 #settingsModal .modal-header .btn-close {
+	filter: invert(1) grayscale(100%) brightness(200%) !important;
+}
+
+body.kk-template1 #settingsModal .modal-body {
+	min-height: 72vh;
+	background: var(--panel) !important;
+	color: var(--text) !important;
+}
+
+body.kk-template1 #settingsModal .card,
+body.kk-template1 #settingsModal .list-group-item,
+body.kk-template1 #settingsModal .modal-body .border,
+body.kk-template1 #settingsModal .modal-body .preview-container,
+body.kk-template1 #settingsModal .modal-body .source-dropdown {
+	background: #0f1731 !important;
+	border-color: #1e2d56 !important;
+	color: var(--text) !important;
+}
+
+body.kk-template1 #settingsModal h1,
+body.kk-template1 #settingsModal h2,
+body.kk-template1 #settingsModal h3,
+body.kk-template1 #settingsModal h4,
+body.kk-template1 #settingsModal h5,
+body.kk-template1 #settingsModal h6,
+body.kk-template1 #settingsModal label,
+body.kk-template1 #settingsModal .form-label,
+body.kk-template1 #settingsModal .card-title,
+body.kk-template1 #settingsModal .modal-title {
+	color: var(--text) !important;
+}
+
+body.kk-template1 #settingsModal .text-muted,
+body.kk-template1 #settingsModal .small,
+body.kk-template1 #settingsModal .form-text,
+body.kk-template1 #settingsModal .muted {
+	color: #b8c4eb !important;
+}
+
+body.kk-template1 #settingsModal .form-control,
+body.kk-template1 #settingsModal .form-select,
+body.kk-template1 #settingsModal .input-group-text {
+	background: #0f1730 !important;
+	border-color: #2a386d !important;
+	color: var(--text) !important;
+}
+
+body.kk-template1 #settingsModal .form-control:focus,
+body.kk-template1 #settingsModal .form-select:focus {
+	border-color: #86b7fe !important;
+	box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
+}
+
+body.kk-template1 #settingsModal .form-control::placeholder {
+	color: #9fb0dd !important;
+}
+
+body.kk-template1 #settingsModal .btn-outline-secondary {
+	background: #121a34 !important;
+	border-color: #354478 !important;
+	color: var(--muted) !important;
+}
+
+body.kk-template1 #settingsModal .btn-outline-secondary:hover,
+body.kk-template1 #settingsModal .btn-outline-secondary:focus {
+	background: #182348 !important;
+	border-color: #46548b !important;
+	color: #fff !important;
+}
+
+body.kk-template1 #settingsModal .list-group-item {
+	cursor: pointer;
+}
+
+body.kk-template1 #settingsModal .list-group-item.active {
+	background: #0d6efd !important;
+	border-color: #0d6efd !important;
+	color: #fff !important;
+}
+
+body.kk-template1 #settingsModal .table {
+	--bs-table-bg: var(--panel);
+	--bs-table-color: var(--text);
+	--bs-table-border-color: var(--line);
+	--bs-table-hover-bg: rgba(255,255,255,.05);
+	--bs-table-hover-color: var(--text);
+	color: var(--text) !important;
+	border-color: var(--line) !important;
+}
+
+body.kk-template1 #settingsModal .table th,
+body.kk-template1 #settingsModal .table td {
+	background: var(--panel) !important;
+	color: var(--text) !important;
+	border-color: var(--line) !important;
+}
+
+body.kk-template1 #settingsModal .table thead th {
+	background: #0f1730 !important;
+}
+
 @media (min-width: 768px) {
 	body.kk-ecc-page #main-content {
 		flex: 0 0 100%;

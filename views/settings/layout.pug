@@ -32,7 +32,7 @@ block content
 					a.list-group-item.list-group-item-action(href="/settings/export" class=(title === 'Export' ? 'active' : ''))
 						!= icon('upload', 'me-2')
 						| Export
-					a.list-group-item.list-group-item-action(href="#modal" data-bs-toggle="modal" data-bs-target="#logsModal")
+					a.list-group-item.list-group-item-action(href="/settings/activity-logs" class=(title === 'Activity Logs' ? 'active' : ''))
 						!= icon('notebook', 'me-2')
 						| Activity Logs
 				if is_hosted
@@ -41,5 +41,3 @@ block content
 						| Subscription
 		.col-md-9
 			block settings
-
-	include ../ajax/section/settings/_logs_modal

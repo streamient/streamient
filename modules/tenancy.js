@@ -24,6 +24,7 @@ const tenantSchema = new mongoose.Schema(
 			ai_instructions: {
 				global: { type: String, default: '' },
 				email: { type: String, default: '' },
+				email_triage: { type: String, default: '' },
 			},
 		},
 	},

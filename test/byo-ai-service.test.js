@@ -24,6 +24,7 @@ function baseAiInstructions() {
 	return {
 		global: '',
 		email: '',
+		email_triage: '',
 	};
 }
 
@@ -188,19 +189,22 @@ describe('BYO AI service', () => {
 		);
 	});
 
-	it('stores global and email AI instructions as plain tenant settings', async () => {
+	it('stores AI instructions as plain tenant settings', async () => {
 		const settings = await updateByoAiSettings('host-1', {
 			instructions: {
 				global: 'Use account context.',
 				email: 'Prioritize support replies.',
+				email_triage: 'Escalate billing issues.',
 			},
 		});
 
 		assert.equal(tenant.settings.ai_instructions.global, 'Use account context.');
 		assert.equal(tenant.settings.ai_instructions.email, 'Prioritize support replies.');
+		assert.equal(tenant.settings.ai_instructions.email_triage, 'Escalate billing issues.');
 		assert.deepEqual(settings.instructions, {
 			global: 'Use account context.',
 			email: 'Prioritize support replies.',
+			email_triage: 'Escalate billing issues.',
 		});
 	});
 

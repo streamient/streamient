@@ -1,71 +1,69 @@
 if can_manage_restricted_settings
-	.modal.fade#logsModal(tabindex="-1" aria-labelledby="logsModalLabel" aria-hidden="true")
-		.modal-dialog.modal-xl.modal-dialog-scrollable
-			.modal-content
-				.modal-header
-					h5.modal-title#logsModalLabel Activity Logs
-					button.btn-close(type="button" data-bs-dismiss="modal" aria-label="Close")
-				.modal-body
-					.row.g-2.mb-3
-						.col-md-3
-							input.form-control.form-control-sm#log-search(type="text" placeholder="Search...")
-						.col-md-2
-							select.form-select.form-select-sm#log-resource
-								option(value="") All Types
-								option(value="note") Note
-								option(value="memory") Memory
-								option(value="url") URL
-								option(value="project") Project
-								option(value="team_member") Team Member
-								option(value="team_invite") Team Invite
-								option(value="oauth_client") OAuth Client
-								option(value="oauth_consent") OAuth Consent
-								option(value="link") Link
-								option(value="user") User
-								option(value="trash") Trash
-						.col-md-2
-							select.form-select.form-select-sm#log-action
-								option(value="") All Actions
-								option(value="create") Create
-								option(value="update") Update
-								option(value="delete") Delete
-								option(value="search") Search
-								option(value="restore") Restore
-								option(value="export") Export
-						.col-md-2
-							select.form-select.form-select-sm#log-channel
-								option(value="") All Channels
-								option(value="web") Web
-								option(value="api") API
-								option(value="mcp") MCP
-						.col-md-3
-							.input-group.input-group-sm
-								input.form-control#log-from(type="date")
-								span.input-group-text to
-								input.form-control#log-to(type="date")
+	h4.mb-4 Activity Logs
 
-					.table-responsive
-						table.table.table-sm.table-hover
-							thead
-								tr
-									th Time
-									th Action
-									th Resource
-									th Channel
-									th Token / Client
-									th Details
-							tbody#log-table-body
-								tr
-									td(colspan="6")
-										.text-center.text-muted Loading...
+	.card
+		.card-body
+			.row.g-2.mb-3
+				.col-md-3
+					input.form-control.form-control-sm#log-search(type="text" placeholder="Search...")
+				.col-md-2
+					select.form-select.form-select-sm#log-resource
+						option(value="") All Types
+						option(value="note") Note
+						option(value="memory") Memory
+						option(value="url") URL
+						option(value="project") Project
+						option(value="team_member") Team Member
+						option(value="team_invite") Team Invite
+						option(value="oauth_client") OAuth Client
+						option(value="oauth_consent") OAuth Consent
+						option(value="link") Link
+						option(value="user") User
+						option(value="trash") Trash
+				.col-md-2
+					select.form-select.form-select-sm#log-action
+						option(value="") All Actions
+						option(value="create") Create
+						option(value="update") Update
+						option(value="delete") Delete
+						option(value="search") Search
+						option(value="restore") Restore
+						option(value="export") Export
+				.col-md-2
+					select.form-select.form-select-sm#log-channel
+						option(value="") All Channels
+						option(value="web") Web
+						option(value="api") API
+						option(value="mcp") MCP
+				.col-md-3
+					.input-group.input-group-sm
+						input.form-control#log-from(type="date")
+						span.input-group-text to
+						input.form-control#log-to(type="date")
 
-					nav
-						ul.pagination.pagination-sm.justify-content-center#log-pagination
+			.table-responsive
+				table.table.table-sm.table-hover
+					thead
+						tr
+							th Time
+							th Action
+							th Resource
+							th Channel
+							th Token / Client
+							th Details
+					tbody#log-table-body
+						tr
+							td(colspan="6")
+								.text-center.text-muted Loading...
+
+			nav
+				ul.pagination.pagination-sm.justify-content-center#log-pagination
 
 	script.
 		(function () {
 			var tbody = document.getElementById('log-table-body');
-			if (!tbody) return;
+			if (!tbody || tbody.__activityLogsBound) return;
+			tbody.__activityLogsBound = true;
 			var pagination = document.getElementById('log-pagination');
 			var currentPage = 1;
 
@@ -155,8 +153,7 @@ if can_manage_restricted_settings
 				return d.innerHTML;
 			}
 
-			var loaded = false;
-			document.getElementById('logsModal').addEventListener('shown.bs.modal', function () {
-				if (!loaded) { load(); loaded = true; }
-			});
+			load(currentPage);
 		})();
+else
+	.alert.alert-warning.mb-0 This setting is available to account admins only.

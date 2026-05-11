@@ -99,6 +99,7 @@ router.get('/settings/byo-ai', requireRestrictedSettingsAccess, requireByoAiWebA
 router.get('/settings/typesense', requireRestrictedSettingsAccess, (req, res) => res.render('settings/typesense', { title: 'Typesense' }));
 router.get('/settings/usage', (req, res) => res.render('settings/usage', { title: 'Usage' }));
 router.get('/settings/export', requireRestrictedSettingsAccess, (req, res) => res.render('settings/export', { title: 'Export' }));
+router.get('/settings/activity-logs', requireRestrictedSettingsAccess, (req, res) => res.render('settings/activity_logs', { title: 'Activity Logs' }));
 if (is_hosted) {
 	router.get('/settings/subscription', (req, res) => res.render('settings/subscription', { title: 'Subscription' }));
 }
@@ -120,6 +121,7 @@ router.get('/ajax/section/settings/byo-ai', requireRestrictedSettingsAccess, req
 router.get('/ajax/section/settings/typesense', requireRestrictedSettingsAccess, (req, res) => res.render('ajax/section/settings/typesense', { title: 'Typesense' }));
 router.get('/ajax/section/settings/usage', (req, res) => res.render('ajax/section/settings/usage', { title: 'Usage' }));
 router.get('/ajax/section/settings/export', requireRestrictedSettingsAccess, (req, res) => res.render('ajax/section/settings/export', { title: 'Export' }));
+router.get('/ajax/section/settings/activity-logs', requireRestrictedSettingsAccess, (req, res) => res.render('ajax/section/settings/activity_logs', { title: 'Activity Logs' }));
 if (is_hosted) {
 	router.get('/ajax/section/settings/subscription', (req, res) => res.render('ajax/section/settings/subscription', { title: 'Subscription' }));
 }

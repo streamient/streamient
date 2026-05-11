@@ -555,6 +555,7 @@ function buildTriagePrompt(email, instructions) {
 		'Do not include triaged; it will be added automatically.',
 		instructions.global ? `Global instructions:\n${instructions.global}` : '',
 		instructions.email ? `Email instructions:\n${instructions.email}` : '',
+		instructions.email_triage ? `Email triage instructions:\n${instructions.email_triage}` : '',
 		`Subject: ${email.subject || '(No subject)'}`,
 		`From: ${(email.from || []).join(', ') || '(unknown)'}`,
 		`To: ${(email.to || []).join(', ') || '(unknown)'}`,

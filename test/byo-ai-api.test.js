@@ -24,6 +24,7 @@ function baseAiInstructions() {
 	return {
 		global: '',
 		email: '',
+		email_triage: '',
 	};
 }
 
@@ -173,14 +174,16 @@ describe('BYO AI API', () => {
 			const saveResponse = await request(server, 'PUT', '/settings/byo-ai', {
 				instructions: {
 					global: 'Use company policy.',
-					email: 'Triage support first.',
+					email: 'Draft email replies politely.',
+					email_triage: 'Triage support first.',
 				},
 			});
 			const saveJson = await saveResponse.json();
 
 			assert.equal(saveResponse.status, 200);
 			assert.equal(saveJson.settings.instructions.global, 'Use company policy.');
-			assert.equal(saveJson.settings.instructions.email, 'Triage support first.');
+			assert.equal(saveJson.settings.instructions.email, 'Draft email replies politely.');
+			assert.equal(saveJson.settings.instructions.email_triage, 'Triage support first.');
 		} finally {
 			await new Promise((resolve) => server.close(resolve));
 		}

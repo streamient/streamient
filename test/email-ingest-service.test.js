@@ -355,18 +355,24 @@ describe('Email ingest service', () => {
 			updatePayload = update.$set;
 			return { _id: emailId, ...update.$set };
 		};
+		let prompt;
 		Tenant.findOne = () => ({
 			select: () => ({
-				lean: async () => ({ settings: { ai_instructions: { global: 'Be concise', email: 'Prioritize support' } } }),
+				lean: async () => ({ settings: { ai_instructions: { global: 'Be concise', email: 'Use warm reply tone', email_triage: 'Prioritize support' } } }),
 			}),
 		});
 
 		try {
 			const result = await triageInboxEmails('host-1', userId, {
 				skipSideEffects: true,
-				completionFn: async () => '{"labels":["human-do"],"summary":"Needs help","reason":"Requires human action"}',
+				completionFn: async ({ messages }) => {
+					prompt = messages[1].content;
+					return '{"labels":["human-do"],"summary":"Needs help","reason":"Requires human action"}';
+				},
 			});
 
+			assert.match(prompt, /Email instructions:\nUse warm reply tone/);
+			assert.match(prompt, /Email triage instructions:\nPrioritize support/);
 			assert.equal(result.processed, 1);
 			assert.equal(result.triaged, 1);
 			assert.deepEqual(updatePayload.labels, ['human-do', 'triaged']);

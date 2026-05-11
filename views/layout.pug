@@ -257,6 +257,18 @@ html(lang="en")
 							!= icon('check', 'me-1')
 							| Save
 
+		//- Settings modal keeps users anchored in the current app context
+		.modal.fade#settingsModal(tabindex="-1" aria-labelledby="settingsModalLabel" aria-hidden="true")
+			.modal-dialog.modal-xl.modal-dialog-scrollable.kk-settings-modal-dialog
+				.modal-content
+					.modal-header
+						h5.modal-title#settingsModalLabel Settings
+						button.btn-close(type="button" data-bs-dismiss="modal" aria-label="Close")
+					.modal-body#settings-modal-body
+						.text-center.py-5.text-muted
+							.spinner-border.spinner-border-sm.me-2
+							span Loading settings...
+
 		script(src="/socket.io/socket.io.js")
 		script(src=`/static/v-${v}/js/icons.js`)
 		script.

@@ -300,6 +300,7 @@ var ROUTES = {
 	'/emails': { section: 'emails', title: 'Emails', partial: '/ajax/section/emails', batch: true },
 	'/ecc': { section: 'ecc', title: 'Email Command Center', partial: '/ajax/section/ecc' },
 	'/trash': { section: 'trash', title: 'Trash', partial: '/ajax/section/trash' },
+	'/settings': { title: 'Profile', partial: '/ajax/section/settings/profile' },
 	'/settings/profile': { title: 'Profile', partial: '/ajax/section/settings/profile' },
 	'/settings/security': { title: 'Security', partial: '/ajax/section/settings/security' },
 	'/settings/team': { title: 'My Team', partial: '/ajax/section/settings/team' },
@@ -308,6 +309,7 @@ var ROUTES = {
 	'/settings/typesense': { title: 'Search', partial: '/ajax/section/settings/typesense' },
 	'/settings/usage': { title: 'Usage', partial: '/ajax/section/settings/usage' },
 	'/settings/export': { title: 'Export', partial: '/ajax/section/settings/export' },
+	'/settings/activity-logs': { title: 'Activity Logs', partial: '/ajax/section/settings/activity-logs' },
 	'/settings/subscription': { title: 'Subscription', partial: '/ajax/section/settings/subscription' },
 };
 
@@ -385,8 +387,63 @@ function mountCurrent(path) {
 	if (route.batch && window.__sections?.batch) window.__sections.batch.mount();
 }
 
+function isSettingsPath(path) {
+	return path === '/settings' || path.indexOf('/settings/') === 0;
+}
+
+async function ensureBootstrapModal() {
+	if (window.BsModal) return window.BsModal;
+	var vendor = await import('/static/js/vendor.js');
+	window.BsModal = vendor.Modal;
+	return window.BsModal;
+}
+
+function renderSettingsLoading() {
+	return '<div class="text-center py-5 text-muted"><span class="spinner-border spinner-border-sm me-2"></span><span>Loading settings...</span></div>';
+}
+
+async function openSettingsModal(path) {
+	var route = ROUTES[path] || ROUTES['/settings/profile'];
+	if (!route || !isSettingsPath(path)) {
+		window.location.href = path;
+		return;
+	}
+
+	var modalEl = document.getElementById('settingsModal');
+	var bodyEl = document.getElementById('settings-modal-body');
+	var titleEl = document.getElementById('settingsModalLabel');
+	if (!modalEl || !bodyEl || !titleEl) {
+		window.location.href = path;
+		return;
+	}
+
+	var Modal = await ensureBootstrapModal();
+	titleEl.textContent = 'Settings';
+	bodyEl.innerHTML = renderSettingsLoading();
+	Modal.getOrCreateInstance(modalEl).show();
+
+	try {
+		var res = await fetch(route.partial);
+		if (isLoginRedirect(res)) return redirectToLogin();
+		if (!res.ok) throw new Error('Failed to load settings');
+
+		var html = await res.text();
+		bodyEl.innerHTML = html;
+		executeScripts(bodyEl);
+	} catch (err) {
+		console.error('Settings modal error:', err);
+		bodyEl.innerHTML = '<div class="alert alert-danger mb-0">Failed to load settings.</div>';
+	}
+}
+
+window.openSettingsModal = openSettingsModal;
+
 async function navigateTo(path, opts) {
 	opts = opts || {};
+	if (isSettingsPath(path) && !opts.allowSettingsPage) {
+		await openSettingsModal(path);
+		return;
+	}
 	var route = ROUTES[path];
 	if (!route) {
 		window.location.href = path;
@@ -478,6 +535,10 @@ document.addEventListener('click', function (e) {
 	var pathname = href.split('?')[0];
 	if (ROUTES[pathname]) {
 		e.preventDefault();
+		if (isSettingsPath(pathname)) {
+			openSettingsModal(pathname);
+			return;
+		}
 		// Extract g param if present
 		var qIdx = href.indexOf('?');
 		if (qIdx !== -1) {

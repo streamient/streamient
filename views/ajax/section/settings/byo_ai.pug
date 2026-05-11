@@ -25,7 +25,19 @@
 								.form-text(data-status="global:gemini_api_key") Loading...
 							.mb-3
 								label.form-label(for="byo-global-instructions") Global AI instructions
-								textarea.form-control.form-control-sm#byo-global-instructions(rows="5" data-instruction-scope="global")
+								textarea.form-control.form-control-sm#byo-global-instructions(
+									rows="5"
+									autocomplete="off"
+									autocorrect="off"
+									autocapitalize="off"
+									spellcheck="false"
+									data-instruction-scope="global"
+									data-1p-ignore="true"
+									data-op-ignore="true"
+									data-lpignore="true"
+									data-bwignore="true"
+									data-form-type="other"
+								)
 						.col-md-6
 							h5.mb-3 Email
 							p.text-muted.small Used only when a prompt is explicitly scoped to emails.
@@ -43,9 +55,35 @@
 								.form-text(data-status="email:gemini_api_key") Loading...
 							.mb-3
 								label.form-label(for="byo-email-instructions") Email AI instructions
-								textarea.form-control.form-control-sm#byo-email-instructions(rows="5" data-instruction-scope="email")
+								textarea.form-control.form-control-sm#byo-email-instructions(
+									rows="5"
+									autocomplete="off"
+									autocorrect="off"
+									autocapitalize="off"
+									spellcheck="false"
+									data-instruction-scope="email"
+									data-1p-ignore="true"
+									data-op-ignore="true"
+									data-lpignore="true"
+									data-bwignore="true"
+									data-form-type="other"
+								)
+							.mb-3
+								label.form-label(for="byo-email-triage-instructions") Email triage instructions
+								textarea.form-control.form-control-sm#byo-email-triage-instructions(
+									rows="5"
+									autocomplete="off"
+									autocorrect="off"
+									autocapitalize="off"
+									spellcheck="false"
+									data-instruction-scope="email_triage"
+									data-1p-ignore="true"
+									data-op-ignore="true"
+									data-lpignore="true"
+									data-bwignore="true"
+									data-form-type="other"
+								)
 					button.btn.btn-primary(type="submit") Save Changes
 				#byo-ai-result.d-none.mt-3
 
-include _logs_modal
 include _byo_ai_script
