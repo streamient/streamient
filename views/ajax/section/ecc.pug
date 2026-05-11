@@ -85,3 +85,31 @@ else
 					!= icon('sparkle', 'mb-2')
 					h6.mb-2 AI idle
 					p.text-muted.small.mb-0 Email selection will not start AI.
+	.modal.fade#ecc-triage-modal(tabindex="-1" aria-labelledby="ecc-triage-modal-title" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false")
+		.modal-dialog.modal-dialog-centered
+			.modal-content
+				.modal-header
+					h5.modal-title#ecc-triage-modal-title Triage running
+				.modal-body
+					.d-flex.align-items-center.mb-3
+						.spinner-border.spinner-border-sm.text-primary.me-3#ecc-triage-spinner(role="status" aria-hidden="true")
+						div
+							.fw-semibold#ecc-triage-modal-status Processing inbox
+							.text-muted.small#ecc-triage-modal-detail Waiting for the first email update.
+					.progress.mb-3(style="height: 8px")
+						.progress-bar#ecc-triage-modal-progress(style="width: 0%" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100")
+					.row.g-3.text-center
+						.col
+							.h6.mb-1#ecc-triage-modal-processed 0
+							.small.text-muted Processed
+						.col
+							.h6.mb-1#ecc-triage-modal-total 0
+							.small.text-muted Total
+						.col
+							.h6.mb-1#ecc-triage-modal-triaged 0
+							.small.text-muted Triaged
+						.col
+							.h6.mb-1#ecc-triage-modal-errors 0
+							.small.text-muted Errors
+				.modal-footer
+					button.btn.btn-secondary.btn-sm#ecc-triage-modal-close(type="button" data-bs-dismiss="modal" disabled) Close

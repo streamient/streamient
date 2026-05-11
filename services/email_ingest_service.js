@@ -15,7 +15,7 @@ import { searchCollection, searchAll, removeDocument } from '../modules/typesens
 import { emitToTenant } from '../modules/socket.js';
 import { getConnectionsForItem, invalidateGraphCache, removeLinksForItem } from './graph_service.js';
 import * as audit from './audit_service.js';
-import { chatCompletion } from '../modules/llm_client.js';
+import { chatModelCompletion } from '../modules/llm_client.js';
 import { getAiInstructions } from './byo_ai_service.js';
 
 const MAX_ATTACHMENT_SIZE = 50 * 1024 * 1024;
@@ -577,7 +577,7 @@ export async function askEmailAi(host_id, emailId, query, options = {}) {
 	const email = await Email.findOne({ _id: emailId, host_id, in_trash: false }).lean();
 	if (!email) return null;
 
-	const completionFn = options.completionFn || chatCompletion;
+	const completionFn = options.completionFn || chatModelCompletion;
 	const instructions = await getAiInstructions(host_id);
 	const content = await completionFn({
 		hostId: host_id,
@@ -982,11 +982,11 @@ export async function triageInboxEmails(host_id, userId, options = {}) {
 		.limit(limit)
 		.lean();
 
-	const completionFn = options.completionFn || chatCompletion;
+	const completionFn = options.completionFn || chatModelCompletion;
 	const instructions = await getAiInstructions(host_id);
 	const results = [];
 	const errors = [];
-	const runId = crypto.randomUUID();
+	const runId = String(options.run_id || '').trim() || crypto.randomUUID();
 	let drafted = 0;
 	let linked = 0;
 	let moved = 0;
@@ -1063,16 +1063,19 @@ export async function triageInboxEmails(host_id, userId, options = {}) {
 				});
 			}
 		} catch (err) {
-			await Email.findOneAndUpdate(
+			const failed = await Email.findOneAndUpdate(
 				{ _id: email._id, host_id },
 				{
 					$set: {
 						triage_status: 'failed',
 						triage_error: err.message,
 						triage_run_id: runId,
+						is_indexed: false,
 					},
 				},
-			).catch(() => {});
+				{ returnDocument: 'after' },
+			).catch(() => null);
+			if (failed && !options.skipSideEffects) emitToTenant(host_id, 'email:updated', failed);
 			errors.push({ email_id: email._id.toString(), error: err.message });
 		}
 	}
@@ -1082,17 +1085,17 @@ export async function triageInboxEmails(host_id, userId, options = {}) {
 		audit.log({
 			action: 'update',
 			resource: 'email',
-				resource_id: 'triage-inbox',
-				user_id: userId,
-				host_id,
-				details: { triaged: results.length, drafted, linked, moved, errors: errors.length },
-				channel: options.ctx?.channel || 'web',
-				ip: options.ctx?.ip,
-				user_agent: options.ctx?.user_agent,
-			});
-		}
+			resource_id: 'triage-inbox',
+			user_id: userId,
+			host_id,
+			details: { triaged: results.length, drafted, linked, moved, errors: errors.length },
+			channel: options.ctx?.channel || 'web',
+			ip: options.ctx?.ip,
+			user_agent: options.ctx?.user_agent,
+		});
+	}
 
-	return { processed: emails.length, triaged: results.length, drafted, linked, moved, errors, results };
+	return { run_id: runId, processed: emails.length, triaged: results.length, drafted, linked, moved, errors, results };
 }
 
 export async function listEmailDrafts(host_id, { project, status, page = 1, limit = 50 } = {}) {

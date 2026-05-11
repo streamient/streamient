@@ -18,6 +18,16 @@
 	var aiMessagesEl;
 	var aiInputEl;
 	var aiSendBtn;
+	var triageModalEl;
+	var triageModalStatus;
+	var triageModalDetail;
+	var triageModalProgress;
+	var triageModalProcessed;
+	var triageModalTotal;
+	var triageModalTriaged;
+	var triageModalErrors;
+	var triageModalClose;
+	var triageSpinner;
 	var activeMailbox = 'inbox';
 	var activeLabel = '';
 	var selectedProject = '';
@@ -25,6 +35,8 @@
 	var selectedIds = new Set();
 	var emailAiMessages = [];
 	var windowListeners = [];
+	var triageRunId = '';
+	var triageProgress = null;
 		var MAILBOX_ACTIONS = [
 			{ slug: 'inbox', name: 'Inbox', icon: 'email' },
 			{ slug: 'archived', name: 'Archived', icon: 'archive' },
@@ -43,10 +55,25 @@
 		return div.innerHTML;
 	}
 
-	function formatDate(value) {
-		if (!value) return '';
-		return new Date(value).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-	}
+		function formatDate(value) {
+			if (!value) return '';
+			return new Date(value).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+		}
+
+		function emailId(email) {
+			return String(email?._id || email?.id || '');
+		}
+
+		function newRunId() {
+			if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+			return String(Date.now()) + '-' + Math.random().toString(16).slice(2);
+		}
+
+		function getMailboxCount(mailbox) {
+			var button = mailboxesEl?.querySelector('[data-mailbox="' + mailbox + '"]');
+			var value = parseInt(button?.querySelector('.badge')?.textContent || '0', 10);
+			return Number.isFinite(value) ? value : 0;
+		}
 
 	function projectQuery() {
 		return selectedProject ? '&project=' + encodeURIComponent(selectedProject) : '';
@@ -286,13 +313,87 @@
 		});
 	}
 
+		function emailMatchesCurrentView(email) {
+			if (!email) return false;
+			if (activeMailbox === 'drafts') return false;
+			if (activeLabel) return (email.labels || []).includes(activeLabel) && email.in_trash !== true;
+			if (activeMailbox === 'trash') return email.in_trash === true;
+			var mailbox = email.mailbox || 'inbox';
+			if (activeMailbox === 'inbox') return email.in_trash !== true && mailbox === 'inbox' && email.triaged !== true;
+			return email.in_trash !== true && mailbox === activeMailbox;
+		}
+
+		function renderEmailItemHtml(email) {
+			var subject = email.subject || '(No subject)';
+			var senders = (email.from || []).slice(0, 2).join(', ') || '(unknown sender)';
+			var recipients = (email.to || []).slice(0, 2).join(', ') || '(no recipients)';
+			var body = (email.triage_summary || email.text_content || email.attachment_text_content || '').slice(0, 180);
+			var actionPoints = (email.triage_action_points || []).slice(0, 2).map(function (item) {
+				return item.text;
+			}).filter(Boolean).join(' - ');
+			var labels = (email.labels || []).map(function (label) {
+				return '<span class="badge ecc-email-label me-1">' + escapeHtml(label) + '</span>';
+			}).join('');
+			var triageMeta = [
+				email.triage_primary_action ? '<span class="badge text-bg-light me-1">' + escapeHtml(email.triage_primary_action) + '</span>' : '',
+				email.triage_status === 'failed' ? '<span class="badge text-bg-danger me-1">Failed</span>' : '',
+				email.triage_draft_id ? '<span class="badge text-bg-info me-1">Draft</span>' : '',
+			].filter(Boolean).join('');
+			return '<div class="list-group-item list-group-item-action ecc-email-item" role="button" tabindex="0" data-id="' + escapeHtml(emailId(email)) + '">'
+				+ '<div class="d-flex justify-content-between align-items-start gap-3 min-w-0">'
+				+ '<div class="form-check ecc-email-select-wrap">'
+				+ '<input class="form-check-input ecc-email-select" type="checkbox" value="' + escapeHtml(emailId(email)) + '" aria-label="Select email">'
+				+ '</div>'
+				+ '<div class="min-w-0 flex-grow-1">'
+				+ '<div class="fw-semibold text-truncate">' + escapeHtml(subject) + '</div>'
+				+ '<div class="small text-muted text-truncate">' + kkIcon('user', 'me-1') + escapeHtml(senders) + '</div>'
+				+ '<div class="small text-muted text-truncate">' + kkIcon('email', 'me-1') + escapeHtml(recipients) + '</div>'
+				+ (body ? '<div class="small text-muted text-truncate mt-1">' + escapeHtml(body) + '</div>' : '')
+				+ (actionPoints ? '<div class="small text-body text-truncate mt-1">' + escapeHtml(actionPoints) + '</div>' : '')
+				+ (triageMeta ? '<div class="mt-2">' + triageMeta + '</div>' : '')
+				+ (labels ? '<div class="mt-2">' + labels + '</div>' : '')
+				+ '</div>'
+				+ '<small class="text-muted text-nowrap">' + escapeHtml(formatDate(email.updatedAt)) + '</small>'
+				+ '</div>'
+				+ '</div>';
+		}
+
+		function bindEmailItem(item) {
+			item.addEventListener('click', function (event) {
+				if (event.target.closest('.ecc-email-select-wrap')) return;
+				toggleEmailSelection(item);
+			});
+			item.addEventListener('keydown', function (event) {
+				if (event.target.closest('.ecc-email-select-wrap')) return;
+				if (event.key === 'Enter' || event.key === ' ') {
+					event.preventDefault();
+					toggleEmailSelection(item);
+				}
+			});
+			var checkbox = item.querySelector('.ecc-email-select');
+			checkbox?.addEventListener('click', function (event) {
+				event.stopPropagation();
+			});
+			checkbox?.addEventListener('change', function () {
+				setEmailSelected(checkbox, checkbox.checked);
+			});
+		}
+
+		function showEmptyEmailsIfNeeded() {
+			if (!listEl || listEl.querySelector('.ecc-email-item')) return;
+			listEl.innerHTML = '<div class="list-group-item text-muted ecc-email-empty">No emails for this view.</div>';
+			selectedEmail = null;
+			emailAiMessages = [];
+			renderEmailAi(null);
+		}
+
 		function renderEmails(emails) {
 		if (!listEl) return;
 		selectedIds.clear();
 		updateActionBar();
 		renderMoveMenu();
 		if (!emails.length) {
-			listEl.innerHTML = '<div class="list-group-item text-muted">No emails for this view.</div>';
+			listEl.innerHTML = '<div class="list-group-item text-muted ecc-email-empty">No emails for this view.</div>';
 			selectedEmail = null;
 			emailAiMessages = [];
 			renderEmailAi(null);
@@ -301,60 +402,10 @@
 		selectedEmail = null;
 		emailAiMessages = [];
 		renderEmailAi(null);
-		listEl.innerHTML = emails.map(function (email) {
-			var subject = email.subject || '(No subject)';
-			var senders = (email.from || []).slice(0, 2).join(', ') || '(unknown sender)';
-			var recipients = (email.to || []).slice(0, 2).join(', ') || '(no recipients)';
-				var body = (email.triage_summary || email.text_content || email.attachment_text_content || '').slice(0, 180);
-				var actionPoints = (email.triage_action_points || []).slice(0, 2).map(function (item) {
-					return item.text;
-				}).filter(Boolean).join(' - ');
-				var labels = (email.labels || []).map(function (label) {
-					return '<span class="badge ecc-email-label me-1">' + escapeHtml(label) + '</span>';
-				}).join('');
-				var triageMeta = [
-					email.triage_primary_action ? '<span class="badge text-bg-light me-1">' + escapeHtml(email.triage_primary_action) + '</span>' : '',
-					email.triage_draft_id ? '<span class="badge text-bg-info me-1">Draft</span>' : '',
-				].filter(Boolean).join('');
-				return '<div class="list-group-item list-group-item-action ecc-email-item" role="button" tabindex="0" data-id="' + escapeHtml(email._id) + '">'
-					+ '<div class="d-flex justify-content-between align-items-start gap-3 min-w-0">'
-				+ '<div class="form-check ecc-email-select-wrap">'
-				+ '<input class="form-check-input ecc-email-select" type="checkbox" value="' + escapeHtml(email._id) + '" aria-label="Select email">'
-				+ '</div>'
-				+ '<div class="min-w-0 flex-grow-1">'
-				+ '<div class="fw-semibold text-truncate">' + escapeHtml(subject) + '</div>'
-				+ '<div class="small text-muted text-truncate">' + kkIcon('user', 'me-1') + escapeHtml(senders) + '</div>'
-					+ '<div class="small text-muted text-truncate">' + kkIcon('email', 'me-1') + escapeHtml(recipients) + '</div>'
-					+ (body ? '<div class="small text-muted text-truncate mt-1">' + escapeHtml(body) + '</div>' : '')
-					+ (actionPoints ? '<div class="small text-body text-truncate mt-1">' + escapeHtml(actionPoints) + '</div>' : '')
-					+ (triageMeta ? '<div class="mt-2">' + triageMeta + '</div>' : '')
-					+ (labels ? '<div class="mt-2">' + labels + '</div>' : '')
-					+ '</div>'
-				+ '<small class="text-muted text-nowrap">' + escapeHtml(formatDate(email.updatedAt)) + '</small>'
-				+ '</div>'
-				+ '</div>';
-		}).join('');
+		listEl.innerHTML = emails.map(renderEmailItemHtml).join('');
 		listEl.querySelectorAll('.ecc-email-item').forEach(function (button) {
-			button.addEventListener('click', function (event) {
-				if (event.target.closest('.ecc-email-select-wrap')) return;
-				toggleEmailSelection(button);
-			});
-			button.addEventListener('keydown', function (event) {
-				if (event.target.closest('.ecc-email-select-wrap')) return;
-				if (event.key === 'Enter' || event.key === ' ') {
-					event.preventDefault();
-					toggleEmailSelection(button);
-				}
-			});
+			bindEmailItem(button);
 		});
-		listEl.querySelectorAll('.ecc-email-select').forEach(function (checkbox) {
-			checkbox.addEventListener('click', function (event) {
-				event.stopPropagation();
-			});
-			checkbox.addEventListener('change', function () {
-				setEmailSelected(checkbox, checkbox.checked);
-			});
-			});
 		}
 
 		function renderDrafts(drafts) {
@@ -469,34 +520,177 @@
 			renderEmails(data.emails || []);
 		}
 
-	async function loadAll() {
-		updateViewText();
-		try {
-			await Promise.all([loadLabels(), loadEmails()]);
-		} catch (err) {
-			if (listEl) listEl.innerHTML = '<div class="list-group-item text-danger">' + escapeHtml(err.message) + '</div>';
+		async function loadAll() {
+			updateViewText();
+			try {
+				await Promise.all([loadLabels(), loadEmails()]);
+			} catch (err) {
+				if (listEl) listEl.innerHTML = '<div class="list-group-item text-danger">' + escapeHtml(err.message) + '</div>';
+			}
 		}
-	}
 
-	async function triageInbox() {
-		if (!triageBtn) return;
-		triageBtn.disabled = true;
-		var original = triageBtn.innerHTML;
-		triageBtn.innerHTML = kkIcon('sync', 'me-1') + 'Triaging...';
-		try {
-			var payload = {};
-			if (selectedProject) payload.project = selectedProject;
-			var result = await api('POST', '/emails/triage-inbox', payload);
-			showSuccess('Triaged ' + (result.triaged || 0) + ' email' + (result.triaged === 1 ? '' : 's'));
-			activeMailbox = 'inbox';
-			activeLabel = '';
-			await loadAll();
-		} catch (err) {
-			showError(err.message);
-		} finally {
-			triageBtn.disabled = false;
-			triageBtn.innerHTML = original;
+		function applyEmailSocketUpdate(email) {
+			if (!listEl || !email) return;
+			if (activeMailbox === 'drafts') {
+				loadEmails();
+				return;
+			}
+			var id = emailId(email);
+			if (!id) return;
+			var existing = listEl.querySelector('.ecc-email-item[data-id="' + CSS.escape(id) + '"]');
+			var matches = emailMatchesCurrentView(email);
+			if (!matches) {
+				if (existing) {
+					existing.remove();
+					selectedIds.delete(id);
+					updateActionBar();
+					showEmptyEmailsIfNeeded();
+				}
+				if (emailId(selectedEmail) === id) renderEmailAi(null);
+				return;
+			}
+			var wrapper = document.createElement('div');
+			wrapper.innerHTML = renderEmailItemHtml(email);
+			var item = wrapper.firstElementChild;
+			if (!item) return;
+			bindEmailItem(item);
+			if (existing) {
+				existing.replaceWith(item);
+			} else {
+				listEl.querySelector('.ecc-email-empty')?.remove();
+				listEl.prepend(item);
+			}
+			if (selectedIds.has(id)) {
+				var checkbox = item.querySelector('.ecc-email-select');
+				if (checkbox) setEmailSelected(checkbox, true);
+			}
+			if (emailId(selectedEmail) === id) {
+				selectedEmail = email;
+				renderEmailAi(email);
+			}
 		}
+
+		function removeEmailFromList(id) {
+			if (!listEl || !id) return;
+			listEl.querySelector('.ecc-email-item[data-id="' + CSS.escape(id) + '"]')?.remove();
+			selectedIds.delete(id);
+			updateActionBar();
+			if (emailId(selectedEmail) === id) renderEmailAi(null);
+			showEmptyEmailsIfNeeded();
+		}
+
+		function handleEmailSocketEvent(event) {
+			var email = event.detail || {};
+			applyEmailSocketUpdate(email);
+			loadLabels().catch(() => {});
+			updateTriageProgressFromEmail(email);
+		}
+
+		function handleEmailDeleted(event) {
+			removeEmailFromList(emailId(event.detail || {}));
+			loadLabels().catch(() => {});
+		}
+
+		function renderTriageProgress() {
+			if (!triageProgress) return;
+			var total = Math.max(triageProgress.total || 0, triageProgress.processed || 0);
+			var pct = total > 0 ? Math.min(100, Math.round((triageProgress.processed / total) * 100)) : 0;
+			if (triageModalProcessed) triageModalProcessed.textContent = triageProgress.processed;
+			if (triageModalTotal) triageModalTotal.textContent = total;
+			if (triageModalTriaged) triageModalTriaged.textContent = triageProgress.triaged;
+			if (triageModalErrors) triageModalErrors.textContent = triageProgress.errors;
+			if (triageModalProgress) {
+				triageModalProgress.style.width = pct + '%';
+				triageModalProgress.setAttribute('aria-valuenow', String(pct));
+			}
+			if (triageModalStatus) {
+				triageModalStatus.textContent = triageProgress.running ? 'Processing inbox' : 'Triage complete';
+			}
+			if (triageModalDetail) {
+				triageModalDetail.textContent = triageProgress.running
+					? triageProgress.processed + ' of ' + total + ' processed.'
+					: triageProgress.triaged + ' triaged, ' + triageProgress.errors + ' errors.';
+			}
+			if (triageSpinner) triageSpinner.classList.toggle('d-none', !triageProgress.running);
+			if (triageModalClose) triageModalClose.disabled = triageProgress.running;
+		}
+
+		async function showTriageModal(total, runId) {
+			triageRunId = runId;
+			triageProgress = {
+				total: total || 0,
+				processed: 0,
+				triaged: 0,
+				errors: 0,
+				seen: new Set(),
+				running: true,
+			};
+			renderTriageProgress();
+			if (!triageModalEl) return;
+			const { Modal } = await import('/static/js/vendor.js');
+			Modal.getOrCreateInstance(triageModalEl).show();
+		}
+
+		function completeTriageProgress(result) {
+			if (!triageProgress) return;
+			triageProgress.total = result?.processed || triageProgress.total || 0;
+			triageProgress.processed = Math.max(triageProgress.processed, result?.processed || 0);
+			triageProgress.triaged = Math.max(triageProgress.triaged, result?.triaged || 0);
+			triageProgress.errors = Math.max(triageProgress.errors, (result?.errors || []).length);
+			triageProgress.running = false;
+			renderTriageProgress();
+		}
+
+		async function hideTriageModal() {
+			if (!triageModalEl) return;
+			const { Modal } = await import('/static/js/vendor.js');
+			Modal.getOrCreateInstance(triageModalEl).hide();
+		}
+
+		function updateTriageProgressFromEmail(email) {
+			if (!triageProgress || !triageRunId || !email || email.triage_run_id !== triageRunId) return;
+			if (!['complete', 'failed'].includes(email.triage_status)) return;
+			var id = emailId(email);
+			if (!id || triageProgress.seen.has(id)) return;
+			triageProgress.seen.add(id);
+			triageProgress.processed += 1;
+			if (email.triage_status === 'complete') triageProgress.triaged += 1;
+			if (email.triage_status === 'failed') triageProgress.errors += 1;
+			if (triageProgress.processed > triageProgress.total) triageProgress.total = triageProgress.processed;
+			renderTriageProgress();
+		}
+
+		async function triageInbox() {
+			if (!triageBtn) return;
+			triageBtn.disabled = true;
+			var original = triageBtn.innerHTML;
+			triageBtn.innerHTML = kkIcon('sync', 'me-1') + 'Triaging...';
+			var runId = newRunId();
+			try {
+				await showTriageModal(getMailboxCount('inbox'), runId);
+				var payload = { run_id: runId };
+				if (selectedProject) payload.project = selectedProject;
+				var result = await api('POST', '/emails/triage-inbox', payload);
+				completeTriageProgress(result);
+				activeMailbox = 'inbox';
+				activeLabel = '';
+				await loadAll();
+				if ((result.processed || 0) > 0 && !(result.triaged || 0) && (result.errors || []).length) {
+					showError((result.errors[0] || {}).error || 'Inbox triage failed');
+				} else {
+					showSuccess('Triaged ' + (result.triaged || 0) + ' email' + (result.triaged === 1 ? '' : 's'));
+					setTimeout(hideTriageModal, 900);
+				}
+			} catch (err) {
+				if (triageProgress) {
+					triageProgress.running = false;
+					renderTriageProgress();
+				}
+				showError(err.message);
+			} finally {
+				triageBtn.disabled = false;
+				triageBtn.innerHTML = original;
+			}
 	}
 
 	function onModalDeleted(e) {
@@ -520,10 +714,22 @@
 		aiPanel = document.getElementById('ecc-ai-panel');
 		aiSubtitle = document.getElementById('ecc-ai-subtitle');
 		openEmailBtn = document.getElementById('ecc-open-email-btn');
+		triageModalEl = document.getElementById('ecc-triage-modal');
+		triageModalStatus = document.getElementById('ecc-triage-modal-status');
+		triageModalDetail = document.getElementById('ecc-triage-modal-detail');
+		triageModalProgress = document.getElementById('ecc-triage-modal-progress');
+		triageModalProcessed = document.getElementById('ecc-triage-modal-processed');
+		triageModalTotal = document.getElementById('ecc-triage-modal-total');
+		triageModalTriaged = document.getElementById('ecc-triage-modal-triaged');
+		triageModalErrors = document.getElementById('ecc-triage-modal-errors');
+		triageModalClose = document.getElementById('ecc-triage-modal-close');
+		triageSpinner = document.getElementById('ecc-triage-spinner');
 		activeMailbox = 'inbox';
 		activeLabel = '';
 		selectedProject = '';
 		selectedEmail = null;
+		triageRunId = '';
+		triageProgress = null;
 		selectedIds.clear();
 		emailAiMessages = [];
 		renderEmailAi(null);
@@ -546,9 +752,9 @@
 		trashBtn?.addEventListener('click', trashSelected);
 		openEmailBtn?.addEventListener('click', openSelectedEmail);
 		addWindowListener('item-modal-deleted', onModalDeleted);
-		addWindowListener('email:created', loadAll);
-		addWindowListener('email:updated', loadAll);
-		addWindowListener('email:deleted', loadAll);
+		addWindowListener('email:created', handleEmailSocketEvent);
+		addWindowListener('email:updated', handleEmailSocketEvent);
+		addWindowListener('email:deleted', handleEmailDeleted);
 		loadAll();
 	}
 
@@ -572,10 +778,22 @@
 		aiPanel = null;
 		aiSubtitle = null;
 		openEmailBtn = null;
+		triageModalEl = null;
+		triageModalStatus = null;
+		triageModalDetail = null;
+		triageModalProgress = null;
+		triageModalProcessed = null;
+		triageModalTotal = null;
+		triageModalTriaged = null;
+		triageModalErrors = null;
+		triageModalClose = null;
+		triageSpinner = null;
 		aiMessagesEl = null;
 		aiInputEl = null;
 		aiSendBtn = null;
 		selectedEmail = null;
+		triageRunId = '';
+		triageProgress = null;
 		selectedIds.clear();
 		emailAiMessages = [];
 	}

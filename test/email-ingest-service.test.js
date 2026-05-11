@@ -537,32 +537,37 @@ describe('Email ingest service', () => {
 
 		try {
 			const result = await triageInboxEmails('host-1', userId, {
-					skipSideEffects: true,
-					searchKnowledgeFn: async () => ({
-						notes: { hits: [{ document: { id: 'note-1', title: 'Support policy', text_content: 'Useful policy' } }] },
-					}),
-					getThreadFn: async () => [],
-					getConnectionsFn: async () => ({ links: [], tag_connections: [] }),
-					completionFn: async ({ messages }) => {
-						prompt = messages[1].content;
-						return '{"primary_action":"reply-required","labels":["reply-required"],"summary":"Needs help","reason":"Requires reply","confidence":0.8,"action_points":[{"text":"Answer the support question","type":"reply"}],"related_context":[{"item_type":"notes","item_id":"note-1","title":"Support policy","reason":"Relevant"}],"draft_reply":{"body_text":"Thanks for reaching out."},"mailbox_action":"keep-inbox"}';
-					},
-				});
+						run_id: 'client-run-1',
+						skipSideEffects: true,
+						searchKnowledgeFn: async () => ({
+							notes: { hits: [{ document: { id: 'note-1', title: 'Support policy', text_content: 'Useful policy' } }] },
+						}),
+						getThreadFn: async () => [],
+						getConnectionsFn: async () => ({ links: [], tag_connections: [] }),
+						completionFn: async ({ messages, scope, maxTokens }) => {
+							assert.equal(scope, 'email');
+							assert.equal(maxTokens, 1800);
+							prompt = messages[1].content;
+							return '{"primary_action":"reply-required","labels":["reply-required"],"summary":"Needs help","reason":"Requires reply","confidence":0.8,"action_points":[{"text":"Answer the support question","type":"reply"}],"related_context":[{"item_type":"notes","item_id":"note-1","title":"Support policy","reason":"Relevant"}],"draft_reply":{"body_text":"Thanks for reaching out."},"mailbox_action":"keep-inbox"}';
+						},
+					});
 
 			assert.match(prompt, /Email instructions:\nUse warm reply tone/);
 				assert.match(prompt, /Email triage instructions:\nPrioritize support/);
 				assert.match(prompt, /Default triage instructions:\nClassify email by the next operational action/);
-				assert.match(prompt, /ALL-PROJECT KNOWLEDGE SEARCH/);
-				assert.equal(result.processed, 1);
-				assert.equal(result.triaged, 1);
+					assert.match(prompt, /ALL-PROJECT KNOWLEDGE SEARCH/);
+					assert.equal(result.run_id, 'client-run-1');
+					assert.equal(result.processed, 1);
+					assert.equal(result.triaged, 1);
 				assert.equal(result.drafted, 1);
 				assert.equal(result.linked, 1);
 				assert.deepEqual(updatePayload.labels, ['reply-required', 'triaged']);
 				assert.equal(updatePayload.triaged, true);
 				assert.equal(updatePayload.triage_summary, 'Needs help');
 				assert.equal(updatePayload.triage_reason, 'Requires reply');
-				assert.equal(updatePayload.triage_primary_action, 'reply-required');
-				assert.equal(updatePayload.triage_confidence, 0.8);
+					assert.equal(updatePayload.triage_primary_action, 'reply-required');
+					assert.equal(updatePayload.triage_run_id, 'client-run-1');
+					assert.equal(updatePayload.triage_confidence, 0.8);
 				assert.deepEqual(updatePayload.triage_action_points, [{ text: 'Answer the support question', type: 'reply', due_at: null }]);
 				assert.equal(updatePayload.triage_draft_id, draftId);
 				assert.equal(draftPayload.to[0], 'sender@example.com');
@@ -578,11 +583,85 @@ describe('Email ingest service', () => {
 				GraphLink.updateOne = originalGraphUpdateOne;
 				Tenant.findOne = originalTenantFindOne;
 			}
-		});
+			});
 
-	it('answers selected email AI requests with email instructions and context', async () => {
-		const originalEmailFindOne = Email.findOne;
-		const originalTenantFindOne = Tenant.findOne;
+			it('returns processed errors when all inbox triage attempts fail', async () => {
+				const emailId = { toString: () => 'email-err-1' };
+				let updatePayload = null;
+				const originalBulkWrite = EmailLabel.bulkWrite;
+				const originalLabelFind = EmailLabel.find;
+				const originalEmailFind = Email.find;
+				const originalFindOneAndUpdate = Email.findOneAndUpdate;
+				const originalTenantFindOne = Tenant.findOne;
+
+				EmailLabel.bulkWrite = async () => ({});
+				EmailLabel.find = () => ({
+					sort: () => ({
+						lean: async () => [],
+					}),
+				});
+				Email.find = () => ({
+					sort: () => ({
+						limit: () => ({
+							lean: async () => [{
+								_id: emailId,
+								subject: 'Broken provider',
+								from: ['sender@example.com'],
+								to: ['team@example.com'],
+								text_content: 'Please triage me',
+								labels: [],
+								mailbox: 'inbox',
+								project: 'project-1',
+								owner: userId,
+							}],
+						}),
+					}),
+				});
+				Email.findOneAndUpdate = async (query, update) => {
+					assert.equal(query._id, emailId);
+					updatePayload = update.$set;
+					return { _id: emailId, ...update.$set };
+				};
+				Tenant.findOne = () => ({
+					select: () => ({
+						lean: async () => ({ settings: { ai_instructions: {} } }),
+					}),
+				});
+
+				try {
+					const result = await triageInboxEmails('host-1', userId, {
+						run_id: 'client-run-failed',
+						skipSideEffects: true,
+						searchKnowledgeFn: async () => ({}),
+						getThreadFn: async () => [],
+						getConnectionsFn: async () => ({ links: [], tag_connections: [] }),
+						completionFn: async ({ scope }) => {
+							assert.equal(scope, 'email');
+							throw new Error('Provider unavailable');
+						},
+					});
+
+					assert.equal(result.run_id, 'client-run-failed');
+					assert.equal(result.processed, 1);
+					assert.equal(result.triaged, 0);
+					assert.equal(result.errors.length, 1);
+					assert.equal(result.errors[0].error, 'Provider unavailable');
+					assert.equal(updatePayload.triage_status, 'failed');
+					assert.equal(updatePayload.triage_error, 'Provider unavailable');
+					assert.equal(updatePayload.triage_run_id, 'client-run-failed');
+					assert.equal(updatePayload.is_indexed, false);
+				} finally {
+					EmailLabel.bulkWrite = originalBulkWrite;
+					EmailLabel.find = originalLabelFind;
+					Email.find = originalEmailFind;
+					Email.findOneAndUpdate = originalFindOneAndUpdate;
+					Tenant.findOne = originalTenantFindOne;
+				}
+			});
+
+		it('answers selected email AI requests with email instructions and context', async () => {
+			const originalEmailFindOne = Email.findOne;
+			const originalTenantFindOne = Tenant.findOne;
 		let systemPrompt = '';
 		let userPrompt = '';
 

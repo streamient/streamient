@@ -3180,6 +3180,10 @@
                     "type": "integer",
                     "default": 25,
                     "maximum": 100
+                  },
+                  "run_id": {
+                    "type": "string",
+                    "description": "Optional client-generated triage run ID for correlating socket progress events"
                   }
                 }
               }
@@ -3197,6 +3201,9 @@
                     "processed": {
                       "type": "integer"
                     },
+                    "run_id": {
+                      "type": "string"
+                    },
                     "triaged": {
                       "type": "integer"
                     },
@@ -3212,13 +3219,35 @@
                     "errors": {
                       "type": "array",
                       "items": {
-                        "type": "object"
+                        "type": "object",
+                        "properties": {
+                          "email_id": {
+                            "type": "string"
+                          },
+                          "error": {
+                            "type": "string"
+                          }
+                        }
                       }
                     },
                     "results": {
                       "type": "array",
                       "items": {
-                        "type": "object"
+                        "type": "object",
+                        "properties": {
+                          "email_id": {
+                            "type": "string"
+                          },
+                          "action": {
+                            "type": "string"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "mailbox": {
+                            "type": "string"
+                          }
+                        }
                       }
                     }
                   }

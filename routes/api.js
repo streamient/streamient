@@ -387,6 +387,7 @@ router.post('/emails/triage-inbox', requireEmailFeatureAccess, async (req, res) 
 		const result = await emailIngestService.triageInboxEmails(req.host_id, req.userId, {
 			project: req.body?.project,
 			limit: req.body?.limit,
+			run_id: req.body?.run_id,
 			ctx: auditCtx(req),
 		});
 		res.json(result);

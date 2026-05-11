@@ -601,7 +601,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 			'counts:refresh',
 		];
 		for (const evt of crudEvents) {
-			socket.on(evt, () => {
+			socket.on(evt, (data) => {
+				window.dispatchEvent(new CustomEvent(evt, { detail: data || {} }));
 				refreshCounts();
 				loadTrashCount();
 			});
