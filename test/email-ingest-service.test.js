@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, listEmails, parseTriageResult, triageInboxEmails, backfillEmailTriageState, askEmailAi, buildTriageContext, resetEmailTriage } from '../services/email_ingest_service.js';
+import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, parseTriageResult, triageInboxEmails, backfillEmailTriageState, askEmailAi, buildTriageContext, resetEmailTriage } from '../services/email_ingest_service.js';
 import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
 import { EmailLabel } from '../model/email_label.js';
@@ -336,6 +336,74 @@ describe('Email ingest service', () => {
 		} finally {
 			Email.findOne = originalFindOne;
 			Email.find = originalFind;
+		}
+	});
+
+	it('builds newest-first thread and resolves the active thread draft', async () => {
+		const root = {
+			_id: { toString: () => '1' },
+			message_id: 'msg-a@example.com',
+			references: ['msg-b@example.com'],
+			createdAt: '2026-01-01T10:00:00.000Z',
+		};
+		const parent = {
+			_id: { toString: () => '2' },
+			message_id: 'msg-b@example.com',
+			references: [],
+			createdAt: '2026-01-01T09:00:00.000Z',
+		};
+		const reply = {
+			_id: { toString: () => '3' },
+			message_id: 'msg-c@example.com',
+			references: ['msg-a@example.com'],
+			createdAt: '2026-01-01T11:00:00.000Z',
+		};
+
+		const originalFindOne = Email.findOne;
+		const originalFind = Email.find;
+		const originalDraftFindOne = EmailDraft.findOne;
+		let draftQuery = null;
+		let draftSort = null;
+
+		Email.findOne = () => ({
+			lean: async () => root,
+		});
+		Email.find = (query) => ({
+			lean: async () => {
+				const messageId = query?.$or?.[0]?.message_id || query?.$or?.[1]?.references;
+				if (messageId === 'msg-a@example.com') return [root, reply];
+				if (messageId === 'msg-b@example.com') return [parent];
+				return [];
+			},
+		});
+		EmailDraft.findOne = (query) => {
+			draftQuery = query;
+			return {
+				sort: (sort) => {
+					draftSort = sort;
+					return {
+						lean: async () => ({ _id: 'draft-1', source_email: '1', status: 'draft' }),
+					};
+				},
+			};
+		};
+
+		try {
+			const thread = await getEmailThread('host-1', '1', { order: 'desc' });
+			assert.deepEqual(thread.map((item) => item.message_id), ['msg-c@example.com', 'msg-a@example.com', 'msg-b@example.com']);
+
+			const draft = await getEmailThreadDraft('host-1', thread);
+			assert.deepEqual(draftQuery, {
+				host_id: 'host-1',
+				source_email: { $in: ['3', '1', '2'] },
+				status: { $ne: 'discarded' },
+			});
+			assert.deepEqual(draftSort, { updatedAt: -1 });
+			assert.equal(draft._id, 'draft-1');
+		} finally {
+			Email.findOne = originalFindOne;
+			Email.find = originalFind;
+			EmailDraft.findOne = originalDraftFindOne;
 		}
 	});
 

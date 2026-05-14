@@ -1328,7 +1328,13 @@ export async function updateEmailDraft(host_id, draftId, data, ctx = {}) {
 	return draft;
 }
 
-export async function getEmailThread(host_id, emailId) {
+function emailThreadSortTime(email) {
+	const value = email.createdAt || email.updatedAt;
+	const time = value ? new Date(value).getTime() : 0;
+	return Number.isFinite(time) ? time : 0;
+}
+
+export async function getEmailThread(host_id, emailId, { order = 'asc' } = {}) {
 	const root = await Email.findOne({ _id: emailId, host_id, in_trash: { $ne: true } }).lean();
 	if (!root) return [];
 
@@ -1377,5 +1383,20 @@ export async function getEmailThread(host_id, emailId) {
 		}
 	}
 
-	return threadDocs.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+	return threadDocs.sort((a, b) => {
+		const delta = emailThreadSortTime(a) - emailThreadSortTime(b);
+		return order === 'desc' ? -delta : delta;
+	});
+}
+
+export async function getEmailThreadDraft(host_id, thread = []) {
+	const sourceIds = thread.map((email) => stringifyObjectId(email._id)).filter(Boolean);
+	if (!sourceIds.length) return null;
+	return EmailDraft.findOne({
+		host_id,
+		source_email: { $in: sourceIds },
+		status: { $ne: 'discarded' },
+	})
+		.sort({ updatedAt: -1 })
+		.lean();
 }

@@ -380,8 +380,12 @@ router.get('/emails/:id', requireEmailFeatureAccess, async (req, res) => {
 });
 
 router.get('/emails/:id/thread', requireEmailFeatureAccess, async (req, res) => {
-	const thread = await emailIngestService.getEmailThread(req.host_id, req.params.id);
-	res.json({ thread });
+	const order = req.query.order === 'desc' ? 'desc' : 'asc';
+	const include = String(req.query.include || '').split(',').map((item) => item.trim()).filter(Boolean);
+	const thread = await emailIngestService.getEmailThread(req.host_id, req.params.id, { order });
+	const payload = { thread };
+	if (include.includes('draft')) payload.draft = await emailIngestService.getEmailThreadDraft(req.host_id, thread);
+	res.json(payload);
 });
 
 router.post('/emails/:id/ai', requireEmailFeatureAccess, async (req, res) => {

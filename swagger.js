@@ -1134,9 +1134,13 @@ const swaggerSpec = {
             get: {
                 tags: ['Emails'],
                 summary: 'Get thread by message references',
-                parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+                parameters: [
+                    { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+                    { name: 'order', in: 'query', required: false, schema: { type: 'string', enum: ['asc', 'desc'], default: 'asc' } },
+                    { name: 'include', in: 'query', required: false, schema: { type: 'string', enum: ['draft'] }, description: 'Comma-separated includes. Use draft to include the active thread draft.' },
+                ],
                 responses: {
-                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { thread: { type: 'array', items: { $ref: '#/components/schemas/Email' } } } } } } },
+                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { thread: { type: 'array', items: { $ref: '#/components/schemas/Email' } }, draft: { $ref: '#/components/schemas/EmailDraft', nullable: true } } } } } },
                 },
             },
         },
