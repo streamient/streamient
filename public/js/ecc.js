@@ -13,6 +13,7 @@
 	var moveMenu;
 	var trashBtn;
 	var resetTriageBtn;
+	var viewHeader;
 	var viewTitle;
 	var viewSubtitle;
 	var listWrap;
@@ -326,10 +327,10 @@
 	}
 
 	function renderEmailAi(email) {
-		if (!aiPanel || !aiSubtitle || !openEmailBtn) return;
+		if (!aiPanel) return;
 		if (!email) {
-			aiSubtitle.textContent = 'No email active.';
-			openEmailBtn.classList.add('d-none');
+			if (aiSubtitle) aiSubtitle.textContent = 'No email active.';
+			openEmailBtn?.classList.add('d-none');
 			aiMessagesEl = null;
 			aiInputEl = null;
 			aiSendBtn = null;
@@ -344,16 +345,9 @@
 		var subject = email.subject || '(No subject)';
 		var sender = (email.from || []).join(', ') || '(unknown sender)';
 		var labels = renderVisibleLabels(email);
-		aiSubtitle.textContent = subject;
-		openEmailBtn.classList.remove('d-none');
+		if (aiSubtitle) aiSubtitle.textContent = subject;
+		openEmailBtn?.classList.remove('d-none');
 		aiPanel.innerHTML = '<div class="ecc-ai-content">'
-			+ '<div class="ecc-ai-section">'
-			+ '<h6 class="mb-2">Email context</h6>'
-			+ '<div class="small text-muted mb-1">From</div>'
-			+ '<div class="mb-2 text-break">' + escapeHtml(sender) + '</div>'
-			+ '<div class="small text-muted mb-1">Subject</div>'
-			+ '<div class="mb-0 text-break">' + escapeHtml(subject) + '</div>'
-			+ '</div>'
 			+ '<div class="ecc-ai-section">'
 			+ '<h6 class="mb-2">AI triage</h6>'
 			+ (labels ? '<div class="mb-2">' + labels + '</div>' : '<div class="text-muted small mb-2">No labels yet.</div>')
@@ -361,6 +355,13 @@
 			+ '<p class="mb-2">' + escapeHtml(email.triage_summary || 'Not triaged yet.') + '</p>'
 			+ '<div class="small text-muted mb-1">Reason</div>'
 			+ '<p class="mb-0">' + escapeHtml(email.triage_reason || 'No AI reason saved yet.') + '</p>'
+			+ '</div>'
+			+ '<div class="ecc-ai-section">'
+			+ '<h6 class="mb-2">Email context</h6>'
+			+ '<div class="small text-muted mb-1">From</div>'
+			+ '<div class="mb-2 text-break">' + escapeHtml(sender) + '</div>'
+			+ '<div class="small text-muted mb-1">Subject</div>'
+			+ '<div class="mb-0 text-break">' + escapeHtml(subject) + '</div>'
 			+ '</div>'
 			+ '<div class="ecc-ai-section ecc-email-chat">'
 			+ '<h6 class="mb-2">Ask Email AI</h6>'
@@ -487,6 +488,7 @@
 
 		function showListView() {
 			detailActive = false;
+			viewHeader?.classList.remove('d-none');
 			listWrap?.classList.remove('d-none');
 			detailEl?.classList.add('d-none');
 			updateActionBar();
@@ -501,6 +503,7 @@
 
 		function showDetailView() {
 			detailActive = true;
+			viewHeader?.classList.add('d-none');
 			listWrap?.classList.add('d-none');
 			detailEl?.classList.remove('d-none');
 			updateActionBar();
@@ -1053,6 +1056,7 @@
 		moveMenu = document.getElementById('ecc-move-menu');
 		trashBtn = document.getElementById('ecc-trash-btn');
 		resetTriageBtn = document.getElementById('ecc-reset-triage-btn');
+		viewHeader = document.getElementById('ecc-view-header');
 		viewTitle = document.getElementById('ecc-view-title');
 		viewSubtitle = document.getElementById('ecc-view-subtitle');
 		listWrap = document.getElementById('ecc-list-wrap');

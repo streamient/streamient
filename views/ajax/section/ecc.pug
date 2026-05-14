@@ -51,7 +51,7 @@ else
 			.list-group#ecc-labels
 				.list-group-item.text-muted.small Loading labels...
 		.ecc-main
-			.d-flex.justify-content-between.align-items-center.mb-3
+			.d-flex.justify-content-between.align-items-center.mb-3#ecc-view-header
 				div
 					h5.mb-1#ecc-view-title Inbox
 					p.text-muted.small.mb-0#ecc-view-subtitle All untriaged emails across projects.
@@ -93,12 +93,6 @@ else
 				#ecc-detail-draft.mb-3
 				#ecc-detail-thread
 		.ecc-ai
-			.d-flex.justify-content-between.align-items-center.mb-3
-				div
-					h5.mb-1 Email AI
-					p.text-muted.small.mb-0#ecc-ai-subtitle No email active.
-				button.btn.btn-outline-secondary.btn-sm#ecc-open-email-btn.d-none(type="button" title="Open full email")
-					!= icon('openInNew')
 			#ecc-ai-panel.ecc-ai-panel
 				.ecc-ai-empty
 					!= icon('sparkle', 'mb-2')
