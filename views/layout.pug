@@ -240,8 +240,19 @@ html(lang="en")
 										.form-text Thread
 											#rm-email-thread.small
 							#rm-email-pane-body.d-none.px-3.pb-2
-								.form-text Body / Attachment Text
-								#rm-email-content.preview-container.border.rounded.p-3(style="min-height:220px; white-space:pre-wrap")
+								.d-flex.justify-content-between.align-items-center.mb-2
+									.form-text Body
+									.d-flex.align-items-center.gap-2
+										.btn-group.btn-group-sm#rm-email-body-mode(role="group" aria-label="Email body mode")
+											button.btn.btn-outline-secondary.active#rm-email-html-btn(type="button")
+												span HTML
+											button.btn.btn-outline-secondary#rm-email-text-btn(type="button")
+												span Text
+										button.btn.btn-outline-secondary.btn-sm.d-none#rm-email-load-images-btn(type="button")
+											span Load images
+								#rm-email-content.preview-container.border.rounded.p-0(style="min-height:220px")
+									iframe#rm-email-html-frame.d-none(title="Email HTML body" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer")
+									pre#rm-email-text-content.mb-0.p-3(style="white-space:pre-wrap")
 
 						//- Loading placeholder
 						#result-modal-loading.text-center.py-4.d-none

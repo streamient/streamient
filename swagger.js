@@ -201,6 +201,8 @@ const swaggerSpec = {
                     bcc: { type: 'array', items: { type: 'string' } },
                     subject: { type: 'string' },
                     text_content: { type: 'string' },
+                    html_content: { type: 'string', description: 'Sanitized HTML email body. Remote image URLs are stored on data-kk-remote-src until explicitly loaded by a client.' },
+                    html_content_has_remote_images: { type: 'boolean' },
                     attachment_text_content: { type: 'string' },
                     source: { type: 'string', enum: ['api', 'emailforwarding'] },
 	                    mailbox: { type: 'string', enum: ['inbox', 'archived', 'sent', 'spam'] },
@@ -1045,7 +1047,8 @@ const swaggerSpec = {
                                 properties: {
                                     project: { type: 'string' },
                                     raw_email: { type: 'string', description: 'Raw RFC822 email content' },
-                                    parsed_email: { type: 'object', description: 'Mailparser-like JSON payload' },
+                                    parsed_email: { type: 'object', description: 'Mailparser-like JSON payload. HTML may be supplied as html, html_content, or body_html and is sanitized before storage.' },
+                                    html_content: { type: 'string', description: 'Optional HTML body for flat parsed payloads. Sanitized before storage.' },
                                     triaged: { type: 'boolean', default: false },
                                 },
                             },
@@ -1113,7 +1116,7 @@ const swaggerSpec = {
                 parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
 	                requestBody: {
 	                    required: true,
-	                    content: { 'application/json': { schema: { type: 'object', properties: { subject: { type: 'string' }, text_content: { type: 'string' }, from: { type: 'array', items: { type: 'string' } }, to: { type: 'array', items: { type: 'string' } }, cc: { type: 'array', items: { type: 'string' } }, bcc: { type: 'array', items: { type: 'string' } }, project: { type: 'string' }, mailbox: { type: 'string', enum: ['inbox', 'archived', 'sent', 'spam'] }, labels: { type: 'array', items: { type: 'string' } }, triaged: { type: 'boolean' }, triage_action_points: { type: 'array', items: { type: 'object' } } } } } },
+	                    content: { 'application/json': { schema: { type: 'object', properties: { subject: { type: 'string' }, text_content: { type: 'string' }, html_content: { type: 'string', description: 'Sanitized before storage. Send an empty string to clear stored HTML.' }, from: { type: 'array', items: { type: 'string' } }, to: { type: 'array', items: { type: 'string' } }, cc: { type: 'array', items: { type: 'string' } }, bcc: { type: 'array', items: { type: 'string' } }, project: { type: 'string' }, mailbox: { type: 'string', enum: ['inbox', 'archived', 'sent', 'spam'] }, labels: { type: 'array', items: { type: 'string' } }, triaged: { type: 'boolean' }, triage_action_points: { type: 'array', items: { type: 'object' } } } } } },
 	                },
                 responses: {
                     200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { email: { $ref: '#/components/schemas/Email' } } } } } },

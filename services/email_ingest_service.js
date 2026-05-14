@@ -17,6 +17,7 @@ import { getConnectionsForItem, invalidateGraphCache, removeLinksForItem } from 
 import * as audit from './audit_service.js';
 import { chatModelCompletion } from '../modules/llm_client.js';
 import { getAiInstructions } from './byo_ai_service.js';
+import { sanitizeEmailHtml } from '../modules/email_html_sanitizer.js';
 
 const MAX_ATTACHMENT_SIZE = 50 * 1024 * 1024;
 const DEFAULT_EMAIL_LABELS = [
@@ -198,6 +199,14 @@ function normalizeForwardedBodyText(parsed) {
 	return striptags(html, [], ' ').replace(/\s+/g, ' ').trim();
 }
 
+function normalizeHtmlContent(value) {
+	const sanitized = sanitizeEmailHtml(value);
+	return {
+		html_content: sanitized.html,
+		html_content_has_remote_images: sanitized.hasRemoteImages,
+	};
+}
+
 function toBuffer(content, transferEncoding) {
 	if (!content) return null;
 	if (Buffer.isBuffer(content)) return content;
@@ -255,6 +264,7 @@ export async function parseEmailInput(data) {
 			bcc: normalizeRecipientList(parsed.bcc),
 			subject: String(parsed.subject || '').trim(),
 			text_content: normalizeBodyText(parsed),
+			...normalizeHtmlContent(parsed.html),
 			attachment_text_content: await extractAttachmentTextContent(parsed.attachments || []),
 			raw_hash: crypto.createHash('sha256').update(data.raw_email).digest('hex'),
 		};
@@ -275,6 +285,7 @@ export async function parseEmailInput(data) {
 		bcc: normalizeRecipientList(parsed.bcc || getParsedHeaderValue(parsed, 'bcc')),
 		subject: String(parsed.subject || '').trim(),
 		text_content: normalizeBodyText(parsed),
+		...normalizeHtmlContent(parsed.html || parsed.html_content || parsed.body_html),
 		attachment_text_content: await extractAttachmentTextContent(parsed.attachments || []),
 		raw_hash: parsed.raw_hash || '',
 	};
@@ -296,6 +307,7 @@ export function parseForwardedEmailInput(data) {
 		bcc: normalizeRecipientList(parsed.bcc || getParsedHeaderValue(parsed, 'bcc')),
 		subject: String(parsed.subject || getParsedHeaderValue(parsed, 'subject') || '').trim(),
 		text_content: normalizeForwardedBodyText(parsed),
+		...normalizeHtmlContent(parsed.html || parsed.html_content || parsed.body_html),
 		attachment_text_content: '',
 		raw_hash: parsed.raw_hash || '',
 	};
@@ -342,7 +354,7 @@ async function createEmailThreadLinks(email, userId, host_id, options = {}) {
 }
 
 async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
-	if (!normalized.subject && !normalized.text_content && !normalized.attachment_text_content) {
+	if (!normalized.subject && !normalized.text_content && !normalized.html_content && !normalized.attachment_text_content) {
 		throw new Error('Email content is empty after normalization');
 	}
 
@@ -630,6 +642,11 @@ export async function updateEmail(host_id, emailId, data, ctx = {}) {
 	const update = {};
 	if (data.subject !== undefined) update.subject = data.subject;
 	if (data.text_content !== undefined) update.text_content = data.text_content;
+	if (data.html_content !== undefined || data.html !== undefined || data.body_html !== undefined) {
+		const sanitized = normalizeHtmlContent(data.html_content ?? data.html ?? data.body_html);
+		update.html_content = sanitized.html_content;
+		update.html_content_has_remote_images = sanitized.html_content_has_remote_images;
+	}
 	if (data.from !== undefined) update.from = normalizeRecipientList(data.from);
 	if (data.to !== undefined) update.to = normalizeRecipientList(data.to);
 	if (data.cc !== undefined) update.cc = normalizeRecipientList(data.cc);

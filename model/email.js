@@ -13,6 +13,8 @@ const emailSchema = new mongoose.Schema(
 		subject: { type: String, trim: true, default: '' },
 
 		text_content: { type: String, default: '' },
+		html_content: { type: String, default: '' },
+		html_content_has_remote_images: { type: Boolean, default: false },
 		attachment_text_content: { type: String, default: '' },
 
 		source: { type: String, enum: ['api', 'emailforwarding'], default: 'api' },

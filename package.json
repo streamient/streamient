@@ -103,6 +103,7 @@
     "playwright": "^1.60.0",
     "pug": "^3.0.4",
     "rate-limit-redis": "^5.0.0",
+    "sanitize-html": "^2.17.4",
     "sharp": "^0.34.5",
     "simple-git": "^3.36.0",
     "socket.io": "^4.8.3",

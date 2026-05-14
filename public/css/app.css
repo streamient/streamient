@@ -969,6 +969,23 @@ small,
 	gap: 0.5rem;
 }
 
+#rm-email-html-frame {
+	width: 100%;
+	min-height: 220px;
+	border: 0;
+	background: #fff;
+	display: block;
+}
+
+#rm-email-text-content {
+	min-height: 220px;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	border: 0;
+	overflow-wrap: anywhere;
+}
+
 .rm-email-thread-item {
 	width: 100%;
 	padding: 0.7rem 0.8rem;
