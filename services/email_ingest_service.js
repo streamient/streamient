@@ -353,6 +353,11 @@ async function createEmailThreadLinks(email, userId, host_id, options = {}) {
 	if (created && !options.skipSideEffects) invalidateGraphCache(host_id).catch(() => {});
 }
 
+function emitEmailCreatedOrUpdated(host_id, event, email) {
+	emitToTenant(host_id, event, email);
+	emitToTenant(host_id, 'counts:refresh');
+}
+
 async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 	if (!normalized.subject && !normalized.text_content && !normalized.html_content && !normalized.attachment_text_content) {
 		throw new Error('Email content is empty after normalization');
@@ -384,6 +389,7 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 	};
 
 	let email;
+	let created = false;
 	if (normalized.message_id) {
 		const existing = await Email.findOne({ message_id: normalized.message_id });
 		if (existing && existing.host_id !== host_id) {
@@ -397,14 +403,16 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 			);
 		} else {
 			email = await Email.create(payload);
+			created = true;
 		}
 	} else {
 		email = await Email.create(payload);
+		created = true;
 	}
 
 	await createEmailThreadLinks(email, userId, host_id, { skipSideEffects: ctx.skipSideEffects });
 	if (!ctx.skipSideEffects) {
-		emitToTenant(host_id, 'email:created', email);
+		emitEmailCreatedOrUpdated(host_id, created ? 'email:created' : 'email:updated', email);
 		invalidateGraphCache(host_id).catch(() => {});
 		audit.log({ action: 'create', resource: 'email', resource_id: email._id.toString(), user_id: userId, host_id, ...ctx });
 		removeDocument(host_id, 'emails', email._id.toString()).catch((err) => console.error('Typesense remove error:', err.message));
@@ -750,6 +758,7 @@ export async function deleteEmail(host_id, emailId, ctx = {}) {
 		removeDocument(host_id, 'emails', emailId).catch((err) => console.error('Typesense remove error:', err.message));
 		removeLinksForItem(host_id, emailId).catch((err) => console.error('Remove links error:', err.message));
 		emitToTenant(host_id, 'email:deleted', { _id: emailId });
+		emitToTenant(host_id, 'counts:refresh');
 		invalidateGraphCache(host_id).catch(() => {});
 		if (ctx.user_id) audit.log({ action: 'delete', resource: 'email', resource_id: emailId, host_id, ...ctx });
 	}
