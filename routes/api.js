@@ -35,6 +35,7 @@ import * as teamService from '../services/team_service.js';
 import * as byoAiService from '../services/byo_ai_service.js';
 import { createChatLimiter } from '../middleware/rate_limit.js';
 import { hasProductAccess, hasProFeatureAccess } from '../services/subscription_access_service.js';
+import { decorateEmailForClient } from '../modules/email_display.js';
 import config from '../config.js';
 import crypto from 'node:crypto';
 
@@ -324,7 +325,7 @@ router.get('/emails', requireEmailFeatureAccess, async (req, res) => {
 		label: req.query.label,
 		triaged: req.query.triaged,
 	});
-	res.json({ emails });
+	res.json({ emails: emails.map(decorateEmailForClient) });
 });
 
 router.get('/email-labels', requireEmailFeatureAccess, async (req, res) => {
@@ -376,14 +377,14 @@ router.get('/emails/:id/triage-status', requireEmailFeatureAccess, async (req, r
 router.get('/emails/:id', requireEmailFeatureAccess, async (req, res) => {
 	const email = await emailIngestService.getEmail(req.host_id, req.params.id);
 	if (!email) return res.status(404).json({ error: 'Email not found' });
-	res.json({ email });
+	res.json({ email: decorateEmailForClient(email) });
 });
 
 router.get('/emails/:id/thread', requireEmailFeatureAccess, async (req, res) => {
 	const order = req.query.order === 'desc' ? 'desc' : 'asc';
 	const include = String(req.query.include || '').split(',').map((item) => item.trim()).filter(Boolean);
 	const thread = await emailIngestService.getEmailThread(req.host_id, req.params.id, { order });
-	const payload = { thread };
+	const payload = { thread: thread.map(decorateEmailForClient) };
 	if (include.includes('draft')) payload.draft = await emailIngestService.getEmailThreadDraft(req.host_id, thread);
 	res.json(payload);
 });

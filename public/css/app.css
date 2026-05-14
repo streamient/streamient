@@ -473,6 +473,15 @@ small,
 	font-size: 0.84rem;
 }
 
+.ecc-detail-html-frame {
+	width: 100%;
+	min-height: 220px;
+	border: 1px solid var(--bs-border-color);
+	border-radius: 0.5rem;
+	background: #fff;
+	display: block;
+}
+
 .ecc-ai-empty {
 	border: 1px dashed var(--bs-border-color);
 	border-radius: 0.5rem;

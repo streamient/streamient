@@ -251,7 +251,7 @@ html(lang="en")
 										button.btn.btn-outline-secondary.btn-sm.d-none#rm-email-load-images-btn(type="button")
 											span Load images
 								#rm-email-content.preview-container.border.rounded.p-0(style="min-height:220px")
-									iframe#rm-email-html-frame.d-none(title="Email HTML body" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer")
+									iframe#rm-email-html-frame.d-none(title="Email HTML body" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer")
 									pre#rm-email-text-content.mb-0.p-3(style="white-space:pre-wrap")
 
 						//- Loading placeholder
@@ -286,6 +286,7 @@ html(lang="en")
 			var __ws_url = "#{ws_url}";
 			var __host_id = "#{host_id}";
 			var __user_name = "#{user ? user.name : ''}";
+			var __static_base = "/static/v-#{v}";
 			var __avatar_colors = ['#6366f1','#8b5cf6','#ec4899','#f43f5e','#f97316','#eab308','#22c55e','#14b8a6','#06b6d4','#3b82f6'];
 			function makeAvatar(name, size) {
 				size = size || 'xs';
@@ -298,6 +299,7 @@ html(lang="en")
 			}
 		script(src=`/static/v-${v}/js/vendor.js` type="module")
 		script(src=`/static/v-${v}/js/editor.js` type="module")
+		script(src=`/static/v-${v}/js/iframe_resizer_parent.js`)
 		script(src=`/static/v-${v}/js/chat.js`)
 		script(src=`/static/v-${v}/js/app.js`)
 		script(src=`/static/v-${v}/js/notes.js`)

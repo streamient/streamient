@@ -8,6 +8,29 @@
 		windowListeners.push([event, handler]);
 	}
 
+	function cleanEmailExcerpt(value) {
+		var lines = [];
+		var rawLines = String(value || '')
+			.split(/\r?\n/g)
+			.map(function (line) {
+				return line.trim();
+			});
+		for (var i = 0; i < rawLines.length; i++) {
+			var line = rawLines[i];
+			if (!line || line === '--') continue;
+			if (/^-*\s*hmstopparser\s*-*$/i.test(line)
+				|| /^on .{1,300}\b(wrote|replied):$/i.test(line)
+				|| /^(from|sent|date|to|cc|subject)\s*:/i.test(line)) break;
+			if (/^-+\s*please reply above this line\s*-+$/i.test(line)) continue;
+			lines.push(line);
+		}
+		return lines
+			.join(' ')
+			.replace(/\s+/g, ' ')
+			.replace(/^--\s*/, '')
+			.trim();
+	}
+
 	async function loadEmails() {
 		if (!listEl) return;
 		var params = currentProjectId ? '?project=' + currentProjectId : '';
@@ -25,7 +48,7 @@
 				var recipientSummary = recipients || '(no recipients)';
 				var hasMoreRecipients = (e.to || []).length > 3 ? ' +' + ((e.to || []).length - 3) : '';
 				var date = e.updatedAt ? new Date(e.updatedAt).toLocaleDateString() : '';
-				var excerpt = (e.text_content || e.attachment_text_content || '').slice(0, 220);
+				var excerpt = e.excerpt || cleanEmailExcerpt(e.text_content || e.attachment_text_content || '').slice(0, 220);
 				return '<div class="list-group-item list-group-item-action email-item" data-id="' + e._id + '">'
 					+ '<div class="d-flex align-items-start gap-2">'
 					+ '<div class="batch-cb-wrap"><input type="checkbox" class="form-check-input batch-cb" value="' + e._id + '"></div>'
@@ -52,6 +75,8 @@
 							id: email._id,
 							title: email.subject || '(No subject)',
 							from: email.from || [],
+							html_content: email.html_content || '',
+							html_content_has_remote_images: Boolean(email.html_content_has_remote_images),
 							text_content: [email.text_content, email.attachment_text_content].filter(Boolean).join('\n\n'),
 						});
 					})

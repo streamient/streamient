@@ -45,6 +45,8 @@
     "@fontsource-variable/material-symbols-outlined": "^5.2.44",
     "@fontsource-variable/noto-sans": "^5.2.10",
     "@fontsource-variable/noto-sans-mono": "^5.2.10",
+    "@iframe-resizer/child": "^5.5.9",
+    "@iframe-resizer/parent": "^5.5.9",
     "@keyv/valkey": "^1.0.11",
     "@opentelemetry/api": "1.9.1",
     "@opentelemetry/auto-instrumentations-node": "0.75.0",

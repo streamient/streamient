@@ -114,6 +114,169 @@
 			return [email?.text_content, email?.attachment_text_content].filter(Boolean).join('\n\n');
 		}
 
+		function cleanEmailText(value) {
+			var lines = [];
+			var rawLines = String(value || '')
+				.split(/\r?\n/g)
+				.map(function (line) {
+					return line.trim();
+				});
+			for (var i = 0; i < rawLines.length; i++) {
+				var line = rawLines[i];
+				if (!line || line === '--') continue;
+				if (/^-*\s*hmstopparser\s*-*$/i.test(line)
+					|| /^on .{1,300}\b(wrote|replied):$/i.test(line)
+					|| /^(from|sent|date|to|cc|subject)\s*:/i.test(line)) break;
+				if (/^-+\s*please reply above this line\s*-+$/i.test(line)) continue;
+				lines.push(line);
+			}
+			return lines
+				.join('\n')
+				.replace(/^--\s*/, '')
+				.trim();
+		}
+
+		function emailExcerpt(email) {
+			return email?.excerpt || cleanEmailText(email?.text_content || email?.attachment_text_content || '').replace(/\s+/g, ' ').slice(0, 180);
+		}
+
+		function emailHtmlFrameSrcdoc(html, loadRemoteImages) {
+			var staticBase = window.__static_base || '/static';
+			var childScriptUrl = window.location.origin + staticBase + '/js/iframe_resizer_child.js';
+			var csp = [
+				"default-src 'none'",
+				"img-src data: cid:" + (loadRemoteImages ? ' http: https:' : ''),
+				"script-src " + window.location.origin,
+				"style-src 'unsafe-inline'",
+				"font-src data:",
+				"base-uri 'none'",
+				"form-action 'none'",
+			].join('; ');
+			return '<!doctype html><html><head>'
+				+ '<meta charset="utf-8">'
+				+ '<meta http-equiv="Content-Security-Policy" content="' + escapeHtml(csp) + '">'
+				+ '<base target="_blank">'
+				+ '<style>html,body{margin:0;padding:0;background:#fff;color:#212529;font-family:Arial,sans-serif;font-size:14px;line-height:1.45;}body{padding:16px;overflow-wrap:anywhere;}img{max-width:100%;height:auto;}table{max-width:100%;}a{color:#0d6efd;}</style>'
+				+ '</head><body>' + html
+				+ '<script async src="' + escapeHtml(childScriptUrl) + '"></script>'
+				+ '</body></html>';
+		}
+
+		function resizeEmailHtmlFrame(frame) {
+			try {
+				var doc = frame.contentDocument;
+				if (!doc?.body) return;
+				var height = Math.max(220, doc.documentElement.scrollHeight, doc.body.scrollHeight);
+				frame.style.height = height + 'px';
+			} catch {
+				frame.style.height = '420px';
+			}
+		}
+
+		function initEmailHtmlFrameResize(frame) {
+			if (!frame) return;
+			frame.onload = function () {
+				if (!frame.iframeResizer && !frame.iFrameResizer) resizeEmailHtmlFrame(frame);
+			};
+			if (typeof window.kkIframeResize !== 'function') {
+				frame.style.height = '420px';
+				return;
+			}
+			window.kkIframeResize(frame);
+		}
+
+		function emailHtmlWithRemoteImages(html, loadRemoteImages) {
+			if (!loadRemoteImages || !html) return html;
+			var doc = new DOMParser().parseFromString('<div id="kk-email-root">' + html + '</div>', 'text/html');
+			doc.querySelectorAll('img[data-kk-remote-src]').forEach(function (img) {
+				var src = img.getAttribute('data-kk-remote-src') || '';
+				if (/^https?:\/\//i.test(src)) img.setAttribute('src', src);
+			});
+			return doc.getElementById('kk-email-root')?.innerHTML || html;
+		}
+
+		function renderBodyHtml(value, loadRemoteImages) {
+			var frame = document.createElement('iframe');
+			frame.className = 'ecc-detail-html-frame';
+			frame.title = 'Email HTML body';
+			frame.setAttribute('sandbox', 'allow-scripts allow-popups allow-popups-to-escape-sandbox');
+			frame.setAttribute('referrerpolicy', 'no-referrer');
+			initEmailHtmlFrameResize(frame);
+			frame.srcdoc = emailHtmlFrameSrcdoc(String(value || ''), loadRemoteImages);
+			return frame;
+		}
+
+		function renderEmailBody(email) {
+			var wrapper = document.createElement('div');
+			var header = document.createElement('div');
+			header.className = 'd-flex justify-content-between align-items-center gap-3 mb-2';
+			header.appendChild(textNode('div', 'small text-muted', 'Body'));
+
+			var controls = document.createElement('div');
+			controls.className = 'd-flex align-items-center gap-2';
+			var modeGroup = document.createElement('div');
+			modeGroup.className = 'btn-group btn-group-sm';
+			modeGroup.setAttribute('role', 'group');
+			modeGroup.setAttribute('aria-label', 'Email body mode');
+			var htmlBtn = textNode('button', 'btn btn-outline-secondary', 'HTML');
+			htmlBtn.type = 'button';
+			var textBtn = textNode('button', 'btn btn-outline-secondary', 'Text');
+			textBtn.type = 'button';
+			modeGroup.appendChild(htmlBtn);
+			modeGroup.appendChild(textBtn);
+			var loadImagesBtn = textNode('button', 'btn btn-outline-secondary btn-sm', 'Load images');
+			loadImagesBtn.type = 'button';
+			controls.appendChild(modeGroup);
+			controls.appendChild(loadImagesBtn);
+			header.appendChild(controls);
+			wrapper.appendChild(header);
+
+			var bodyWrap = document.createElement('div');
+			wrapper.appendChild(bodyWrap);
+
+			var html = email?.html_content || '';
+			var text = emailBody(email);
+			var hasHtml = Boolean(html);
+			var hasText = Boolean(cleanEmailText(text));
+			var hasRemoteImages = hasHtml && Boolean(email?.html_content_has_remote_images);
+			var remoteImagesLoaded = false;
+			var mode = hasHtml ? 'html' : 'text';
+
+			function render() {
+				htmlBtn.disabled = !hasHtml;
+				textBtn.disabled = !hasText;
+				htmlBtn.classList.toggle('active', mode === 'html');
+				textBtn.classList.toggle('active', mode === 'text');
+				loadImagesBtn.classList.toggle('d-none', !hasRemoteImages || remoteImagesLoaded || mode !== 'html');
+				replaceChildren(bodyWrap);
+				if (mode === 'html' && hasHtml) {
+					var htmlValue = emailHtmlWithRemoteImages(html, remoteImagesLoaded);
+					bodyWrap.appendChild(renderBodyHtml(htmlValue, remoteImagesLoaded));
+				} else {
+					bodyWrap.appendChild(renderBodyText(text || '(empty)'));
+				}
+			}
+
+			htmlBtn.addEventListener('click', function () {
+				if (!hasHtml) return;
+				mode = 'html';
+				render();
+			});
+			textBtn.addEventListener('click', function () {
+				if (!hasText) return;
+				mode = 'text';
+				render();
+			});
+			loadImagesBtn.addEventListener('click', function () {
+				remoteImagesLoaded = true;
+				mode = 'html';
+				render();
+			});
+
+			render();
+			return wrapper;
+		}
+
 		function normalizeEccMailbox(value) {
 			var mailbox = String(value || '').trim();
 			return ['inbox', 'archived', 'sent', 'spam', 'drafts', 'trash'].includes(mailbox) ? mailbox : 'inbox';
@@ -165,7 +328,7 @@
 		function renderBodyText(value) {
 			var body = document.createElement('div');
 			body.className = 'ecc-detail-body';
-			var raw = String(value || '(empty)');
+			var raw = cleanEmailText(value) || '(empty)';
 			var lines = raw.split(/\r?\n/);
 			lines.forEach(function (line) {
 				var row = document.createElement('div');
@@ -561,25 +724,28 @@
 			detailDraftEl.appendChild(card);
 		}
 
-		function renderThreadMessage(email) {
+		function renderThreadMessage(email, options) {
 			var item = document.createElement('div');
 			item.className = 'list-group-item ecc-detail-message';
 
 			var header = document.createElement('div');
-			header.className = 'd-flex justify-content-between align-items-start gap-3 mb-3';
-			var titleWrap = document.createElement('div');
-			titleWrap.className = 'min-w-0';
-			titleWrap.appendChild(textNode('h6', 'mb-1 text-truncate', email.subject || '(No subject)'));
-			titleWrap.appendChild(textNode('div', 'small text-muted text-break', listSummary(email.from, '(unknown sender)')));
-			header.appendChild(titleWrap);
+			header.className = 'd-flex align-items-start gap-3 mb-3';
+			if (options?.hideRepeatedHeader) {
+				header.classList.add('justify-content-end');
+			} else {
+				header.classList.add('justify-content-between');
+				var titleWrap = document.createElement('div');
+				titleWrap.className = 'min-w-0';
+				titleWrap.appendChild(textNode('h6', 'mb-1 text-truncate', email.subject || '(No subject)'));
+				titleWrap.appendChild(textNode('div', 'small text-muted text-break', listSummary(email.from, '(unknown sender)')));
+				header.appendChild(titleWrap);
+			}
 			header.appendChild(textNode('small', 'text-muted text-nowrap', formatDateTime(email.createdAt || email.updatedAt)));
 			item.appendChild(header);
 
 			appendMeta(item, 'To', listSummary(email.to, '(no recipients)'));
 			appendMeta(item, 'Cc', listSummary(email.cc, ''));
-			var body = emailBody(email);
-			item.appendChild(textNode('div', 'small text-muted mb-1', 'Body'));
-			item.appendChild(renderBodyText(body || '(empty)'));
+			item.appendChild(renderEmailBody(email));
 			return item;
 		}
 
@@ -601,8 +767,12 @@
 			}
 			var group = document.createElement('div');
 			group.className = 'list-group';
+			var selectedId = emailId(selected);
 			messages.forEach(function (message) {
-				group.appendChild(renderThreadMessage(message));
+				var messageId = emailId(message);
+				group.appendChild(renderThreadMessage(message, {
+					hideRepeatedHeader: Boolean(selectedId && messageId && selectedId === messageId),
+				}));
 			});
 			detailThreadEl.appendChild(group);
 		}
@@ -611,7 +781,7 @@
 			var subject = email.subject || '(No subject)';
 			var senders = (email.from || []).slice(0, 2).join(', ') || '(unknown sender)';
 			var recipients = (email.to || []).slice(0, 2).join(', ') || '(no recipients)';
-			var body = (email.triage_summary || email.text_content || email.attachment_text_content || '').slice(0, 180);
+			var body = (email.triage_summary || emailExcerpt(email) || '').slice(0, 180);
 			var actionPoints = (email.triage_action_points || []).slice(0, 2).map(function (item) {
 				return item.text;
 			}).filter(Boolean).join(' - ');
@@ -780,6 +950,8 @@
 			id: email._id,
 			title: email.subject || '(No subject)',
 			from: email.from || [],
+			html_content: email.html_content || '',
+			html_content_has_remote_images: Boolean(email.html_content_has_remote_images),
 			text_content: [email.text_content, email.attachment_text_content].filter(Boolean).join('\n\n'),
 		});
 	}

@@ -25,6 +25,16 @@ Remote image URLs in stored HTML are rewritten to `data-kk-remote-src` and flagg
 }
 ```
 
+## Read
+
+```http
+GET /api/v1/emails
+GET /api/v1/emails/:id
+GET /api/v1/emails/:id/thread
+```
+
+Email read responses include sanitized `html_content`, `html_content_has_remote_images`, and `excerpt`. The excerpt is derived from visible HTML when available and strips parser control lines such as reply-above markers.
+
 ## Triage status
 
 Use triage status endpoints when an external system only needs classification state, routing action, and optional embedded message/draft data.

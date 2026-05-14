@@ -483,9 +483,12 @@ function rmShowEmailBody() {
 }
 
 function rmEmailFrameSrcdoc(html, loadRemoteImages) {
+	const staticBase = window.__static_base || '/static';
+	const childScriptUrl = window.location.origin + staticBase + '/js/iframe_resizer_child.js';
 	const csp = [
 		"default-src 'none'",
 		`img-src data: cid:${loadRemoteImages ? ' http: https:' : ''}`,
+		`script-src ${window.location.origin}`,
 		"style-src 'unsafe-inline'",
 		"font-src data:",
 		"base-uri 'none'",
@@ -496,7 +499,9 @@ function rmEmailFrameSrcdoc(html, loadRemoteImages) {
 		+ '<meta http-equiv="Content-Security-Policy" content="' + escapeHtml(csp) + '">'
 		+ '<base target="_blank">'
 		+ '<style>html,body{margin:0;padding:0;background:#fff;color:#212529;font-family:Arial,sans-serif;font-size:14px;line-height:1.45;}body{padding:16px;overflow-wrap:anywhere;}img{max-width:100%;height:auto;}table{max-width:100%;}a{color:#0d6efd;}</style>'
-		+ '</head><body>' + html + '</body></html>';
+		+ '</head><body>' + html
+		+ '<script async src="' + escapeHtml(childScriptUrl) + '"></script>'
+		+ '</body></html>';
 }
 
 function rmEmailHtmlWithRemoteImages() {
@@ -518,6 +523,18 @@ function rmResizeEmailFrame(frame) {
 	} catch {
 		frame.style.height = '420px';
 	}
+}
+
+function rmInitEmailFrameResize(frame) {
+	if (!frame) return;
+	frame.onload = () => {
+		if (!frame.iframeResizer && !frame.iFrameResizer) rmResizeEmailFrame(frame);
+	};
+	if (typeof window.kkIframeResize !== 'function') {
+		frame.style.height = '420px';
+		return;
+	}
+	window.kkIframeResize(frame);
 }
 
 function rmSetEmailBodyMode(mode) {
@@ -546,7 +563,7 @@ function rmRenderEmailBody() {
 	textEl.classList.toggle('d-none', rmEmailBodyMode !== 'text');
 
 	if (rmEmailBodyMode === 'html') {
-		frame.onload = () => rmResizeEmailFrame(frame);
+		rmInitEmailFrameResize(frame);
 		frame.srcdoc = rmEmailFrameSrcdoc(rmEmailHtmlWithRemoteImages(), rmEmailRemoteImagesLoaded);
 	} else {
 		frame.removeAttribute('srcdoc');

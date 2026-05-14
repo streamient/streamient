@@ -790,6 +790,14 @@ body.kk-template1 #rm-email-html-frame {
   background: #fff;
   display: block;
 }
+body.kk-template1 .ecc-detail-html-frame {
+  width: 100%;
+  min-height: 220px;
+  border: 1px solid #2a386d !important;
+  border-radius: 0.5rem;
+  background: #fff;
+  display: block;
+}
 body.kk-template1 #rm-email-text-content {
   min-height: 220px;
   background: transparent;

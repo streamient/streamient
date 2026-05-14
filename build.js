@@ -64,6 +64,31 @@ await build({
 });
 console.log('Graph bundle built → public/js/graph_bundle.js');
 
+// iframe-resizer parent/child bundles for sandboxed email HTML iframes
+await build({
+	entryPoints: ['src/iframe_resizer_parent.js'],
+	bundle: true,
+	outfile: 'public/js/iframe_resizer_parent.js',
+	format: 'iife',
+	platform: 'browser',
+	target: ['es2020'],
+	minify: isProd,
+	sourcemap: false,
+});
+console.log('iframe-resizer parent built → public/js/iframe_resizer_parent.js');
+
+await build({
+	entryPoints: ['src/iframe_resizer_child.js'],
+	bundle: true,
+	outfile: 'public/js/iframe_resizer_child.js',
+	format: 'iife',
+	platform: 'browser',
+	target: ['es2020'],
+	minify: isProd,
+	sourcemap: false,
+});
+console.log('iframe-resizer child built → public/js/iframe_resizer_child.js');
+
 // Generate build ID from content hash of all static JS + CSS assets
 const hash = createHash('md5');
 for (const dir of ['public/js', 'public/css']) {
