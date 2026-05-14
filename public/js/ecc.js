@@ -102,8 +102,13 @@
 
 		function appendMeta(container, label, value) {
 			if (!value) return;
-			container.appendChild(textNode('div', 'small text-muted mb-1', label));
-			container.appendChild(textNode('div', 'mb-2 text-break', value));
+			var row = document.createElement('div');
+			row.className = 'mb-2 text-break';
+			var labelEl = textNode('span', 'small text-muted me-1', label + ':');
+			var valueEl = textNode('span', '', value);
+			row.appendChild(labelEl);
+			row.appendChild(valueEl);
+			container.appendChild(row);
 		}
 
 		function listSummary(items, fallback) {
@@ -141,25 +146,11 @@
 		}
 
 		function emailHtmlFrameSrcdoc(html, loadRemoteImages) {
-			var staticBase = window.__static_base || '/static';
-			var childScriptUrl = window.location.origin + staticBase + '/js/iframe_resizer_child.js';
-			var csp = [
-				"default-src 'none'",
-				"img-src data: cid:" + (loadRemoteImages ? ' http: https:' : ''),
-				"script-src " + window.location.origin,
-				"style-src 'unsafe-inline'",
-				"font-src data:",
-				"base-uri 'none'",
-				"form-action 'none'",
-			].join('; ');
-			return '<!doctype html><html><head>'
-				+ '<meta charset="utf-8">'
-				+ '<meta http-equiv="Content-Security-Policy" content="' + escapeHtml(csp) + '">'
-				+ '<base target="_blank">'
-				+ '<style>html,body{margin:0;padding:0;background:#fff;color:#212529;font-family:Arial,sans-serif;font-size:14px;line-height:1.45;}body{padding:16px;overflow-wrap:anywhere;}img{max-width:100%;height:auto;}table{max-width:100%;}a{color:#0d6efd;}</style>'
-				+ '</head><body>' + html
-				+ '<script async src="' + escapeHtml(childScriptUrl) + '"></script>'
-				+ '</body></html>';
+			return window.kkEmailIframeRenderer?.buildSrcdoc({
+				html: html,
+				loadRemoteImages: loadRemoteImages,
+				theme: window.kkEmailIframeRenderer?.defaultTheme() || 'dark',
+			}) || '';
 		}
 
 		function resizeEmailHtmlFrame(frame) {
@@ -174,35 +165,31 @@
 		}
 
 		function initEmailHtmlFrameResize(frame) {
-			if (!frame) return;
-			frame.onload = function () {
-				if (!frame.iframeResizer && !frame.iFrameResizer) resizeEmailHtmlFrame(frame);
-			};
-			if (typeof window.kkIframeResize !== 'function') {
-				frame.style.height = '420px';
+			if (window.kkEmailIframeRenderer?.initResize) {
+				window.kkEmailIframeRenderer.initResize(frame);
 				return;
 			}
-			window.kkIframeResize(frame);
+			resizeEmailHtmlFrame(frame);
 		}
 
 		function emailHtmlWithRemoteImages(html, loadRemoteImages) {
-			if (!loadRemoteImages || !html) return html;
-			var doc = new DOMParser().parseFromString('<div id="kk-email-root">' + html + '</div>', 'text/html');
-			doc.querySelectorAll('img[data-kk-remote-src]').forEach(function (img) {
-				var src = img.getAttribute('data-kk-remote-src') || '';
-				if (/^https?:\/\//i.test(src)) img.setAttribute('src', src);
-			});
-			return doc.getElementById('kk-email-root')?.innerHTML || html;
+			return window.kkEmailIframeRenderer?.htmlWithRemoteImages(html, loadRemoteImages) || html;
 		}
 
-		function renderBodyHtml(value, loadRemoteImages) {
+		function renderBodyHtml(value, loadRemoteImages, theme, email) {
 			var frame = document.createElement('iframe');
 			frame.className = 'ecc-detail-html-frame';
 			frame.title = 'Email HTML body';
 			frame.setAttribute('sandbox', 'allow-scripts allow-popups allow-popups-to-escape-sandbox');
 			frame.setAttribute('referrerpolicy', 'no-referrer');
 			initEmailHtmlFrameResize(frame);
-			frame.srcdoc = emailHtmlFrameSrcdoc(String(value || ''), loadRemoteImages);
+			frame.srcdoc = window.kkEmailIframeRenderer?.buildSrcdoc({
+				html: String(value || ''),
+				loadRemoteImages: loadRemoteImages,
+				theme: theme,
+				subject: email?.subject || '',
+				from: listSummary(email?.from, ''),
+			}) || emailHtmlFrameSrcdoc(String(value || ''), loadRemoteImages);
 			return frame;
 		}
 
@@ -224,9 +211,20 @@
 			textBtn.type = 'button';
 			modeGroup.appendChild(htmlBtn);
 			modeGroup.appendChild(textBtn);
+			var themeGroup = document.createElement('div');
+			themeGroup.className = 'btn-group btn-group-sm';
+			themeGroup.setAttribute('role', 'group');
+			themeGroup.setAttribute('aria-label', 'Email HTML theme');
+			var darkBtn = textNode('button', 'btn btn-outline-secondary', 'Dark');
+			darkBtn.type = 'button';
+			var originalBtn = textNode('button', 'btn btn-outline-secondary', 'Original');
+			originalBtn.type = 'button';
+			themeGroup.appendChild(darkBtn);
+			themeGroup.appendChild(originalBtn);
 			var loadImagesBtn = textNode('button', 'btn btn-outline-secondary btn-sm', 'Load images');
 			loadImagesBtn.type = 'button';
 			controls.appendChild(modeGroup);
+			controls.appendChild(themeGroup);
 			controls.appendChild(loadImagesBtn);
 			header.appendChild(controls);
 			wrapper.appendChild(header);
@@ -241,17 +239,21 @@
 			var hasRemoteImages = hasHtml && Boolean(email?.html_content_has_remote_images);
 			var remoteImagesLoaded = false;
 			var mode = hasHtml ? 'html' : 'text';
+			var theme = window.kkEmailIframeRenderer?.defaultTheme() || 'dark';
 
 			function render() {
 				htmlBtn.disabled = !hasHtml;
 				textBtn.disabled = !hasText;
 				htmlBtn.classList.toggle('active', mode === 'html');
 				textBtn.classList.toggle('active', mode === 'text');
+				darkBtn.classList.toggle('active', theme === 'dark');
+				originalBtn.classList.toggle('active', theme === 'original');
+				themeGroup.classList.toggle('d-none', !hasHtml || mode !== 'html');
 				loadImagesBtn.classList.toggle('d-none', !hasRemoteImages || remoteImagesLoaded || mode !== 'html');
 				replaceChildren(bodyWrap);
 				if (mode === 'html' && hasHtml) {
 					var htmlValue = emailHtmlWithRemoteImages(html, remoteImagesLoaded);
-					bodyWrap.appendChild(renderBodyHtml(htmlValue, remoteImagesLoaded));
+					bodyWrap.appendChild(renderBodyHtml(htmlValue, remoteImagesLoaded, theme, email));
 				} else {
 					bodyWrap.appendChild(renderBodyText(text || '(empty)'));
 				}
@@ -265,6 +267,16 @@
 			textBtn.addEventListener('click', function () {
 				if (!hasText) return;
 				mode = 'text';
+				render();
+			});
+			darkBtn.addEventListener('click', function () {
+				theme = 'dark';
+				mode = 'html';
+				render();
+			});
+			originalBtn.addEventListener('click', function () {
+				theme = 'original';
+				mode = 'html';
 				render();
 			});
 			loadImagesBtn.addEventListener('click', function () {
@@ -727,21 +739,21 @@
 		function renderThreadMessage(email, options) {
 			var item = document.createElement('div');
 			item.className = 'list-group-item ecc-detail-message';
-
-			var header = document.createElement('div');
-			header.className = 'd-flex align-items-start gap-3 mb-3';
+			var dateText = formatDateTime(email.createdAt || email.updatedAt);
 			if (options?.hideRepeatedHeader) {
-				header.classList.add('justify-content-end');
+				if (dateText) item.appendChild(textNode('small', 'd-block text-muted text-end mb-2', dateText));
 			} else {
+				var header = document.createElement('div');
+				header.className = 'd-flex align-items-start gap-3 mb-3';
 				header.classList.add('justify-content-between');
 				var titleWrap = document.createElement('div');
 				titleWrap.className = 'min-w-0';
 				titleWrap.appendChild(textNode('h6', 'mb-1 text-truncate', email.subject || '(No subject)'));
 				titleWrap.appendChild(textNode('div', 'small text-muted text-break', listSummary(email.from, '(unknown sender)')));
 				header.appendChild(titleWrap);
+				header.appendChild(textNode('small', 'text-muted text-nowrap', dateText));
+				item.appendChild(header);
 			}
-			header.appendChild(textNode('small', 'text-muted text-nowrap', formatDateTime(email.createdAt || email.updatedAt)));
-			item.appendChild(header);
 
 			appendMeta(item, 'To', listSummary(email.to, '(no recipients)'));
 			appendMeta(item, 'Cc', listSummary(email.cc, ''));

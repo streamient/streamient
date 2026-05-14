@@ -248,6 +248,11 @@ html(lang="en")
 												span HTML
 											button.btn.btn-outline-secondary#rm-email-text-btn(type="button")
 												span Text
+										.btn-group.btn-group-sm#rm-email-theme-mode(role="group" aria-label="Email HTML theme")
+											button.btn.btn-outline-secondary.active#rm-email-dark-btn(type="button")
+												span Dark
+											button.btn.btn-outline-secondary#rm-email-original-btn(type="button")
+												span Original
 										button.btn.btn-outline-secondary.btn-sm.d-none#rm-email-load-images-btn(type="button")
 											span Load images
 								#rm-email-content.preview-container.border.rounded.p-0(style="min-height:220px")
@@ -300,6 +305,7 @@ html(lang="en")
 		script(src=`/static/v-${v}/js/vendor.js` type="module")
 		script(src=`/static/v-${v}/js/editor.js` type="module")
 		script(src=`/static/v-${v}/js/iframe_resizer_parent.js`)
+		script(src=`/static/v-${v}/js/email_iframe_renderer.js`)
 		script(src=`/static/v-${v}/js/chat.js`)
 		script(src=`/static/v-${v}/js/app.js`)
 		script(src=`/static/v-${v}/js/notes.js`)

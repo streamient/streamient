@@ -89,6 +89,30 @@ await build({
 });
 console.log('iframe-resizer child built → public/js/iframe_resizer_child.js');
 
+await build({
+	entryPoints: ['src/email_dark_mode_child.js'],
+	bundle: true,
+	outfile: 'public/js/email_dark_mode_child.js',
+	format: 'iife',
+	platform: 'browser',
+	target: ['es2020'],
+	minify: isProd,
+	sourcemap: false,
+});
+console.log('Email dark mode child built → public/js/email_dark_mode_child.js');
+
+await build({
+	entryPoints: ['src/email_iframe_renderer.js'],
+	bundle: true,
+	outfile: 'public/js/email_iframe_renderer.js',
+	format: 'iife',
+	platform: 'browser',
+	target: ['es2020'],
+	minify: isProd,
+	sourcemap: false,
+});
+console.log('Email iframe renderer built → public/js/email_iframe_renderer.js');
+
 // Generate build ID from content hash of all static JS + CSS assets
 const hash = createHash('md5');
 for (const dir of ['public/js', 'public/css']) {

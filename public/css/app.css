@@ -478,7 +478,7 @@ small,
 	min-height: 220px;
 	border: 1px solid var(--bs-border-color);
 	border-radius: 0.5rem;
-	background: #fff;
+	background: var(--bs-body-bg);
 	display: block;
 }
 
@@ -982,7 +982,7 @@ small,
 	width: 100%;
 	min-height: 220px;
 	border: 0;
-	background: #fff;
+	background: var(--bs-body-bg);
 	display: block;
 }
 
