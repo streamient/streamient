@@ -243,6 +243,15 @@ body.kk-template1 .ecc-email-item {
   color: var(--text) !important;
 }
 
+body.kk-template1 #main-content .ecc-email-item .ecc-email-sender,
+body.kk-template1 #main-content .ecc-email-item .ecc-email-date {
+  font-size: 0.7rem;
+}
+
+body.kk-template1 #main-content .ecc-email-item .ecc-email-excerpt {
+  font-size: 0.85rem;
+}
+
 body.kk-template1 .ecc-left .list-group-item.active,
 body.kk-template1 .ecc-email-item.is-active {
   color: #fff !important;

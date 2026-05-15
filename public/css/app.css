@@ -499,6 +499,23 @@ small,
 	margin-left: 0 !important;
 }
 
+.ecc-email-sender,
+.ecc-email-date {
+	font-size: 0.7rem;
+	line-height: 1.2;
+}
+
+.ecc-email-subject {
+	margin-top: 0.15rem;
+	line-height: 1.25;
+}
+
+.ecc-email-excerpt {
+	font-size: 0.85rem;
+	line-height: 1.25;
+	margin-top: 0.15rem;
+}
+
 .ecc-label-dot {
 	width: 0.6rem;
 	height: 0.6rem;

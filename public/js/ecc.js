@@ -799,14 +799,16 @@
 				+ '<input class="form-check-input ecc-email-select" type="checkbox" value="' + escapeHtml(emailId(email)) + '" aria-label="Select email">'
 				+ '</div>'
 				+ '<div class="min-w-0 flex-grow-1">'
-				+ '<div class="fw-semibold text-truncate">' + escapeHtml(subject) + '</div>'
-				+ (body ? '<div class="small text-muted text-truncate mt-1">' + escapeHtml(body) + '</div>' : '')
-				+ '<div class="small text-muted text-truncate">' + escapeHtml(senders) + '</div>'
+				+ '<div class="d-flex justify-content-between align-items-center gap-2 min-w-0">'
+				+ '<span class="ecc-email-sender text-muted text-truncate">' + escapeHtml(senders) + '</span>'
+				+ '<time class="ecc-email-date text-muted text-nowrap flex-shrink-0">' + escapeHtml(formatDate(email.updatedAt)) + '</time>'
+				+ '</div>'
+				+ '<div class="fw-semibold text-truncate ecc-email-subject">' + escapeHtml(subject) + '</div>'
+				+ (body ? '<div class="ecc-email-excerpt text-muted text-truncate">' + escapeHtml(body) + '</div>' : '')
 				+ (actionPoints ? '<div class="small text-body text-truncate mt-1">' + escapeHtml(actionPoints) + '</div>' : '')
 				+ (triageMeta ? '<div class="mt-2">' + triageMeta + '</div>' : '')
 				+ (labels ? '<div class="mt-2">' + labels + '</div>' : '')
 				+ '</div>'
-				+ '<small class="text-muted text-nowrap">' + escapeHtml(formatDate(email.updatedAt)) + '</small>'
 				+ '</div>'
 				+ '</div>';
 		}
