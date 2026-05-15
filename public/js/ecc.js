@@ -278,7 +278,18 @@
 		function renderEmailBody(email) {
 			var wrapper = document.createElement('div');
 			var header = document.createElement('div');
-			header.className = 'd-flex justify-content-end align-items-center gap-3 mb-2';
+			header.className = 'd-flex justify-content-between align-items-center gap-3 mb-2';
+
+			var replyActions = document.createElement('div');
+			replyActions.className = 'd-flex align-items-center gap-2';
+			var replyBtn = textNode('button', 'btn btn-outline-primary btn-sm', 'Reply');
+			replyBtn.type = 'button';
+			replyActions.appendChild(replyBtn);
+			if (currentDraft?._id) {
+				var showDraftBtn = textNode('button', 'btn btn-primary btn-sm', 'Show draft');
+				showDraftBtn.type = 'button';
+				replyActions.appendChild(showDraftBtn);
+			}
 
 			var controls = document.createElement('div');
 			controls.className = 'd-flex align-items-center gap-2 ecc-email-body-controls';
@@ -304,12 +315,10 @@
 			themeGroup.appendChild(originalBtn);
 			var loadImagesBtn = textNode('button', 'btn btn-outline-secondary btn-sm', 'Load images');
 			loadImagesBtn.type = 'button';
-			var replyBtn = textNode('button', 'btn btn-outline-primary btn-sm', 'Reply');
-			replyBtn.type = 'button';
 			controls.appendChild(modeGroup);
 			controls.appendChild(themeGroup);
 			controls.appendChild(loadImagesBtn);
-			controls.appendChild(replyBtn);
+			header.appendChild(replyActions);
 			header.appendChild(controls);
 			wrapper.appendChild(header);
 
@@ -373,6 +382,9 @@
 				render();
 			});
 			replyBtn.addEventListener('click', function () {
+				openReplyEditor(email, replyWrap);
+			});
+			showDraftBtn?.addEventListener('click', function () {
 				openReplyEditor(email, replyWrap);
 			});
 
@@ -564,11 +576,20 @@
 
 	function renderVisibleLabels(email) {
 		var labels = (email.labels || []).filter(function (label) {
-			return !SYSTEM_TRIAGE_LABELS.includes(label);
+			return label !== activeLabel && !SYSTEM_TRIAGE_LABELS.includes(label);
 		});
 		return labels.map(function (label) {
 			return '<span class="badge ecc-email-label me-1">' + escapeHtml(label) + '</span>';
 		}).join('');
+	}
+
+	function shouldShowTriageActionBadge(email) {
+		if (!email.triage_primary_action) return false;
+		return email.triage_primary_action !== activeLabel;
+	}
+
+	function shouldShowDraftBadge(email) {
+		return !activeLabel && Boolean(email.triage_draft_id);
 	}
 
 	function setEmailSelected(checkbox, selected) {
@@ -1671,9 +1692,9 @@
 			}).filter(Boolean).join(' - ');
 			var labels = renderVisibleLabels(email);
 			var triageMeta = [
-				email.triage_primary_action ? '<span class="badge text-bg-light me-1">' + escapeHtml(TRIAGE_ACTION_NAMES[email.triage_primary_action] || email.triage_primary_action) + '</span>' : '',
+				shouldShowTriageActionBadge(email) ? '<span class="badge text-bg-light me-1">' + escapeHtml(TRIAGE_ACTION_NAMES[email.triage_primary_action] || email.triage_primary_action) + '</span>' : '',
 				email.triage_status === 'failed' ? '<span class="badge text-bg-danger me-1">Failed</span>' : '',
-				email.triage_draft_id ? '<span class="badge text-bg-info me-1">Draft</span>' : '',
+				shouldShowDraftBadge(email) ? '<span class="badge text-bg-info me-1">Draft</span>' : '',
 			].filter(Boolean).join('');
 			return '<div class="list-group-item list-group-item-action ecc-email-item" role="button" tabindex="0" data-id="' + escapeHtml(emailId(email)) + '">'
 				+ '<div class="d-flex justify-content-between align-items-start gap-3 min-w-0">'
