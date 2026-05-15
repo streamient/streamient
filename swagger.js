@@ -1170,7 +1170,7 @@ const swaggerSpec = {
 	            post: {
 	                tags: ['Emails'],
 	                summary: 'Ask Email AI across the current email view',
-	                description: 'Runs a Typesense-first list, count, search, or summary query over emails. Scope defaults to the current ECC project/mailbox/label view.',
+	                description: 'Runs a Typesense-first list, count, search, or summary query over emails. Scope defaults to the current ECC project/mailbox/label view. Summary requests search the scoped project first, then retry across all projects when no scoped emails are found.',
 	                requestBody: {
 	                    required: true,
 	                    content: {
@@ -1205,6 +1205,7 @@ const swaggerSpec = {
 	                                        answer: { type: 'string' },
 	                                        count: { type: 'integer' },
 	                                        mode: { type: 'string', enum: ['list', 'search', 'count', 'summary'] },
+	                                        context_scope: { type: 'string', enum: ['project', 'all-projects'], description: 'Context/search scope used after project-first fallback.' },
 	                                        scope: { type: 'object' },
 	                                        emails: { type: 'array', items: { $ref: '#/components/schemas/Email' } },
 	                                    },
@@ -1267,13 +1268,14 @@ const swaggerSpec = {
 	            post: {
 	                tags: ['Emails'],
 	                summary: 'Ask Email AI about one email',
+	                description: 'Answers using the selected email plus Kumbukum context. Context search checks the email project first, then all projects only when no usable project records are found.',
                 parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
                 requestBody: {
                     required: true,
                     content: { 'application/json': { schema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] } } },
                 },
                 responses: {
-                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { answer: { type: 'string' } } } } } },
+                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { answer: { type: 'string' }, context_scope: { type: 'string', enum: ['project', 'all-projects'] } } } } } },
                     404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
                 },
 	            },
@@ -1294,6 +1296,7 @@ const swaggerSpec = {
 	            post: {
 	                tags: ['Emails'],
 	                summary: 'Generate reply suggestions for one email',
+	                description: 'Generates reply choices using the selected email plus Kumbukum context. Context search checks the email project first, then all projects only when no usable project records are found.',
 	                parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
 	                responses: {
 	                    200: {
@@ -1303,6 +1306,7 @@ const swaggerSpec = {
 	                                schema: {
 	                                    type: 'object',
 	                                    properties: {
+	                                        context_scope: { type: 'string', enum: ['project', 'all-projects'] },
 	                                        replies: {
 	                                            type: 'array',
 	                                            items: {
@@ -1415,6 +1419,7 @@ const swaggerSpec = {
             post: {
                 tags: ['Emails'],
                 summary: 'Run AI triage over untriaged inbox emails',
+                description: 'Runs AI triage over inbox emails. For classification and generated draft replies, Kumbukum context is searched in each email project first, then across all projects only when no usable project records are found.',
                 requestBody: {
                     required: false,
                     content: {

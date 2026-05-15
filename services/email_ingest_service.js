@@ -48,7 +48,7 @@ const DEFAULT_EMAIL_TRIAGE_INSTRUCTIONS = [
 ].join(' ');
 const DEFAULT_EMAIL_AI_INSTRUCTIONS = [
 	'Answer as an email assistant for the selected message.',
-	'Use only the provided email context unless the user asks for general guidance.',
+	'Use the selected email plus retrieved Kumbukum context. Retrieved context searches the current project first and falls back to all projects only when no current-project records are found.',
 	'Be concise and call out uncertainty when the email context is insufficient.',
 ].join(' ');
 const EMAIL_AI_LIST_LIMIT = 50;
@@ -1061,13 +1061,25 @@ export async function askEmailListAi(host_id, query, scope = {}, options = {}) {
 	}
 
 	const intent = parseEmailAiQuery(prompt);
-	const filterBy = buildEmailAiTypesenseFilter(normalizedScope, intent);
 	const searchQuery = intent.search_text ? intent.search_text : '*';
 	const limit = intent.mode === 'count' ? EMAIL_AI_COUNT_LIMIT : EMAIL_AI_LIST_LIMIT;
-	const hits = await collectEmailAiTypesenseHits(host_id, searchQuery, filterBy, {
+	const searchFn = options.searchFn || searchCollection;
+	let effectiveScope = normalizedScope;
+	let contextScope = normalizedScope.project ? 'project' : 'all-projects';
+	let filterBy = buildEmailAiTypesenseFilter(effectiveScope, intent);
+	let hits = await collectEmailAiTypesenseHits(host_id, searchQuery, filterBy, {
 		limit,
-		searchFn: options.searchFn || searchCollection,
+		searchFn,
 	});
+	if (intent.mode === 'summary' && normalizedScope.project && !hits.length) {
+		effectiveScope = { ...normalizedScope, project: '' };
+		contextScope = 'all-projects';
+		filterBy = buildEmailAiTypesenseFilter(effectiveScope, intent);
+		hits = await collectEmailAiTypesenseHits(host_id, searchQuery, filterBy, {
+			limit,
+			searchFn,
+		});
+	}
 	const emails = hits.map((hit) => emailFromTypesenseDocument(hit.document || {}));
 	const count = intent.mode === 'count' ? emails.length : emails.length;
 	const mode = intent.mode === 'summary' ? 'summary' : (intent.mode === 'count' ? 'count' : (searchQuery === '*' ? 'list' : 'search'));
@@ -1080,7 +1092,8 @@ export async function askEmailListAi(host_id, query, scope = {}, options = {}) {
 		count,
 		emails: intent.mode === 'count' ? [] : emails,
 		mode,
-		scope: normalizedScope,
+		scope: effectiveScope,
+		context_scope: contextScope,
 	};
 }
 
@@ -1107,6 +1120,10 @@ export async function askEmailAi(host_id, emailId, query, options = {}) {
 
 	const completionFn = options.completionFn || emailAiCompletion;
 	const instructions = await getAiInstructions(host_id);
+	const context = await buildEmailKnowledgeContext(host_id, email, {
+		...options,
+		query: emailAiContextSearchQuery(email, prompt),
+	});
 	const content = await completionFn({
 		hostId: host_id,
 		scope: 'email',
@@ -1124,13 +1141,14 @@ export async function askEmailAi(host_id, emailId, query, options = {}) {
 				role: 'user',
 				content: [
 					`Email context:\n${buildEmailContext(email)}`,
+					`Retrieved Kumbukum context:\n${formatEmailKnowledgeContext(context) || 'No related context found.'}`,
 					`User request:\n${prompt}`,
 				].join('\n\n'),
 			},
 		],
 	});
 
-	return { answer: String(content || '').trim() };
+	return { answer: String(content || '').trim(), context_scope: context.context_scope };
 }
 
 export async function summarizeEmail(host_id, emailId, ctx = {}, options = {}) {
@@ -1200,6 +1218,7 @@ export async function suggestEmailReplies(host_id, emailId, options = {}) {
 
 	const instructions = await getAiInstructions(host_id);
 	const completionFn = options.completionFn || emailAiCompletion;
+	const context = await buildEmailKnowledgeContext(host_id, email, options);
 	const content = await completionFn({
 		hostId: host_id,
 		scope: 'email',
@@ -1220,13 +1239,14 @@ export async function suggestEmailReplies(host_id, emailId, options = {}) {
 					'Return shape: {"replies":[{"title":"short label","body_text":"plain text reply"},{"title":"short label","body_text":"plain text reply"}]}.',
 					'Keep each reply concise and ready to use.',
 					`Email context:\n${buildEmailContext(email)}`,
+					`Retrieved Kumbukum context:\n${formatEmailKnowledgeContext(context) || 'No related context found.'}`,
 				].join('\n\n'),
 			},
 		],
 	});
 	const replies = parseEmailReplySuggestionsResult(content);
 	if (!replies.length) throw new Error('No reply suggestions returned');
-	return { replies };
+	return { replies, context_scope: context.context_scope };
 }
 
 export async function useEmailReplySuggestion(host_id, emailId, data = {}, ctx = {}) {
@@ -1439,6 +1459,13 @@ function triageSearchQuery(email) {
 	].filter(Boolean).join('\n').slice(0, 1600) || '*';
 }
 
+function emailAiContextSearchQuery(email, prompt = '') {
+	return [
+		String(prompt || '').trim(),
+		triageSearchQuery(email),
+	].filter(Boolean).join('\n').slice(0, 1600) || '*';
+}
+
 function resultDocument(hit) {
 	return hit?.document || hit || {};
 }
@@ -1474,6 +1501,67 @@ function flattenKnowledgeResults(results, currentEmailId) {
 	return items.slice(0, 12);
 }
 
+function currentProjectIdForEmailContext(email = {}, options = {}) {
+	return stringifyObjectId(options.project || options.project_id || email.project?._id || email.project) || '';
+}
+
+async function buildEmailKnowledgeContext(host_id, email, options = {}) {
+	const currentEmailId = stringifyObjectId(email?._id);
+	const projectId = currentProjectIdForEmailContext(email, options);
+	const query = String(options.query || triageSearchQuery(email)).trim() || '*';
+	const searchKnowledgeFn = options.searchKnowledgeFn || ((hostId, searchQuery, searchOptions) => searchAll(hostId, searchQuery, searchOptions));
+	const searchOptions = {
+		perPage: options.perPage || 4,
+		includeEmails: true,
+		group: true,
+		exclude_fields: 'embedding',
+	};
+
+	async function runSearch(scopedProjectId) {
+		const scopedOptions = { ...searchOptions };
+		if (scopedProjectId) scopedOptions.projectId = scopedProjectId;
+		const results = await searchKnowledgeFn(host_id, query, scopedOptions);
+		return {
+			results,
+			knowledge: flattenKnowledgeResults(results, currentEmailId),
+		};
+	}
+
+	if (projectId) {
+		const scoped = await runSearch(projectId).catch(() => ({ results: {}, knowledge: [] }));
+		if (scoped.knowledge.length) {
+			return {
+				...scoped,
+				context_scope: 'project',
+				context_project_id: projectId,
+				searched_project_first: true,
+			};
+		}
+	}
+
+	const fallback = await runSearch('').catch(() => ({ results: {}, knowledge: [] }));
+	return {
+		...fallback,
+		context_scope: 'all-projects',
+		context_project_id: projectId,
+		searched_project_first: Boolean(projectId),
+	};
+}
+
+function formatEmailKnowledgeContext(context = {}) {
+	const lines = [];
+	if (context.knowledge?.length) {
+		const label = context.context_scope === 'project'
+			? 'CURRENT-PROJECT KNOWLEDGE SEARCH'
+			: 'ALL-PROJECT KNOWLEDGE SEARCH';
+		lines.push(`${label}:`);
+		for (const item of context.knowledge.slice(0, 10)) {
+			lines.push(`- [${item.item_type}:${item.item_id}] ${item.title}: ${item.excerpt}`);
+		}
+	}
+	return lines.join('\n').slice(0, 6000);
+}
+
 function formatTriageContext(context = {}) {
 	const lines = [];
 	if (context.thread?.length) {
@@ -1482,12 +1570,8 @@ function formatTriageContext(context = {}) {
 			lines.push(`- [emails:${item.item_id}] ${item.title}: ${item.excerpt}`);
 		}
 	}
-	if (context.knowledge?.length) {
-		lines.push('ALL-PROJECT KNOWLEDGE SEARCH:');
-		for (const item of context.knowledge.slice(0, 10)) {
-			lines.push(`- [${item.item_type}:${item.item_id}] ${item.title}: ${item.excerpt}`);
-		}
-	}
+	const knowledgeText = formatEmailKnowledgeContext(context);
+	if (knowledgeText) lines.push(knowledgeText);
 	if (context.graph_connections?.length) {
 		lines.push('GRAPH CONNECTIONS:');
 		for (const item of context.graph_connections.slice(0, 8)) {
@@ -1499,16 +1583,10 @@ function formatTriageContext(context = {}) {
 
 export async function buildTriageContext(host_id, email, options = {}) {
 	const currentEmailId = email._id?.toString();
-	const searchKnowledgeFn = options.searchKnowledgeFn || ((hostId, query, searchOptions) => searchAll(hostId, query, searchOptions));
 	const getConnectionsFn = options.getConnectionsFn || getConnectionsForItem;
 	const getThreadFn = options.getThreadFn || getEmailThread;
-	const [knowledgeResults, thread, graph] = await Promise.all([
-		searchKnowledgeFn(host_id, triageSearchQuery(email), {
-			perPage: 4,
-			includeEmails: true,
-			group: true,
-			exclude_fields: 'embedding',
-		}).catch(() => ({})),
+	const [knowledgeContext, thread, graph] = await Promise.all([
+		buildEmailKnowledgeContext(host_id, email, options),
 		getThreadFn(host_id, currentEmailId).catch(() => []),
 		getConnectionsFn(host_id, currentEmailId).catch(() => ({ links: [], tag_connections: [] })),
 	]);
@@ -1542,12 +1620,14 @@ export async function buildTriageContext(host_id, email, options = {}) {
 		})),
 	].filter((item) => item.item_id && item.item_id !== currentEmailId);
 
-	const knowledge = flattenKnowledgeResults(knowledgeResults, currentEmailId);
 	return {
-		knowledge,
-		prior_emails: knowledge.filter((item) => item.item_type === 'emails'),
+		knowledge: knowledgeContext.knowledge,
+		prior_emails: knowledgeContext.knowledge.filter((item) => item.item_type === 'emails'),
 		thread: threadItems,
 		graph_connections: normalizeRelatedContext(graphItems),
+		context_scope: knowledgeContext.context_scope,
+		context_project_id: knowledgeContext.context_project_id,
+		searched_project_first: knowledgeContext.searched_project_first,
 	};
 }
 

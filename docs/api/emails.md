@@ -45,7 +45,7 @@ POST /api/v1/emails/:id/suggest-replies
 POST /api/v1/emails/:id/draft-reply
 ```
 
-Use `/emails/ai` for list-level ECC questions such as counts, sender lookups, mailbox summaries, and semantic searches. It uses Typesense first and accepts the current ECC view as `scope`.
+Use `/emails/ai` for list-level ECC questions such as counts, sender lookups, mailbox summaries, and semantic searches. It uses Typesense first and accepts the current ECC view as `scope`. Summary requests search the scoped project first; if no scoped emails are found, they retry across all projects.
 
 ```json
 {
@@ -66,12 +66,13 @@ Response:
 	"answer": "Showing 3 emails matching \"show emails from sender@example.com\".",
 	"count": 3,
 	"mode": "list",
+	"context_scope": "project",
 	"scope": {},
 	"emails": []
 }
 ```
 
-Use `/emails/:id/ai` for questions about one selected email. Use `/emails/:id/summarize` to generate and save `triage_summary`, `/emails/:id/suggest-replies` to return two structured reply choices, and `/emails/:id/draft-reply` to turn one choice into a draft.
+Use `/emails/:id/ai` for questions about one selected email. It includes retrieved Kumbukum context by searching the selected email's project first, then all projects only when no project records are found. Use `/emails/:id/summarize` to generate and save `triage_summary`, `/emails/:id/suggest-replies` to return two structured reply choices with the same project-first context lookup, and `/emails/:id/draft-reply` to turn one choice into a draft.
 
 ## Triage status
 
@@ -140,3 +141,5 @@ Body:
 ```
 
 Use the returned `run_id`, `email_id`, or original `message_id` with the triage status endpoints to poll completion from external systems.
+
+Triage-generated classifications and reply drafts use the same project-first context rule: search records in the email's project first, then retry across all projects only when no usable project context is found.
