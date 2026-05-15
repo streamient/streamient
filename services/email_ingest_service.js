@@ -24,9 +24,9 @@ const DEFAULT_EMAIL_LABELS = [
 	{ slug: 'reply-required', name: 'Review', color: '#dc3545' },
 	{ slug: 'human-do', name: 'Human Do', color: '#fd7e14' },
 	{ slug: 'waiting', name: 'Waiting', color: '#0d6efd' },
+	{ slug: 'spam', name: 'Spam', color: '#212529' },
 	{ slug: 'no-action', name: 'No action', color: '#6c757d' },
 	{ slug: 'triaged', name: 'Done', color: '#198754' },
-	{ slug: 'spam', name: 'Spam', color: '#212529' },
 ];
 const SYSTEM_LABEL_SLUGS = DEFAULT_EMAIL_LABELS.map((label) => label.slug);
 const DEFAULT_EMAIL_LABEL_ORDER = new Map(DEFAULT_EMAIL_LABELS.map((label, index) => [label.slug, index]));

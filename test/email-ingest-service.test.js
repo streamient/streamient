@@ -563,7 +563,7 @@ describe('Email ingest service', () => {
 		try {
 			const result = await listEmailLabels('host-1');
 
-			assert.deepEqual(result.labels.map((label) => label.name), ['Review', 'Human Do', 'Waiting', 'No action', 'Spam']);
+			assert.deepEqual(result.labels.map((label) => label.name), ['Review', 'Human Do', 'Waiting', 'Spam', 'No action']);
 			assert.ok(!result.labels.some((label) => label.slug === 'triaged'));
 			assert.equal(bulkOps.find((op) => op.updateOne.filter.slug === 'reply-required').updateOne.update.$set.name, 'Review');
 			assert.equal(bulkOps.find((op) => op.updateOne.filter.slug === 'triaged').updateOne.update.$set.name, 'Done');
