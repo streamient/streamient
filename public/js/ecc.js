@@ -200,7 +200,7 @@
 			header.appendChild(textNode('div', 'small text-muted', 'Body'));
 
 			var controls = document.createElement('div');
-			controls.className = 'd-flex align-items-center gap-2';
+			controls.className = 'd-flex align-items-center gap-2 ecc-email-body-controls';
 			var modeGroup = document.createElement('div');
 			modeGroup.className = 'btn-group btn-group-sm';
 			modeGroup.setAttribute('role', 'group');
@@ -212,7 +212,7 @@
 			modeGroup.appendChild(htmlBtn);
 			modeGroup.appendChild(textBtn);
 			var themeGroup = document.createElement('div');
-			themeGroup.className = 'btn-group btn-group-sm';
+			themeGroup.className = 'btn-group btn-group-sm mx-2';
 			themeGroup.setAttribute('role', 'group');
 			themeGroup.setAttribute('aria-label', 'Email HTML theme');
 			var darkBtn = textNode('button', 'btn btn-outline-secondary', 'Dark');
