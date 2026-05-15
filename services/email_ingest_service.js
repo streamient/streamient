@@ -1133,6 +1133,141 @@ export async function askEmailAi(host_id, emailId, query, options = {}) {
 	return { answer: String(content || '').trim() };
 }
 
+export async function summarizeEmail(host_id, emailId, ctx = {}, options = {}) {
+	const email = await Email.findOne({ _id: emailId, host_id, in_trash: false }).lean();
+	if (!email) return null;
+
+	const instructions = await getAiInstructions(host_id);
+	const completionFn = options.completionFn || emailAiCompletion;
+	const content = await completionFn({
+		hostId: host_id,
+		scope: 'email',
+		maxTokens: 400,
+		messages: [
+			{
+				role: 'system',
+				content: [
+					'Summarize the selected email in one or two concise sentences. Return only the summary text.',
+					instructions.global ? `Global instructions:\n${instructions.global}` : '',
+					instructions.email ? `Email AI instructions:\n${instructions.email}` : '',
+				].filter(Boolean).join('\n\n'),
+			},
+			{ role: 'user', content: `Email context:\n${buildEmailContext(email)}` },
+		],
+	});
+	const summary = String(content || '')
+		.trim()
+		.replace(/^summary\s*:\s*/i, '')
+		.slice(0, 500);
+	if (!summary) throw new Error('Email summary was empty');
+
+	const updated = await updateEmail(host_id, emailId, { triage_summary: summary }, ctx);
+	return { summary, email: updated };
+}
+
+export function parseEmailReplySuggestionsResult(text) {
+	let parsed;
+	try {
+		parsed = JSON.parse(extractJsonObject(text));
+	} catch {
+		throw new Error('Reply suggestions response was not valid JSON');
+	}
+
+	const items = Array.isArray(parsed) ? parsed : parsed.replies;
+	if (!Array.isArray(items)) throw new Error('Reply suggestions response must include replies');
+
+	return items
+		.map((item, index) => {
+			if (typeof item === 'string') {
+				return {
+					title: `Reply ${index + 1}`,
+					body_text: item.trim().slice(0, 12000),
+				};
+			}
+			if (!item || typeof item !== 'object') return null;
+			return {
+				title: String(item.title || `Reply ${index + 1}`).trim().slice(0, 120),
+				body_text: String(item.body_text || item.text || item.body || '').trim().slice(0, 12000),
+			};
+		})
+		.filter((item) => item?.body_text)
+		.slice(0, 2);
+}
+
+export async function suggestEmailReplies(host_id, emailId, options = {}) {
+	const email = await Email.findOne({ _id: emailId, host_id, in_trash: false }).lean();
+	if (!email) return null;
+
+	const instructions = await getAiInstructions(host_id);
+	const completionFn = options.completionFn || emailAiCompletion;
+	const content = await completionFn({
+		hostId: host_id,
+		scope: 'email',
+		maxTokens: 1400,
+		messages: [
+			{
+				role: 'system',
+				content: [
+					'You write practical email replies. Return compact JSON only. Never send email.',
+					instructions.global ? `Global instructions:\n${instructions.global}` : '',
+					instructions.email ? `Email AI instructions:\n${instructions.email}` : '',
+				].filter(Boolean).join('\n\n'),
+			},
+			{
+				role: 'user',
+				content: [
+					'Create exactly two different reply options for this email.',
+					'Return shape: {"replies":[{"title":"short label","body_text":"plain text reply"},{"title":"short label","body_text":"plain text reply"}]}.',
+					'Keep each reply concise and ready to use.',
+					`Email context:\n${buildEmailContext(email)}`,
+				].join('\n\n'),
+			},
+		],
+	});
+	const replies = parseEmailReplySuggestionsResult(content);
+	if (!replies.length) throw new Error('No reply suggestions returned');
+	return { replies };
+}
+
+export async function useEmailReplySuggestion(host_id, emailId, data = {}, ctx = {}) {
+	const email = await Email.findOne({ _id: emailId, host_id, in_trash: false }).lean();
+	if (!email) return null;
+
+	const bodyText = String(data.body_text || data.text || data.body || '').trim().slice(0, 12000);
+	if (!bodyText) throw new Error('body_text required');
+	const subject = String(data.subject || '').trim().slice(0, 300) || `Re: ${email.subject || '(No subject)'}`;
+	const before = ctx.user_id
+		? await EmailDraft.findOne({ source_email: email._id, host_id, generated_by_triage: false, status: { $ne: 'discarded' } }).sort({ updatedAt: -1 }).lean()
+		: null;
+	const draft = await EmailDraft.findOneAndUpdate(
+		{ source_email: email._id, host_id, generated_by_triage: false, status: { $ne: 'discarded' } },
+		{
+			$set: {
+				from: (email.to || [])[0] || '',
+				to: email.from || [],
+				cc: [],
+				bcc: [],
+				subject,
+				body_text: bodyText,
+				body_html: '',
+				status: 'draft',
+				confidence: null,
+				project: email.project,
+				owner: ctx.user_id || email.owner,
+				host_id,
+				generated_by_triage: false,
+			},
+		},
+		{ upsert: true, sort: { updatedAt: -1 }, returnDocument: 'after' },
+	);
+
+	if (draft && ctx.user_id) {
+		const details = audit.diffSnapshot(before, draft);
+		audit.log({ action: 'update', resource: 'email_draft', resource_id: draft._id.toString(), host_id, details: { ...details, source: 'reply_suggestion' }, ...ctx });
+	}
+	return draft;
+}
+
 export async function countEmails(host_id) {
 	return Email.countDocuments({ host_id, in_trash: false });
 }

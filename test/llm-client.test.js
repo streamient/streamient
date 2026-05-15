@@ -50,6 +50,8 @@ describe('LLM client email model routing', () => {
 		assert.equal(content, 'ok');
 		assert.equal(requests[0].body.model, 'email-ai-model');
 		assert.equal(requests[0].options.headers.Authorization, 'Bearer env-openai');
+		assert.equal(requests[0].body.max_tokens, 4096);
+		assert.equal(requests[0].body.max_completion_tokens, undefined);
 	});
 
 	it('uses the Email triage model for email triage completions', async () => {
@@ -59,5 +61,19 @@ describe('LLM client email model routing', () => {
 		});
 
 		assert.equal(requests[0].body.model, 'email-triage-model');
+	});
+
+	it('uses max_completion_tokens for OpenAI GPT-5 email models', async () => {
+		config.llm.emailAiModel = 'gpt-5.4-mini';
+
+		await emailAiCompletion({
+			hostId: 'host-1',
+			maxTokens: 400,
+			messages: [{ role: 'user', content: 'Summarize this email' }],
+		});
+
+		assert.equal(requests[0].body.model, 'gpt-5.4-mini');
+		assert.equal(requests[0].body.max_tokens, undefined);
+		assert.equal(requests[0].body.max_completion_tokens, 400);
 	});
 });

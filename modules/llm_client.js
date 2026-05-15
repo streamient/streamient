@@ -20,6 +20,20 @@ const PROVIDERS = {
 	},
 };
 
+function usesMaxCompletionTokens(providerName, model = '') {
+	if (providerName !== 'openai') return false;
+	return /^(gpt-5|gpt-4\.1|o[134]|o\d)/i.test(String(model || ''));
+}
+
+function applyTokenLimit(body, providerName, model, maxTokens) {
+	if (usesMaxCompletionTokens(providerName, model)) {
+		body.max_completion_tokens = maxTokens;
+		return body;
+	}
+	body.max_tokens = maxTokens;
+	return body;
+}
+
 /**
  * Resolve provider name and API key.
  * Accepts an explicit provider string or falls back to config.llm.chatProvider.
@@ -60,18 +74,18 @@ export async function chatCompletion({ messages, stream = false, provider: provi
 	}
 
 	// OpenAI-compatible API (OpenAI, Groq, Cerebras)
+	const body = applyTokenLimit({
+		model,
+		messages,
+		stream,
+	}, name, model, maxTokens);
 	const response = await fetch(`${provider.baseUrl}/chat/completions`, {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json',
 			Authorization: `Bearer ${apiKey}`,
 		},
-		body: JSON.stringify({
-			model,
-			messages,
-			stream,
-			max_tokens: maxTokens,
-		}),
+		body: JSON.stringify(body),
 	});
 
 	if (!response.ok) {

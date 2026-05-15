@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailLabels, parseTriageResult, triageInboxEmails, backfillEmailTriageState, askEmailAi, askEmailListAi, buildEmailAiTypesenseFilter, buildTriageContext, parseEmailAiQuery, resetEmailTriage, updateEmail } from '../services/email_ingest_service.js';
+import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailLabels, parseTriageResult, triageInboxEmails, backfillEmailTriageState, askEmailAi, askEmailListAi, buildEmailAiTypesenseFilter, buildTriageContext, parseEmailAiQuery, resetEmailTriage, updateEmail, parseEmailReplySuggestionsResult, suggestEmailReplies } from '../services/email_ingest_service.js';
 import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
 import { EmailLabel } from '../model/email_label.js';
@@ -1195,7 +1195,7 @@ describe('Email ingest service', () => {
 		it('answers selected email AI requests with email instructions and context', async () => {
 			const originalEmailFindOne = Email.findOne;
 			const originalTenantFindOne = Tenant.findOne;
-		let systemPrompt = '';
+			let systemPrompt = '';
 		let userPrompt = '';
 
 		Email.findOne = (query) => {
@@ -1240,7 +1240,60 @@ describe('Email ingest service', () => {
 			assert.match(userPrompt, /User request:\nDraft the key points/);
 		} finally {
 			Email.findOne = originalEmailFindOne;
-			Tenant.findOne = originalTenantFindOne;
-		}
+				Tenant.findOne = originalTenantFindOne;
+			}
+		});
+
+		it('parses structured reply suggestions', () => {
+			const replies = parseEmailReplySuggestionsResult('```json\n{"replies":[{"title":"Short","body_text":"Thanks for the note."},{"title":"Detailed","body_text":"Thanks, I will review and follow up."},{"title":"Extra","body_text":"Ignore me"}]}\n```');
+			assert.deepEqual(replies, [
+				{ title: 'Short', body_text: 'Thanks for the note.' },
+				{ title: 'Detailed', body_text: 'Thanks, I will review and follow up.' },
+			]);
+			assert.throws(() => parseEmailReplySuggestionsResult('{"items":[]}'), /replies/);
+		});
+
+		it('generates selected email reply suggestions as JSON', async () => {
+			const originalEmailFindOne = Email.findOne;
+			const originalTenantFindOne = Tenant.findOne;
+			let userPrompt = '';
+
+			Email.findOne = (query) => {
+				assert.deepEqual(query, { _id: 'email-1', host_id: 'host-1', in_trash: false });
+				return {
+					lean: async () => ({
+						_id: 'email-1',
+						subject: 'Support request',
+						from: ['sender@example.com'],
+						to: ['team@example.com'],
+						text_content: 'Can you help me configure this?',
+					}),
+				};
+			};
+			Tenant.findOne = () => ({
+				select: () => ({
+					lean: async () => ({ settings: { ai_instructions: { email: 'Be concise' } } }),
+				}),
+			});
+
+			try {
+				const result = await suggestEmailReplies('host-1', 'email-1', {
+					completionFn: async ({ messages, scope }) => {
+						assert.equal(scope, 'email');
+						userPrompt = messages[1].content;
+						return '{"replies":[{"title":"Option A","body_text":"Happy to help."},{"title":"Option B","body_text":"Send over the details."}]}';
+					},
+				});
+
+				assert.match(userPrompt, /Create exactly two different reply options/);
+				assert.match(userPrompt, /Subject: Support request/);
+				assert.deepEqual(result.replies, [
+					{ title: 'Option A', body_text: 'Happy to help.' },
+					{ title: 'Option B', body_text: 'Send over the details.' },
+				]);
+			} finally {
+				Email.findOne = originalEmailFindOne;
+				Tenant.findOne = originalTenantFindOne;
+			}
+		});
 	});
-});

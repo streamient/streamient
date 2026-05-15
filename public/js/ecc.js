@@ -48,6 +48,7 @@
 	var pendingEmailId = '';
 	var selectedIds = new Set();
 	var emailAiMessages = [];
+	var emailReplySuggestions = [];
 	var windowListeners = [];
 	var triageRunId = '';
 	var triageProgress = null;
@@ -498,32 +499,31 @@
 
 	function renderEmailAi(email) {
 		if (!aiPanel) return;
-			if (!email) {
-				if (aiSubtitle) aiSubtitle.textContent = 'No email active.';
-				openEmailBtn?.classList.add('d-none');
-				renderEmailListAi();
-				return;
-			}
+		if (!email) {
+			if (aiSubtitle) aiSubtitle.textContent = 'No email active.';
+			openEmailBtn?.classList.add('d-none');
+			renderEmailListAi();
+			return;
+		}
 		var subject = email.subject || '(No subject)';
-		var sender = (email.from || []).join(', ') || '(unknown sender)';
 		var labels = renderVisibleLabels(email);
+		var summary = String(email.triage_summary || '').trim();
 		if (aiSubtitle) aiSubtitle.textContent = subject;
 		openEmailBtn?.classList.remove('d-none');
 		aiPanel.innerHTML = '<div class="ecc-ai-content">'
 			+ '<div class="ecc-ai-section">'
-			+ '<h6 class="mb-2">AI triage</h6>'
-			+ (labels ? '<div class="mb-2">' + labels + '</div>' : '<div class="text-muted small mb-2">No labels yet.</div>')
-			+ '<div class="small text-muted mb-1">Summary</div>'
-			+ '<p class="mb-2">' + escapeHtml(email.triage_summary || 'Not triaged yet.') + '</p>'
-			+ '<div class="small text-muted mb-1">Reason</div>'
-			+ '<p class="mb-0">' + escapeHtml(email.triage_reason || 'No AI reason saved yet.') + '</p>'
+			+ '<h6 class="mb-2">Summary</h6>'
+			+ (summary
+				? '<p class="mb-3">' + escapeHtml(summary) + '</p>'
+				: '<button type="button" class="btn btn-outline-primary btn-sm mb-3" id="ecc-email-summarize">Summarize email</button>')
+			+ (labels ? '<div>' + labels + '</div>' : '')
 			+ '</div>'
 			+ '<div class="ecc-ai-section">'
-			+ '<h6 class="mb-2">Email context</h6>'
-			+ '<div class="small text-muted mb-1">From</div>'
-			+ '<div class="mb-2 text-break">' + escapeHtml(sender) + '</div>'
-			+ '<div class="small text-muted mb-1">Subject</div>'
-			+ '<div class="mb-0 text-break">' + escapeHtml(subject) + '</div>'
+			+ '<div class="d-flex justify-content-between align-items-center gap-2 mb-3">'
+			+ '<h6 class="mb-0">Reply options</h6>'
+			+ '<button type="button" class="btn btn-outline-primary btn-sm" id="ecc-email-suggest-reply">Suggest a reply</button>'
+			+ '</div>'
+			+ '<div class="ecc-email-reply-suggestions" id="ecc-email-reply-suggestions"></div>'
 			+ '</div>'
 			+ '<div class="ecc-ai-section ecc-email-chat">'
 			+ '<h6 class="mb-2">Ask Email AI</h6>'
@@ -543,12 +543,38 @@
 		aiInputEl = document.getElementById('ecc-email-ai-input');
 		aiSendBtn = document.getElementById('ecc-email-ai-send');
 		renderEmailAiMessages();
+		renderReplySuggestions();
+		document.getElementById('ecc-email-summarize')?.addEventListener('click', summarizeSelectedEmail);
+		document.getElementById('ecc-email-suggest-reply')?.addEventListener('click', suggestEmailReplies);
 		aiSendBtn?.addEventListener('click', sendEmailAiMessage);
 		aiInputEl?.addEventListener('keydown', function (event) {
 			if (event.key === 'Enter' && !event.shiftKey) {
 				event.preventDefault();
 				sendEmailAiMessage();
 			}
+		});
+	}
+
+	function renderReplySuggestions(loadingText) {
+		var el = document.getElementById('ecc-email-reply-suggestions');
+		if (!el) return;
+		if (loadingText) {
+			el.innerHTML = '<div class="text-muted small">' + escapeHtml(loadingText) + '</div>';
+			return;
+		}
+		if (!emailReplySuggestions.length) {
+			el.innerHTML = '<div class="text-muted small">No reply suggestions yet.</div>';
+			return;
+		}
+		el.innerHTML = emailReplySuggestions.map(function (reply, index) {
+			return '<div class="ecc-email-reply-option mb-3">'
+				+ '<div class="small fw-semibold mb-2">' + escapeHtml(reply.title || ('Reply ' + (index + 1))) + '</div>'
+				+ '<div class="small mb-2 text-break">' + escapeHtml(reply.body_text || '') + '</div>'
+				+ '<button type="button" class="btn btn-primary btn-sm ecc-email-use-reply" data-index="' + index + '">Use reply</button>'
+				+ '</div>';
+		}).join('');
+		el.querySelectorAll('.ecc-email-use-reply').forEach(function (button) {
+			button.addEventListener('click', useReplySuggestion);
 		});
 	}
 
@@ -566,25 +592,88 @@
 		aiMessagesEl.scrollTop = aiMessagesEl.scrollHeight;
 	}
 
-		async function sendEmailAiMessage() {
-			if (!aiInputEl || !aiSendBtn) return;
-			var query = aiInputEl.value.trim();
-			if (!query) return;
-			emailAiMessages.push({ role: 'user', text: query });
+	async function summarizeSelectedEmail() {
+		if (!selectedEmail) return;
+		var button = document.getElementById('ecc-email-summarize');
+		if (button) {
+			button.disabled = true;
+			button.textContent = 'Summarizing...';
+		}
+		try {
+			var res = await api('POST', '/emails/' + encodeURIComponent(selectedEmail._id) + '/summarize', {});
+			if (res.email) {
+				selectedEmail = res.email;
+			} else {
+				selectedEmail.triage_summary = res.summary || '';
+			}
+			renderEmailAi(selectedEmail);
+		} catch (err) {
+			showError(err.message || 'Failed to summarize email');
+			if (button) {
+				button.disabled = false;
+				button.textContent = 'Summarize email';
+			}
+		}
+	}
+
+	async function suggestEmailReplies() {
+		if (!selectedEmail) return;
+		var button = document.getElementById('ecc-email-suggest-reply');
+		if (button) button.disabled = true;
+		renderReplySuggestions('Writing reply options...');
+		try {
+			var res = await api('POST', '/emails/' + encodeURIComponent(selectedEmail._id) + '/suggest-replies', {});
+			emailReplySuggestions = res.replies || [];
+			renderReplySuggestions();
+		} catch (err) {
+			emailReplySuggestions = [];
+			renderReplySuggestions();
+			showError(err.message || 'Failed to suggest replies');
+		} finally {
+			if (button) button.disabled = false;
+		}
+	}
+
+	async function useReplySuggestion(event) {
+		if (!selectedEmail) return;
+		var button = event.currentTarget;
+		var reply = emailReplySuggestions[parseInt(button.dataset.index, 10)];
+		if (!reply?.body_text) return;
+		button.disabled = true;
+		button.textContent = 'Using...';
+		try {
+			var res = await api('POST', '/emails/' + encodeURIComponent(selectedEmail._id) + '/draft-reply', {
+				body_text: reply.body_text,
+			});
+			renderDraftDetail(res.draft || null);
+			showSuccess('Draft reply updated');
+		} catch (err) {
+			showError(err.message || 'Failed to use reply');
+		} finally {
+			button.disabled = false;
+			button.textContent = 'Use reply';
+		}
+	}
+
+	async function sendEmailAiMessage() {
+		if (!aiInputEl || !aiSendBtn) return;
+		var query = aiInputEl.value.trim();
+		if (!query) return;
+		emailAiMessages.push({ role: 'user', text: query });
 		aiInputEl.value = '';
-			aiSendBtn.disabled = true;
-			renderEmailAiMessages();
-			try {
-				var res = selectedEmail
-					? await api('POST', '/emails/' + selectedEmail._id + '/ai', { query: query })
-					: await api('POST', '/emails/ai', { query: query, scope: currentEmailAiScope() });
-				emailAiMessages.push({ role: 'assistant', text: res.answer || '' });
-				if (!selectedEmail && Array.isArray(res.emails) && res.mode !== 'count') {
-					renderEmailAiResultEmails(res.emails, res.answer || '', res.count || 0);
-				}
-			} catch (err) {
-				emailAiMessages.push({ role: 'assistant', text: 'Error: ' + (err.message || 'Email AI failed') });
-			} finally {
+		aiSendBtn.disabled = true;
+		renderEmailAiMessages();
+		try {
+			var res = selectedEmail
+				? await api('POST', '/emails/' + selectedEmail._id + '/ai', { query: query })
+				: await api('POST', '/emails/ai', { query: query, scope: currentEmailAiScope() });
+			emailAiMessages.push({ role: 'assistant', text: res.answer || '' });
+			if (!selectedEmail && Array.isArray(res.emails) && res.mode !== 'count') {
+				renderEmailAiResultEmails(res.emails, res.answer || '', res.count || 0);
+			}
+		} catch (err) {
+			emailAiMessages.push({ role: 'assistant', text: 'Error: ' + (err.message || 'Email AI failed') });
+		} finally {
 			aiSendBtn.disabled = false;
 			renderEmailAiMessages();
 			aiInputEl.focus();
@@ -928,6 +1017,7 @@
 			listEl.innerHTML = '<div class="list-group-item text-muted ecc-email-empty">No emails for this view.</div>';
 			selectedEmail = null;
 			emailAiMessages = [];
+			emailReplySuggestions = [];
 			renderEmailAi(null);
 			updateActionBar();
 		}
@@ -942,12 +1032,14 @@
 			listEl.innerHTML = '<div class="list-group-item text-muted ecc-email-empty">No emails for this view.</div>';
 			selectedEmail = null;
 			emailAiMessages = [];
+			emailReplySuggestions = [];
 			renderEmailAi(null);
 			updateActionBar();
 			return;
 		}
 		selectedEmail = null;
 		emailAiMessages = [];
+		emailReplySuggestions = [];
 		renderEmailAi(null);
 		listEl.innerHTML = emails.map(renderEmailItemHtml).join('');
 		listEl.querySelectorAll('.ecc-email-item').forEach(function (button) {
@@ -964,6 +1056,7 @@
 		renderMoveMenu();
 		selectedEmail = null;
 		emailAiMessages = [];
+		emailReplySuggestions = [];
 		renderEmailAi(null);
 		if (!drafts.length) {
 			listEl.innerHTML = '<div class="list-group-item text-muted">No drafts for this view.</div>';
@@ -1007,6 +1100,7 @@
 			selectedEmail = email;
 			pendingEmailId = '';
 			emailAiMessages = [];
+			emailReplySuggestions = [];
 			listEl?.querySelectorAll('.ecc-email-item').forEach(function (item) {
 				var active = item.dataset.id === id || item.dataset.sourceEmail === id;
 				item.classList.toggle('is-active', active);
@@ -1017,6 +1111,7 @@
 			selectedEmail = null;
 			pendingEmailId = '';
 			emailAiMessages = [];
+			emailReplySuggestions = [];
 			renderEmailAi(null);
 			showDetailError(err.message || 'Failed to load email.');
 		}

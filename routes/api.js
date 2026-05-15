@@ -466,6 +466,36 @@ router.post('/emails/:id/ai', requireEmailFeatureAccess, async (req, res) => {
 	}
 });
 
+router.post('/emails/:id/summarize', requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const result = await emailIngestService.summarizeEmail(req.host_id, req.params.id, auditCtx(req));
+		if (!result) return res.status(404).json({ error: 'Email not found' });
+		res.json({ summary: result.summary, email: decorateEmailForClient(result.email) });
+	} catch (err) {
+		res.status(400).json({ error: err.message || 'Email summary failed' });
+	}
+});
+
+router.post('/emails/:id/suggest-replies', requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const result = await emailIngestService.suggestEmailReplies(req.host_id, req.params.id);
+		if (!result) return res.status(404).json({ error: 'Email not found' });
+		res.json(result);
+	} catch (err) {
+		res.status(400).json({ error: err.message || 'Reply suggestions failed' });
+	}
+});
+
+router.post('/emails/:id/draft-reply', requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const draft = await emailIngestService.useEmailReplySuggestion(req.host_id, req.params.id, req.body || {}, auditCtx(req));
+		if (!draft) return res.status(404).json({ error: 'Email not found' });
+		res.json({ draft });
+	} catch (err) {
+		res.status(400).json({ error: err.message || 'Draft reply failed' });
+	}
+});
+
 router.post('/emails/ai', requireEmailFeatureAccess, async (req, res) => {
 	try {
 		const result = await emailIngestService.askEmailListAi(req.host_id, req.body?.query, req.body?.scope || {});

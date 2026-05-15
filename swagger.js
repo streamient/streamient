@@ -1263,10 +1263,10 @@ const swaggerSpec = {
                 },
             },
         },
-        '/emails/{id}/ai': {
-            post: {
-                tags: ['Emails'],
-                summary: 'Ask Email AI about one email',
+	        '/emails/{id}/ai': {
+	            post: {
+	                tags: ['Emails'],
+	                summary: 'Ask Email AI about one email',
                 parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
                 requestBody: {
                     required: true,
@@ -1276,11 +1276,83 @@ const swaggerSpec = {
                     200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { answer: { type: 'string' } } } } } },
                     404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
                 },
-            },
-        },
-        '/emails/{id}/reset-triage': {
-            post: {
-                tags: ['Emails'],
+	            },
+	        },
+	        '/emails/{id}/summarize': {
+	            post: {
+	                tags: ['Emails'],
+	                summary: 'Generate and save an email summary',
+	                parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+	                responses: {
+	                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { summary: { type: 'string' }, email: { $ref: '#/components/schemas/Email' } } } } } },
+	                    400: { description: 'Invalid request', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+	                    404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+	                },
+	            },
+	        },
+	        '/emails/{id}/suggest-replies': {
+	            post: {
+	                tags: ['Emails'],
+	                summary: 'Generate reply suggestions for one email',
+	                parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+	                responses: {
+	                    200: {
+	                        description: 'OK',
+	                        content: {
+	                            'application/json': {
+	                                schema: {
+	                                    type: 'object',
+	                                    properties: {
+	                                        replies: {
+	                                            type: 'array',
+	                                            items: {
+	                                                type: 'object',
+	                                                properties: {
+	                                                    title: { type: 'string' },
+	                                                    body_text: { type: 'string' },
+	                                                },
+	                                            },
+	                                        },
+	                                    },
+	                                },
+	                            },
+	                        },
+	                    },
+	                    400: { description: 'Invalid request', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+	                    404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+	                },
+	            },
+	        },
+	        '/emails/{id}/draft-reply': {
+	            post: {
+	                tags: ['Emails'],
+	                summary: 'Create or update a draft from a reply suggestion',
+	                parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+	                requestBody: {
+	                    required: true,
+	                    content: {
+	                        'application/json': {
+	                            schema: {
+	                                type: 'object',
+	                                required: ['body_text'],
+	                                properties: {
+	                                    subject: { type: 'string' },
+	                                    body_text: { type: 'string' },
+	                                },
+	                            },
+	                        },
+	                    },
+	                },
+	                responses: {
+	                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { draft: { $ref: '#/components/schemas/EmailDraft' } } } } } },
+	                    400: { description: 'Invalid request', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+	                    404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+	                },
+	            },
+	        },
+	        '/emails/{id}/reset-triage': {
+	            post: {
+	                tags: ['Emails'],
                 summary: 'Reset email triage state',
                 description: 'Moves the email back to inbox, restores it from trash, clears labels, and clears triage metadata.',
                 parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],

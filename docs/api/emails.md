@@ -40,6 +40,9 @@ Email read responses include sanitized `html_content`, `html_content_has_remote_
 ```http
 POST /api/v1/emails/ai
 POST /api/v1/emails/:id/ai
+POST /api/v1/emails/:id/summarize
+POST /api/v1/emails/:id/suggest-replies
+POST /api/v1/emails/:id/draft-reply
 ```
 
 Use `/emails/ai` for list-level ECC questions such as counts, sender lookups, mailbox summaries, and semantic searches. It uses Typesense first and accepts the current ECC view as `scope`.
@@ -68,7 +71,7 @@ Response:
 }
 ```
 
-Use `/emails/:id/ai` for questions about one selected email.
+Use `/emails/:id/ai` for questions about one selected email. Use `/emails/:id/summarize` to generate and save `triage_summary`, `/emails/:id/suggest-replies` to return two structured reply choices, and `/emails/:id/draft-reply` to turn one choice into a draft.
 
 ## Triage status
 

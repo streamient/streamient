@@ -662,6 +662,17 @@ small,
 	flex: 0 0 auto;
 }
 
+.ecc-email-reply-option {
+	border-bottom: 1px solid var(--bs-border-color);
+	padding-bottom: 0.75rem;
+}
+
+.ecc-email-reply-option:last-child {
+	border-bottom: 0;
+	margin-bottom: 0 !important;
+	padding-bottom: 0;
+}
+
 .ecc-email-ai-message {
 	border-radius: 0.5rem;
 	padding: 0.55rem 0.7rem;
