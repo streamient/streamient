@@ -26,8 +26,8 @@ x-env: &env
     EMAIL_AI_MODEL_PROVIDER: openai
     EMAIL_TRIAGE_MODEL: "gpt-5.4-mini"
     EMAIL_TRIAGE_MODEL_PROVIDER: openai
-    GOOGLE_API_KEY: "${GOOGLE_API_KEY:-}"
     OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+    GOOGLE_API_KEY: "${GOOGLE_API_KEY:-}"
     APP_URL: http://localhost:3000
     MCP_BASE_URL: http://localhost:3002
     WS_URL: ""
