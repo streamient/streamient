@@ -310,6 +310,18 @@ body.kk-template1 .huebee__close-button {
 		flex: 0 0 100%;
 		width: 100%;
 		max-width: 100%;
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+		overflow: hidden;
+	}
+
+	body.kk-ecc-page #page-content {
+		display: flex;
+		flex: 1 1 0;
+		flex-direction: column;
+		min-height: 0;
+		overflow: hidden;
 	}
 }
 
@@ -432,7 +444,8 @@ small,
 	display: grid;
 	grid-template-columns: minmax(180px, 220px) minmax(0, 1fr) minmax(320px, 380px);
 	gap: 1rem;
-	min-height: calc(100vh - 170px);
+	height: 100%;
+	min-height: 0;
 	overflow: hidden;
 }
 
@@ -440,18 +453,25 @@ small,
 	border-right: 1px solid var(--bs-border-color);
 	padding-right: 1rem;
 	min-width: 0;
+	min-height: 0;
+	overflow-x: hidden;
+	overflow-y: auto;
 }
 
 .ecc-main {
 	min-width: 0;
-	overflow: hidden;
+	min-height: 0;
+	overflow-x: hidden;
+	overflow-y: auto;
 }
 
 .ecc-ai {
 	border-left: 1px solid var(--bs-border-color);
 	padding-left: 1rem;
 	min-width: 0;
-	overflow: hidden;
+	min-height: 0;
+	overflow-x: hidden;
+	overflow-y: auto;
 }
 
 .min-w-0 {
@@ -618,6 +638,8 @@ small,
 @media (max-width: 991.98px) {
 	.ecc-shell {
 		grid-template-columns: 1fr;
+		height: auto;
+		overflow: visible;
 	}
 
 	.ecc-left {
@@ -625,6 +647,7 @@ small,
 		border-bottom: 1px solid var(--bs-border-color);
 		padding-right: 0;
 		padding-bottom: 1rem;
+		overflow: visible;
 	}
 
 	.ecc-ai {
@@ -632,6 +655,11 @@ small,
 		border-top: 1px solid var(--bs-border-color);
 		padding-left: 0;
 		padding-top: 1rem;
+		overflow: visible;
+	}
+
+	.ecc-main {
+		overflow: visible;
 	}
 }
 
