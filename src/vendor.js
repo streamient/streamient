@@ -1,10 +1,12 @@
-// Vendor JS bundle — Bootstrap + SweetAlert2 + Huebee + JSURL + FilePond
+// Vendor JS bundle — Bootstrap + SweetAlert2 + Huebee + JSURL + FilePond + Tagify
 export { Collapse, Dropdown, Modal, Offcanvas, Tab, Toast, Tooltip } from 'bootstrap';
 export { default as Huebee } from 'huebee';
 import * as JSURL from 'jsurl2';
 export { JSURL };
 import * as FilePond from 'filepond';
 export { FilePond };
+import Tagify from '@yaireo/tagify';
+export { Tagify };
 import Swal from 'sweetalert2';
 export { Swal };
 
@@ -57,10 +59,11 @@ Swal.fire = (...args) => {
 	return originalSwalFire(...args);
 };
 
-// Make SweetAlert2 + JSURL + FilePond + marked + Bootstrap Modal available globally for non-module scripts
+// Make SweetAlert2 + JSURL + FilePond + Tagify + marked + Bootstrap Modal available globally for non-module scripts
 import { Modal as BsModal } from 'bootstrap';
 window.Swal = Swal;
 window.JSURL = JSURL;
 window.FilePond = FilePond;
+window.Tagify = Tagify;
 window.marked = marked;
 window.BsModal = BsModal;

@@ -7,6 +7,7 @@ import { simpleParser } from 'mailparser';
 
 import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
+import { EmailIdentity } from '../model/email_identity.js';
 import { EmailLabel } from '../model/email_label.js';
 import { GraphLink } from '../model/graph_link.js';
 import { extractText } from './import_service.js';
@@ -33,6 +34,7 @@ const DEFAULT_EMAIL_LABEL_ORDER = new Map(DEFAULT_EMAIL_LABELS.map((label, index
 const HIDDEN_EMAIL_LABEL_SLUGS = new Set(['triaged']);
 const PRIMARY_TRIAGE_LABELS = ['reply-required', 'human-do', 'waiting', 'no-action', 'spam'];
 const TRIAGE_ACTIONS = PRIMARY_TRIAGE_LABELS;
+const MAX_DRAFT_RECIPIENTS = 10;
 const MAILBOX_ACTIONS = ['none', 'keep-inbox', 'archive', 'spam'];
 const TRIAGE_STATUSES = ['pending', 'complete', 'failed'];
 const TRIAGE_STATUS_INCLUDES = ['email', 'draft'];
@@ -168,7 +170,35 @@ function normalizeDraftRecipientList(value, fieldName) {
 	const recipients = [...new Set(normalizeRecipientList(value))];
 	const invalid = recipients.filter((recipient) => !DRAFT_EMAIL_RE.test(recipient));
 	if (invalid.length) throw new Error(`${fieldName} contains invalid email address`);
+	if (recipients.length > MAX_DRAFT_RECIPIENTS) throw new Error(`${fieldName} cannot contain more than ${MAX_DRAFT_RECIPIENTS} addresses`);
 	return recipients;
+}
+
+function normalizeDraftFrom(value) {
+	const from = extractEmailAddress(value);
+	if (from && !DRAFT_EMAIL_RE.test(from)) throw new Error('from contains invalid email address');
+	return from;
+}
+
+async function listProjectEmailIdentities(host_id, projectId) {
+	if (!projectId) return [];
+	return EmailIdentity.find({ host_id, project: projectId }).select('_id name email signature').sort({ email: 1 }).lean();
+}
+
+async function resolveDraftFrom(host_id, projectId, requestedFrom, fallbackFrom) {
+	const identities = await listProjectEmailIdentities(host_id, projectId);
+	const requested = normalizeDraftFrom(requestedFrom);
+	const fallback = normalizeDraftFrom(fallbackFrom);
+
+	if (!identities.length) return requested || fallback || '';
+
+	const emails = new Set(identities.map((identity) => normalizeDraftFrom(identity.email)).filter(Boolean));
+	if (requested) {
+		if (!emails.has(requested)) throw new Error('from must match a configured outbound email address');
+		return requested;
+	}
+	if (fallback && emails.has(fallback)) return fallback;
+	return normalizeDraftFrom(identities[0].email);
 }
 
 function normalizeDraftHtml(value) {
@@ -859,6 +889,52 @@ function exactTypesenseValue(value) {
 	return '`' + String(value || '').replace(/`/g, '\\`') + '`';
 }
 
+function collectFromEmailSuggestions(result, query, limit) {
+	const needle = String(query || '').trim().toLowerCase();
+	const addresses = [];
+	const seen = new Set();
+	for (const hit of result?.hits || []) {
+		for (const address of normalizeRecipientList([...(hit.document?.from_emails || []), ...(hit.document?.from || [])])) {
+			if (needle && !address.includes(needle)) continue;
+			if (seen.has(address)) continue;
+			seen.add(address);
+			addresses.push(address);
+			if (addresses.length >= limit) return addresses;
+		}
+	}
+	return addresses;
+}
+
+export async function suggestFromEmailAddresses(host_id, { query = '', project = '', limit = 10, searchFn = searchCollection } = {}) {
+	const cappedLimit = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 25);
+	const q = String(query || '').trim().toLowerCase();
+	const searchQuery = q || '*';
+
+	async function runSearch(projectId) {
+		return searchFn(host_id, 'emails', searchQuery, {
+			queryBy: 'from_emails,from',
+			perPage: 50,
+			group: false,
+			include_fields: 'from_emails,from,project_id,updated_at',
+			exclude_fields: 'embedding',
+			filter_by: projectId ? `project_id:=${exactTypesenseValue(projectId)}` : undefined,
+			extra: { sort_by: 'updated_at:desc', prefix: true },
+		});
+	}
+
+	if (project) {
+		const projectResult = await runSearch(String(project));
+		const projectAddresses = collectFromEmailSuggestions(projectResult, q, cappedLimit);
+		if (projectAddresses.length) return { addresses: projectAddresses, scope: 'project' };
+	}
+
+	const tenantResult = await runSearch('');
+	return {
+		addresses: collectFromEmailSuggestions(tenantResult, q, cappedLimit),
+		scope: 'tenant',
+	};
+}
+
 function normalizeEmailAiScope(scope = {}) {
 	const mailbox = String(scope.mailbox || '').trim().toLowerCase();
 	const normalized = {
@@ -1276,9 +1352,9 @@ export async function useEmailReplySuggestion(host_id, emailId, data = {}, ctx =
 
 	const bodyHtml = data.body_html !== undefined || data.html !== undefined ? normalizeDraftHtml(data.body_html ?? data.html) : '';
 	const bodyText = String(data.body_text || data.text || data.body || textFromDraftHtml(bodyHtml)).trim().slice(0, 12000);
-	if (!bodyText) throw new Error('body_text required');
 	const subject = String(data.subject || '').trim().slice(0, 300) || `Re: ${email.subject || '(No subject)'}`;
-	const to = data.to !== undefined ? normalizeDraftRecipientList(data.to, 'to') : (email.from || []);
+	const from = await resolveDraftFrom(host_id, email.project, data.from, (email.to || [])[0] || '');
+	const to = data.to !== undefined ? normalizeDraftRecipientList(data.to, 'to') : normalizeDraftRecipientList(email.from || [], 'to');
 	const cc = data.cc !== undefined ? normalizeDraftRecipientList(data.cc, 'cc') : [];
 	const bcc = data.bcc !== undefined ? normalizeDraftRecipientList(data.bcc, 'bcc') : [];
 	const before = ctx.user_id
@@ -1288,7 +1364,7 @@ export async function useEmailReplySuggestion(host_id, emailId, data = {}, ctx =
 		{ source_email: email._id, host_id, generated_by_triage: false, status: { $ne: 'discarded' } },
 		{
 			$set: {
-				from: (email.to || [])[0] || '',
+				from,
 				to,
 				cc,
 				bcc,
@@ -1885,6 +1961,12 @@ export async function getEmailDraft(host_id, draftId) {
 
 export async function updateEmailDraft(host_id, draftId, data, ctx = {}) {
 	const update = {};
+	const before = await EmailDraft.findOne({ _id: draftId, host_id }).lean();
+	if (!before) return null;
+	if (data.from !== undefined || !before.from) {
+		const nextFrom = await resolveDraftFrom(host_id, before.project, data.from, before.from);
+		if (nextFrom !== before.from) update.from = nextFrom;
+	}
 	if (data.to !== undefined) update.to = normalizeDraftRecipientList(data.to, 'to');
 	if (data.cc !== undefined) update.cc = normalizeDraftRecipientList(data.cc, 'cc');
 	if (data.bcc !== undefined) update.bcc = normalizeDraftRecipientList(data.bcc, 'bcc');
@@ -1895,9 +1977,8 @@ export async function updateEmailDraft(host_id, draftId, data, ctx = {}) {
 		if (data.body_text === undefined) update.body_text = textFromDraftHtml(update.body_html);
 	}
 	if (data.status !== undefined && ['draft', 'ready', 'discarded'].includes(data.status)) update.status = data.status;
-	if (Object.keys(update).length === 0) return getEmailDraft(host_id, draftId);
+	if (Object.keys(update).length === 0) return before;
 
-	const before = ctx.user_id ? await EmailDraft.findOne({ _id: draftId, host_id }).lean() : null;
 	const draft = await EmailDraft.findOneAndUpdate(
 		{ _id: draftId, host_id },
 		{ $set: update },

@@ -80,7 +80,9 @@ Response:
 
 Use `/emails/:id/ai` for questions about one selected email. It includes retrieved Kumbukum context by searching the selected email's project first, then all projects only when no project records are found. Use `/emails/:id/summarize` to generate and save `triage_summary`, `/emails/:id/suggest-replies` to return two structured reply choices with the same project-first context lookup, and `/emails/:id/draft-reply` to turn one choice into a draft.
 
-Draft updates accept manually entered recipient arrays in `to`, `cc`, and `bcc`, plus `subject`, `body_text`, and sanitized `body_html`. Recipient lookup, autocomplete, and default recipient fetching are not part of this phase.
+Draft updates accept `from`, recipient arrays in `to`, `cc`, and `bcc`, plus `subject`, `body_text`, and sanitized `body_html`. `from` must match a configured outbound email identity for the email project when identities exist. `to`, `cc`, and `bcc` are limited to 10 addresses each.
+
+Compose clients can load safe outbound identity data with `GET /api/v1/projects/:id/email-identities/compose`. Recipient autocomplete can call `GET /api/v1/emails/from-addresses?q=partial&project=PROJECT_ID&limit=10`; it searches sender addresses in the project first, then falls back tenant-wide when no project results are found.
 
 ## Triage status
 

@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailLabels, parseTriageResult, triageInboxEmails, backfillEmailTriageState, askEmailAi, askEmailListAi, buildEmailAiTypesenseFilter, buildTriageContext, parseEmailAiQuery, resetEmailTriage, updateEmail, parseEmailReplySuggestionsResult, suggestEmailReplies } from '../services/email_ingest_service.js';
+import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailLabels, parseTriageResult, triageInboxEmails, backfillEmailTriageState, askEmailAi, askEmailListAi, buildEmailAiTypesenseFilter, buildTriageContext, parseEmailAiQuery, resetEmailTriage, updateEmail, parseEmailReplySuggestionsResult, suggestEmailReplies, suggestFromEmailAddresses } from '../services/email_ingest_service.js';
 import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
 import { EmailLabel } from '../model/email_label.js';
@@ -1404,5 +1404,32 @@ describe('Email ingest service', () => {
 				Email.findOne = originalEmailFindOne;
 				Tenant.findOne = originalTenantFindOne;
 			}
+		});
+
+		it('suggests From email addresses from project first and then tenant fallback', async () => {
+			const calls = [];
+			const result = await suggestFromEmailAddresses('host-1', {
+				query: 'sender',
+				project: 'project-1',
+				limit: 10,
+				searchFn: async (_hostId, type, query, options) => {
+					calls.push({ type, query, options });
+					if (options.filter_by) return { hits: [] };
+					return {
+						hits: [
+							{ document: { from_emails: ['sender@example.com', 'other@example.com'] } },
+							{ document: { from: ['Sender Two <sender-two@example.com>'] } },
+						],
+					};
+				},
+			});
+
+			assert.equal(calls.length, 2);
+			assert.equal(calls[0].type, 'emails');
+			assert.equal(calls[0].query, 'sender');
+			assert.equal(calls[0].options.queryBy, 'from_emails,from');
+			assert.match(calls[0].options.filter_by, /project_id:=`project-1`/);
+			assert.equal(result.scope, 'tenant');
+			assert.deepEqual(result.addresses, ['sender@example.com', 'sender-two@example.com']);
 		});
 	});

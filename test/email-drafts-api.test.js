@@ -7,6 +7,7 @@ import { User } from '../model/user.js';
 import { TenantMember } from '../model/tenant_member.js';
 import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
+import { EmailIdentity } from '../model/email_identity.js';
 import { EmailInternalNote } from '../model/email_internal_note.js';
 
 async function createServer() {
@@ -51,6 +52,7 @@ describe('Email draft API', () => {
 	const originalDraftFind = EmailDraft.find;
 	const originalDraftFindOne = EmailDraft.findOne;
 	const originalDraftFindOneAndUpdate = EmailDraft.findOneAndUpdate;
+	const originalIdentityFind = EmailIdentity.find;
 	const originalInternalNoteFind = EmailInternalNote.find;
 	const originalInternalNoteFindOne = EmailInternalNote.findOne;
 	const originalInternalNoteCreate = EmailInternalNote.create;
@@ -83,6 +85,13 @@ describe('Email draft API', () => {
 				}],
 			}),
 		});
+		EmailIdentity.find = () => ({
+			select: () => ({
+				sort: () => ({
+					lean: async () => [],
+				}),
+			}),
+		});
 	});
 
 	afterEach(() => {
@@ -96,6 +105,7 @@ describe('Email draft API', () => {
 		EmailDraft.find = originalDraftFind;
 		EmailDraft.findOne = originalDraftFindOne;
 		EmailDraft.findOneAndUpdate = originalDraftFindOneAndUpdate;
+		EmailIdentity.find = originalIdentityFind;
 		EmailInternalNote.find = originalInternalNoteFind;
 		EmailInternalNote.findOne = originalInternalNoteFindOne;
 		EmailInternalNote.create = originalInternalNoteCreate;
@@ -164,6 +174,9 @@ describe('Email draft API', () => {
 	});
 
 	it('rejects invalid manual draft recipients', async () => {
+		EmailDraft.findOne = () => ({
+			lean: async () => ({ _id: '507f1f77bcf86cd799439099', project: 'project-1', status: 'draft' }),
+		});
 		EmailDraft.findOneAndUpdate = () => {
 			throw new Error('should not update invalid recipients');
 		};
@@ -178,6 +191,107 @@ describe('Email draft API', () => {
 
 			assert.equal(response.status, 400);
 			assert.match(json.error, /to contains invalid email address/);
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
+	it('defaults and validates draft from against project outbound identities', async () => {
+		let draftPayload = null;
+		const identities = [
+			{ _id: 'identity-sales', email: 'sales@example.com', name: 'Sales', signature: '' },
+			{ _id: 'identity-support', email: 'support@example.com', name: 'Support', signature: '' },
+		];
+		EmailIdentity.find = () => ({
+			select: () => ({
+				sort: () => ({
+					lean: async () => identities,
+				}),
+			}),
+		});
+		Email.findOne = () => ({
+			lean: async () => ({
+				_id: 'email-1',
+				project: 'project-1',
+				owner: '507f1f77bcf86cd799439011',
+				from: ['customer@example.com'],
+				to: ['Support <support@example.com>'],
+				subject: 'Question',
+				host_id: 'host-1',
+			}),
+		});
+		EmailDraft.findOne = () => ({
+			sort: () => ({
+				lean: async () => null,
+			}),
+		});
+		EmailDraft.findOneAndUpdate = (query, update) => {
+			draftPayload = update.$set;
+			return { _id: 'draft-1', ...update.$set };
+		};
+
+		const server = await createServer();
+		try {
+			const defaultResponse = await request(server, 'POST', '/emails/email-1/draft-reply', {
+				body_text: 'Hello',
+			});
+			const defaultJson = await readJson(defaultResponse);
+
+			assert.equal(defaultResponse.status, 200);
+			assert.equal(draftPayload.from, 'support@example.com');
+			assert.equal(defaultJson.draft.from, 'support@example.com');
+
+			const selectedResponse = await request(server, 'POST', '/emails/email-1/draft-reply', {
+				from: 'sales@example.com',
+				body_text: 'Hello',
+			});
+			assert.equal(selectedResponse.status, 200);
+			assert.equal(draftPayload.from, 'sales@example.com');
+
+			const rejectedResponse = await request(server, 'POST', '/emails/email-1/draft-reply', {
+				from: 'other@example.com',
+				body_text: 'Hello',
+			});
+			const rejectedJson = await readJson(rejectedResponse);
+
+			assert.equal(rejectedResponse.status, 400);
+			assert.match(rejectedJson.error, /from must match a configured outbound email address/);
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
+	it('enforces the ten-address draft recipient limit', async () => {
+		let updatePayload = null;
+		EmailDraft.findOne = () => ({
+			lean: async () => ({ _id: '507f1f77bcf86cd799439099', project: 'project-1', status: 'draft' }),
+		});
+		EmailDraft.findOneAndUpdate = (query, update) => {
+			updatePayload = update.$set;
+			return {
+				lean: async () => ({ _id: query._id, ...update.$set }),
+			};
+		};
+
+		const ten = Array.from({ length: 10 }, (_, index) => `person${index}@example.com`);
+		const eleven = Array.from({ length: 11 }, (_, index) => `person${index}@example.com`);
+
+		const server = await createServer();
+		try {
+			const acceptedResponse = await request(server, 'PUT', '/email-drafts/507f1f77bcf86cd799439099', {
+				to: ten,
+				body_text: 'Hello',
+			});
+			assert.equal(acceptedResponse.status, 200);
+			assert.deepEqual(updatePayload.to, ten);
+
+			const rejectedResponse = await request(server, 'PUT', '/email-drafts/507f1f77bcf86cd799439099', {
+				to: eleven,
+				body_text: 'Hello',
+			});
+			const rejectedJson = await readJson(rejectedResponse);
+			assert.equal(rejectedResponse.status, 400);
+			assert.match(rejectedJson.error, /to cannot contain more than 10 addresses/);
 		} finally {
 			await new Promise((resolve) => server.close(resolve));
 		}

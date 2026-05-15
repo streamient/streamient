@@ -270,6 +270,18 @@ router.get('/projects/:id/email-identities', requireProjectSettingsAccess, requi
 	res.json({ identities });
 });
 
+router.get('/projects/:id/email-identities/compose', requireEmailFeatureAccess, async (req, res) => {
+	const identities = await emailIdentityService.listEmailIdentities(req.host_id, req.params.id);
+	res.json({
+		identities: identities.map((identity) => ({
+			_id: identity._id,
+			name: identity.name || '',
+			email: identity.email,
+			signature: identity.signature || '',
+		})),
+	});
+});
+
 router.post('/projects/:id/email-identities', requireProjectSettingsAccess, requireEmailFeatureAccess, async (req, res) => {
 	try {
 		const identity = await emailIdentityService.createEmailIdentity(req.userId, req.host_id, req.params.id, req.body || {}, auditCtx(req));
@@ -432,6 +444,19 @@ router.get('/emails/triage-status', requireEmailFeatureAccess, async (req, res) 
 		include: req.query.include,
 	});
 	res.json({ statuses });
+});
+
+router.get('/emails/from-addresses', requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const result = await emailIngestService.suggestFromEmailAddresses(req.host_id, {
+			query: req.query.q,
+			project: req.query.project,
+			limit: req.query.limit,
+		});
+		res.json(result);
+	} catch (err) {
+		res.status(400).json({ error: err.message || 'Email address search failed' });
+	}
 });
 
 router.get('/emails/:id/triage-status', requireEmailFeatureAccess, async (req, res) => {

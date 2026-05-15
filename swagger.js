@@ -272,9 +272,9 @@ const swaggerSpec = {
 	                    _id: { type: 'string' },
 	                    source_email: { type: 'string' },
 	                    from: { type: 'string' },
-	                    to: { type: 'array', items: { type: 'string' } },
-	                    cc: { type: 'array', items: { type: 'string' } },
-	                    bcc: { type: 'array', items: { type: 'string' } },
+	                    to: { type: 'array', maxItems: 10, items: { type: 'string' } },
+	                    cc: { type: 'array', maxItems: 10, items: { type: 'string' } },
+	                    bcc: { type: 'array', maxItems: 10, items: { type: 'string' } },
 	                    subject: { type: 'string' },
 	                    body_text: { type: 'string' },
 	                    body_html: { type: 'string' },
@@ -1418,10 +1418,14 @@ const swaggerSpec = {
 	                        'application/json': {
 	                            schema: {
 	                                type: 'object',
-	                                required: ['body_text'],
 	                                properties: {
+	                                    from: { type: 'string', format: 'email', description: 'Must match a configured outbound email identity for the email project when identities exist.' },
+	                                    to: { type: 'array', maxItems: 10, items: { type: 'string', format: 'email' } },
+	                                    cc: { type: 'array', maxItems: 10, items: { type: 'string', format: 'email' } },
+	                                    bcc: { type: 'array', maxItems: 10, items: { type: 'string', format: 'email' } },
 	                                    subject: { type: 'string' },
 	                                    body_text: { type: 'string' },
+	                                    body_html: { type: 'string' },
 	                                },
 	                            },
 	                        },
@@ -1456,6 +1460,33 @@ const swaggerSpec = {
                 },
                 responses: {
                     200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { results: { type: 'array', items: { $ref: '#/components/schemas/Email' } } } } } } },
+                },
+            },
+        },
+        '/emails/from-addresses': {
+            get: {
+                tags: ['Emails'],
+                summary: 'Suggest sender email addresses for draft recipients',
+                parameters: [
+                    { name: 'q', in: 'query', schema: { type: 'string' }, description: 'Partial email address query' },
+                    { name: 'project', in: 'query', schema: { type: 'string' }, description: 'Project to search first before tenant fallback' },
+                    { name: 'limit', in: 'query', schema: { type: 'integer', default: 10, maximum: 25 } },
+                ],
+                responses: {
+                    200: {
+                        description: 'OK',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        addresses: { type: 'array', items: { type: 'string', format: 'email' } },
+                                        scope: { type: 'string', enum: ['project', 'tenant'] },
+                                    },
+                                },
+                            },
+                        },
+                    },
                 },
             },
         },
@@ -1590,7 +1621,7 @@ const swaggerSpec = {
 	                parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
 	                requestBody: {
 	                    required: true,
-	                    content: { 'application/json': { schema: { type: 'object', properties: { to: { type: 'array', items: { type: 'string' } }, cc: { type: 'array', items: { type: 'string' } }, bcc: { type: 'array', items: { type: 'string' } }, subject: { type: 'string' }, body_text: { type: 'string' }, body_html: { type: 'string' }, status: { type: 'string', enum: ['draft', 'ready', 'discarded'] } } } } },
+	                    content: { 'application/json': { schema: { type: 'object', properties: { from: { type: 'string', format: 'email' }, to: { type: 'array', maxItems: 10, items: { type: 'string', format: 'email' } }, cc: { type: 'array', maxItems: 10, items: { type: 'string', format: 'email' } }, bcc: { type: 'array', maxItems: 10, items: { type: 'string', format: 'email' } }, subject: { type: 'string' }, body_text: { type: 'string' }, body_html: { type: 'string' }, status: { type: 'string', enum: ['draft', 'ready', 'discarded'] } } } } },
 	                },
 	                responses: {
 	                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { draft: { $ref: '#/components/schemas/EmailDraft' } } } } } },
@@ -2521,6 +2552,41 @@ const swaggerSpec = {
 	                    400: { description: 'Validation error', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
 	                    403: { description: 'Plan or access denied', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
 	                    404: { description: 'Project not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+	                },
+	            },
+	        },
+	        '/projects/{id}/email-identities/compose': {
+	            get: {
+	                tags: ['Email Identities'],
+	                summary: 'List compose-safe outbound email identities',
+	                description: 'Returns only fields needed by the ECC draft composer. Requires Email Pro feature access.',
+	                parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' }, description: 'Project ID' }],
+	                responses: {
+	                    200: {
+	                        description: 'OK',
+	                        content: {
+	                            'application/json': {
+	                                schema: {
+	                                    type: 'object',
+	                                    properties: {
+	                                        identities: {
+	                                            type: 'array',
+	                                            items: {
+	                                                type: 'object',
+	                                                properties: {
+	                                                    _id: { type: 'string' },
+	                                                    name: { type: 'string' },
+	                                                    email: { type: 'string', format: 'email' },
+	                                                    signature: { type: 'string' },
+	                                                },
+	                                            },
+	                                        },
+	                                    },
+	                                },
+	                            },
+	                        },
+	                    },
+	                    403: { description: 'Plan or access denied', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
 	                },
 	            },
 	        },

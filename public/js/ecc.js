@@ -53,6 +53,10 @@
 	var currentDraft = null;
 	var draftEditor = null;
 	var draftEditorHost = null;
+	var draftAutosaveTimer = null;
+	var draftAutosaveDirty = false;
+	var draftAutosaveSaving = false;
+	var draftRecipientTagifies = [];
 	var noteEditor = null;
 	var noteEditorHost = null;
 	var currentInternalNotes = [];
@@ -69,6 +73,7 @@
 		{ slug: 'spam', name: 'Spam', icon: 'warning' },
 	];
 	var SYSTEM_TRIAGE_LABELS = ['reply-required', 'human-do', 'waiting', 'no-action', 'triaged', 'spam'];
+	var DRAFT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 	var TRIAGE_ACTION_NAMES = {
 		'reply-required': 'Review',
 		'human-do': 'Human Do',
@@ -135,6 +140,57 @@
 				.split(',')
 				.map(function (item) { return item.trim(); })
 				.filter(Boolean);
+		}
+
+		function recipientInputValueToList(input) {
+			var tagify = input?._kkTagify;
+			if (tagify) {
+				return (tagify.value || [])
+					.map(function (item) { return normalizeEmailAddress(item.value); })
+					.filter(Boolean);
+			}
+			return inputValueToList(input?.value);
+		}
+
+		function normalizeEmailAddress(value) {
+			var text = String(value || '').trim();
+			if (!text) return '';
+			var bracketMatch = text.match(/<([^<>]+)>/);
+			var address = bracketMatch ? bracketMatch[1] : text;
+			var emailMatch = address.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+			return String(emailMatch ? emailMatch[0] : address).trim().toLowerCase();
+		}
+
+		function emailProjectId(email) {
+			return String(email?.project?._id || email?.project || selectedProject || '');
+		}
+
+		function defaultDraftFrom(draft, email, identities) {
+			var identityEmails = (identities || []).map(function (identity) {
+				return normalizeEmailAddress(identity.email);
+			});
+			var draftFrom = normalizeEmailAddress(draft?.from);
+			if (draftFrom && identityEmails.includes(draftFrom)) return draftFrom;
+			var inboundRecipients = (email?.to || []).map(normalizeEmailAddress).filter(Boolean);
+			for (var i = 0; i < inboundRecipients.length; i++) {
+				if (identityEmails.includes(inboundRecipients[i])) return inboundRecipients[i];
+			}
+			return identityEmails[0] || '';
+		}
+
+		async function loadComposeEmailIdentities(email) {
+			var projectId = emailProjectId(email);
+			if (!projectId) return [];
+			var res = await api('GET', '/projects/' + encodeURIComponent(projectId) + '/email-identities/compose');
+			return res.identities || [];
+		}
+
+		function validateDraftRecipientCounts(payload) {
+			['to', 'cc', 'bcc'].forEach(function (field) {
+				if ((payload[field] || []).length > 10) {
+					throw new Error(field + ' cannot contain more than 10 addresses');
+				}
+			});
 		}
 
 		function listSummary(items, fallback) {
@@ -891,6 +947,20 @@
 		}
 
 		function destroyDraftEditor() {
+			if (draftAutosaveTimer) {
+				clearInterval(draftAutosaveTimer);
+				draftAutosaveTimer = null;
+			}
+			draftAutosaveDirty = false;
+			draftAutosaveSaving = false;
+			draftRecipientTagifies.forEach(function (tagify) {
+				try {
+					tagify.destroy();
+				} catch {
+					// Editor teardown should continue even if Tagify already removed itself.
+				}
+			});
+			draftRecipientTagifies = [];
 			if (draftEditor) {
 				draftEditor.destroy();
 				draftEditor = null;
@@ -1115,15 +1185,20 @@
 			}
 		}
 
-		function initEmailEditor(container, content, placeholder) {
+		function initEmailEditor(container, content, placeholder, onUpdate) {
 			container.innerHTML = '';
 			if (window.KumbukumEditor?.createEmailEditor) {
-				return window.KumbukumEditor.createEmailEditor(container, { content: content || '', placeholder: placeholder || 'Write...' });
+				return window.KumbukumEditor.createEmailEditor(container, {
+					content: content || '',
+					placeholder: placeholder || 'Write...',
+					onUpdate: onUpdate || null,
+				});
 			}
 			var fallback = document.createElement('div');
 			fallback.className = 'form-control form-control-sm';
 			fallback.contentEditable = 'true';
 			fallback.innerHTML = content || '';
+			if (onUpdate) fallback.addEventListener('input', onUpdate);
 			container.appendChild(fallback);
 			return {
 				getHTML: function () { return fallback.innerHTML; },
@@ -1139,36 +1214,139 @@
 			return draft?.body_html || plainTextToHtml(draft?.body_text || '');
 		}
 
+		function recipientSuggestionPath(email, query) {
+			var projectId = emailProjectId(email);
+			var path = '/emails/from-addresses?q=' + encodeURIComponent(query || '') + '&limit=10';
+			if (projectId) path += '&project=' + encodeURIComponent(projectId);
+			return path;
+		}
+
+		function setupDraftRecipientTagify(input, email, initialItems, markDirty) {
+			var initial = (initialItems || []).map(normalizeEmailAddress).filter(Boolean);
+			input.value = '';
+			if (!window.Tagify) {
+				input.value = listToInputValue(initial);
+				input.addEventListener('input', markDirty);
+				return null;
+			}
+
+			var tagify = new window.Tagify(input, {
+				delimiters: ',|\n',
+				enforceWhitelist: false,
+				maxTags: 10,
+				trim: true,
+				dropdown: {
+					enabled: 1,
+					maxItems: 10,
+					closeOnSelect: true,
+					highlightFirst: true,
+				},
+				validate: function (tagData) {
+					return DRAFT_EMAIL_RE.test(normalizeEmailAddress(tagData.value));
+				},
+				transformTag: function (tagData) {
+					tagData.value = normalizeEmailAddress(tagData.value);
+				},
+			});
+
+			input._kkTagify = tagify;
+			draftRecipientTagifies.push(tagify);
+			if (initial.length) tagify.addTags(initial, true);
+
+			tagify.on('input', function (event) {
+				var query = String(event.detail.value || '').trim();
+				if (query.length < 2) return;
+				tagify.loading(true);
+				api('GET', recipientSuggestionPath(email, query))
+					.then(function (res) {
+						tagify.settings.whitelist = (res.addresses || []).map(function (address) {
+							return { value: address };
+						});
+						tagify.loading(false);
+						tagify.dropdown.show(query);
+					})
+					.catch(function () {
+						tagify.settings.whitelist = [];
+						tagify.loading(false);
+						tagify.dropdown.hide();
+					});
+			});
+			tagify.on('add', markDirty);
+			tagify.on('remove', markDirty);
+			tagify.on('edit:updated', markDirty);
+			tagify.on('invalid', function (event) {
+				if (event.detail?.message) setDraftSaveStatus(input.closest('.ecc-detail-draft'), event.detail.message, 'error');
+			});
+			return tagify;
+		}
+
 		function draftPayloadFromForm(card) {
-			return {
-				to: inputValueToList(card.querySelector('.ecc-draft-to')?.value),
-				cc: inputValueToList(card.querySelector('.ecc-draft-cc')?.value),
-				bcc: inputValueToList(card.querySelector('.ecc-draft-bcc')?.value),
+			var payload = {
+				from: card.querySelector('.ecc-draft-from')?.value || '',
+				to: recipientInputValueToList(card.querySelector('.ecc-draft-to')),
+				cc: recipientInputValueToList(card.querySelector('.ecc-draft-cc')),
+				bcc: recipientInputValueToList(card.querySelector('.ecc-draft-bcc')),
 				subject: card.querySelector('.ecc-draft-subject')?.value || '',
 				body_html: draftEditor?.getHTML?.() || '',
 				body_text: draftEditor?.getText?.() || '',
 				status: 'draft',
 			};
+			validateDraftRecipientCounts(payload);
+			return payload;
 		}
 
-		async function saveDraftFromCard(card, draft, sourceEmail) {
+		function setDraftSaveStatus(card, text, tone) {
+			var status = card?.querySelector('.ecc-draft-save-status');
+			if (!status) return;
+			status.textContent = text || '';
+			status.classList.toggle('text-danger', tone === 'error');
+			status.classList.toggle('text-muted', tone !== 'error');
+		}
+
+		async function saveDraftFromCard(card, draft, sourceEmail, options) {
+			var silent = Boolean(options?.silent);
 			var replyEmail = sourceEmail || selectedEmail;
 			if (!replyEmail || !card) return;
 			var button = card.querySelector('.ecc-draft-save');
-			if (button) button.disabled = true;
+			if (button && !silent) button.disabled = true;
+			if (silent) setDraftSaveStatus(card, 'Saving...', '');
 			try {
 				var payload = draftPayloadFromForm(card);
 				var res = draft?._id
 					? await api('PUT', '/email-drafts/' + encodeURIComponent(draft._id), payload)
 					: await api('POST', '/emails/' + encodeURIComponent(replyEmail._id) + '/draft-reply', payload);
 				currentDraft = res.draft || null;
-				destroyDraftEditor();
-				showSuccess('Draft saved');
+				draftAutosaveDirty = false;
+				setDraftSaveStatus(card, 'Saved', '');
+				if (!silent) {
+					destroyDraftEditor();
+					showSuccess('Draft saved');
+				}
 				if (activeMailbox === 'drafts') loadLabels().catch(() => {});
 			} catch (err) {
-				showError(err.message || 'Failed to save draft');
-				if (button) button.disabled = false;
+				if (silent) {
+					setDraftSaveStatus(card, err.message || 'Autosave failed', 'error');
+				} else {
+					showError(err.message || 'Failed to save draft');
+					if (button) button.disabled = false;
+				}
 			}
+		}
+
+		function startDraftAutosave(card, email) {
+			draftAutosaveDirty = false;
+			draftAutosaveSaving = false;
+			draftAutosaveTimer = setInterval(async function () {
+				if (!draftAutosaveDirty || draftAutosaveSaving) return;
+				draftAutosaveSaving = true;
+				try {
+					await saveDraftFromCard(card, currentDraft, email, { silent: true });
+				} catch {
+					// Status is already shown inline.
+				} finally {
+					draftAutosaveSaving = false;
+				}
+			}, 15000);
 		}
 
 		function renderDraftDetail(draft) {
@@ -1178,22 +1356,35 @@
 			replaceChildren(detailDraftEl);
 		}
 
-		function openReplyEditor(email, host) {
+		async function openReplyEditor(email, host) {
 			if (!email?._id || !host) return;
 			destroyDraftEditor();
 			draftEditorHost = host;
 			host.classList.remove('d-none');
+			host.innerHTML = '<div class="text-muted small mb-3">Loading draft editor...</div>';
 
 			var draft = currentDraft || null;
+			var identities = [];
+			try {
+				identities = await loadComposeEmailIdentities(email);
+			} catch {
+				identities = [];
+			}
+			host.innerHTML = '';
+
 			var card = document.createElement('div');
 			card.className = 'ecc-detail-card ecc-detail-draft ecc-inline-reply';
+			var markDirty = function () {
+				draftAutosaveDirty = true;
+				setDraftSaveStatus(card, '', '');
+			};
 
 			var header = document.createElement('div');
 			header.className = 'd-flex justify-content-between align-items-start gap-3 mb-3';
 			var titleWrap = document.createElement('div');
 			titleWrap.className = 'min-w-0';
 			titleWrap.appendChild(textNode('h6', 'mb-1 text-truncate', draft ? 'Draft reply' : 'New draft reply'));
-			titleWrap.appendChild(textNode('div', 'small text-muted', 'Manual recipients only in this phase.'));
+			titleWrap.appendChild(textNode('div', 'small text-muted', 'Autosaves every 15 seconds.'));
 			header.appendChild(titleWrap);
 			if (draft?.updatedAt) header.appendChild(textNode('small', 'text-muted text-nowrap', formatDateTime(draft.updatedAt)));
 			card.appendChild(header);
@@ -1201,30 +1392,64 @@
 			var fields = document.createElement('div');
 			fields.className = 'ecc-draft-fields';
 			fields.innerHTML = ''
-				+ '<div class="mb-2"><label class="form-label small mb-1">To</label><input type="text" class="form-control form-control-sm ecc-draft-to"></div>'
-				+ '<div class="row g-2 mb-2">'
-				+ '<div class="col-md-6"><label class="form-label small mb-1">Cc</label><input type="text" class="form-control form-control-sm ecc-draft-cc"></div>'
-				+ '<div class="col-md-6"><label class="form-label small mb-1">Bcc</label><input type="text" class="form-control form-control-sm ecc-draft-bcc"></div>'
+				+ '<div class="ecc-draft-row mb-2"><label class="form-label small mb-0">From:</label><select class="form-select form-select-sm ecc-draft-from"></select></div>'
+				+ '<div class="small text-danger mb-2 d-none ecc-draft-identity-warning">No outbound email addresses configured for this project.</div>'
+				+ '<div class="ecc-draft-row mb-2"><label class="form-label small mb-0">To:</label><div class="d-flex align-items-center gap-1 min-w-0"><div class="ecc-recipient-control flex-grow-1"><input type="text" class="form-control form-control-sm ecc-draft-to" autocomplete="off"></div><button class="btn btn-outline-secondary btn-sm ecc-draft-show-cc" type="button">Cc</button><button class="btn btn-outline-secondary btn-sm ecc-draft-show-bcc" type="button">Bcc</button></div></div>'
+				+ '<div class="ecc-draft-row mb-2 d-none ecc-draft-cc-row"><label class="form-label small mb-0">Cc:</label><div class="ecc-recipient-control"><input type="text" class="form-control form-control-sm ecc-draft-cc" autocomplete="off"></div></div>'
+				+ '<div class="ecc-draft-row mb-2 d-none ecc-draft-bcc-row"><label class="form-label small mb-0">Bcc:</label><div class="ecc-recipient-control"><input type="text" class="form-control form-control-sm ecc-draft-bcc" autocomplete="off"></div></div>'
+				+ '<div class="ecc-draft-row mb-2"><label class="form-label small mb-0">Subject:</label><input type="text" class="form-control form-control-sm ecc-draft-subject"></div>'
+				+ '<div class="mb-3">'
+				+ '<label class="form-label small mb-1">Message</label>'
+				+ '<div class="ecc-draft-editor"></div>'
 				+ '</div>'
-				+ '<div class="mb-2"><label class="form-label small mb-1">Subject</label><input type="text" class="form-control form-control-sm ecc-draft-subject"></div>'
-				+ '<div class="mb-3"><label class="form-label small mb-1">Message</label><div class="ecc-draft-editor"></div></div>';
 			card.appendChild(fields);
 
-			fields.querySelector('.ecc-draft-to').value = listToInputValue(draft?.to || []);
-			fields.querySelector('.ecc-draft-cc').value = listToInputValue(draft?.cc || []);
-			fields.querySelector('.ecc-draft-bcc').value = listToInputValue(draft?.bcc || []);
+			var fromSelect = fields.querySelector('.ecc-draft-from');
+			fromSelect.innerHTML = identities.map(function (identity) {
+				var label = (identity.name ? identity.name + ' <' + identity.email + '>' : identity.email);
+				return '<option value="' + escapeHtml(normalizeEmailAddress(identity.email)) + '">' + escapeHtml(label) + '</option>';
+			}).join('');
+			fromSelect.value = defaultDraftFrom(draft, email, identities);
+			fromSelect.disabled = identities.length === 0;
+			fields.querySelector('.ecc-draft-identity-warning')?.classList.toggle('d-none', identities.length > 0);
 			fields.querySelector('.ecc-draft-subject').value = draft?.subject || (email?.subject ? 'Re: ' + email.subject : '');
-			draftEditor = initEmailEditor(fields.querySelector('.ecc-draft-editor'), draftEditorContent(draft), 'Write a reply...');
+			fields.querySelector('.ecc-draft-cc-row')?.classList.toggle('d-none', !(draft?.cc || []).length);
+			fields.querySelector('.ecc-draft-bcc-row')?.classList.toggle('d-none', !(draft?.bcc || []).length);
+			fields.querySelector('.ecc-draft-show-cc')?.classList.toggle('d-none', Boolean((draft?.cc || []).length));
+			fields.querySelector('.ecc-draft-show-bcc')?.classList.toggle('d-none', Boolean((draft?.bcc || []).length));
+			draftEditor = initEmailEditor(fields.querySelector('.ecc-draft-editor'), draftEditorContent(draft), 'Write a reply...', markDirty);
+			fields.querySelectorAll('input, select').forEach(function (input) {
+				if (!input.classList.contains('ecc-draft-to') && !input.classList.contains('ecc-draft-cc') && !input.classList.contains('ecc-draft-bcc')) input.addEventListener('input', markDirty);
+				input.addEventListener('change', markDirty);
+			});
+			setupDraftRecipientTagify(fields.querySelector('.ecc-draft-to'), email, draft?.to?.length ? draft.to : (email?.from || []), markDirty);
+			setupDraftRecipientTagify(fields.querySelector('.ecc-draft-cc'), email, draft?.cc || [], markDirty);
+			setupDraftRecipientTagify(fields.querySelector('.ecc-draft-bcc'), email, draft?.bcc || [], markDirty);
+			fields.querySelector('.ecc-draft-show-cc')?.addEventListener('click', function () {
+				fields.querySelector('.ecc-draft-cc-row')?.classList.remove('d-none');
+				fields.querySelector('.ecc-draft-show-cc')?.classList.add('d-none');
+				fields.querySelector('.ecc-draft-cc')?.focus();
+			});
+			fields.querySelector('.ecc-draft-show-bcc')?.addEventListener('click', function () {
+				fields.querySelector('.ecc-draft-bcc-row')?.classList.remove('d-none');
+				fields.querySelector('.ecc-draft-show-bcc')?.classList.add('d-none');
+				fields.querySelector('.ecc-draft-bcc')?.focus();
+			});
 
 			var footer = document.createElement('div');
 			footer.className = 'd-flex justify-content-between align-items-center gap-3';
-			footer.appendChild(textNode('span', 'badge ecc-detail-draft-badge', draft?.status || 'draft'));
+			var statusWrap = document.createElement('div');
+			statusWrap.className = 'd-flex align-items-center gap-2 min-w-0';
+			statusWrap.appendChild(textNode('span', 'badge ecc-detail-draft-badge', draft?.status || 'draft'));
+			statusWrap.appendChild(textNode('small', 'text-muted ecc-draft-save-status', ''));
+			footer.appendChild(statusWrap);
 			var actions = document.createElement('div');
 			actions.className = 'd-flex gap-2';
 			var cancelButton = textNode('button', 'btn btn-outline-secondary btn-sm', 'Cancel');
 			cancelButton.type = 'button';
 			var saveButton = textNode('button', 'btn btn-primary btn-sm ecc-draft-save', 'Save draft');
 			saveButton.type = 'button';
+			saveButton.disabled = identities.length === 0;
 			actions.appendChild(cancelButton);
 			actions.appendChild(saveButton);
 			footer.appendChild(actions);
@@ -1234,6 +1459,7 @@
 			saveButton.addEventListener('click', function () {
 				saveDraftFromCard(card, currentDraft, email);
 			});
+			if (identities.length > 0) startDraftAutosave(card, email);
 		}
 
 		function renderThreadMessage(email, options) {
