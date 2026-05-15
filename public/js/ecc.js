@@ -548,7 +548,7 @@
 		resetTriageBtn?.classList.toggle('d-none', isDraftMailbox);
 		if (trashBtn) {
 			trashBtn.classList.toggle('d-none', activeMailbox === 'trash' && !isDraftMailbox);
-			var trashText = trashBtn.querySelector('span');
+			var trashText = trashBtn.querySelector('.ecc-trash-text');
 			if (trashText) trashText.textContent = isDraftMailbox ? 'Delete' : 'Trash';
 			trashBtn.title = isDraftMailbox ? 'Delete selected drafts' : 'Move selected emails to trash';
 		}
