@@ -277,6 +277,7 @@ const swaggerSpec = {
 	                    host_id: { type: 'string' },
 	                    name: { type: 'string' },
 	                    email: { type: 'string', format: 'email' },
+	                    signature: { type: 'string', description: 'Plain text email signature configured for this identity.' },
 	                    smtp: {
 	                        type: 'object',
 	                        properties: {
@@ -2417,6 +2418,7 @@ const swaggerSpec = {
 	                                properties: {
 	                                    name: { type: 'string' },
 	                                    email: { type: 'string', format: 'email' },
+	                                    signature: { type: 'string' },
 	                                    smtp: {
 	                                        type: 'object',
 	                                        properties: {
@@ -2467,6 +2469,7 @@ const swaggerSpec = {
 	                                properties: {
 	                                    name: { type: 'string' },
 	                                    email: { type: 'string', format: 'email' },
+	                                    signature: { type: 'string' },
 	                                    clear_auth_password: { type: 'boolean' },
 	                                    smtp: {
 	                                        type: 'object',

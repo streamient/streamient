@@ -107,7 +107,21 @@
 					if emailIdentities && emailIdentities.length
 						.list-group#project-email-identities-list
 							each identity in emailIdentities
-								.list-group-item
+								.list-group-item.project-email-identity-row(
+									style="cursor:pointer"
+									tabindex="0"
+									role="button"
+									data-id=identity._id
+									data-name=identity.name
+									data-email=identity.email
+									data-signature=identity.signature
+									data-smtp-host=identity.smtp.host
+									data-smtp-port=identity.smtp.port
+									data-smtp-auth-user=identity.smtp.auth_user
+									data-smtp-password-configured=(identity.smtp.auth_password_configured ? 'true' : 'false')
+									data-smtp-tls=(identity.smtp.tls ? 'true' : 'false')
+									data-smtp-ssl=(identity.smtp.ssl ? 'true' : 'false')
+								)
 									.d-flex.align-items-start
 										.flex-grow-1.min-w-0
 											.fw-bold.text-break= identity.name || identity.email
@@ -126,15 +140,6 @@
 											button.btn.btn-sm.btn-outline-secondary.me-1.project-email-identity-edit(
 												type="button"
 												title="Edit"
-												data-id=identity._id
-												data-name=identity.name
-												data-email=identity.email
-												data-smtp-host=identity.smtp.host
-												data-smtp-port=identity.smtp.port
-												data-smtp-auth-user=identity.smtp.auth_user
-												data-smtp-password-configured=identity.smtp.auth_password_configured
-												data-smtp-tls=identity.smtp.tls
-												data-smtp-ssl=identity.smtp.ssl
 											)
 												!= icon('gear')
 											button.btn.btn-sm.btn-outline-danger.project-email-identity-delete(type="button" title="Delete" data-id=identity._id)
@@ -154,6 +159,9 @@
 							.col-md-6
 								label.form-label(for="project-email-identity-email") Email
 								input.form-control.form-control-sm#project-email-identity-email(type="email" autocomplete="off")
+							.col-12
+								label.form-label(for="project-email-identity-signature") Signature
+								textarea.form-control.form-control-sm#project-email-identity-signature(rows="4")
 							.col-md-8
 								label.form-label(for="project-email-identity-smtp-host") SMTP host
 								input.form-control.form-control-sm#project-email-identity-smtp-host(type="text" autocomplete="off")

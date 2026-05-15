@@ -424,7 +424,7 @@ async function openProjectSettingsModal(projectId, tab) {
 	__currentProjectSettingsTab = tab || 'details';
 	if (titleEl) titleEl.textContent = 'Project settings';
 	var Modal = await ensureBootstrapModal();
-	Modal.getOrCreateInstance(modalEl).show();
+	Modal.getOrCreateInstance(modalEl, { backdrop: 'static', keyboard: false }).show();
 	await loadProjectSettingsBody(projectId, __currentProjectSettingsTab);
 }
 
@@ -554,24 +554,37 @@ function bindProjectEmailIdentityForm(bodyEl, projectId) {
 		return bodyEl.querySelector(id);
 	}
 
+	function dataBool(value) {
+		return value === true || value === 'true' || value === '1' || value === 'on';
+	}
+
 	function showIdentityForm(identity) {
 		var isEdit = Boolean(identity?.id);
 		field('#project-email-identity-id').value = identity?.id || '';
 		field('#project-email-identity-name').value = identity?.name || '';
 		field('#project-email-identity-email').value = identity?.email || '';
+		field('#project-email-identity-signature').value = identity?.signature || '';
 		field('#project-email-identity-smtp-host').value = identity?.smtpHost || '';
 		field('#project-email-identity-smtp-port').value = identity?.smtpPort || '587';
 		field('#project-email-identity-smtp-user').value = identity?.smtpAuthUser || '';
 		field('#project-email-identity-smtp-password').value = '';
-		field('#project-email-identity-smtp-tls').checked = identity?.smtpTls === 'true' || identity?.smtpTls === true;
-		field('#project-email-identity-smtp-ssl').checked = identity?.smtpSsl === 'true' || identity?.smtpSsl === true;
+		field('#project-email-identity-smtp-tls').checked = dataBool(identity?.smtpTls);
+		field('#project-email-identity-smtp-ssl').checked = dataBool(identity?.smtpSsl);
 		field('#project-email-identity-clear-password').checked = false;
 		field('#project-email-identity-form-title').textContent = isEdit ? 'Edit outbound email address' : 'Add outbound email address';
-		var passwordConfigured = identity?.smtpPasswordConfigured === 'true' || identity?.smtpPasswordConfigured === true;
+		var passwordConfigured = dataBool(identity?.smtpPasswordConfigured);
 		field('#project-email-identity-password-help').textContent = isEdit && passwordConfigured ? 'Leave empty to keep the stored password.' : '';
 		field('#project-email-identity-clear-password-wrap').classList.toggle('d-none', !isEdit || !passwordConfigured);
 		formWrap.classList.remove('d-none');
 		field('#project-email-identity-name')?.focus();
+	}
+
+	function toggleIdentityForm(identity) {
+		if (!formWrap.classList.contains('d-none') && field('#project-email-identity-id').value === identity?.id) {
+			hideIdentityForm();
+			return;
+		}
+		showIdentityForm(identity);
 	}
 
 	function hideIdentityForm() {
@@ -586,14 +599,27 @@ function bindProjectEmailIdentityForm(bodyEl, projectId) {
 
 	cancelBtn?.addEventListener('click', hideIdentityForm);
 
+	bodyEl.querySelectorAll('.project-email-identity-row').forEach(function (row) {
+		row.addEventListener('click', function () {
+			toggleIdentityForm(row.dataset);
+		});
+		row.addEventListener('keydown', function (e) {
+			if (e.key !== 'Enter' && e.key !== ' ') return;
+			e.preventDefault();
+			toggleIdentityForm(row.dataset);
+		});
+	});
+
 	bodyEl.querySelectorAll('.project-email-identity-edit').forEach(function (button) {
-		button.addEventListener('click', function () {
-			showIdentityForm(button.dataset);
+		button.addEventListener('click', function (e) {
+			e.stopPropagation();
+			toggleIdentityForm(button.closest('.project-email-identity-row')?.dataset || button.dataset);
 		});
 	});
 
 	bodyEl.querySelectorAll('.project-email-identity-delete').forEach(function (button) {
-		button.addEventListener('click', async function () {
+		button.addEventListener('click', async function (e) {
+			e.stopPropagation();
 			var confirmed = await confirmAction('Delete email address', 'This removes the outbound SMTP configuration.');
 			if (!confirmed) return;
 			try {
@@ -612,6 +638,7 @@ function bindProjectEmailIdentityForm(bodyEl, projectId) {
 		var payload = {
 			name: field('#project-email-identity-name').value.trim(),
 			email: field('#project-email-identity-email').value.trim(),
+			signature: field('#project-email-identity-signature').value.trim(),
 			smtp: {
 				host: field('#project-email-identity-smtp-host').value.trim(),
 				port: parseInt(field('#project-email-identity-smtp-port').value, 10) || 587,
@@ -655,7 +682,7 @@ async function openSettingsModal(path) {
 	var Modal = await ensureBootstrapModal();
 	titleEl.textContent = 'Settings';
 	bodyEl.innerHTML = renderSettingsLoading();
-	Modal.getOrCreateInstance(modalEl).show();
+	Modal.getOrCreateInstance(modalEl, { backdrop: 'static', keyboard: false }).show();
 
 	try {
 		var res = await fetch(route.partial);

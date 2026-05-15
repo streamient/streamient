@@ -36,6 +36,7 @@ function publicIdentity(identity) {
 	const obj = typeof identity.toObject === 'function' ? identity.toObject() : { ...identity };
 	return {
 		...obj,
+		signature: obj.signature || '',
 		smtp: {
 			host: obj.smtp?.host || '',
 			port: obj.smtp?.port || 587,
@@ -62,6 +63,7 @@ function createPayload(userId, hostId, projectId, data = {}) {
 		host_id: hostId,
 		name,
 		email,
+		signature: normalizeString(data.signature),
 		smtp: {
 			host,
 			port: normalizePort(smtp.port || 587),
@@ -76,6 +78,7 @@ function createPayload(userId, hostId, projectId, data = {}) {
 function updatePayload(data = {}) {
 	const update = {};
 	if (data.name !== undefined) update.name = normalizeString(data.name);
+	if (data.signature !== undefined) update.signature = normalizeString(data.signature);
 	if (data.email !== undefined) {
 		const email = normalizeString(data.email).toLowerCase();
 		if (!email || !EMAIL_RE.test(email)) throw new Error('Valid email is required');

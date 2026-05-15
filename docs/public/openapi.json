@@ -732,6 +732,10 @@
             "type": "string",
             "format": "email"
           },
+          "signature": {
+            "type": "string",
+            "description": "Plain text email signature configured for this identity."
+          },
           "smtp": {
             "type": "object",
             "properties": {
@@ -7376,6 +7380,9 @@
                     "type": "string",
                     "format": "email"
                   },
+                  "signature": {
+                    "type": "string"
+                  },
                   "smtp": {
                     "type": "object",
                     "properties": {
@@ -7538,6 +7545,9 @@
                   "email": {
                     "type": "string",
                     "format": "email"
+                  },
+                  "signature": {
+                    "type": "string"
                   },
                   "clear_auth_password": {
                     "type": "boolean"

@@ -249,6 +249,7 @@ describe('Project settings API', () => {
 			const createResponse = await request(server, 'POST', '/projects/project-1/email-identities', {
 				name: 'Support',
 				email: 'Support@Example.com',
+				signature: 'Thanks,\nSupport',
 				smtp: {
 					host: 'smtp.example.com',
 					port: 465,
@@ -262,6 +263,7 @@ describe('Project settings API', () => {
 
 			assert.equal(createResponse.status, 201);
 			assert.equal(createJson.identity.email, 'support@example.com');
+			assert.equal(createJson.identity.signature, 'Thanks,\nSupport');
 			assert.equal(createJson.identity.smtp.auth_password_configured, true);
 			assert.equal(createJson.identity.smtp.auth_password, undefined);
 			assert.equal(identities[0].host_id, 'host-1');
@@ -282,6 +284,7 @@ describe('Project settings API', () => {
 			const updateResponse = await request(server, 'PUT', '/email-identities/identity-1', {
 				name: 'Support Updated',
 				email: 'support@example.com',
+				signature: 'Regards,\nSupport Team',
 				smtp: {
 					host: 'smtp2.example.com',
 					port: 587,
@@ -295,6 +298,7 @@ describe('Project settings API', () => {
 
 			assert.equal(updateResponse.status, 200);
 			assert.equal(updateJson.identity.name, 'Support Updated');
+			assert.equal(updateJson.identity.signature, 'Regards,\nSupport Team');
 			assert.equal(updateJson.identity.smtp.auth_password_configured, true);
 			assert.equal(identities[0].smtp.auth_password, storedPassword);
 

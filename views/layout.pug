@@ -274,7 +274,7 @@ html(lang="en")
 							| Save
 
 		//- Settings modal keeps users anchored in the current app context
-		.modal.fade#settingsModal(tabindex="-1" aria-labelledby="settingsModalLabel" aria-hidden="true")
+		.modal.fade#settingsModal(tabindex="-1" aria-labelledby="settingsModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false")
 			.modal-dialog.modal-xl.modal-dialog-scrollable.kk-settings-modal-dialog
 				.modal-content
 					.modal-header
@@ -286,7 +286,7 @@ html(lang="en")
 							span Loading settings...
 
 		//- Project settings modal keeps project configuration anchored in dashboard context
-		.modal.fade#projectSettingsModal(tabindex="-1" aria-labelledby="projectSettingsModalLabel" aria-hidden="true")
+		.modal.fade#projectSettingsModal(tabindex="-1" aria-labelledby="projectSettingsModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false")
 			.modal-dialog.modal-xl.modal-dialog-scrollable.kk-settings-modal-dialog
 				.modal-content
 					.modal-header

@@ -7,6 +7,7 @@ const emailIdentitySchema = new mongoose.Schema(
 		host_id: { type: String, required: true, index: true },
 		name: { type: String, trim: true, default: '' },
 		email: { type: String, required: true, trim: true, lowercase: true },
+		signature: { type: String, trim: true, default: '' },
 		smtp: {
 			host: { type: String, required: true, trim: true },
 			port: { type: Number, required: true, default: 587, min: 1, max: 65535 },
