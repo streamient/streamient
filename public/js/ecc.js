@@ -19,9 +19,9 @@
 	var listWrap;
 	var detailEl;
 	var detailBackBtn;
-	var detailOpenBtn;
 	var detailTitle;
 	var detailSubtitle;
+	var detailDate;
 	var detailDraftEl;
 	var detailThreadEl;
 	var aiPanel;
@@ -105,17 +105,6 @@
 			if (className) node.className = className;
 			node.textContent = text || '';
 			return node;
-		}
-
-		function appendMeta(container, label, value) {
-			if (!value) return;
-			var row = document.createElement('div');
-			row.className = 'mb-2 text-break';
-			var labelEl = textNode('span', 'small text-muted me-1', label + ':');
-			var valueEl = textNode('span', '', value);
-			row.appendChild(labelEl);
-			row.appendChild(valueEl);
-			container.appendChild(row);
 		}
 
 		function listSummary(items, fallback) {
@@ -203,8 +192,7 @@
 		function renderEmailBody(email) {
 			var wrapper = document.createElement('div');
 			var header = document.createElement('div');
-			header.className = 'd-flex justify-content-between align-items-center gap-3 mb-2';
-			header.appendChild(textNode('div', 'small text-muted', 'Body'));
+			header.className = 'd-flex justify-content-end align-items-center gap-3 mb-2';
 
 			var controls = document.createElement('div');
 			controls.className = 'd-flex align-items-center gap-2 ecc-email-body-controls';
@@ -695,6 +683,7 @@
 			showDetailView();
 			if (detailTitle) detailTitle.textContent = 'Loading email';
 			if (detailSubtitle) detailSubtitle.textContent = emailId || '';
+			if (detailDate) detailDate.textContent = '';
 			if (detailDraftEl) {
 				replaceChildren(detailDraftEl);
 				detailDraftEl.appendChild(textNode('div', 'text-muted small', 'Loading draft.'));
@@ -709,6 +698,7 @@
 			showDetailView();
 			if (detailTitle) detailTitle.textContent = 'Email detail';
 			if (detailSubtitle) detailSubtitle.textContent = 'Unable to load email.';
+			if (detailDate) detailDate.textContent = '';
 			if (detailDraftEl) replaceChildren(detailDraftEl);
 			if (detailThreadEl) {
 				replaceChildren(detailThreadEl);
@@ -733,9 +723,6 @@
 			header.appendChild(textNode('small', 'text-muted text-nowrap', formatDateTime(draft.updatedAt)));
 			card.appendChild(header);
 
-			appendMeta(card, 'To', listSummary(draft.to, '(no recipients)'));
-			appendMeta(card, 'Cc', listSummary(draft.cc, ''));
-			card.appendChild(textNode('div', 'small text-muted mb-1', 'Body'));
 			card.appendChild(renderBodyText(draft.body_text || draft.body_html || ''));
 
 			var badge = textNode('span', 'badge ecc-detail-draft-badge mt-3', draft.status || 'draft');
@@ -747,9 +734,7 @@
 			var item = document.createElement('div');
 			item.className = 'list-group-item ecc-detail-message';
 			var dateText = formatDateTime(email.createdAt || email.updatedAt);
-			if (options?.hideRepeatedHeader) {
-				if (dateText) item.appendChild(textNode('small', 'd-block text-muted text-end mb-2', dateText));
-			} else {
+			if (!options?.hideRepeatedHeader) {
 				var header = document.createElement('div');
 				header.className = 'd-flex align-items-start gap-3 mb-3';
 				header.classList.add('justify-content-between');
@@ -762,8 +747,6 @@
 				item.appendChild(header);
 			}
 
-			appendMeta(item, 'To', listSummary(email.to, '(no recipients)'));
-			appendMeta(item, 'Cc', listSummary(email.cc, ''));
 			item.appendChild(renderEmailBody(email));
 			return item;
 		}
@@ -777,6 +760,7 @@
 					? listSummary(selected.from, '(unknown sender)')
 					: 'No email found.';
 			}
+			if (detailDate) detailDate.textContent = selected ? formatDateTime(selected.createdAt || selected.updatedAt) : '';
 			renderDraftDetail(draft || null);
 			if (!detailThreadEl) return;
 			replaceChildren(detailThreadEl);
@@ -1253,9 +1237,9 @@
 		listWrap = document.getElementById('ecc-list-wrap');
 		detailEl = document.getElementById('ecc-detail');
 		detailBackBtn = document.getElementById('ecc-detail-back-btn');
-		detailOpenBtn = document.getElementById('ecc-detail-open-btn');
 		detailTitle = document.getElementById('ecc-detail-title');
 		detailSubtitle = document.getElementById('ecc-detail-subtitle');
+		detailDate = document.getElementById('ecc-detail-date');
 		detailDraftEl = document.getElementById('ecc-detail-draft');
 		detailThreadEl = document.getElementById('ecc-detail-thread');
 		aiPanel = document.getElementById('ecc-ai-panel');
@@ -1314,7 +1298,6 @@
 		resetTriageBtn?.addEventListener('click', resetSelectedTriage);
 		openEmailBtn?.addEventListener('click', openSelectedEmail);
 		detailBackBtn?.addEventListener('click', backToListView);
-		detailOpenBtn?.addEventListener('click', openSelectedEmail);
 		addWindowListener('item-modal-deleted', onModalDeleted);
 		addWindowListener('email:created', handleEmailSocketEvent);
 		addWindowListener('email:updated', handleEmailSocketEvent);
@@ -1347,9 +1330,9 @@
 		listWrap = null;
 		detailEl = null;
 		detailBackBtn = null;
-		detailOpenBtn = null;
 		detailTitle = null;
 		detailSubtitle = null;
+		detailDate = null;
 		detailDraftEl = null;
 		detailThreadEl = null;
 		aiPanel = null;
