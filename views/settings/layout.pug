@@ -18,9 +18,9 @@ block content
 					!= icon('key', 'me-2')
 					| Apps Access
 				if can_manage_restricted_settings && byo_ai_enabled
-					a.list-group-item.list-group-item-action(href="/settings/byo-ai" class=(title === 'BYO AI' ? 'active' : ''))
+					a.list-group-item.list-group-item-action(href="/settings/byo-ai" class=(title === 'AI' ? 'active' : ''))
 						!= icon('sparkle', 'me-2')
-						| BYO AI
+						| AI
 				if can_manage_restricted_settings
 					a.list-group-item.list-group-item-action(href="/settings/typesense" class=(title === 'Typesense' ? 'active' : ''))
 						!= icon('search', 'me-2')
