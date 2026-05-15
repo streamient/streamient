@@ -30,6 +30,7 @@ const DEFAULT_EMAIL_LABELS = [
 ];
 const SYSTEM_LABEL_SLUGS = DEFAULT_EMAIL_LABELS.map((label) => label.slug);
 const DEFAULT_EMAIL_LABEL_ORDER = new Map(DEFAULT_EMAIL_LABELS.map((label, index) => [label.slug, index]));
+const HIDDEN_EMAIL_LABEL_SLUGS = new Set(['triaged']);
 const PRIMARY_TRIAGE_LABELS = ['reply-required', 'human-do', 'waiting', 'no-action', 'spam'];
 const TRIAGE_ACTIONS = PRIMARY_TRIAGE_LABELS;
 const MAILBOX_ACTIONS = ['none', 'keep-inbox', 'archive', 'spam'];
@@ -614,6 +615,7 @@ export async function getEmailTriageStatus(host_id, emailId, { include } = {}) {
 
 export async function listEmailLabels(host_id, filters = {}) {
 	const labels = await ensureDefaultEmailLabels(host_id);
+	const visibleLabels = labels.filter((label) => !HIDDEN_EMAIL_LABEL_SLUGS.has(label.slug));
 	const projectId = filters.project || null;
 	const baseQuery = { host_id, in_trash: false, ...(projectId ? { project: projectId } : {}) };
 
@@ -626,7 +628,7 @@ export async function listEmailLabels(host_id, filters = {}) {
 			EmailDraft.countDocuments({ host_id, status: { $ne: 'discarded' }, ...(projectId ? { project: projectId } : {}) }),
 			Email.countDocuments({ host_id, in_trash: true, ...(projectId ? { project: projectId } : {}) }),
 		]),
-		Promise.all(labels.map(async (label) => ({
+		Promise.all(visibleLabels.map(async (label) => ({
 			slug: label.slug,
 			count: await Email.countDocuments({ ...baseQuery, labels: label.slug }),
 		}))),
@@ -635,14 +637,14 @@ export async function listEmailLabels(host_id, filters = {}) {
 	const labelCountMap = Object.fromEntries(labelCounts.map((item) => [item.slug, item.count]));
 	return {
 		mailboxes: [
-				{ slug: 'inbox', name: 'Inbox', count: mailboxCounts[0] },
-				{ slug: 'archived', name: 'Archived', count: mailboxCounts[1] },
-				{ slug: 'sent', name: 'Sent', count: mailboxCounts[2] },
-				{ slug: 'spam', name: 'Spam', count: mailboxCounts[3] },
-				{ slug: 'drafts', name: 'Drafts', count: mailboxCounts[4] },
-				{ slug: 'trash', name: 'Trash', count: mailboxCounts[5] },
-			],
-		labels: labels.map((label) => ({
+			{ slug: 'inbox', name: 'Inbox', count: mailboxCounts[0] },
+			{ slug: 'archived', name: 'Archived', count: mailboxCounts[1] },
+			{ slug: 'sent', name: 'Sent', count: mailboxCounts[2] },
+			{ slug: 'spam', name: 'Spam', count: mailboxCounts[3] },
+			{ slug: 'drafts', name: 'Drafts', count: mailboxCounts[4] },
+			{ slug: 'trash', name: 'Trash', count: mailboxCounts[5] },
+		],
+		labels: visibleLabels.map((label) => ({
 			_id: label._id,
 			slug: label.slug,
 			name: label.name,

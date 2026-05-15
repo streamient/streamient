@@ -534,7 +534,7 @@ describe('Email ingest service', () => {
 		}
 	});
 
-	it('lists default email labels in beginner-friendly order with current names', async () => {
+	it('lists default email labels in beginner-friendly order and hides internal done label', async () => {
 		let bulkOps = [];
 		const originalBulkWrite = EmailLabel.bulkWrite;
 		const originalLabelFind = EmailLabel.find;
@@ -563,7 +563,8 @@ describe('Email ingest service', () => {
 		try {
 			const result = await listEmailLabels('host-1');
 
-			assert.deepEqual(result.labels.map((label) => label.name), ['Review', 'Human Do', 'Waiting', 'No action', 'Done', 'Spam']);
+			assert.deepEqual(result.labels.map((label) => label.name), ['Review', 'Human Do', 'Waiting', 'No action', 'Spam']);
+			assert.ok(!result.labels.some((label) => label.slug === 'triaged'));
 			assert.equal(bulkOps.find((op) => op.updateOne.filter.slug === 'reply-required').updateOne.update.$set.name, 'Review');
 			assert.equal(bulkOps.find((op) => op.updateOne.filter.slug === 'triaged').updateOne.update.$set.name, 'Done');
 		} finally {
