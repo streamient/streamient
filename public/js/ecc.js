@@ -783,7 +783,6 @@
 		function renderEmailItemHtml(email) {
 			var subject = email.subject || '(No subject)';
 			var senders = (email.from || []).slice(0, 2).join(', ') || '(unknown sender)';
-			var recipients = (email.to || []).slice(0, 2).join(', ') || '(no recipients)';
 			var body = (email.triage_summary || emailExcerpt(email) || '').slice(0, 180);
 			var actionPoints = (email.triage_action_points || []).slice(0, 2).map(function (item) {
 				return item.text;
@@ -801,9 +800,8 @@
 				+ '</div>'
 				+ '<div class="min-w-0 flex-grow-1">'
 				+ '<div class="fw-semibold text-truncate">' + escapeHtml(subject) + '</div>'
-				+ '<div class="small text-muted text-truncate">' + kkIcon('user', 'me-1') + escapeHtml(senders) + '</div>'
-				+ '<div class="small text-muted text-truncate">' + kkIcon('email', 'me-1') + escapeHtml(recipients) + '</div>'
 				+ (body ? '<div class="small text-muted text-truncate mt-1">' + escapeHtml(body) + '</div>' : '')
+				+ '<div class="small text-muted text-truncate">' + escapeHtml(senders) + '</div>'
 				+ (actionPoints ? '<div class="small text-body text-truncate mt-1">' + escapeHtml(actionPoints) + '</div>' : '')
 				+ (triageMeta ? '<div class="mt-2">' + triageMeta + '</div>' : '')
 				+ (labels ? '<div class="mt-2">' + labels + '</div>' : '')

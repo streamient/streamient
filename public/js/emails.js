@@ -55,9 +55,6 @@
 		var senders = (e.from || []).slice(0, 3).join(', ');
 		var senderSummary = senders || '';
 		var hasMoreSenders = (e.from || []).length > 3 ? ' +' + ((e.from || []).length - 3) : '';
-		var recipients = (e.to || []).slice(0, 3).join(', ');
-		var recipientSummary = recipients || '(no recipients)';
-		var hasMoreRecipients = (e.to || []).length > 3 ? ' +' + ((e.to || []).length - 3) : '';
 		var date = e.updatedAt ? new Date(e.updatedAt).toLocaleDateString() : '';
 		var excerpt = e.excerpt || cleanEmailExcerpt(e.text_content || e.attachment_text_content || '').slice(0, 220);
 		return '<div class="list-group-item list-group-item-action email-item" data-id="' + escapeHtml(id) + '">'
@@ -68,9 +65,8 @@
 			+ '<strong class="text-truncate">' + escapeHtml(subject) + '</strong>'
 			+ '<small class="text-muted text-nowrap flex-shrink-0">' + date + '</small>'
 			+ '</div>'
-			+ (senderSummary ? '<p class="mb-1 text-muted small text-truncate">' + kkIcon('user', 'me-1') + escapeHtml(senderSummary + hasMoreSenders) + '</p>' : '')
-			+ '<p class="mb-1 text-muted small text-truncate">' + kkIcon('email', 'me-1') + escapeHtml(recipientSummary + hasMoreRecipients) + '</p>'
-			+ (excerpt ? '<p class="mb-0 text-muted small text-truncate">' + escapeHtml(excerpt) + '</p>' : '')
+			+ (excerpt ? '<p class="mb-1 text-muted small text-truncate">' + escapeHtml(excerpt) + '</p>' : '')
+			+ (senderSummary ? '<p class="mb-0 text-muted small text-truncate">' + escapeHtml(senderSummary + hasMoreSenders) + '</p>' : '')
 			+ '</div></div></div>';
 	}
 
