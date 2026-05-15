@@ -498,20 +498,12 @@
 
 	function renderEmailAi(email) {
 		if (!aiPanel) return;
-		if (!email) {
-			if (aiSubtitle) aiSubtitle.textContent = 'No email active.';
-			openEmailBtn?.classList.add('d-none');
-			aiMessagesEl = null;
-			aiInputEl = null;
-			aiSendBtn = null;
-			emailAiMessages = [];
-			aiPanel.innerHTML = '<div class="ecc-ai-empty">'
-				+ kkIcon('sparkle', 'mb-2')
-				+ '<h6 class="mb-2">AI idle</h6>'
-				+ '<p class="text-muted small mb-0">Email selection will not start AI.</p>'
-				+ '</div>';
-			return;
-		}
+			if (!email) {
+				if (aiSubtitle) aiSubtitle.textContent = 'No email active.';
+				openEmailBtn?.classList.add('d-none');
+				renderEmailListAi();
+				return;
+			}
 		var subject = email.subject || '(No subject)';
 		var sender = (email.from || []).join(', ') || '(unknown sender)';
 		var labels = renderVisibleLabels(email);
@@ -536,12 +528,14 @@
 			+ '<div class="ecc-ai-section ecc-email-chat">'
 			+ '<h6 class="mb-2">Ask Email AI</h6>'
 			+ '<div class="ecc-email-ai-messages" id="ecc-email-ai-messages"></div>'
+			+ '<div class="ecc-email-ai-composer">'
 			+ '<label class="form-label small mb-1" for="ecc-email-ai-input">Message</label>'
 			+ '<div class="input-group input-group-sm">'
 			+ '<input type="text" class="form-control form-control-sm" id="ecc-email-ai-input" autocomplete="off">'
 			+ '<button type="button" class="btn btn-primary btn-sm" id="ecc-email-ai-send" title="Send">'
 			+ kkIcon('send')
 			+ '</button>'
+			+ '</div>'
 			+ '</div>'
 			+ '</div>'
 			+ '</div>';
@@ -572,20 +566,25 @@
 		aiMessagesEl.scrollTop = aiMessagesEl.scrollHeight;
 	}
 
-	async function sendEmailAiMessage() {
-		if (!selectedEmail || !aiInputEl || !aiSendBtn) return;
-		var query = aiInputEl.value.trim();
-		if (!query) return;
-		emailAiMessages.push({ role: 'user', text: query });
+		async function sendEmailAiMessage() {
+			if (!aiInputEl || !aiSendBtn) return;
+			var query = aiInputEl.value.trim();
+			if (!query) return;
+			emailAiMessages.push({ role: 'user', text: query });
 		aiInputEl.value = '';
-		aiSendBtn.disabled = true;
-		renderEmailAiMessages();
-		try {
-			var res = await api('POST', '/emails/' + selectedEmail._id + '/ai', { query: query });
-			emailAiMessages.push({ role: 'assistant', text: res.answer || '' });
-		} catch (err) {
-			emailAiMessages.push({ role: 'assistant', text: 'Error: ' + (err.message || 'Email AI failed') });
-		} finally {
+			aiSendBtn.disabled = true;
+			renderEmailAiMessages();
+			try {
+				var res = selectedEmail
+					? await api('POST', '/emails/' + selectedEmail._id + '/ai', { query: query })
+					: await api('POST', '/emails/ai', { query: query, scope: currentEmailAiScope() });
+				emailAiMessages.push({ role: 'assistant', text: res.answer || '' });
+				if (!selectedEmail && Array.isArray(res.emails) && res.mode !== 'count') {
+					renderEmailAiResultEmails(res.emails, res.answer || '', res.count || 0);
+				}
+			} catch (err) {
+				emailAiMessages.push({ role: 'assistant', text: 'Error: ' + (err.message || 'Email AI failed') });
+			} finally {
 			aiSendBtn.disabled = false;
 			renderEmailAiMessages();
 			aiInputEl.focus();
@@ -664,12 +663,13 @@
 			updateActionBar();
 		}
 
-		function backToListView() {
-			selectedEmail = null;
-			pendingEmailId = '';
-			showListView();
-			writeUrlState('');
-		}
+			function backToListView() {
+				selectedEmail = null;
+				pendingEmailId = '';
+				showListView();
+				renderEmailAi(null);
+				writeUrlState('');
+			}
 
 		function showDetailView() {
 			detailActive = true;
@@ -692,6 +692,39 @@
 				replaceChildren(detailThreadEl);
 				detailThreadEl.appendChild(textNode('div', 'list-group-item text-muted', 'Loading thread.'));
 			}
+		}
+
+		function currentEmailAiScope() {
+			return {
+				project: selectedProject || '',
+				mailbox: activeLabel ? '' : (activeMailbox || ''),
+				label: activeLabel || '',
+				triaged: !activeLabel && activeMailbox === 'inbox' ? false : undefined,
+			};
+		}
+
+		function renderEmailAiResultEmails(emails, answer, count) {
+			if (!listEl) return;
+			showListView();
+			selectedEmail = null;
+			selectedIds.clear();
+			updateActionBar();
+			renderMoveMenu();
+			if (viewTitle) viewTitle.textContent = 'Email AI results';
+			if (viewSubtitle) {
+				var total = Number.isFinite(count) ? count : emails.length;
+				viewSubtitle.textContent = total === 1 ? '1 matching email.' : total + ' matching emails.';
+			}
+			if (!emails.length) {
+				listEl.innerHTML = '<div class="list-group-item text-muted ecc-email-empty">' + escapeHtml(answer || 'No matching emails.') + '</div>';
+				updateActionBar();
+				return;
+			}
+			listEl.innerHTML = emails.map(renderEmailItemHtml).join('');
+			listEl.querySelectorAll('.ecc-email-item').forEach(function (button) {
+				bindEmailItem(button);
+			});
+			updateActionBar();
 		}
 
 		function showDetailError(message) {
@@ -831,6 +864,50 @@
 			});
 			checkbox?.addEventListener('change', function () {
 				setEmailSelected(checkbox, checkbox.checked);
+			});
+		}
+
+		function renderEmailListAi() {
+			if (!aiPanel) return;
+			aiPanel.innerHTML = '<div class="ecc-ai-content">'
+				+ '<div class="ecc-ai-section ecc-email-chat">'
+				+ '<h6 class="mb-2">Ask Email AI</h6>'
+				+ '<div class="text-muted small mb-3">Search and count emails in the current view.</div>'
+				+ '<div class="ecc-email-ai-examples mb-3">'
+				+ '<button type="button" class="chat-example-btn ecc-email-ai-example mb-1">Show reply-required emails in this view</button>'
+				+ '<button type="button" class="chat-example-btn ecc-email-ai-example mb-1">How many reply-required emails are in this view?</button>'
+				+ '<button type="button" class="chat-example-btn ecc-email-ai-example mb-1">Find emails about invoices</button>'
+				+ '<button type="button" class="chat-example-btn ecc-email-ai-example mb-1">Summarize this mailbox</button>'
+				+ '</div>'
+				+ '<div class="ecc-email-ai-messages" id="ecc-email-ai-messages"></div>'
+				+ '<div class="ecc-email-ai-composer">'
+				+ '<label class="form-label small mb-1" for="ecc-email-ai-input">Message</label>'
+				+ '<div class="input-group input-group-sm">'
+				+ '<input type="text" class="form-control form-control-sm" id="ecc-email-ai-input" autocomplete="off">'
+				+ '<button type="button" class="btn btn-primary btn-sm" id="ecc-email-ai-send" title="Send">'
+				+ kkIcon('send')
+				+ '</button>'
+				+ '</div>'
+				+ '</div>'
+				+ '</div>'
+				+ '</div>';
+			aiMessagesEl = document.getElementById('ecc-email-ai-messages');
+			aiInputEl = document.getElementById('ecc-email-ai-input');
+			aiSendBtn = document.getElementById('ecc-email-ai-send');
+			renderEmailAiMessages();
+			aiSendBtn?.addEventListener('click', sendEmailAiMessage);
+			aiInputEl?.addEventListener('keydown', function (event) {
+				if (event.key === 'Enter' && !event.shiftKey) {
+					event.preventDefault();
+					sendEmailAiMessage();
+				}
+			});
+			aiPanel.querySelectorAll('.ecc-email-ai-example').forEach(function (button) {
+				button.addEventListener('click', function () {
+					if (!aiInputEl) return;
+					aiInputEl.value = button.textContent || '';
+					sendEmailAiMessage();
+				});
 			});
 		}
 

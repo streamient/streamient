@@ -1151,9 +1151,9 @@ const swaggerSpec = {
                 },
             },
         },
-        '/emails/{id}/triage-status': {
-            get: {
-                tags: ['Emails'],
+	        '/emails/{id}/triage-status': {
+	            get: {
+	                tags: ['Emails'],
                 summary: 'Get one email triage status',
                 description: 'Returns compact triage status for one email. Use include=email,draft to retrieve the full source email and generated triage draft in the same response.',
                 parameters: [
@@ -1163,12 +1163,62 @@ const swaggerSpec = {
                 responses: {
                     200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { status: { $ref: '#/components/schemas/EmailTriageStatus' } } } } } },
                     404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-                },
-            },
-        },
-        '/emails/{id}': {
-            get: {
-                tags: ['Emails'],
+	                },
+	            },
+	        },
+	        '/emails/ai': {
+	            post: {
+	                tags: ['Emails'],
+	                summary: 'Ask Email AI across the current email view',
+	                description: 'Runs a Typesense-first list, count, search, or summary query over emails. Scope defaults to the current ECC project/mailbox/label view.',
+	                requestBody: {
+	                    required: true,
+	                    content: {
+	                        'application/json': {
+	                            schema: {
+	                                type: 'object',
+	                                required: ['query'],
+	                                properties: {
+	                                    query: { type: 'string', example: 'show emails from sender@example.com' },
+	                                    scope: {
+	                                        type: 'object',
+	                                        properties: {
+	                                            project: { type: 'string' },
+	                                            mailbox: { type: 'string', enum: ['inbox', 'archived', 'sent', 'spam', 'trash', 'drafts'] },
+	                                            label: { type: 'string' },
+	                                            triaged: { type: 'boolean' },
+	                                        },
+	                                    },
+	                                },
+	                            },
+	                        },
+	                    },
+	                },
+	                responses: {
+	                    200: {
+	                        description: 'OK',
+	                        content: {
+	                            'application/json': {
+	                                schema: {
+	                                    type: 'object',
+	                                    properties: {
+	                                        answer: { type: 'string' },
+	                                        count: { type: 'integer' },
+	                                        mode: { type: 'string', enum: ['list', 'search', 'count', 'summary'] },
+	                                        scope: { type: 'object' },
+	                                        emails: { type: 'array', items: { $ref: '#/components/schemas/Email' } },
+	                                    },
+	                                },
+	                            },
+	                        },
+	                    },
+	                    400: { description: 'Invalid request', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+	                },
+	            },
+	        },
+	        '/emails/{id}': {
+	            get: {
+	                tags: ['Emails'],
                 summary: 'Get an email',
                 parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
                 responses: {

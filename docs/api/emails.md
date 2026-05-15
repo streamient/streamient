@@ -35,6 +35,41 @@ GET /api/v1/emails/:id/thread
 
 Email read responses include sanitized `html_content`, `html_content_has_remote_images`, and `excerpt`. The excerpt is derived from visible HTML when available and strips parser control lines such as reply-above markers.
 
+## Email AI
+
+```http
+POST /api/v1/emails/ai
+POST /api/v1/emails/:id/ai
+```
+
+Use `/emails/ai` for list-level ECC questions such as counts, sender lookups, mailbox summaries, and semantic searches. It uses Typesense first and accepts the current ECC view as `scope`.
+
+```json
+{
+	"query": "show emails from sender@example.com",
+	"scope": {
+		"project": "optional-project-id",
+		"mailbox": "inbox",
+		"label": "",
+		"triaged": false
+	}
+}
+```
+
+Response:
+
+```json
+{
+	"answer": "Showing 3 emails matching \"show emails from sender@example.com\".",
+	"count": 3,
+	"mode": "list",
+	"scope": {},
+	"emails": []
+}
+```
+
+Use `/emails/:id/ai` for questions about one selected email.
+
 ## Triage status
 
 Use triage status endpoints when an external system only needs classification state, routing action, and optional embedded message/draft data.

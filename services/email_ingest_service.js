@@ -51,6 +51,30 @@ const DEFAULT_EMAIL_AI_INSTRUCTIONS = [
 	'Use only the provided email context unless the user asks for general guidance.',
 	'Be concise and call out uncertainty when the email context is insufficient.',
 ].join(' ');
+const EMAIL_AI_LIST_LIMIT = 50;
+const EMAIL_AI_COUNT_LIMIT = 5000;
+const EMAIL_AI_INCLUDE_FIELDS = [
+	'id',
+	'source_id',
+	'project_id',
+	'subject',
+	'from',
+	'to',
+	'cc',
+	'bcc',
+	'mailbox',
+	'labels',
+	'triaged',
+	'triage_status',
+	'triage_summary',
+	'triage_primary_action',
+	'triage_action_points',
+	'message_id',
+	'text_content',
+	'attachment_text_content',
+	'created_at',
+	'updated_at',
+].join(',');
 
 function canonicalMessageId(value) {
 	const raw = String(value || '').trim();
@@ -808,6 +832,256 @@ export async function searchEmails(host_id, query, options = {}) {
 		queryBy: 'subject,text_content,attachment_text_content,from,to,cc,bcc,embedding',
 		...options,
 	});
+}
+
+function exactTypesenseValue(value) {
+	return '`' + String(value || '').replace(/`/g, '\\`') + '`';
+}
+
+function normalizeEmailAiScope(scope = {}) {
+	const mailbox = String(scope.mailbox || '').trim().toLowerCase();
+	const normalized = {
+		project: String(scope.project || scope.project_id || '').trim(),
+		mailbox: ['inbox', 'archived', 'sent', 'spam', 'trash', 'drafts'].includes(mailbox) ? mailbox : '',
+		label: String(scope.label || '').trim(),
+		triaged: parseBooleanFilter(scope.triaged),
+	};
+	if (normalized.label) normalized.mailbox = '';
+	return normalized;
+}
+
+function findEmailAddressNearWord(query, word) {
+	const pattern = new RegExp(`\\b${word}[:\\s]+([^\\s,;]+@[^\\s,;]+)`, 'i');
+	const match = String(query || '').match(pattern);
+	return extractEmailAddress(match?.[1] || '');
+}
+
+function findEmailAiStatus(query) {
+	const lower = String(query || '').toLowerCase();
+	const pairs = [
+		['reply-required', /\breply[-\s]?required\b|\breview\b/],
+		['human-do', /\bhuman[-\s]?do\b|\bto[-\s]?do\b|\baction required\b/],
+		['waiting', /\bwaiting\b/],
+		['no-action', /\bno[-\s]?action\b|\bfyi\b/],
+		['spam', /\bspam\b/],
+	];
+	return pairs.find(([, pattern]) => pattern.test(lower))?.[0] || '';
+}
+
+function findEmailAiMailbox(query) {
+	const lower = String(query || '').toLowerCase();
+	if (/\btrash(ed)?\b/.test(lower)) return 'trash';
+	if (/\barchive(d)?\b/.test(lower)) return 'archived';
+	if (/\bsent\b/.test(lower)) return 'sent';
+	if (/\bspam\b/.test(lower)) return 'spam';
+	if (/\binbox\b/.test(lower)) return 'inbox';
+	return '';
+}
+
+function normalizeEmailAiSearchText(query, intent) {
+	let text = String(query || '');
+	for (const address of intent.email_addresses || []) {
+		text = text.replace(new RegExp(address.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), ' ');
+	}
+	text = text
+		.replace(/\b(show|find|search|list|get|give|display|me|all|emails?|messages?|from|to|cc|bcc|about|with|containing|that|mention|mentions|how many|count|number of|total|summari[sz]e|summary|this mailbox|this view|in this view)\b/gi, ' ')
+		.replace(/\b(are|is|was|were|be|in|the|a|an|current)\b/gi, ' ')
+		.replace(/[?!.,;:]+/g, ' ')
+		.replace(/\breply[-\s]?required\b|\bhuman[-\s]?do\b|\bno[-\s]?action\b|\bwaiting\b|\bspam\b|\binbox\b|\barchive(d)?\b|\bsent\b|\btrash(ed)?\b/gi, ' ')
+		.replace(/\s+/g, ' ')
+		.trim();
+	return text;
+}
+
+export function parseEmailAiQuery(query = '') {
+	const raw = String(query || '').trim();
+	const lower = raw.toLowerCase();
+	const emailAddresses = [...new Set((raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || []).map(extractEmailAddress).filter(Boolean))];
+	const from = findEmailAddressNearWord(raw, 'from');
+	const to = findEmailAddressNearWord(raw, 'to');
+	const cc = findEmailAddressNearWord(raw, 'cc');
+	const bcc = findEmailAddressNearWord(raw, 'bcc');
+	const mode = /\b(how many|count|number of|total)\b/i.test(raw)
+		? 'count'
+		: (/\b(summari[sz]e|summary|recap)\b/i.test(raw) ? 'summary' : 'list');
+	const intent = {
+		mode,
+		email_addresses: emailAddresses,
+		from_email: from,
+		to_email: to,
+		cc_email: cc,
+		bcc_email: bcc,
+		participant_email: !from && !to && !cc && !bcc && emailAddresses.length ? emailAddresses[0] : '',
+		status: findEmailAiStatus(raw),
+		mailbox: findEmailAiMailbox(raw),
+		explicit_all: /\b(all emails|all messages|every email|every message|across all emails|across every email)\b/i.test(raw),
+	};
+	intent.search_text = normalizeEmailAiSearchText(raw, intent);
+	if (!intent.search_text && !intent.from_email && !intent.to_email && !intent.cc_email && !intent.bcc_email && !intent.participant_email && !intent.status && !intent.mailbox) {
+		intent.search_text = lower.includes('recent') ? '' : raw;
+	}
+	return intent;
+}
+
+export function buildEmailAiTypesenseFilter(scope = {}, intent = {}) {
+	const normalizedScope = normalizeEmailAiScope(scope);
+	const parts = [];
+	if (normalizedScope.project) parts.push(`project_id:=${exactTypesenseValue(normalizedScope.project)}`);
+
+	const scopedMailbox = intent.explicit_all ? '' : normalizedScope.mailbox;
+	const scopedLabel = intent.explicit_all ? '' : normalizedScope.label;
+	const scopedTriaged = intent.explicit_all ? null : normalizedScope.triaged;
+	const mailbox = intent.mailbox || scopedMailbox;
+
+	if (mailbox && mailbox !== 'drafts') {
+		if (mailbox === 'trash') {
+			parts.push('in_trash:=true');
+		} else {
+			parts.push(`mailbox:=${exactTypesenseValue(mailbox)}`);
+		}
+	}
+	if (scopedLabel) parts.push(`labels:=${exactTypesenseValue(scopedLabel)}`);
+	if (scopedTriaged !== null) parts.push(`triaged:=${scopedTriaged ? 'true' : 'false'}`);
+
+	if (intent.status) {
+		const status = exactTypesenseValue(intent.status);
+		parts.push(`(labels:=${status} || triage_primary_action:=${status})`);
+	}
+	if (intent.from_email) parts.push(`from_emails:=${exactTypesenseValue(intent.from_email)}`);
+	if (intent.to_email) parts.push(`to_emails:=${exactTypesenseValue(intent.to_email)}`);
+	if (intent.cc_email) parts.push(`cc_emails:=${exactTypesenseValue(intent.cc_email)}`);
+	if (intent.bcc_email) parts.push(`bcc_emails:=${exactTypesenseValue(intent.bcc_email)}`);
+	if (intent.participant_email) parts.push(`participant_emails:=${exactTypesenseValue(intent.participant_email)}`);
+
+	return parts.join(' && ');
+}
+
+function emailFromTypesenseDocument(document = {}) {
+	const updatedAt = document.updated_at ? new Date(document.updated_at * 1000).toISOString() : null;
+	const createdAt = document.created_at ? new Date(document.created_at * 1000).toISOString() : null;
+	const actionPoints = (document.triage_action_points || []).map((item) => (typeof item === 'string' ? { text: item } : item));
+	return {
+		_id: document.source_id || document.id,
+		id: document.source_id || document.id,
+		project: document.project_id || '',
+		subject: document.subject || '',
+		from: document.from || [],
+		to: document.to || [],
+		cc: document.cc || [],
+		bcc: document.bcc || [],
+		mailbox: document.mailbox || 'inbox',
+		labels: document.labels || [],
+		triaged: Boolean(document.triaged),
+		triage_status: document.triage_status || '',
+		triage_summary: document.triage_summary || '',
+		triage_primary_action: document.triage_primary_action || '',
+		triage_action_points: actionPoints,
+		message_id: document.message_id || '',
+		text_content: document.text_content || '',
+		attachment_text_content: document.attachment_text_content || '',
+		createdAt,
+		updatedAt,
+	};
+}
+
+async function collectEmailAiTypesenseHits(host_id, query, filterBy, { limit, searchFn = searchCollection } = {}) {
+	const all = [];
+	const seen = new Set();
+	let page = 1;
+	while (all.length < limit) {
+		const perPage = Math.min(250, limit - all.length);
+		const result = await searchFn(host_id, 'emails', query || '*', {
+			queryBy: query && query !== '*' ? 'embedding' : 'subject',
+			perPage,
+			page,
+			filter_by: filterBy || undefined,
+			include_fields: EMAIL_AI_INCLUDE_FIELDS,
+			exclude_fields: 'embedding',
+			extra: { sort_by: 'updated_at:desc' },
+		});
+		const hits = result?.hits || [];
+		if (!hits.length) break;
+		for (const hit of hits) {
+			const document = hit.document || {};
+			const id = document.source_id || document.id;
+			if (!id || seen.has(id)) continue;
+			seen.add(id);
+			all.push(hit);
+			if (all.length >= limit) break;
+		}
+		if (hits.length < perPage) break;
+		page += 1;
+	}
+	return all;
+}
+
+function buildEmailAiAnswer({ mode, count, emails, query }) {
+	if (mode === 'count') {
+		return count === 1 ? 'I found 1 matching email.' : `I found ${count} matching emails.`;
+	}
+	if (!emails.length) return 'I found no matching emails.';
+	const shown = emails.length === 1 ? '1 email' : `${emails.length} emails`;
+	return `Showing ${shown} matching "${query}".`;
+}
+
+async function summarizeEmailAiResults(host_id, prompt, emails, completionFn = emailAiCompletion) {
+	const instructions = await getAiInstructions(host_id);
+	const context = emails.slice(0, 20).map((email, index) => [
+		`Email ${index + 1}`,
+		`Subject: ${email.subject || '(No subject)'}`,
+		`From: ${(email.from || []).join(', ') || '(unknown)'}`,
+		email.triage_summary ? `Triage summary: ${email.triage_summary}` : '',
+		`Excerpt: ${(email.text_content || email.attachment_text_content || '').slice(0, 800)}`,
+	].filter(Boolean).join('\n')).join('\n\n');
+	const content = await completionFn({
+		hostId: host_id,
+		scope: 'email',
+		maxTokens: 900,
+		messages: [
+			{
+				role: 'system',
+				content: [
+					'Answer as an email assistant summarizing a set of matched emails. Be concise and use only the provided email list.',
+					instructions.global ? `Global instructions:\n${instructions.global}` : '',
+					instructions.email ? `Email AI instructions:\n${instructions.email}` : '',
+				].filter(Boolean).join('\n\n'),
+			},
+			{ role: 'user', content: `Matched emails:\n${context || '(none)'}\n\nUser request:\n${prompt}` },
+		],
+	});
+	return String(content || '').trim();
+}
+
+export async function askEmailListAi(host_id, query, scope = {}, options = {}) {
+	const prompt = String(query || '').trim();
+	if (!prompt) throw new Error('query required');
+	const normalizedScope = normalizeEmailAiScope(scope);
+	if (normalizedScope.mailbox === 'drafts') {
+		return { answer: 'Email AI searches emails, not drafts.', count: 0, emails: [], mode: 'list', scope: normalizedScope };
+	}
+
+	const intent = parseEmailAiQuery(prompt);
+	const filterBy = buildEmailAiTypesenseFilter(normalizedScope, intent);
+	const searchQuery = intent.search_text ? intent.search_text : '*';
+	const limit = intent.mode === 'count' ? EMAIL_AI_COUNT_LIMIT : EMAIL_AI_LIST_LIMIT;
+	const hits = await collectEmailAiTypesenseHits(host_id, searchQuery, filterBy, {
+		limit,
+		searchFn: options.searchFn || searchCollection,
+	});
+	const emails = hits.map((hit) => emailFromTypesenseDocument(hit.document || {}));
+	const count = intent.mode === 'count' ? emails.length : emails.length;
+	const mode = intent.mode === 'summary' ? 'summary' : (intent.mode === 'count' ? 'count' : (searchQuery === '*' ? 'list' : 'search'));
+	const answer = intent.mode === 'summary' && emails.length
+		? await summarizeEmailAiResults(host_id, prompt, emails, options.completionFn || emailAiCompletion)
+		: buildEmailAiAnswer({ mode, count, emails, query: prompt });
+
+	return {
+		answer,
+		count,
+		emails: intent.mode === 'count' ? [] : emails,
+		mode,
+		scope: normalizedScope,
+	};
 }
 
 function buildEmailContext(email) {

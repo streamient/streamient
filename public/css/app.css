@@ -468,10 +468,12 @@ small,
 .ecc-ai {
 	border-left: 1px solid var(--bs-border-color);
 	padding-left: 1rem;
+	display: flex;
+	flex-direction: column;
 	min-width: 0;
 	min-height: 0;
 	overflow-x: hidden;
-	overflow-y: auto;
+	overflow-y: hidden;
 }
 
 .min-w-0 {
@@ -609,7 +611,19 @@ small,
 }
 
 .ecc-ai-panel {
+	display: flex;
+	flex: 1 1 0;
+	flex-direction: column;
 	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+}
+
+.ecc-ai-content {
+	display: flex;
+	flex: 1 1 0;
+	flex-direction: column;
+	min-height: 0;
 	overflow: hidden;
 }
 
@@ -622,13 +636,30 @@ small,
 	overflow: hidden;
 }
 
+.ecc-email-chat {
+	display: flex;
+	flex: 1 1 0;
+	flex-direction: column;
+	min-height: 0;
+	margin-bottom: 0;
+}
+
+.ecc-email-ai-examples {
+	flex: 0 0 auto;
+}
+
 .ecc-email-ai-messages {
 	display: flex;
+	flex: 1 1 0;
 	flex-direction: column;
 	gap: 0.5rem;
-	max-height: 260px;
+	min-height: 0;
 	overflow-y: auto;
 	margin-bottom: 0.75rem;
+}
+
+.ecc-email-ai-composer {
+	flex: 0 0 auto;
 }
 
 .ecc-email-ai-message {
@@ -674,6 +705,18 @@ small,
 		padding-left: 0;
 		padding-top: 1rem;
 		overflow: visible;
+	}
+
+	.ecc-ai,
+	.ecc-ai-panel,
+	.ecc-ai-content,
+	.ecc-email-chat {
+		display: block;
+		min-height: 0;
+	}
+
+	.ecc-email-ai-messages {
+		max-height: 260px;
 	}
 
 	.ecc-main {

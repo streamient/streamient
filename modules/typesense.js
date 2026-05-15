@@ -247,6 +247,19 @@ function exactFilterValue(value) {
 	return '`' + String(value).replace(/`/g, '\\`') + '`';
 }
 
+function normalizeEmailAddressValue(value) {
+	const text = String(value || '').trim();
+	if (!text) return '';
+	const bracketMatch = text.match(/<([^<>]+)>/);
+	const address = bracketMatch ? bracketMatch[1] : text;
+	const emailMatch = address.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+	return String(emailMatch ? emailMatch[0] : address).trim().toLowerCase();
+}
+
+function normalizeEmailAddressList(value) {
+	return [...new Set((Array.isArray(value) ? value : [value]).map(normalizeEmailAddressValue).filter(Boolean))];
+}
+
 /**
  * Collection schemas by type. Host ID is appended at runtime.
  */
@@ -269,24 +282,36 @@ export function toTypesenseDoc(type, doc) {
 			return { ...base, title: doc.title || '', content: doc.content || '', tags: doc.tags || [], source: doc.source || '' };
 		case 'urls':
 			return { ...base, url: doc.url || '', title: doc.title || '', description: doc.description || '', text_content: doc.text_content || '' };
-		case 'emails':
-			return {
-				...base,
-				subject: doc.subject || '',
-				text_content: doc.text_content || '',
-				attachment_text_content: doc.attachment_text_content || '',
-				from: doc.from || [],
-				to: doc.to || [],
-				cc: doc.cc || [],
-				bcc: doc.bcc || [],
-				mailbox: doc.mailbox || 'inbox',
-				labels: doc.labels || [],
-				triage_summary: doc.triage_summary || '',
-				triage_primary_action: doc.triage_primary_action || '',
-				triage_action_points: (doc.triage_action_points || []).map((item) => item.text || '').filter(Boolean),
-				message_id: doc.message_id || '',
-				references: doc.references || [],
-			};
+			case 'emails':
+				const fromEmails = normalizeEmailAddressList(doc.from);
+				const toEmails = normalizeEmailAddressList(doc.to);
+				const ccEmails = normalizeEmailAddressList(doc.cc);
+				const bccEmails = normalizeEmailAddressList(doc.bcc);
+				return {
+					...base,
+					subject: doc.subject || '',
+					text_content: doc.text_content || '',
+					attachment_text_content: doc.attachment_text_content || '',
+					from: doc.from || [],
+					to: doc.to || [],
+					cc: doc.cc || [],
+					bcc: doc.bcc || [],
+					from_emails: fromEmails,
+					to_emails: toEmails,
+					cc_emails: ccEmails,
+					bcc_emails: bccEmails,
+					participant_emails: [...new Set([...fromEmails, ...toEmails, ...ccEmails, ...bccEmails])],
+					mailbox: doc.mailbox || 'inbox',
+					labels: doc.labels || [],
+					triaged: Boolean(doc.triaged),
+					triage_status: doc.triage_status || '',
+					triage_summary: doc.triage_summary || '',
+					triage_primary_action: doc.triage_primary_action || '',
+					triage_action_points: (doc.triage_action_points || []).map((item) => item.text || '').filter(Boolean),
+					message_id: doc.message_id || '',
+					references: doc.references || [],
+					in_trash: Boolean(doc.in_trash),
+				};
 		default:
 			return base;
 	}
@@ -386,20 +411,28 @@ const schemas = {
 			{ name: 'subject', type: 'string', optional: true },
 			{ name: 'text_content', type: 'string', optional: true },
 			{ name: 'attachment_text_content', type: 'string', optional: true },
-			{ name: 'from', type: 'string[]', optional: true },
-			{ name: 'to', type: 'string[]', optional: true },
-			{ name: 'cc', type: 'string[]', optional: true },
-			{ name: 'bcc', type: 'string[]', optional: true },
-			{ name: 'mailbox', type: 'string', facet: true, optional: true },
-			{ name: 'labels', type: 'string[]', facet: true, optional: true },
-			{ name: 'triage_summary', type: 'string', optional: true },
-			{ name: 'triage_primary_action', type: 'string', facet: true, optional: true },
-			{ name: 'triage_action_points', type: 'string[]', optional: true },
-			{ name: 'message_id', type: 'string', optional: true },
-			{ name: 'references', type: 'string[]', optional: true },
-			{ name: 'project_id', type: 'string', facet: true },
-			{ name: 'created_at', type: 'int64' },
-			{ name: 'updated_at', type: 'int64' },
+				{ name: 'from', type: 'string[]', optional: true },
+				{ name: 'to', type: 'string[]', optional: true },
+				{ name: 'cc', type: 'string[]', optional: true },
+				{ name: 'bcc', type: 'string[]', optional: true },
+				{ name: 'from_emails', type: 'string[]', facet: true, optional: true },
+				{ name: 'to_emails', type: 'string[]', facet: true, optional: true },
+				{ name: 'cc_emails', type: 'string[]', facet: true, optional: true },
+				{ name: 'bcc_emails', type: 'string[]', facet: true, optional: true },
+				{ name: 'participant_emails', type: 'string[]', facet: true, optional: true },
+				{ name: 'mailbox', type: 'string', facet: true, optional: true },
+				{ name: 'labels', type: 'string[]', facet: true, optional: true },
+				{ name: 'triaged', type: 'bool', facet: true, optional: true },
+				{ name: 'triage_status', type: 'string', facet: true, optional: true },
+				{ name: 'triage_summary', type: 'string', optional: true },
+				{ name: 'triage_primary_action', type: 'string', facet: true, optional: true },
+				{ name: 'triage_action_points', type: 'string[]', optional: true },
+				{ name: 'message_id', type: 'string', optional: true },
+				{ name: 'references', type: 'string[]', optional: true },
+				{ name: 'in_trash', type: 'bool', facet: true, optional: true },
+				{ name: 'project_id', type: 'string', facet: true },
+				{ name: 'created_at', type: 'int64' },
+				{ name: 'updated_at', type: 'int64' },
 			...chunkMetadataFields(),
 			{
 				name: 'embedding',
@@ -572,7 +605,7 @@ export async function searchCollection(host_id, type, query, options = {}) {
 		q: query,
 		query_by: options.queryBy || 'title',
 		prefix: false,
-		per_page: options.perPage || 10,
+		per_page: options.perPage ?? 10,
 		page: options.page || 1,
 		exclude_fields: resolveExcludeFields(options.exclude_fields, type),
 		...options.extra,

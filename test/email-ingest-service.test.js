@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailLabels, parseTriageResult, triageInboxEmails, backfillEmailTriageState, askEmailAi, buildTriageContext, resetEmailTriage, updateEmail } from '../services/email_ingest_service.js';
+import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailLabels, parseTriageResult, triageInboxEmails, backfillEmailTriageState, askEmailAi, askEmailListAi, buildEmailAiTypesenseFilter, buildTriageContext, parseEmailAiQuery, resetEmailTriage, updateEmail } from '../services/email_ingest_service.js';
 import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
 import { EmailLabel } from '../model/email_label.js';
@@ -741,8 +741,70 @@ describe('Email ingest service', () => {
 
 		assert.deepEqual(doc.from, ['sender@example.com']);
 		assert.deepEqual(doc.to, ['to@example.com']);
+		assert.deepEqual(doc.from_emails, ['sender@example.com']);
+		assert.deepEqual(doc.to_emails, ['to@example.com']);
+		assert.deepEqual(doc.participant_emails, ['sender@example.com', 'to@example.com']);
 		assert.equal(doc.subject, 'Hello from sender test');
 		assert.equal(doc.html_content, undefined);
+	});
+
+	it('parses list-level Email AI sender/count intent', () => {
+		const intent = parseEmailAiQuery('How many emails from Sender@Example.com are in this view?');
+
+		assert.equal(intent.mode, 'count');
+		assert.equal(intent.from_email, 'sender@example.com');
+		assert.equal(intent.search_text, '');
+	});
+
+	it('builds Typesense filters from current ECC scope and Email AI intent', () => {
+		const filter = buildEmailAiTypesenseFilter(
+			{ project: 'project-1', mailbox: 'inbox', triaged: false },
+			parseEmailAiQuery('show emails from sender@example.com'),
+		);
+
+		assert.match(filter, /project_id:=`project-1`/);
+		assert.match(filter, /mailbox:=`inbox`/);
+		assert.match(filter, /triaged:=false/);
+		assert.match(filter, /from_emails:=`sender@example.com`/);
+	});
+
+	it('uses Typesense for list-level Email AI results', async () => {
+		let searchCall = null;
+		const result = await askEmailListAi('host-1', 'show emails from sender@example.com', {
+			project: 'project-1',
+			mailbox: 'inbox',
+			triaged: false,
+		}, {
+			searchFn: async (hostId, type, query, options) => {
+				searchCall = { hostId, type, query, options };
+				return {
+					hits: [{
+						document: {
+							id: 'email-1',
+							source_id: 'email-1',
+							project_id: 'project-1',
+							subject: 'Hello',
+							from: ['sender@example.com'],
+							to: ['team@example.com'],
+							mailbox: 'inbox',
+							labels: ['reply-required'],
+							triaged: false,
+							updated_at: 1778830000,
+							created_at: 1778820000,
+						},
+					}],
+				};
+			},
+		});
+
+		assert.equal(searchCall.hostId, 'host-1');
+		assert.equal(searchCall.type, 'emails');
+		assert.equal(searchCall.query, '*');
+		assert.match(searchCall.options.filter_by, /from_emails:=`sender@example.com`/);
+		assert.equal(result.mode, 'list');
+		assert.equal(result.count, 1);
+		assert.equal(result.emails[0]._id, 'email-1');
+		assert.equal(result.emails[0].updatedAt, '2026-05-15T07:26:40.000Z');
 	});
 
 	it('lists default ECC inbox as untriaged emails across projects', async () => {
