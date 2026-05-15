@@ -168,6 +168,16 @@ describe('Email draft API', () => {
 			assert.equal(updatePayload.update.$set.body_html, '<p><strong>Updated draft</strong></p>');
 			assert.equal(updateJson.draft.status, 'ready');
 			assert.equal(updateJson.draft.body_text, 'Updated draft');
+
+			const deleteResponse = await request(server, 'DELETE', '/email-drafts/507f1f77bcf86cd799439099');
+			const deleteJson = await readJson(deleteResponse);
+
+			assert.equal(deleteResponse.status, 200);
+			assert.equal(updatePayload.query._id, '507f1f77bcf86cd799439099');
+			assert.equal(updatePayload.query.host_id, 'host-1');
+			assert.equal(updatePayload.update.$set.status, 'discarded');
+			assert.equal(deleteJson.message, 'Email draft deleted');
+			assert.equal(deleteJson.draft.status, 'discarded');
 		} finally {
 			await new Promise((resolve) => server.close(resolve));
 		}

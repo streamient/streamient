@@ -507,7 +507,7 @@
 	function updateSelectAllButton() {
 		if (!selectAllBtn) return;
 		var checkboxes = getEmailCheckboxes();
-		var enabled = !detailActive && activeMailbox !== 'drafts' && checkboxes.length > 0;
+		var enabled = !detailActive && checkboxes.length > 0;
 		var selectedCount = checkboxes.filter(function (checkbox) {
 			return selectedIds.has(checkbox.value);
 		}).length;
@@ -516,6 +516,7 @@
 		selectAllBtn.disabled = !enabled;
 		selectAllBtn.classList.toggle('active', allSelected);
 		selectAllBtn.setAttribute('aria-pressed', allSelected ? 'true' : 'false');
+		selectAllBtn.title = activeMailbox === 'drafts' ? 'Select all visible drafts' : 'Select all visible emails';
 		if (selectAllText) selectAllText.textContent = allSelected ? 'Clear selection' : 'Select all';
 	}
 
@@ -527,10 +528,18 @@
 	function updateActionBar() {
 		if (!actionBar || !actionCount) return;
 		var count = selectedIds.size;
+		var isDraftMailbox = activeMailbox === 'drafts';
 		actionCount.textContent = count + ' selected';
-		actionBar.classList.toggle('d-none', detailActive || count === 0 || activeMailbox === 'drafts');
-		actionBar.classList.toggle('d-flex', !detailActive && count > 0 && activeMailbox !== 'drafts');
-		if (trashBtn) trashBtn.classList.toggle('d-none', activeMailbox === 'trash');
+		actionBar.classList.toggle('d-none', detailActive || count === 0);
+		actionBar.classList.toggle('d-flex', !detailActive && count > 0);
+		moveMenu?.closest('.dropdown')?.classList.toggle('d-none', isDraftMailbox);
+		resetTriageBtn?.classList.toggle('d-none', isDraftMailbox);
+		if (trashBtn) {
+			trashBtn.classList.toggle('d-none', activeMailbox === 'trash' && !isDraftMailbox);
+			var trashText = trashBtn.querySelector('span');
+			if (trashText) trashText.textContent = isDraftMailbox ? 'Delete' : 'Trash';
+			trashBtn.title = isDraftMailbox ? 'Delete selected drafts' : 'Move selected emails to trash';
+		}
 		updateSelectAllButton();
 		updateTriageButton();
 	}
@@ -582,7 +591,7 @@
 
 	function toggleSelectAll() {
 		var checkboxes = getEmailCheckboxes();
-		if (activeMailbox === 'drafts' || !checkboxes.length) return;
+		if (!checkboxes.length) return;
 		var allSelected = checkboxes.every(function (checkbox) {
 			return selectedIds.has(checkbox.value);
 		});
@@ -1303,6 +1312,26 @@
 			status.classList.toggle('text-muted', tone !== 'error');
 		}
 
+		async function deleteDraft(draftId, options) {
+			if (!draftId) return;
+			var silent = Boolean(options?.silent);
+			if (!silent) {
+				var confirmed = await confirmAction('Delete Draft', 'This draft will be deleted.');
+				if (!confirmed) return;
+			}
+			await api('DELETE', '/email-drafts/' + encodeURIComponent(draftId));
+			if (String(currentDraft?._id || '') === String(draftId)) currentDraft = null;
+			destroyDraftEditor();
+			if (!silent) showSuccess('Draft deleted');
+			await loadLabels();
+			if (activeMailbox === 'drafts') {
+				backToListView();
+				await loadEmails();
+			} else {
+				renderDraftDetail(null);
+			}
+		}
+
 		async function saveDraftFromCard(card, draft, sourceEmail, options) {
 			var silent = Boolean(options?.silent);
 			var replyEmail = sourceEmail || selectedEmail;
@@ -1445,6 +1474,11 @@
 			footer.appendChild(statusWrap);
 			var actions = document.createElement('div');
 			actions.className = 'd-flex gap-2';
+			if (draft?._id) {
+				var deleteButton = textNode('button', 'btn btn-outline-danger btn-sm', 'Delete draft');
+				deleteButton.type = 'button';
+				actions.appendChild(deleteButton);
+			}
 			var cancelButton = textNode('button', 'btn btn-outline-secondary btn-sm', 'Cancel');
 			cancelButton.type = 'button';
 			var saveButton = textNode('button', 'btn btn-primary btn-sm ecc-draft-save', 'Save draft');
@@ -1455,6 +1489,18 @@
 			footer.appendChild(actions);
 			card.appendChild(footer);
 			host.appendChild(card);
+			if (draft?._id) {
+				actions.querySelector('.btn-outline-danger')?.addEventListener('click', async function (event) {
+					var button = event.currentTarget;
+					button.disabled = true;
+					try {
+						await deleteDraft(draft._id);
+					} catch (err) {
+						showError(err.message || 'Failed to delete draft');
+						button.disabled = false;
+					}
+				});
+			}
 			cancelButton.addEventListener('click', destroyDraftEditor);
 			saveButton.addEventListener('click', function () {
 				saveDraftFromCard(card, currentDraft, email);
@@ -1715,14 +1761,23 @@
 		}
 
 		function bindDraftItem(item) {
-			item.addEventListener('click', function () {
-				selectEmail(item.dataset.sourceEmail || '');
+			item.addEventListener('click', function (event) {
+				if (event.target.closest('.ecc-email-select-wrap')) return;
+				selectDraft(item.dataset.id || '', item.dataset.sourceEmail || '');
 			});
 			item.addEventListener('keydown', function (event) {
+				if (event.target.closest('.ecc-email-select-wrap')) return;
 				if (event.key === 'Enter' || event.key === ' ') {
 					event.preventDefault();
-					selectEmail(item.dataset.sourceEmail || '');
+					selectDraft(item.dataset.id || '', item.dataset.sourceEmail || '');
 				}
+			});
+			var checkbox = item.querySelector('.ecc-email-select');
+			checkbox?.addEventListener('click', function (event) {
+				event.stopPropagation();
+			});
+			checkbox?.addEventListener('change', function () {
+				setEmailSelected(checkbox, checkbox.checked);
 			});
 		}
 
@@ -1778,16 +1833,15 @@
 			return;
 		}
 		listEl.innerHTML = drafts.map(function (draft) {
-			var recipients = (draft.to || []).slice(0, 2).join(', ') || '(no recipients)';
-			var body = (draft.body_text || '').slice(0, 180);
+			var draftId = String(draft._id || draft.id || '');
 			var sourceEmailId = draftSourceEmailId(draft);
-			return '<div class="list-group-item list-group-item-action ecc-email-item" role="button" tabindex="0" data-source-email="' + escapeHtml(sourceEmailId) + '">'
+			return '<div class="list-group-item list-group-item-action ecc-email-item" role="button" tabindex="0" data-id="' + escapeHtml(draftId) + '" data-source-email="' + escapeHtml(sourceEmailId) + '">'
 				+ '<div class="d-flex justify-content-between align-items-start gap-3 min-w-0">'
+				+ '<div class="form-check ecc-email-select-wrap">'
+				+ '<input class="form-check-input ecc-email-select" type="checkbox" value="' + escapeHtml(draftId) + '" aria-label="Select draft">'
+				+ '</div>'
 				+ '<div class="min-w-0 flex-grow-1">'
 				+ '<div class="fw-semibold text-truncate">' + escapeHtml(draft.subject || '(No subject)') + '</div>'
-				+ '<div class="small text-muted text-truncate">' + kkIcon('email', 'me-1') + escapeHtml(recipients) + '</div>'
-				+ (body ? '<div class="small text-muted text-truncate mt-1">' + escapeHtml(body) + '</div>' : '')
-				+ '<div class="mt-2"><span class="badge text-bg-light me-1">' + escapeHtml(draft.status || 'draft') + '</span></div>'
 				+ '</div>'
 				+ '<small class="text-muted text-nowrap">' + escapeHtml(formatDate(draft.updatedAt)) + '</small>'
 				+ '</div>'
@@ -1799,7 +1853,15 @@
 		updateActionBar();
 	}
 
-	async function selectEmail(id) {
+	async function selectDraft(draftId, sourceEmailId) {
+		if (!sourceEmailId) {
+			showError('Draft source email not found');
+			return;
+		}
+		await selectEmail(sourceEmailId, { openDraft: true, draftId: draftId });
+	}
+
+	async function selectEmail(id, options) {
 		if (!id) return;
 		pendingEmailId = id;
 		writeUrlState(id);
@@ -1818,11 +1880,17 @@
 			pendingEmailId = '';
 			emailAiMessages = [];
 			emailReplySuggestions = [];
+			var draft = res.draft || null;
+			if (options?.draftId && String(draft?._id || '') !== String(options.draftId)) {
+				var draftRes = await api('GET', '/email-drafts/' + encodeURIComponent(options.draftId));
+				draft = draftRes.draft || draft;
+			}
 			listEl?.querySelectorAll('.ecc-email-item').forEach(function (item) {
-				var active = item.dataset.id === id || item.dataset.sourceEmail === id;
+				var active = item.dataset.id === id || item.dataset.sourceEmail === id || item.dataset.id === options?.draftId;
 				item.classList.toggle('is-active', active);
 			});
-			renderEmailDetail(email, thread, res.draft || null);
+			renderEmailDetail(email, thread, draft);
+			if (options?.openDraft) openReplyEditor(email, detailDraftEl);
 			renderEmailAi(email);
 		} catch (err) {
 			selectedEmail = null;
@@ -1872,6 +1940,10 @@
 	}
 
 	async function trashSelected() {
+		if (activeMailbox === 'drafts') {
+			await deleteSelectedDrafts();
+			return;
+		}
 		var ids = getSelectedIds();
 		if (!ids.length) return;
 		var confirmed = await confirmAction('Move to Trash', ids.length + ' email(s) will be moved to trash.');
@@ -1883,6 +1955,23 @@
 			await loadAll();
 		} catch (err) {
 			showError(err.message || 'Failed to move emails to trash');
+		}
+	}
+
+	async function deleteSelectedDrafts() {
+		var ids = getSelectedIds();
+		if (!ids.length) return;
+		var confirmed = await confirmAction('Delete Drafts', ids.length + ' draft(s) will be deleted.');
+		if (!confirmed) return;
+		try {
+			await Promise.all(ids.map(function (id) {
+				return api('DELETE', '/email-drafts/' + encodeURIComponent(id));
+			}));
+			showSuccess(ids.length + ' draft(s) deleted');
+			clearSelection();
+			await loadAll();
+		} catch (err) {
+			showError(err.message || 'Failed to delete drafts');
 		}
 	}
 

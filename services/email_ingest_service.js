@@ -1991,6 +1991,21 @@ export async function updateEmailDraft(host_id, draftId, data, ctx = {}) {
 	return draft;
 }
 
+export async function discardEmailDraft(host_id, draftId, ctx = {}) {
+	const before = await EmailDraft.findOne({ _id: draftId, host_id }).lean();
+	if (!before) return null;
+	const draft = await EmailDraft.findOneAndUpdate(
+		{ _id: draftId, host_id },
+		{ $set: { status: 'discarded' } },
+		{ returnDocument: 'after' },
+	).lean();
+	if (draft && ctx.user_id) {
+		const details = audit.diffSnapshot(before, draft);
+		audit.log({ action: 'delete', resource: 'email_draft', resource_id: draftId, host_id, details, ...ctx });
+	}
+	return draft;
+}
+
 function emailThreadSortTime(email) {
 	const value = email.createdAt || email.updatedAt;
 	const time = value ? new Date(value).getTime() : 0;

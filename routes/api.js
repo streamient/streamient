@@ -634,6 +634,12 @@ router.put('/email-drafts/:id', requireEmailFeatureAccess, async (req, res) => {
 	}
 });
 
+router.delete('/email-drafts/:id', requireEmailFeatureAccess, async (req, res) => {
+	const draft = await emailIngestService.discardEmailDraft(req.host_id, req.params.id, auditCtx(req));
+	if (!draft) return res.status(404).json({ error: 'Email draft not found' });
+	res.json({ draft, message: 'Email draft deleted' });
+});
+
 // ---- URLs ----
 
 router.get('/urls', async (req, res) => {

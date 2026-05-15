@@ -82,6 +82,8 @@ Use `/emails/:id/ai` for questions about one selected email. It includes retriev
 
 Draft updates accept `from`, recipient arrays in `to`, `cc`, and `bcc`, plus `subject`, `body_text`, and sanitized `body_html`. `from` must match a configured outbound email identity for the email project when identities exist. `to`, `cc`, and `bcc` are limited to 10 addresses each.
 
+Draft deletion uses `DELETE /api/v1/email-drafts/:id` and marks the draft as `discarded`, which removes it from active draft lists.
+
 Compose clients can load safe outbound identity data with `GET /api/v1/projects/:id/email-identities/compose`. Recipient autocomplete can call `GET /api/v1/emails/from-addresses?q=partial&project=PROJECT_ID&limit=10`; it searches sender addresses in the project first, then falls back tenant-wide when no project results are found.
 
 ## Triage status

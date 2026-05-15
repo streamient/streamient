@@ -1628,6 +1628,16 @@ const swaggerSpec = {
 	                    404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
 	                },
 	            },
+	            delete: {
+	                tags: ['Emails'],
+	                summary: 'Delete an email draft',
+	                description: 'Marks the email draft as discarded so it no longer appears in active draft lists.',
+	                parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+	                responses: {
+	                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { message: { type: 'string' }, draft: { $ref: '#/components/schemas/EmailDraft' } } } } } },
+	                    404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+	                },
+	            },
 	        },
 
 	        // ---- URLs ----
