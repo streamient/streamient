@@ -1384,7 +1384,7 @@
 			var titleWrap = document.createElement('div');
 			titleWrap.className = 'min-w-0';
 			titleWrap.appendChild(textNode('h6', 'mb-1 text-truncate', draft ? 'Draft reply' : 'New draft reply'));
-			titleWrap.appendChild(textNode('div', 'small text-muted', 'Autosaves every 15 seconds.'));
+			// titleWrap.appendChild(textNode('div', 'small text-muted', 'Autosaves every 15 seconds.'));
 			header.appendChild(titleWrap);
 			if (draft?.updatedAt) header.appendChild(textNode('small', 'text-muted text-nowrap', formatDateTime(draft.updatedAt)));
 			card.appendChild(header);
@@ -1440,7 +1440,7 @@
 			footer.className = 'd-flex justify-content-between align-items-center gap-3';
 			var statusWrap = document.createElement('div');
 			statusWrap.className = 'd-flex align-items-center gap-2 min-w-0';
-			statusWrap.appendChild(textNode('span', 'badge ecc-detail-draft-badge', draft?.status || 'draft'));
+			// statusWrap.appendChild(textNode('span', 'badge ecc-detail-draft-badge', draft?.status || 'draft'));
 			statusWrap.appendChild(textNode('small', 'text-muted ecc-draft-save-status', ''));
 			footer.appendChild(statusWrap);
 			var actions = document.createElement('div');
