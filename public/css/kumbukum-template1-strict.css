@@ -228,6 +228,15 @@ body.kk-template1 #main-content .list-group-item .text-muted.small:last-child {
   margin-top: 6px;
 }
 
+body.kk-template1 #main-content .email-item .email-item-sender,
+body.kk-template1 #main-content .email-item .email-item-date {
+  font-size: 0.7rem;
+}
+
+body.kk-template1 #main-content .email-item .email-item-excerpt {
+  font-size: 0.85rem;
+}
+
 body.kk-template1 .ecc-left .list-group-item,
 body.kk-template1 .ecc-ai .list-group-item,
 body.kk-template1 .ecc-email-item {

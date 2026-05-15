@@ -62,11 +62,11 @@
 			+ '<div class="batch-cb-wrap"><input type="checkbox" class="form-check-input batch-cb" value="' + escapeHtml(id) + '"></div>'
 			+ '<div class="flex-grow-1 overflow-hidden">'
 			+ '<div class="d-flex justify-content-between align-items-center gap-2">'
-			+ '<strong class="text-truncate">' + escapeHtml(subject) + '</strong>'
-			+ '<small class="text-muted text-nowrap flex-shrink-0">' + date + '</small>'
+			+ (senderSummary ? '<span class="email-item-sender text-muted text-truncate">' + escapeHtml(senderSummary + hasMoreSenders) + '</span>' : '<span class="email-item-sender text-muted text-truncate"></span>')
+			+ '<time class="email-item-date text-muted text-nowrap flex-shrink-0">' + escapeHtml(date) + '</time>'
 			+ '</div>'
-			+ (excerpt ? '<p class="mb-1 text-muted small text-truncate">' + escapeHtml(excerpt) + '</p>' : '')
-			+ (senderSummary ? '<p class="mb-0 text-muted small text-truncate">' + escapeHtml(senderSummary + hasMoreSenders) + '</p>' : '')
+			+ '<strong class="email-item-subject text-truncate d-block">' + escapeHtml(subject) + '</strong>'
+			+ (excerpt ? '<p class="email-item-excerpt mb-0 text-muted text-truncate">' + escapeHtml(excerpt) + '</p>' : '')
 			+ '</div></div></div>';
 	}
 

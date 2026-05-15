@@ -765,6 +765,23 @@ small,
 	background: #f0f0f0;
 }
 
+.email-item-sender,
+.email-item-date {
+	font-size: 0.7rem;
+	line-height: 1.2;
+}
+
+.email-item-subject {
+	margin-top: 0.15rem;
+	line-height: 1.25;
+}
+
+.email-item-excerpt {
+	font-size: 0.85rem;
+	line-height: 1.25;
+	margin-top: 0.15rem;
+}
+
 /* Project list */
 .project-item {
 	padding: 0;
