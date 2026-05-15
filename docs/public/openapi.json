@@ -710,6 +710,66 @@
           }
         }
       },
+      "EmailIdentity": {
+        "type": "object",
+        "properties": {
+          "_id": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "host_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "smtp": {
+            "type": "object",
+            "properties": {
+              "host": {
+                "type": "string"
+              },
+              "port": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              },
+              "auth_user": {
+                "type": "string"
+              },
+              "auth_password_configured": {
+                "type": "boolean",
+                "description": "True when an encrypted SMTP password is stored. The secret value is never returned."
+              },
+              "tls": {
+                "type": "boolean",
+                "description": "Use Nodemailer requireTLS for outbound sending."
+              },
+              "ssl": {
+                "type": "boolean",
+                "description": "Use Nodemailer secure for outbound sending."
+              }
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "EmailTriageStatus": {
         "type": "object",
         "properties": {
@@ -1630,6 +1690,88 @@
           },
           "400": {
             "description": "Cannot delete — project still has notes, memories, URLs, or git repos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{id}/settings": {
+      "get": {
+        "tags": [
+          "Projects"
+        ],
+        "summary": "Get project settings payload",
+        "description": "Returns project details, feature availability, forwarding domain, masked git repo settings, and masked outbound email identities. Requires owner/admin access.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "project": {
+                      "$ref": "#/components/schemas/Project"
+                    },
+                    "features": {
+                      "type": "object",
+                      "properties": {
+                        "git_sync": {
+                          "type": "boolean"
+                        },
+                        "email_ingest": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "email_forward_domain": {
+                      "type": "string"
+                    },
+                    "git_repos": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/GitRepo"
+                      }
+                    },
+                    "email_identities": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/EmailIdentity"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Owner/admin access required",
             "content": {
               "application/json": {
                 "schema": {
@@ -6809,6 +6951,361 @@
                       }
                     },
                     "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{id}/email-identities": {
+      "get": {
+        "tags": [
+          "Email Identities"
+        ],
+        "summary": "List project outbound email identities",
+        "description": "Returns masked project-owned email addresses with SMTP settings. Requires owner/admin and Email Pro feature access.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Project ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "identities": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/EmailIdentity"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Plan or access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Email Identities"
+        ],
+        "summary": "Create a project outbound email identity",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Project ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "smtp": {
+                    "type": "object",
+                    "properties": {
+                      "host": {
+                        "type": "string"
+                      },
+                      "port": {
+                        "type": "integer",
+                        "default": 587
+                      },
+                      "auth_user": {
+                        "type": "string"
+                      },
+                      "auth_password": {
+                        "type": "string",
+                        "description": "Stored encrypted and never returned."
+                      },
+                      "tls": {
+                        "type": "boolean",
+                        "default": false
+                      },
+                      "ssl": {
+                        "type": "boolean",
+                        "default": false
+                      }
+                    },
+                    "required": [
+                      "host",
+                      "port"
+                    ]
+                  }
+                },
+                "required": [
+                  "email",
+                  "smtp"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "identity": {
+                      "$ref": "#/components/schemas/EmailIdentity"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Plan or access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Project not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/email-identities/{id}": {
+      "get": {
+        "tags": [
+          "Email Identities"
+        ],
+        "summary": "Get one outbound email identity",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "identity": {
+                      "$ref": "#/components/schemas/EmailIdentity"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Email Identities"
+        ],
+        "summary": "Update one outbound email identity",
+        "description": "Omit or send an empty smtp.auth_password to keep the existing password. Send clear_auth_password=true to remove it.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "clear_auth_password": {
+                    "type": "boolean"
+                  },
+                  "smtp": {
+                    "type": "object",
+                    "properties": {
+                      "host": {
+                        "type": "string"
+                      },
+                      "port": {
+                        "type": "integer"
+                      },
+                      "auth_user": {
+                        "type": "string"
+                      },
+                      "auth_password": {
+                        "type": "string"
+                      },
+                      "tls": {
+                        "type": "boolean"
+                      },
+                      "ssl": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "identity": {
+                      "$ref": "#/components/schemas/EmailIdentity"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Email Identities"
+        ],
+        "summary": "Delete one outbound email identity",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
                       "type": "string"
                     }
                   }

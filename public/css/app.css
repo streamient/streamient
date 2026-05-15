@@ -93,7 +93,8 @@ body.kk-ecc-page #chat-results-panel {
 	display: none !important;
 }
 
-body.kk-template1 #settingsModal {
+body.kk-template1 #settingsModal,
+body.kk-template1 #projectSettingsModal {
 	--bs-body-color: var(--text);
 	--bs-body-bg: var(--panel);
 	--bs-border-color: var(--line);
@@ -102,31 +103,36 @@ body.kk-template1 #settingsModal {
 	color: var(--text);
 }
 
-body.kk-template1 #settingsModal .kk-settings-modal-dialog {
+body.kk-template1 #settingsModal .kk-settings-modal-dialog,
+body.kk-template1 #projectSettingsModal .kk-settings-modal-dialog {
 	width: min(96vw, 1500px);
 	max-width: min(96vw, 1500px);
 	margin-right: auto;
 	margin-left: auto;
 }
 
-body.kk-template1 #settingsModal .modal-content {
+body.kk-template1 #settingsModal .modal-content,
+body.kk-template1 #projectSettingsModal .modal-content {
 	min-height: calc(100vh - 3rem);
 	background: var(--panel) !important;
 	border-color: var(--line) !important;
 	color: var(--text) !important;
 }
 
-body.kk-template1 #settingsModal .modal-header {
+body.kk-template1 #settingsModal .modal-header,
+body.kk-template1 #projectSettingsModal .modal-header {
 	background: var(--panel) !important;
 	border-bottom-color: var(--line) !important;
 	color: var(--text) !important;
 }
 
-body.kk-template1 #settingsModal .modal-header .btn-close {
+body.kk-template1 #settingsModal .modal-header .btn-close,
+body.kk-template1 #projectSettingsModal .modal-header .btn-close {
 	filter: invert(1) grayscale(100%) brightness(200%) !important;
 }
 
-body.kk-template1 #settingsModal .modal-body {
+body.kk-template1 #settingsModal .modal-body,
+body.kk-template1 #projectSettingsModal .modal-body {
 	min-height: 72vh;
 	background: var(--panel) !important;
 	color: var(--text) !important;
@@ -136,7 +142,12 @@ body.kk-template1 #settingsModal .card,
 body.kk-template1 #settingsModal .list-group-item,
 body.kk-template1 #settingsModal .modal-body .border,
 body.kk-template1 #settingsModal .modal-body .preview-container,
-body.kk-template1 #settingsModal .modal-body .source-dropdown {
+body.kk-template1 #settingsModal .modal-body .source-dropdown,
+body.kk-template1 #projectSettingsModal .card,
+body.kk-template1 #projectSettingsModal .list-group-item,
+body.kk-template1 #projectSettingsModal .modal-body .border,
+body.kk-template1 #projectSettingsModal .modal-body .preview-container,
+body.kk-template1 #projectSettingsModal .modal-body .source-dropdown {
 	background: #0f1731 !important;
 	border-color: #1e2d56 !important;
 	color: var(--text) !important;
@@ -151,53 +162,78 @@ body.kk-template1 #settingsModal h6,
 body.kk-template1 #settingsModal label,
 body.kk-template1 #settingsModal .form-label,
 body.kk-template1 #settingsModal .card-title,
-body.kk-template1 #settingsModal .modal-title {
+body.kk-template1 #settingsModal .modal-title,
+body.kk-template1 #projectSettingsModal h1,
+body.kk-template1 #projectSettingsModal h2,
+body.kk-template1 #projectSettingsModal h3,
+body.kk-template1 #projectSettingsModal h4,
+body.kk-template1 #projectSettingsModal h5,
+body.kk-template1 #projectSettingsModal h6,
+body.kk-template1 #projectSettingsModal label,
+body.kk-template1 #projectSettingsModal .form-label,
+body.kk-template1 #projectSettingsModal .card-title,
+body.kk-template1 #projectSettingsModal .modal-title {
 	color: var(--text) !important;
 }
 
 body.kk-template1 #settingsModal .text-muted,
 body.kk-template1 #settingsModal .small,
 body.kk-template1 #settingsModal .form-text,
-body.kk-template1 #settingsModal .muted {
+body.kk-template1 #settingsModal .muted,
+body.kk-template1 #projectSettingsModal .text-muted,
+body.kk-template1 #projectSettingsModal .small,
+body.kk-template1 #projectSettingsModal .form-text,
+body.kk-template1 #projectSettingsModal .muted {
 	color: #b8c4eb !important;
 }
 
 body.kk-template1 #settingsModal .form-control,
 body.kk-template1 #settingsModal .form-select,
-body.kk-template1 #settingsModal .input-group-text {
+body.kk-template1 #settingsModal .input-group-text,
+body.kk-template1 #projectSettingsModal .form-control,
+body.kk-template1 #projectSettingsModal .form-select,
+body.kk-template1 #projectSettingsModal .input-group-text {
 	background: #0f1730 !important;
 	border-color: #2a386d !important;
 	color: var(--text) !important;
 }
 
 body.kk-template1 #settingsModal .form-control:focus,
-body.kk-template1 #settingsModal .form-select:focus {
+body.kk-template1 #settingsModal .form-select:focus,
+body.kk-template1 #projectSettingsModal .form-control:focus,
+body.kk-template1 #projectSettingsModal .form-select:focus {
 	border-color: #86b7fe !important;
 	box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
 }
 
-body.kk-template1 #settingsModal .form-control::placeholder {
+body.kk-template1 #settingsModal .form-control::placeholder,
+body.kk-template1 #projectSettingsModal .form-control::placeholder {
 	color: #9fb0dd !important;
 }
 
-body.kk-template1 #settingsModal .btn-outline-secondary {
+body.kk-template1 #settingsModal .btn-outline-secondary,
+body.kk-template1 #projectSettingsModal .btn-outline-secondary {
 	background: #121a34 !important;
 	border-color: #354478 !important;
 	color: var(--muted) !important;
 }
 
 body.kk-template1 #settingsModal .btn-outline-secondary:hover,
-body.kk-template1 #settingsModal .btn-outline-secondary:focus {
+body.kk-template1 #settingsModal .btn-outline-secondary:focus,
+body.kk-template1 #projectSettingsModal .btn-outline-secondary:hover,
+body.kk-template1 #projectSettingsModal .btn-outline-secondary:focus {
 	background: #182348 !important;
 	border-color: #46548b !important;
 	color: #fff !important;
 }
 
-body.kk-template1 #settingsModal .list-group-item {
+body.kk-template1 #settingsModal .list-group-item,
+body.kk-template1 #projectSettingsModal .list-group-item {
 	cursor: pointer;
 }
 
-body.kk-template1 #settingsModal .list-group-item.active {
+body.kk-template1 #settingsModal .list-group-item.active,
+body.kk-template1 #projectSettingsModal .list-group-item.active {
 	background: #0d6efd !important;
 	border-color: #0d6efd !important;
 	color: #fff !important;
@@ -222,6 +258,51 @@ body.kk-template1 #settingsModal .table td {
 
 body.kk-template1 #settingsModal .table thead th {
 	background: #0f1730 !important;
+}
+
+.project-forwarding-copy {
+	width: min(100%, 34rem);
+	max-width: 100%;
+}
+
+.project-forwarding-copy .form-control {
+	flex: 1 1 auto;
+	min-width: 18rem;
+	max-width: 100%;
+}
+
+@media (min-width: 768px) {
+	.project-forwarding-copy {
+		max-width: 50%;
+	}
+}
+
+.project-settings-color-row {
+	position: relative;
+}
+
+body.kk-template1 .huebee__container {
+	background: #0f1731 !important;
+	border: 1px solid var(--line) !important;
+	box-shadow: 0 10px 24px rgba(0, 0, 0, .35) !important;
+}
+
+body.kk-template1 .huebee.is-static-open .huebee__container {
+	box-shadow: none !important;
+}
+
+body.kk-template1 .huebee__canvas {
+	border-radius: 4px;
+}
+
+body.kk-template1 .huebee__cursor {
+	border-color: #f8fafc !important;
+	box-shadow: 0 0 0 1px rgba(15, 23, 49, .65);
+}
+
+body.kk-template1 .huebee__close-button {
+	background: var(--panel) !important;
+	border: 1px solid var(--line);
 }
 
 @media (min-width: 768px) {

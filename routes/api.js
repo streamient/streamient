@@ -30,6 +30,7 @@ import * as graphService from '../services/graph_service.js';
 import * as exportService from '../services/export_service.js';
 import * as auditService from '../services/audit_service.js';
 import * as gitSyncService from '../services/git_sync_service.js';
+import * as emailIdentityService from '../services/email_identity_service.js';
 import * as oauthService from '../services/oauth_service.js';
 import * as teamService from '../services/team_service.js';
 import * as byoAiService from '../services/byo_ai_service.js';
@@ -84,6 +85,11 @@ function requireRestrictedSettingsAccess(req, res, next) {
 	return res.status(403).json({ error: 'Account admin access is required' });
 }
 
+function requireProjectSettingsAccess(req, res, next) {
+	if (teamService.canManageTeam(req.memberRole)) return next();
+	return res.status(403).json({ error: 'Project settings admin access is required' });
+}
+
 function isByoAiSettingsAccessEnabled(plan) {
 	return (is_hosted && plan === 'pro') || (!is_hosted && config.env !== 'production');
 }
@@ -117,6 +123,30 @@ router.get('/projects/:id', async (req, res) => {
 	res.json({ project });
 });
 
+router.get('/projects/:id/settings', requireProjectSettingsAccess, async (req, res) => {
+	const project = await projectService.getProject(req.host_id, req.params.id);
+	if (!project) return res.status(404).json({ error: 'Project not found' });
+
+	const tenant = await Tenant.findOne({ host_id: req.host_id }).select('plan').lean();
+	const plan = tenant?.plan || 'free';
+	const proOnlyFeatureEnabled = hasProFeatureAccess(req.billingUser, plan, is_hosted);
+	const [gitRepos, emailIdentities] = await Promise.all([
+		proOnlyFeatureEnabled ? gitSyncService.listGitRepos(req.host_id, req.params.id).catch(() => []) : [],
+		proOnlyFeatureEnabled ? emailIdentityService.listEmailIdentities(req.host_id, req.params.id).catch(() => []) : [],
+	]);
+
+	res.json({
+		project,
+		features: {
+			git_sync: proOnlyFeatureEnabled,
+			email_ingest: proOnlyFeatureEnabled,
+		},
+		email_forward_domain: String(config.emailForwardDomain || '').trim().replace(/^@+/, ''),
+		git_repos: gitRepos,
+		email_identities: emailIdentities,
+	});
+});
+
 router.get('/features', async (req, res) => {
 	const tenant = await Tenant.findOne({ host_id: req.host_id }).select('plan').lean();
 	const plan = tenant?.plan || 'free';
@@ -124,13 +154,13 @@ router.get('/features', async (req, res) => {
 	res.json({ features: { email_ingest: proOnlyFeatureEnabled, git_sync: proOnlyFeatureEnabled } });
 });
 
-router.put('/projects/:id', async (req, res) => {
+router.put('/projects/:id', requireProjectSettingsAccess, async (req, res) => {
 	const project = await projectService.updateProject(req.host_id, req.params.id, req.body, auditCtx(req));
 	if (!project) return res.status(404).json({ error: 'Project not found' });
 	res.json({ project });
 });
 
-router.delete('/projects/:id', async (req, res) => {
+router.delete('/projects/:id', requireProjectSettingsAccess, async (req, res) => {
 	try {
 		const project = await projectService.deleteProject(req.host_id, req.params.id, auditCtx(req));
 		if (!project) return res.status(404).json({ error: 'Project not found' });
@@ -166,12 +196,12 @@ async function requireEmailFeatureAccess(req, res, next) {
 	next();
 }
 
-router.get('/projects/:id/git-repos', requireGitSyncAccess, async (req, res) => {
+router.get('/projects/:id/git-repos', requireProjectSettingsAccess, requireGitSyncAccess, async (req, res) => {
 	const repos = await gitSyncService.listGitRepos(req.host_id, req.params.id);
 	res.json({ repos });
 });
 
-router.post('/projects/:id/git-repos', requireGitSyncAccess, async (req, res) => {
+router.post('/projects/:id/git-repos', requireProjectSettingsAccess, requireGitSyncAccess, async (req, res) => {
 	try {
 		const repo = await gitSyncService.createGitRepo(req.userId, req.host_id, {
 			...req.body,
@@ -183,25 +213,25 @@ router.post('/projects/:id/git-repos', requireGitSyncAccess, async (req, res) =>
 	}
 });
 
-router.get('/git-repos/:id', requireGitSyncAccess, async (req, res) => {
+router.get('/git-repos/:id', requireProjectSettingsAccess, requireGitSyncAccess, async (req, res) => {
 	const repo = await gitSyncService.getGitRepo(req.host_id, req.params.id);
 	if (!repo) return res.status(404).json({ error: 'Git repo not found' });
 	res.json({ repo });
 });
 
-router.put('/git-repos/:id', requireGitSyncAccess, async (req, res) => {
+router.put('/git-repos/:id', requireProjectSettingsAccess, requireGitSyncAccess, async (req, res) => {
 	const repo = await gitSyncService.updateGitRepo(req.host_id, req.params.id, req.body, auditCtx(req));
 	if (!repo) return res.status(404).json({ error: 'Git repo not found' });
 	res.json({ repo });
 });
 
-router.delete('/git-repos/:id', requireGitSyncAccess, async (req, res) => {
+router.delete('/git-repos/:id', requireProjectSettingsAccess, requireGitSyncAccess, async (req, res) => {
 	const repo = await gitSyncService.deleteGitRepo(req.host_id, req.params.id, auditCtx(req));
 	if (!repo) return res.status(404).json({ error: 'Git repo not found' });
 	res.json({ message: 'Git repo deleted' });
 });
 
-router.post('/git-repos/:id/sync', requireGitSyncAccess, async (req, res) => {
+router.post('/git-repos/:id/sync', requireProjectSettingsAccess, requireGitSyncAccess, async (req, res) => {
 	try {
 		if (req.body?.background === true) {
 			const summary = await gitSyncService.startSyncRepo(req.params.id, req.userId, req.host_id, auditCtx(req));
@@ -214,13 +244,13 @@ router.post('/git-repos/:id/sync', requireGitSyncAccess, async (req, res) => {
 	}
 });
 
-router.get('/git-repos/:id/logs', requireGitSyncAccess, async (req, res) => {
+router.get('/git-repos/:id/logs', requireProjectSettingsAccess, requireGitSyncAccess, async (req, res) => {
 	const logs = await gitSyncService.listSyncLogs(req.host_id, req.params.id, req.query.limit);
 	if (!logs) return res.status(404).json({ error: 'Git repo not found' });
 	res.json({ logs });
 });
 
-router.get('/git-repos/:id/status', requireGitSyncAccess, async (req, res) => {
+router.get('/git-repos/:id/status', requireProjectSettingsAccess, requireGitSyncAccess, async (req, res) => {
 	const repo = await gitSyncService.getGitRepo(req.host_id, req.params.id);
 	if (!repo) return res.status(404).json({ error: 'Git repo not found' });
 	res.json({
@@ -232,6 +262,43 @@ router.get('/git-repos/:id/status', requireGitSyncAccess, async (req, res) => {
 		runs: repo.sync_runs || [],
 		error: repo.last_sync_error || undefined,
 	});
+});
+
+router.get('/projects/:id/email-identities', requireProjectSettingsAccess, requireEmailFeatureAccess, async (req, res) => {
+	const identities = await emailIdentityService.listEmailIdentities(req.host_id, req.params.id);
+	res.json({ identities });
+});
+
+router.post('/projects/:id/email-identities', requireProjectSettingsAccess, requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const identity = await emailIdentityService.createEmailIdentity(req.userId, req.host_id, req.params.id, req.body || {}, auditCtx(req));
+		res.status(201).json({ identity });
+	} catch (err) {
+		const status = err.message === 'Project not found' ? 404 : 400;
+		res.status(status).json({ error: err.message });
+	}
+});
+
+router.get('/email-identities/:id', requireProjectSettingsAccess, requireEmailFeatureAccess, async (req, res) => {
+	const identity = await emailIdentityService.getEmailIdentity(req.host_id, req.params.id);
+	if (!identity) return res.status(404).json({ error: 'Email identity not found' });
+	res.json({ identity });
+});
+
+router.put('/email-identities/:id', requireProjectSettingsAccess, requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const identity = await emailIdentityService.updateEmailIdentity(req.host_id, req.params.id, req.body || {}, auditCtx(req));
+		if (!identity) return res.status(404).json({ error: 'Email identity not found' });
+		res.json({ identity });
+	} catch (err) {
+		res.status(400).json({ error: err.message });
+	}
+});
+
+router.delete('/email-identities/:id', requireProjectSettingsAccess, requireEmailFeatureAccess, async (req, res) => {
+	const identity = await emailIdentityService.deleteEmailIdentity(req.host_id, req.params.id, auditCtx(req));
+	if (!identity) return res.status(404).json({ error: 'Email identity not found' });
+	res.json({ message: 'Email identity deleted' });
 });
 
 // ---- Notes ----

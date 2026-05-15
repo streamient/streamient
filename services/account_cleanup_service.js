@@ -5,6 +5,7 @@ import { Memory } from '../model/memory.js';
 import { Url } from '../model/url.js';
 import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
+import { EmailIdentity } from '../model/email_identity.js';
 import { Project } from '../model/project.js';
 import { GraphLink } from '../model/graph_link.js';
 import { GitRepo } from '../model/git_repo.js';
@@ -68,9 +69,10 @@ export async function deleteTenantData(hostId, tenantId = null, deps = {}) {
 		Note,
 		Memory,
 		Url,
-		Email,
-		EmailDraft,
-		Project,
+			Email,
+			EmailDraft,
+			EmailIdentity,
+			Project,
 		GraphLink,
 		GitRepo,
 		OAuthAuthorizationCode,
@@ -106,9 +108,10 @@ export async function deleteTenantData(hostId, tenantId = null, deps = {}) {
 		models.Note.deleteMany({ host_id: hostId }),
 		models.Memory.deleteMany({ host_id: hostId }),
 		models.Url.deleteMany({ host_id: hostId }),
-		models.Email.deleteMany({ host_id: hostId }),
-		models.EmailDraft.deleteMany({ host_id: hostId }),
-		models.Project.deleteMany({ host_id: hostId }),
+			models.Email.deleteMany({ host_id: hostId }),
+			models.EmailDraft.deleteMany({ host_id: hostId }),
+			models.EmailIdentity.deleteMany({ host_id: hostId }),
+			models.Project.deleteMany({ host_id: hostId }),
 		models.GraphLink.deleteMany({ host_id: hostId }),
 		models.GitRepo.deleteMany({ host_id: hostId }),
 		models.OAuthAuthorizationCode.deleteMany({ host_id: hostId }),

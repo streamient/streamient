@@ -2,8 +2,10 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { requireTenant, Tenant } from '../modules/tenancy.js';
 import { User } from '../model/user.js';
+import { EmailIdentity } from '../model/email_identity.js';
 import { listProjects, getProject, getProjectCounts } from '../services/project_service.js';
 import { listGitRepos } from '../services/git_sync_service.js';
+import { listEmailIdentities } from '../services/email_identity_service.js';
 import { formatTrialEndsIn, hasProductAccess, hasProFeatureAccess } from '../services/subscription_access_service.js';
 import config from '../config.js';
 
@@ -155,11 +157,43 @@ router.get('/ajax/project-overview/:id', async (req, res) => {
 		const emailFeatureEnabled = proOnlyFeatureEnabled;
 		const emailForwardDomain = String(config.emailForwardDomain || '').trim().replace(/^@+/, '');
 		const gitRepos = await listGitRepos(req.host_id, req.params.id).catch(() => []);
+		const emailIdentityCount = await EmailIdentity.countDocuments({ host_id: req.host_id, project: req.params.id }).catch(() => 0);
 		const pc = counts[project._id.toString()] || { notes: 0, memory: 0, urls: 0, emails: 0 };
-		const canDelete = !project.is_default && pc.notes === 0 && pc.memory === 0 && pc.urls === 0 && pc.emails === 0 && gitRepos.length === 0;
-		res.render('ajax/project_overview', { project, counts, gitSyncEnabled, emailFeatureEnabled, emailForwardDomain, gitRepos, canDelete, is_hosted });
+		const canDelete = !project.is_default && pc.notes === 0 && pc.memory === 0 && pc.urls === 0 && pc.emails === 0 && gitRepos.length === 0 && emailIdentityCount === 0;
+		const canManageProjectSettings = req.memberRole === 'owner' || req.memberRole === 'admin';
+		res.render('ajax/project_overview', { project, counts, gitSyncEnabled, emailFeatureEnabled, emailForwardDomain, gitRepos, canDelete, canManageProjectSettings, is_hosted });
 	} catch (err) {
 		res.status(500).send('<div class="text-danger">Failed to load project</div>');
+	}
+});
+
+router.get('/ajax/project-settings/:id', requireRestrictedSettingsAccess, async (req, res) => {
+	try {
+		const [project, tenant] = await Promise.all([
+			getProject(req.host_id, req.params.id),
+			Tenant.findOne({ host_id: req.host_id }).select('plan').lean(),
+		]);
+		if (!project) return res.status(404).send('<div class="alert alert-danger mb-0">Project not found.</div>');
+
+		const plan = tenant?.plan || 'free';
+		const proOnlyFeatureEnabled = hasProFeatureAccess(res.locals.user, plan, is_hosted);
+		const emailForwardDomain = String(config.emailForwardDomain || '').trim().replace(/^@+/, '');
+		const [gitRepos, emailIdentities] = await Promise.all([
+			proOnlyFeatureEnabled ? listGitRepos(req.host_id, req.params.id).catch(() => []) : [],
+			proOnlyFeatureEnabled ? listEmailIdentities(req.host_id, req.params.id).catch(() => []) : [],
+		]);
+		res.render('ajax/project_settings', {
+			project,
+			gitRepos,
+			emailIdentities,
+			gitSyncEnabled: proOnlyFeatureEnabled,
+			emailFeatureEnabled: proOnlyFeatureEnabled,
+			emailForwardDomain,
+			is_hosted,
+		});
+	} catch (err) {
+		console.error('Project settings modal error:', err);
+		res.status(500).send('<div class="alert alert-danger mb-0">Failed to load project settings.</div>');
 	}
 });
 

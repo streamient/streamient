@@ -1,0 +1,195 @@
+- const forwardingEmail = emailForwardDomain ? `${project._id}@${emailForwardDomain}` : ''
+
+.row.project-settings-shell(data-project-id=project._id)
+	.col-md-3
+		.list-group.mb-3.project-settings-menu
+			button.list-group-item.list-group-item-action.active(type="button" data-project-settings-tab="details")
+				!= icon('gear', 'me-2')
+				span Project details
+			button.list-group-item.list-group-item-action(type="button" data-project-settings-tab="git")
+				!= icon('gitBranch', 'me-2')
+				span Git sync
+			button.list-group-item.list-group-item-action(type="button" data-project-settings-tab="email")
+				!= icon('email', 'me-2')
+				span Email settings
+	.col-md-9
+		.project-settings-pane(data-project-settings-pane="details")
+			h4.mb-4 Project details
+			form#project-details-form
+				.mb-3
+					label.form-label(for="project-settings-name") Name
+					input.form-control.form-control-sm#project-settings-name(type="text" value=project.name autocomplete="off")
+					.mb-3
+						label.form-label(for="project-settings-color") Color
+						.d-flex.align-items-center.gap-3.project-settings-color-row
+							span.project-color#project-settings-color-preview(style=`background:${project.color}; width:20px; height:20px`)
+							.flex-grow-1
+								input.form-control.form-control-sm#project-settings-color(type="text" value=project.color autocomplete="off")
+				.d-flex.justify-content-end.mt-3
+					button.btn.btn-primary.btn-sm(type="submit")
+						!= icon('check', 'me-1')
+						span Save Changes
+
+		.project-settings-pane.d-none(data-project-settings-pane="git")
+			.d-flex.justify-content-between.align-items-center.mb-4
+				h4.mb-0 Git sync
+				if gitSyncEnabled
+					button.btn.btn-sm.btn-outline-primary(type="button" onclick=`addGitRepo('${project._id}')`)
+						!= icon('add', 'me-1')
+						span Add Repo
+			if gitSyncEnabled
+				if gitRepos && gitRepos.length
+					.list-group
+						each repo in gitRepos
+							.list-group-item
+								.d-flex.align-items-start.mb-3
+									.d-flex.flex-column.min-w-0
+										.mb-2
+											.fw-bold.text-break= repo.name || repo.repo_url
+											.text-muted.small.text-break= repo.repo_url
+										if repo.last_sync_summary
+											- const gs = repo.last_sync_summary
+											.text-muted.small.mt-1
+												span= `${gs.imported_files || 0} imported · ${gs.exported_files || 0} exported · ${gs.imported_commits || 0} commits · ${gs.trashed_items || 0} trashed · ${gs.conflicts || 0} conflicts`
+									.ms-auto.text-nowrap
+										button.btn.btn-sm.btn-outline-primary.me-1(type="button" onclick=`triggerGitSync('${repo._id}')` title="Sync now")
+											!= icon('sync')
+										button.btn.btn-sm.btn-outline-secondary.me-1(type="button" onclick=`showGitSyncLogs('${repo._id}')` title="Sync log")
+											!= icon('history')
+										button.btn.btn-sm.btn-outline-secondary.me-1(type="button" onclick=`editGitRepo('${repo._id}')` title="Settings")
+											!= icon('gear')
+										button.btn.btn-sm.btn-outline-secondary(type="button" onclick=`deleteGitRepo('${repo._id}')` title="Remove")
+											!= icon('delete')
+								.d-flex.align-items-center
+									if repo.enabled
+										span.badge.bg-success.me-2 Enabled
+									else
+										span.badge.bg-secondary.me-2 Disabled
+									if repo.last_sync_status === 'success'
+										span.badge.bg-info Last sync: success
+									else if repo.last_sync_status === 'failed'
+										span.badge.bg-danger.cursor-pointer(title=repo.last_sync_error) Last sync: failed
+									else if repo.last_sync_status === 'in_progress'
+										span.badge.bg-warning Syncing
+				else
+					p.text-muted.small.mb-0 No git repos configured. Add one to sync markdown files.
+			else
+				.card.border-warning-subtle
+					.card-body
+						h5.mb-2
+							!= icon('lock', 'me-2')
+							span Git Sync (Pro)
+						p.text-muted.mb-2 Sync commit messages, markdown files, and more from your repository into your project.
+						if is_hosted
+							a.btn.btn-sm.btn-outline-warning(href="/settings/subscription") Upgrade to Pro
+
+		.project-settings-pane.d-none(data-project-settings-pane="email")
+			.mb-4
+				h4.mb-0 Email settings
+			if emailFeatureEnabled
+				.mb-5
+					h6.mb-2 Email forwarding
+					if forwardingEmail
+						p.text-muted.small.mb-2 Forward emails to this address to import your emails into this project.
+						.input-group.input-group-sm.w-auto.project-forwarding-copy
+							input.form-control.form-control-sm#project-settings-forwarding-email(type="text" readonly value=forwardingEmail aria-label="Forwarding email address")
+							button.btn.btn-outline-secondary#project-settings-copy-forwarding-email(type="button" data-copy-value=forwardingEmail title="Copy forwarding email")
+								!= icon('copy')
+					else
+						.alert.alert-warning.mb-0 EMAIL_FORWARD_DOMAIN is not configured.
+
+				.mb-4
+					.d-flex.justify-content-between.align-items-center.mb-3
+						h6.mb-0 Outbound email addresses
+						button.btn.btn-sm.btn-outline-primary#project-email-identity-add(type="button")
+							!= icon('add', 'me-1')
+							span Add Email
+					if emailIdentities && emailIdentities.length
+						.list-group#project-email-identities-list
+							each identity in emailIdentities
+								.list-group-item
+									.d-flex.align-items-start
+										.flex-grow-1.min-w-0
+											.fw-bold.text-break= identity.name || identity.email
+											.text-muted.small.text-break= identity.email
+											.text-muted.small.text-break
+												span= `${identity.smtp.host}:${identity.smtp.port}`
+												if identity.smtp.auth_user
+													span= ` · ${identity.smtp.auth_user}`
+												if identity.smtp.auth_password_configured
+													span  · password configured
+												if identity.smtp.tls
+													span  · TLS
+												if identity.smtp.ssl
+													span  · SSL
+										.ms-auto.text-nowrap
+											button.btn.btn-sm.btn-outline-secondary.me-1.project-email-identity-edit(
+												type="button"
+												title="Edit"
+												data-id=identity._id
+												data-name=identity.name
+												data-email=identity.email
+												data-smtp-host=identity.smtp.host
+												data-smtp-port=identity.smtp.port
+												data-smtp-auth-user=identity.smtp.auth_user
+												data-smtp-password-configured=identity.smtp.auth_password_configured
+												data-smtp-tls=identity.smtp.tls
+												data-smtp-ssl=identity.smtp.ssl
+											)
+												!= icon('gear')
+											button.btn.btn-sm.btn-outline-danger.project-email-identity-delete(type="button" title="Delete" data-id=identity._id)
+												!= icon('delete')
+					else
+						p.text-muted.small.mb-0#project-email-identities-empty No outbound email addresses configured.
+
+				#project-email-identity-form-wrap.d-none
+					hr
+					h6.mb-3#project-email-identity-form-title Add outbound email address
+					form#project-email-identity-form
+						input#project-email-identity-id(type="hidden")
+						.row.g-3
+							.col-md-6
+								label.form-label(for="project-email-identity-name") Name
+								input.form-control.form-control-sm#project-email-identity-name(type="text" autocomplete="off")
+							.col-md-6
+								label.form-label(for="project-email-identity-email") Email
+								input.form-control.form-control-sm#project-email-identity-email(type="email" autocomplete="off")
+							.col-md-8
+								label.form-label(for="project-email-identity-smtp-host") SMTP host
+								input.form-control.form-control-sm#project-email-identity-smtp-host(type="text" autocomplete="off")
+							.col-md-4
+								label.form-label(for="project-email-identity-smtp-port") Port
+								input.form-control.form-control-sm#project-email-identity-smtp-port(type="number" min="1" max="65535" value="587")
+							.col-md-6
+								label.form-label(for="project-email-identity-smtp-user") Auth user
+								input.form-control.form-control-sm#project-email-identity-smtp-user(type="text" autocomplete="off")
+							.col-md-6
+								label.form-label(for="project-email-identity-smtp-password") Auth password
+								input.form-control.form-control-sm#project-email-identity-smtp-password(type="password" autocomplete="new-password")
+								.form-text#project-email-identity-password-help
+							.col-md-6
+								.form-check
+									input.form-check-input#project-email-identity-smtp-tls(type="checkbox")
+									label.form-check-label(for="project-email-identity-smtp-tls") TLS
+							.col-md-6
+								.form-check
+									input.form-check-input#project-email-identity-smtp-ssl(type="checkbox")
+									label.form-check-label(for="project-email-identity-smtp-ssl") SSL
+							.col-12.d-none#project-email-identity-clear-password-wrap
+								.form-check
+									input.form-check-input#project-email-identity-clear-password(type="checkbox")
+									label.form-check-label(for="project-email-identity-clear-password") Clear stored password
+						.d-flex.justify-content-between.align-items-center.mt-3
+							button.btn.btn-secondary.btn-sm#project-email-identity-cancel(type="button") Cancel
+							button.btn.btn-primary.btn-sm(type="submit")
+								!= icon('check', 'me-1')
+								span Save Email
+			else
+				.card.border-warning-subtle
+					.card-body
+						h5.mb-2
+							!= icon('lock', 'me-2')
+							span Email settings (Pro)
+						p.text-muted.mb-2 Forward emails directly into a project and configure outbound project addresses.
+						if is_hosted
+							a.btn.btn-sm.btn-outline-warning(href="/settings/subscription") Upgrade to Pro

@@ -196,36 +196,7 @@ async function loadProjectOverview(projectId) {
 
 // Edit project
 async function editProject(projectId) {
-	const { Swal, Huebee } = await import('/static/js/vendor.js');
-	const { project } = await api('GET', `/projects/${projectId}`);
-
-	let selectedColor = project.color;
-	const { value: formValues } = await Swal.fire({
-		title: 'Edit Project',
-		html: `
-			<input id="swal-name" class="swal2-input" placeholder="Project name" value="${project.name}">
-			<div class="mt-3"><label class="form-label">Color</label><div id="swal-color-container"><input id="swal-color" value="${project.color}"></div></div>
-		`,
-		showCancelButton: true,
-		focusConfirm: false,
-		didOpen: () => {
-			const colorInput = document.getElementById('swal-color');
-			const hueb = new Huebee(colorInput, huebeeOptions);
-			hueb.on('change', (color) => { selectedColor = color; });
-		},
-		preConfirm: () => {
-			const name = document.getElementById('swal-name').value.trim();
-			if (!name) { Swal.showValidationMessage('Name is required'); return false; }
-			return { name, color: selectedColor };
-		},
-	});
-
-	if (formValues) {
-		await api('PUT', `/projects/${projectId}`, formValues);
-		await loadProjects();
-		loadProjectOverview(projectId);
-		showSuccess('Project updated');
-	}
+	await openProjectSettingsModal(projectId, 'details');
 }
 
 // Delete project
@@ -251,6 +222,12 @@ const huebeeOptions = {
 	shades: 5,
 	staticOpen: true,
 	customColors: ['#C25', '#E62', '#EA0', '#19F', '#2D2', '#6c757d', '#333', '#F8F'],
+};
+
+const projectSettingsHuebeeOptions = {
+	...huebeeOptions,
+	staticOpen: false,
+	setBGColor: '#project-settings-color-preview',
 };
 
 // New project — inline
@@ -401,6 +378,263 @@ async function ensureBootstrapModal() {
 
 function renderSettingsLoading() {
 	return '<div class="text-center py-5 text-muted"><span class="spinner-border spinner-border-sm me-2"></span><span>Loading settings...</span></div>';
+}
+
+function renderProjectSettingsLoading() {
+	return '<div class="text-center py-5 text-muted"><span class="spinner-border spinner-border-sm me-2"></span><span>Loading project settings...</span></div>';
+}
+
+var __currentProjectSettingsId = null;
+var __currentProjectSettingsTab = 'details';
+
+function setProjectSettingsTab(bodyEl, tab) {
+	var selected = tab || 'details';
+	__currentProjectSettingsTab = selected;
+	bodyEl.querySelectorAll('[data-project-settings-tab]').forEach(function (button) {
+		button.classList.toggle('active', button.dataset.projectSettingsTab === selected);
+	});
+	bodyEl.querySelectorAll('[data-project-settings-pane]').forEach(function (pane) {
+		pane.classList.toggle('d-none', pane.dataset.projectSettingsPane !== selected);
+	});
+}
+
+async function loadProjectSettingsBody(projectId, tab) {
+	var bodyEl = document.getElementById('project-settings-modal-body');
+	if (!bodyEl) return;
+	bodyEl.innerHTML = renderProjectSettingsLoading();
+	try {
+		var res = await fetch(`/ajax/project-settings/${projectId}`);
+		if (isLoginRedirect(res)) return redirectToLogin();
+		var html = await res.text();
+		if (!res.ok) throw new Error(html || 'Failed to load project settings');
+		bodyEl.innerHTML = html;
+		executeScripts(bodyEl);
+		bindProjectSettingsModal(projectId, tab || __currentProjectSettingsTab || 'details');
+	} catch (err) {
+		console.error('Project settings modal error:', err);
+		bodyEl.innerHTML = '<div class="alert alert-danger mb-0">Failed to load project settings.</div>';
+	}
+}
+
+async function openProjectSettingsModal(projectId, tab) {
+	var modalEl = document.getElementById('projectSettingsModal');
+	var titleEl = document.getElementById('projectSettingsModalLabel');
+	if (!modalEl) return;
+	__currentProjectSettingsId = projectId;
+	__currentProjectSettingsTab = tab || 'details';
+	if (titleEl) titleEl.textContent = 'Project settings';
+	var Modal = await ensureBootstrapModal();
+	Modal.getOrCreateInstance(modalEl).show();
+	await loadProjectSettingsBody(projectId, __currentProjectSettingsTab);
+}
+
+function refreshProjectSettingsIfOpen(tab) {
+	var modalEl = document.getElementById('projectSettingsModal');
+	if (!modalEl || !modalEl.classList.contains('show') || !__currentProjectSettingsId) return;
+	loadProjectSettingsBody(__currentProjectSettingsId, tab || __currentProjectSettingsTab);
+}
+
+function projectSelector(projectId) {
+	return String(projectId || '').replace(/["\\]/g, '\\$&');
+}
+
+function updateProjectDetailsInDom(projectId, name, color) {
+	var selector = projectSelector(projectId);
+	document.querySelectorAll(`.project-item[data-id="${selector}"]`).forEach(function (item) {
+		var nameEl = item.querySelector('.project-item-name');
+		var colorEl = item.querySelector('.project-color');
+		if (nameEl) nameEl.textContent = name;
+		if (colorEl) colorEl.style.background = color;
+	});
+
+	var overview = document.getElementById('project-overview');
+	if (overview) {
+		var overviewName = overview.querySelector('.project-overview-name');
+		var overviewColor = overview.querySelector('.project-overview-color');
+		if (overviewName) overviewName.textContent = name;
+		if (overviewColor) overviewColor.style.background = color;
+	}
+}
+
+function bindProjectSettingsModal(projectId, activeTab) {
+	var bodyEl = document.getElementById('project-settings-modal-body');
+	if (!bodyEl) return;
+
+	var colorInput = bodyEl.querySelector('#project-settings-color');
+	var colorPreview = bodyEl.querySelector('#project-settings-color-preview');
+	var projectColorHuebee = null;
+	var projectColorHuebeeInit = null;
+
+	function isHexColor(value) {
+		return /^#[0-9a-f]{6}$/i.test(value || '');
+	}
+
+	function setProjectColorControls(color) {
+		if (!color) return;
+		if (colorPreview) colorPreview.style.background = color;
+		if (colorInput) colorInput.value = color;
+		if (projectColorHuebee && isHexColor(color)) projectColorHuebee.setColor(color);
+	}
+
+	async function openProjectColorPicker() {
+		if (!colorInput) return;
+		if (!projectColorHuebeeInit) {
+			projectColorHuebeeInit = import('/static/js/vendor.js').then(function ({ Huebee }) {
+				projectColorHuebee = new Huebee(colorInput, projectSettingsHuebeeOptions);
+				colorInput.__projectSettingsHuebee = projectColorHuebee;
+				projectColorHuebee.on('change', function (color) {
+					setProjectColorControls(color);
+				});
+				return projectColorHuebee;
+			});
+		}
+		var hueb = await projectColorHuebeeInit;
+		if (isHexColor(colorInput.value.trim())) hueb.setColor(colorInput.value.trim());
+		hueb.open();
+	}
+
+	bodyEl.querySelectorAll('[data-project-settings-tab]').forEach(function (button) {
+		button.addEventListener('click', function () {
+			setProjectSettingsTab(bodyEl, button.dataset.projectSettingsTab);
+		});
+	});
+	setProjectSettingsTab(bodyEl, activeTab || 'details');
+
+	if (colorInput) {
+		colorInput.addEventListener('input', function () {
+			setProjectColorControls(colorInput.value.trim());
+		});
+		colorInput.addEventListener('click', openProjectColorPicker);
+		colorInput.addEventListener('focus', openProjectColorPicker);
+	}
+
+	var detailsForm = bodyEl.querySelector('#project-details-form');
+	detailsForm?.addEventListener('submit', async function (e) {
+		e.preventDefault();
+		var name = bodyEl.querySelector('#project-settings-name')?.value.trim();
+		var color = bodyEl.querySelector('#project-settings-color')?.value.trim();
+		if (!name) return showError('Name is required');
+		if (!isHexColor(color)) return showError('Color must be a valid hex value.');
+		try {
+			var result = await api('PUT', `/projects/${projectId}`, { name, color });
+			var project = result.project || { _id: projectId, name, color };
+			updateProjectDetailsInDom(project._id || projectId, project.name, project.color);
+			setProjectColorControls(project.color);
+			showSuccess('Project updated');
+		} catch (err) {
+			showError(err.message);
+		}
+	});
+
+	var copyForwardingEmailBtn = bodyEl.querySelector('#project-settings-copy-forwarding-email');
+	copyForwardingEmailBtn?.addEventListener('click', async function () {
+		var value = copyForwardingEmailBtn.dataset.copyValue || bodyEl.querySelector('#project-settings-forwarding-email')?.value || '';
+		if (!value) return;
+		try {
+			await navigator.clipboard.writeText(value);
+		} catch {
+			var input = bodyEl.querySelector('#project-settings-forwarding-email');
+			input?.select();
+			document.execCommand('copy');
+		}
+		showSuccess('Forwarding email copied');
+	});
+
+	bindProjectEmailIdentityForm(bodyEl, projectId);
+}
+
+function bindProjectEmailIdentityForm(bodyEl, projectId) {
+	var addBtn = bodyEl.querySelector('#project-email-identity-add');
+	var formWrap = bodyEl.querySelector('#project-email-identity-form-wrap');
+	var form = bodyEl.querySelector('#project-email-identity-form');
+	var cancelBtn = bodyEl.querySelector('#project-email-identity-cancel');
+	if (!formWrap || !form) return;
+
+	function field(id) {
+		return bodyEl.querySelector(id);
+	}
+
+	function showIdentityForm(identity) {
+		var isEdit = Boolean(identity?.id);
+		field('#project-email-identity-id').value = identity?.id || '';
+		field('#project-email-identity-name').value = identity?.name || '';
+		field('#project-email-identity-email').value = identity?.email || '';
+		field('#project-email-identity-smtp-host').value = identity?.smtpHost || '';
+		field('#project-email-identity-smtp-port').value = identity?.smtpPort || '587';
+		field('#project-email-identity-smtp-user').value = identity?.smtpAuthUser || '';
+		field('#project-email-identity-smtp-password').value = '';
+		field('#project-email-identity-smtp-tls').checked = identity?.smtpTls === 'true' || identity?.smtpTls === true;
+		field('#project-email-identity-smtp-ssl').checked = identity?.smtpSsl === 'true' || identity?.smtpSsl === true;
+		field('#project-email-identity-clear-password').checked = false;
+		field('#project-email-identity-form-title').textContent = isEdit ? 'Edit outbound email address' : 'Add outbound email address';
+		var passwordConfigured = identity?.smtpPasswordConfigured === 'true' || identity?.smtpPasswordConfigured === true;
+		field('#project-email-identity-password-help').textContent = isEdit && passwordConfigured ? 'Leave empty to keep the stored password.' : '';
+		field('#project-email-identity-clear-password-wrap').classList.toggle('d-none', !isEdit || !passwordConfigured);
+		formWrap.classList.remove('d-none');
+		field('#project-email-identity-name')?.focus();
+	}
+
+	function hideIdentityForm() {
+		form.reset();
+		field('#project-email-identity-id').value = '';
+		formWrap.classList.add('d-none');
+	}
+
+	addBtn?.addEventListener('click', function () {
+		showIdentityForm(null);
+	});
+
+	cancelBtn?.addEventListener('click', hideIdentityForm);
+
+	bodyEl.querySelectorAll('.project-email-identity-edit').forEach(function (button) {
+		button.addEventListener('click', function () {
+			showIdentityForm(button.dataset);
+		});
+	});
+
+	bodyEl.querySelectorAll('.project-email-identity-delete').forEach(function (button) {
+		button.addEventListener('click', async function () {
+			var confirmed = await confirmAction('Delete email address', 'This removes the outbound SMTP configuration.');
+			if (!confirmed) return;
+			try {
+				await api('DELETE', `/email-identities/${button.dataset.id}`);
+				await loadProjectSettingsBody(projectId, 'email');
+				showSuccess('Email address deleted');
+			} catch (err) {
+				showError(err.message);
+			}
+		});
+	});
+
+	form.addEventListener('submit', async function (e) {
+		e.preventDefault();
+		var identityId = field('#project-email-identity-id').value;
+		var payload = {
+			name: field('#project-email-identity-name').value.trim(),
+			email: field('#project-email-identity-email').value.trim(),
+			smtp: {
+				host: field('#project-email-identity-smtp-host').value.trim(),
+				port: parseInt(field('#project-email-identity-smtp-port').value, 10) || 587,
+				auth_user: field('#project-email-identity-smtp-user').value.trim(),
+				auth_password: field('#project-email-identity-smtp-password').value.trim(),
+				tls: field('#project-email-identity-smtp-tls').checked,
+				ssl: field('#project-email-identity-smtp-ssl').checked,
+			},
+			clear_auth_password: field('#project-email-identity-clear-password').checked,
+		};
+		try {
+			if (identityId) {
+				await api('PUT', `/email-identities/${identityId}`, payload);
+				showSuccess('Email address updated');
+			} else {
+				await api('POST', `/projects/${projectId}/email-identities`, payload);
+				showSuccess('Email address added');
+			}
+			await loadProjectSettingsBody(projectId, 'email');
+		} catch (err) {
+			showError(err.message);
+		}
+	});
 }
 
 async function openSettingsModal(path) {
@@ -729,6 +963,7 @@ async function addGitRepo(projectId) {
 	try {
 		await api('POST', `/projects/${projectId}/git-repos`, formValues);
 		loadProjectOverview(projectId);
+		refreshProjectSettingsIfOpen('git');
 		Swal.fire({ icon: 'success', title: 'Git repo added', timer: 1500, showConfirmButton: false });
 	} catch (err) {
 		Swal.fire('Error', err.message, 'error');
@@ -794,6 +1029,7 @@ async function editGitRepo(repoId) {
 		await api('PUT', `/git-repos/${repoId}`, formValues);
 		const activeProject = document.querySelector('.project-item.active')?.dataset?.id;
 		if (activeProject) loadProjectOverview(activeProject);
+		refreshProjectSettingsIfOpen('git');
 		Swal.fire({ icon: 'success', title: 'Updated', timer: 1500, showConfirmButton: false });
 	} catch (err) {
 		Swal.fire('Error', err.message, 'error');
@@ -814,6 +1050,7 @@ async function deleteGitRepo(repoId) {
 		await api('DELETE', `/git-repos/${repoId}`);
 		const activeProject = document.querySelector('.project-item.active')?.dataset?.id;
 		if (activeProject) loadProjectOverview(activeProject);
+		refreshProjectSettingsIfOpen('git');
 	} catch (err) {
 		Swal.fire('Error', err.message, 'error');
 	}
@@ -854,6 +1091,7 @@ async function triggerGitSync(repoId) {
 		const result = await waitForGitSync(repoId);
 		const activeProject = document.querySelector('.project-item.active')?.dataset?.id;
 		if (activeProject) loadProjectOverview(activeProject);
+		refreshProjectSettingsIfOpen('git');
 		const summary = result.summary || {};
 		if (result.status === 'failed') {
 			Swal.fire('Sync failed', result.error || summary.message || 'Sync failed', 'error');

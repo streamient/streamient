@@ -285,6 +285,18 @@ html(lang="en")
 							.spinner-border.spinner-border-sm.me-2
 							span Loading settings...
 
+		//- Project settings modal keeps project configuration anchored in dashboard context
+		.modal.fade#projectSettingsModal(tabindex="-1" aria-labelledby="projectSettingsModalLabel" aria-hidden="true")
+			.modal-dialog.modal-xl.modal-dialog-scrollable.kk-settings-modal-dialog
+				.modal-content
+					.modal-header
+						h5.modal-title#projectSettingsModalLabel Project settings
+						button.btn-close(type="button" data-bs-dismiss="modal" aria-label="Close")
+					.modal-body#project-settings-modal-body
+						.text-center.py-5.text-muted
+							.spinner-border.spinner-border-sm.me-2
+							span Loading project settings...
+
 		script(src="/socket.io/socket.io.js")
 		script(src=`/static/v-${v}/js/icons.js`)
 		script.
