@@ -1,8 +1,3 @@
-.d-flex.justify-content-between.align-items-center.mb-3
-	div
-		h4.mb-1 Email Command Center
-		p.text-muted.small.mb-0 AI-assisted email triage across projects.
-
 if !email_feature_enabled
 	.card.border-warning-subtle
 		.card-body
@@ -16,7 +11,6 @@ else
 	.ecc-shell
 		.ecc-left
 			.mb-3
-				label.form-label.small(for="ecc-project-select") Project
 				select.form-select.form-select-sm#ecc-project-select
 					option(value="") All projects
 					each project in projects

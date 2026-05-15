@@ -117,7 +117,7 @@ OrderedMap.from = function(value) {
 };
 var dist_default = OrderedMap;
 
-// node_modules/.pnpm/prosemirror-model@1.25.4/node_modules/prosemirror-model/dist/index.js
+// node_modules/.pnpm/prosemirror-model@1.25.5/node_modules/prosemirror-model/dist/index.js
 function findDiffStart(a, b, pos) {
   for (let i = 0; ; i++) {
     if (i == a.childCount || i == b.childCount)
@@ -423,7 +423,7 @@ var Fragment = class _Fragment {
       return _Fragment.empty;
     if (!Array.isArray(value))
       throw new RangeError("Invalid input for Fragment.fromJSON");
-    return new _Fragment(value.map(schema.nodeFromJSON));
+    return _Fragment.fromArray(value.map(schema.nodeFromJSON));
   }
   /**
   Build a fragment from an array of nodes. Ensures that adjacent
@@ -646,7 +646,7 @@ var Slice = class _Slice {
   @internal
   */
   insertAt(pos, fragment) {
-    let content = insertInto(this.content, pos + this.openStart, fragment);
+    let content = insertInto(this.content, pos + this.openStart, fragment, this.openStart + 1, this.openEnd + 1);
     return content && new _Slice(content, this.openStart, this.openEnd);
   }
   /**
@@ -717,14 +717,14 @@ function removeRange(content, from2, to) {
     throw new RangeError("Removing non-flat range");
   return content.replaceChild(index, child.copy(removeRange(child.content, from2 - offset - 1, to - offset - 1)));
 }
-function insertInto(content, dist, insert, parent) {
+function insertInto(content, dist, insert, openStart, openEnd, parent) {
   let { index, offset } = content.findIndex(dist), child = content.maybeChild(index);
   if (offset == dist || child.isText) {
-    if (parent && !parent.canReplace(index, index, insert))
-      return null;
+    if (parent && openStart <= 0 && openEnd <= 0 && !parent.canReplace(index, index, insert))
+      return console.log("bail"), null;
     return content.cut(0, dist).append(insert).append(content.cut(dist));
   }
-  let inner = insertInto(child.content, dist - offset - 1, insert, child);
+  let inner = insertInto(child.content, dist - offset - 1, insert, index == 0 ? openStart - 1 : 0, index == content.childCount - 1 ? openEnd - 1 : 0, child);
   return inner && content.replaceChild(index, child.copy(inner));
 }
 function replace($from, $to, slice2) {
@@ -1202,10 +1202,11 @@ var Node = class _Node2 {
     this.content.forEach(f);
   }
   /**
-  Invoke a callback for all descendant nodes recursively between
+  Invoke a callback for all descendant nodes recursively overlapping
   the given two positions that are relative to start of this
-  node's content. The callback is invoked with the node, its
-  position relative to the original node (method receiver),
+  node's content. This includes all ancestors of the nodes
+  containing the two positions. The callback is invoked with the
+  node, its position relative to the original node (method receiver),
   its parent node, and its child index. When the callback returns
   false for a given node, that node's children will not be
   recursed over. The last parameter can be used to specify a
@@ -3161,6 +3162,8 @@ var DOMSerializer = class _DOMSerializer {
   @internal
   */
   serializeNodeInner(node, options) {
+    if (node.isText)
+      return doc(options).createTextNode(node.text);
     let { dom, contentDOM } = renderSpec(doc(options), this.nodes[node.type.name](node), null, node.attrs);
     if (contentDOM) {
       if (node.isLeaf)
@@ -3195,6 +3198,8 @@ var DOMSerializer = class _DOMSerializer {
     return toDOM && renderSpec(doc(options), toDOM(mark, inline), null, mark.attrs);
   }
   static renderSpec(doc3, structure, xmlNS = null, blockArraysIn) {
+    if (typeof structure == "string")
+      return { dom: doc3.createTextNode(structure) };
     return renderSpec(doc3, structure, xmlNS, blockArraysIn);
   }
   /**
@@ -3263,11 +3268,9 @@ function suspiciousAttributesInner(attrs) {
   return result;
 }
 function renderSpec(doc3, structure, xmlNS, blockArraysIn) {
-  if (typeof structure == "string")
-    return { dom: doc3.createTextNode(structure) };
-  if (structure.nodeType != null)
+  if (structure.nodeType == 3)
     return { dom: structure };
-  if (structure.dom && structure.dom.nodeType != null)
+  if (structure.dom && structure.dom.nodeType == 3)
     return structure;
   let tagName = structure[0], suspicious;
   if (typeof tagName != "string")
@@ -3301,6 +3304,8 @@ function renderSpec(doc3, structure, xmlNS, blockArraysIn) {
       if (i < structure.length - 1 || i > start)
         throw new RangeError("Content hole must be the only child of its parent node");
       return { dom, contentDOM: dom };
+    } else if (typeof child == "string") {
+      dom.appendChild(doc3.createTextNode(child));
     } else {
       let { dom: inner, contentDOM: innerContent } = renderSpec(doc3, child, xmlNS, blockArraysIn);
       dom.appendChild(inner);
