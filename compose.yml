@@ -16,12 +16,16 @@ x-env: &env
     SMTP_USER: ""
     SMTP_PASS: ""
     SMTP_FROM: "noreply@localhost"
-    CHAT_AI_MODEL: "gemini-flash-latest"
-    CHAT_AI_MODEL_PROVIDER: google
-    NL_SEARCH_MODEL: "gemini-flash-lite-latest"
-    NL_SEARCH_MODEL_PROVIDER: google
-    TS_CONVERSATION_MODEL: "gemini-flash-lite-latest"
-    TS_CONVERSATION_MODEL_PROVIDER: google
+    CHAT_AI_MODEL: "gpt-5.4-mini"
+    CHAT_AI_MODEL_PROVIDER: openai
+    NL_SEARCH_MODEL: "gpt-5.4-mini"
+    NL_SEARCH_MODEL_PROVIDER: openai
+    TS_CONVERSATION_MODEL: "gpt-5.4-mini"
+    TS_CONVERSATION_MODEL_PROVIDER: openai
+    EMAIL_AI_MODEL: "gpt-5.4-mini"
+    EMAIL_AI_MODEL_PROVIDER: openai
+    EMAIL_TRIAGE_MODEL: "gpt-5.4-mini"
+    EMAIL_TRIAGE_MODEL_PROVIDER: openai
     GOOGLE_API_KEY: "${GOOGLE_API_KEY:-}"
     OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
     APP_URL: http://localhost:3000

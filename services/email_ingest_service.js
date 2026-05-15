@@ -15,7 +15,7 @@ import { searchCollection, searchAll, removeDocument } from '../modules/typesens
 import { emitToTenant } from '../modules/socket.js';
 import { getConnectionsForItem, invalidateGraphCache, removeLinksForItem } from './graph_service.js';
 import * as audit from './audit_service.js';
-import { chatModelCompletion } from '../modules/llm_client.js';
+import { emailAiCompletion, emailTriageCompletion } from '../modules/llm_client.js';
 import { getAiInstructions } from './byo_ai_service.js';
 import { sanitizeEmailHtml } from '../modules/email_html_sanitizer.js';
 
@@ -806,7 +806,7 @@ export async function askEmailAi(host_id, emailId, query, options = {}) {
 	const email = await Email.findOne({ _id: emailId, host_id, in_trash: false }).lean();
 	if (!email) return null;
 
-	const completionFn = options.completionFn || chatModelCompletion;
+	const completionFn = options.completionFn || emailAiCompletion;
 	const instructions = await getAiInstructions(host_id);
 	const content = await completionFn({
 		hostId: host_id,
@@ -1211,7 +1211,7 @@ export async function triageInboxEmails(host_id, userId, options = {}) {
 		.limit(limit)
 		.lean();
 
-	const completionFn = options.completionFn || chatModelCompletion;
+	const completionFn = options.completionFn || emailTriageCompletion;
 	const instructions = await getAiInstructions(host_id);
 	const results = [];
 	const errors = [];
