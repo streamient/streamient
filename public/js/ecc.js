@@ -50,6 +50,7 @@
 	var selectedIds = new Set();
 	var emailAiMessages = [];
 	var emailReplySuggestions = [];
+	var replySuggestionsAutoCloseTimer = null;
 	var currentDraft = null;
 	var draftEditor = null;
 	var draftEditorHost = null;
@@ -66,6 +67,7 @@
 	var triageRunId = '';
 	var triageProgress = null;
 	var INTERNAL_NOTE_PREVIEW_LIMIT = 150;
+	var REPLY_SUGGESTIONS_AUTO_CLOSE_MS = 45000;
 	var MAILBOX_ACTIONS = [
 		{ slug: 'inbox', name: 'Inbox', icon: 'email' },
 		{ slug: 'archived', name: 'Archived', icon: 'archive' },
@@ -286,7 +288,7 @@
 			replyBtn.type = 'button';
 			replyActions.appendChild(replyBtn);
 			if (currentDraft?._id) {
-				var showDraftBtn = textNode('button', 'btn btn-primary btn-sm', 'Show draft');
+				var showDraftBtn = textNode('button', 'btn btn-primary btn-sm ecc-show-draft-btn', 'Show draft');
 				showDraftBtn.type = 'button';
 				replyActions.appendChild(showDraftBtn);
 			}
@@ -625,6 +627,7 @@
 	function renderEmailAi(email) {
 		if (!aiPanel) return;
 		if (!email) {
+			clearReplySuggestionsAutoClose();
 			if (aiSubtitle) aiSubtitle.textContent = 'No email active.';
 			openEmailBtn?.classList.add('d-none');
 			internalNotesEl = null;
@@ -656,7 +659,7 @@
 			+ '<div class="ecc-internal-note-editor d-none mb-3"></div>'
 			+ '<div class="ecc-internal-notes-list"></div>'
 			+ '</div>'
-			+ '<div class="ecc-ai-section">'
+			+ '<div class="ecc-ai-section ecc-email-reply-options">'
 			+ '<div class="d-flex justify-content-between align-items-center gap-2 mb-3">'
 			+ '<h6 class="mb-0">Reply options</h6>'
 			+ '<button type="button" class="btn btn-outline-primary btn-sm" id="ecc-email-suggest-reply">Suggest a reply</button>'
@@ -698,14 +701,32 @@
 		});
 	}
 
+	function clearReplySuggestionsAutoClose() {
+		if (replySuggestionsAutoCloseTimer) {
+			clearTimeout(replySuggestionsAutoCloseTimer);
+			replySuggestionsAutoCloseTimer = null;
+		}
+	}
+
+	function scheduleReplySuggestionsAutoClose() {
+		clearReplySuggestionsAutoClose();
+		if (!emailReplySuggestions.length) return;
+		replySuggestionsAutoCloseTimer = setTimeout(function () {
+			emailReplySuggestions = [];
+			renderReplySuggestions();
+		}, REPLY_SUGGESTIONS_AUTO_CLOSE_MS);
+	}
+
 	function renderReplySuggestions(loadingText) {
 		var el = document.getElementById('ecc-email-reply-suggestions');
 		if (!el) return;
 		if (loadingText) {
+			clearReplySuggestionsAutoClose();
 			el.innerHTML = '<div class="text-muted small">' + escapeHtml(loadingText) + '</div>';
 			return;
 		}
 		if (!emailReplySuggestions.length) {
+			clearReplySuggestionsAutoClose();
 			el.innerHTML = '<div class="text-muted small">No reply suggestions yet.</div>';
 			return;
 		}
@@ -719,6 +740,7 @@
 		el.querySelectorAll('.ecc-email-use-reply').forEach(function (button) {
 			button.addEventListener('click', useReplySuggestion);
 		});
+		scheduleReplySuggestionsAutoClose();
 	}
 
 	function renderEmailAiMessages() {
@@ -779,16 +801,25 @@
 
 	async function useReplySuggestion(event) {
 		if (!selectedEmail) return;
+		var replyEmail = selectedEmail;
 		var button = event.currentTarget;
 		var reply = emailReplySuggestions[parseInt(button.dataset.index, 10)];
 		if (!reply?.body_text) return;
 		button.disabled = true;
 		button.textContent = 'Using...';
 		try {
-			var res = await api('POST', '/emails/' + encodeURIComponent(selectedEmail._id) + '/draft-reply', {
+			var hadDraft = Boolean(currentDraft?._id);
+			var res = await api('POST', '/emails/' + encodeURIComponent(replyEmail._id) + '/draft-reply', {
 				body_text: reply.body_text,
 			});
-			renderDraftDetail(res.draft || null);
+			if (emailId(selectedEmail) !== emailId(replyEmail)) return;
+			var draft = res.draft || null;
+			renderDraftDetail(draft);
+			if (draft) {
+				await openReplyEditor(replyEmail, detailDraftEl);
+				detailDraftEl?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+			}
+			if (!hadDraft && currentDraft?._id) loadLabels().catch(() => {});
 			showSuccess('Draft reply updated');
 		} catch (err) {
 			showError(err.message || 'Failed to use reply');
@@ -1333,6 +1364,13 @@
 			status.classList.toggle('text-muted', tone !== 'error');
 		}
 
+		function syncDraftControls() {
+			if (currentDraft?._id) return;
+			detailThreadEl?.querySelectorAll('.ecc-show-draft-btn').forEach(function (button) {
+				button.remove();
+			});
+		}
+
 		async function deleteDraft(draftId, options) {
 			if (!draftId) return;
 			var silent = Boolean(options?.silent);
@@ -1350,6 +1388,7 @@
 				await loadEmails();
 			} else {
 				renderDraftDetail(null);
+				syncDraftControls();
 			}
 		}
 
@@ -1361,6 +1400,7 @@
 			if (button && !silent) button.disabled = true;
 			if (silent) setDraftSaveStatus(card, 'Saving...', '');
 			try {
+				var hadDraft = Boolean(draft?._id || currentDraft?._id);
 				var payload = draftPayloadFromForm(card);
 				var res = draft?._id
 					? await api('PUT', '/email-drafts/' + encodeURIComponent(draft._id), payload)
@@ -1372,7 +1412,7 @@
 					destroyDraftEditor();
 					showSuccess('Draft saved');
 				}
-				if (activeMailbox === 'drafts') loadLabels().catch(() => {});
+				if (activeMailbox === 'drafts' || (!hadDraft && currentDraft?._id)) loadLabels().catch(() => {});
 			} catch (err) {
 				if (silent) {
 					setDraftSaveStatus(card, err.message || 'Autosave failed', 'error');
@@ -2361,10 +2401,12 @@
 		currentDraft = null;
 		destroyDraftEditor();
 		destroyNoteEditor();
+		clearReplySuggestionsAutoClose();
 		triageRunId = '';
 		triageProgress = null;
 		selectedIds.clear();
 		emailAiMessages = [];
+		emailReplySuggestions = [];
 	}
 
 	window.__sections = window.__sections || {};
