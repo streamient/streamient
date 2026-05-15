@@ -360,6 +360,46 @@ body.kk-template1 .small,
 body.kk-template1 .form-text,
 body.kk-template1 .muted{color:#b8c4eb!important}
 
+body.kk-template1 .kk-email-editor-toolbar {
+  background:#0f1730!important;
+  border-color:#2a386d!important;
+  color:#e9ecff!important;
+}
+
+body.kk-template1 .kk-email-editor-button {
+  border-color:#354478!important;
+  background:#121a34!important;
+  color:#dce4ff!important;
+}
+
+body.kk-template1 .kk-email-editor-button:hover,
+body.kk-template1 .kk-email-editor-button:focus {
+  background:#182348!important;
+  border-color:#46548b!important;
+  color:#fff!important;
+}
+
+body.kk-template1 .kk-email-editor-button.active {
+  background:#1b2b64!important;
+  border-color:#6f61ff!important;
+  color:#fff!important;
+}
+
+body.kk-template1 .kk-email-editor-body .ProseMirror {
+  background:#0f1730!important;
+  border-color:#2a386d!important;
+  color:#e9ecff!important;
+}
+
+body.kk-template1 .kk-email-editor-body .ProseMirror:focus {
+  border-color:#6f61ff!important;
+  box-shadow:0 0 0 1px #6f61ff inset,0 0 0 .2rem rgba(111,97,255,.14)!important;
+}
+
+body.kk-template1 .kk-email-editor-body .ProseMirror p.is-editor-empty:first-child::before {
+  color:#9fb0dd!important;
+}
+
 /* Modal preview readability */
 body.kk-template1 #rm-note-preview,
 body.kk-template1 #rm-memory-preview,

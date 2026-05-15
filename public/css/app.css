@@ -579,6 +579,7 @@ small,
 	border-bottom: 0;
 	border-radius: 0.375rem 0.375rem 0 0;
 	background: var(--bs-body-bg);
+	color: var(--bs-body-color);
 }
 
 .kk-email-editor-button {
@@ -601,6 +602,7 @@ small,
 	border-radius: 0 0 0.375rem 0.375rem;
 	outline: none;
 	background: var(--bs-body-bg);
+	color: var(--bs-body-color);
 	overflow-wrap: anywhere;
 }
 
@@ -628,6 +630,15 @@ small,
 .ecc-internal-notes-list {
 	max-height: 16rem;
 	overflow-y: auto;
+}
+
+.ecc-inline-reply {
+	margin-top: 0.5rem;
+	margin-bottom: 0.5rem;
+}
+
+.ecc-inline-reply-wrap {
+	min-width: 0;
 }
 
 .ecc-internal-note {

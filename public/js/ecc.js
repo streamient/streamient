@@ -52,6 +52,7 @@
 	var emailReplySuggestions = [];
 	var currentDraft = null;
 	var draftEditor = null;
+	var draftEditorHost = null;
 	var noteEditor = null;
 	var windowListeners = [];
 	var triageRunId = '';
@@ -242,11 +243,18 @@
 			themeGroup.appendChild(originalBtn);
 			var loadImagesBtn = textNode('button', 'btn btn-outline-secondary btn-sm', 'Load images');
 			loadImagesBtn.type = 'button';
+			var replyBtn = textNode('button', 'btn btn-outline-primary btn-sm', 'Reply');
+			replyBtn.type = 'button';
 			controls.appendChild(modeGroup);
 			controls.appendChild(themeGroup);
 			controls.appendChild(loadImagesBtn);
+			controls.appendChild(replyBtn);
 			header.appendChild(controls);
 			wrapper.appendChild(header);
+
+			var replyWrap = document.createElement('div');
+			replyWrap.className = 'ecc-inline-reply-wrap d-none mb-3';
+			wrapper.appendChild(replyWrap);
 
 			var bodyWrap = document.createElement('div');
 			wrapper.appendChild(bodyWrap);
@@ -302,6 +310,9 @@
 				remoteImagesLoaded = true;
 				mode = 'html';
 				render();
+			});
+			replyBtn.addEventListener('click', function () {
+				openReplyEditor(email, replyWrap);
 			});
 
 			render();
@@ -861,12 +872,22 @@
 				draftEditor.destroy();
 				draftEditor = null;
 			}
+			if (draftEditorHost) {
+				draftEditorHost.innerHTML = '';
+				draftEditorHost.classList.add('d-none');
+				draftEditorHost = null;
+			}
 		}
 
 		function destroyNoteEditor() {
 			if (noteEditor) {
 				noteEditor.destroy();
 				noteEditor = null;
+			}
+			var noteEditorEl = internalNotesEl?.querySelector('.ecc-internal-note-editor');
+			if (noteEditorEl) {
+				noteEditorEl.innerHTML = '';
+				noteEditorEl.classList.add('d-none');
 			}
 		}
 
@@ -906,17 +927,18 @@
 			};
 		}
 
-		async function saveDraftFromCard(card, draft) {
-			if (!selectedEmail || !card) return;
+		async function saveDraftFromCard(card, draft, sourceEmail) {
+			var replyEmail = sourceEmail || selectedEmail;
+			if (!replyEmail || !card) return;
 			var button = card.querySelector('.ecc-draft-save');
 			if (button) button.disabled = true;
 			try {
 				var payload = draftPayloadFromForm(card);
 				var res = draft?._id
 					? await api('PUT', '/email-drafts/' + encodeURIComponent(draft._id), payload)
-					: await api('POST', '/emails/' + encodeURIComponent(selectedEmail._id) + '/draft-reply', payload);
+					: await api('POST', '/emails/' + encodeURIComponent(replyEmail._id) + '/draft-reply', payload);
 				currentDraft = res.draft || null;
-				renderDraftDetail(currentDraft);
+				destroyDraftEditor();
 				showSuccess('Draft saved');
 				if (activeMailbox === 'drafts') loadLabels().catch(() => {});
 			} catch (err) {
@@ -930,9 +952,17 @@
 			destroyDraftEditor();
 			currentDraft = draft || null;
 			replaceChildren(detailDraftEl);
-			if (!draft && !selectedEmail) return;
+		}
+
+		function openReplyEditor(email, host) {
+			if (!email?._id || !host) return;
+			destroyDraftEditor();
+			draftEditorHost = host;
+			host.classList.remove('d-none');
+
+			var draft = currentDraft || null;
 			var card = document.createElement('div');
-			card.className = 'ecc-detail-card ecc-detail-draft';
+			card.className = 'ecc-detail-card ecc-detail-draft ecc-inline-reply';
 
 			var header = document.createElement('div');
 			header.className = 'd-flex justify-content-between align-items-start gap-3 mb-3';
@@ -959,7 +989,7 @@
 			fields.querySelector('.ecc-draft-to').value = listToInputValue(draft?.to || []);
 			fields.querySelector('.ecc-draft-cc').value = listToInputValue(draft?.cc || []);
 			fields.querySelector('.ecc-draft-bcc').value = listToInputValue(draft?.bcc || []);
-			fields.querySelector('.ecc-draft-subject').value = draft?.subject || (selectedEmail?.subject ? 'Re: ' + selectedEmail.subject : '');
+			fields.querySelector('.ecc-draft-subject').value = draft?.subject || (email?.subject ? 'Re: ' + email.subject : '');
 			draftEditor = initEmailEditor(fields.querySelector('.ecc-draft-editor'), draftEditorContent(draft), 'Write a reply...');
 
 			var footer = document.createElement('div');
@@ -967,15 +997,19 @@
 			footer.appendChild(textNode('span', 'badge ecc-detail-draft-badge', draft?.status || 'draft'));
 			var actions = document.createElement('div');
 			actions.className = 'd-flex gap-2';
+			var cancelButton = textNode('button', 'btn btn-outline-secondary btn-sm', 'Cancel');
+			cancelButton.type = 'button';
 			var saveButton = textNode('button', 'btn btn-primary btn-sm ecc-draft-save', 'Save draft');
 			saveButton.type = 'button';
+			actions.appendChild(cancelButton);
 			actions.appendChild(saveButton);
 			footer.appendChild(actions);
 			card.appendChild(footer);
+			host.appendChild(card);
+			cancelButton.addEventListener('click', destroyDraftEditor);
 			saveButton.addEventListener('click', function () {
-				saveDraftFromCard(card, currentDraft);
+				saveDraftFromCard(card, currentDraft, email);
 			});
-			detailDraftEl.appendChild(card);
 		}
 
 		function renderThreadMessage(email, options) {
@@ -1062,6 +1096,40 @@
 			}
 		}
 
+		function openInternalNoteEditor(email) {
+			if (!internalNotesEl || !email?._id) return;
+			destroyNoteEditor();
+			var noteEditorEl = internalNotesEl.querySelector('.ecc-internal-note-editor');
+			if (!noteEditorEl) return;
+			noteEditorEl.classList.remove('d-none');
+			noteEditorEl.innerHTML = ''
+				+ '<div class="ecc-internal-note-editor-body mb-2"></div>'
+				+ '<div class="d-flex justify-content-end gap-2">'
+				+ '<button type="button" class="btn btn-outline-secondary btn-sm ecc-internal-note-cancel">Cancel</button>'
+				+ '<button type="button" class="btn btn-primary btn-sm ecc-internal-note-save">Save note</button>'
+				+ '</div>';
+			noteEditor = initEmailEditor(noteEditorEl.querySelector('.ecc-internal-note-editor-body'), '', 'Add an internal note...');
+			noteEditorEl.querySelector('.ecc-internal-note-cancel')?.addEventListener('click', destroyNoteEditor);
+			noteEditorEl.querySelector('.ecc-internal-note-save')?.addEventListener('click', async function (event) {
+				var button = event.currentTarget;
+				var payload = {
+					content: noteEditor?.getHTML?.() || '',
+					text_content: noteEditor?.getText?.() || '',
+				};
+				if (!payload.text_content.trim()) return;
+				button.disabled = true;
+				try {
+					await api('POST', '/emails/' + encodeURIComponent(email._id) + '/internal-notes', payload);
+					destroyNoteEditor();
+					await loadInternalNotes(email);
+					showSuccess('Internal note added');
+				} catch (err) {
+					showError(err.message || 'Failed to add internal note');
+					button.disabled = false;
+				}
+			});
+		}
+
 		function renderInternalNotesPanel(email) {
 			if (!internalNotesEl) return;
 			destroyNoteEditor();
@@ -1073,33 +1141,16 @@
 			internalNotesEl.classList.remove('d-none');
 			internalNotesEl.innerHTML = ''
 				+ '<div class="d-flex justify-content-between align-items-center gap-2 mb-3">'
+				+ '<div class="d-flex align-items-center gap-2 min-w-0">'
 				+ '<h6 class="mb-0">Internal notes</h6>'
 				+ '<span class="badge text-bg-light">Private</span>'
 				+ '</div>'
-				+ '<div class="ecc-internal-notes-list mb-3"></div>'
-				+ '<div class="ecc-internal-note-editor mb-2"></div>'
-				+ '<div class="d-flex justify-content-end">'
-				+ '<button type="button" class="btn btn-primary btn-sm ecc-internal-note-save">Add note</button>'
-				+ '</div>';
-			noteEditor = initEmailEditor(internalNotesEl.querySelector('.ecc-internal-note-editor'), '', 'Add an internal note...');
-			internalNotesEl.querySelector('.ecc-internal-note-save')?.addEventListener('click', async function (event) {
-				var button = event.currentTarget;
-				var payload = {
-					content: noteEditor?.getHTML?.() || '',
-					text_content: noteEditor?.getText?.() || '',
-				};
-				if (!payload.text_content.trim()) return;
-				button.disabled = true;
-				try {
-					await api('POST', '/emails/' + encodeURIComponent(email._id) + '/internal-notes', payload);
-					noteEditor?.commands?.setContent?.('');
-					await loadInternalNotes(email);
-					showSuccess('Internal note added');
-				} catch (err) {
-					showError(err.message || 'Failed to add internal note');
-				} finally {
-					button.disabled = false;
-				}
+				+ '<button type="button" class="btn btn-outline-primary btn-sm ecc-internal-note-open">Add note</button>'
+				+ '</div>'
+				+ '<div class="ecc-internal-note-editor d-none mb-3"></div>'
+				+ '<div class="ecc-internal-notes-list"></div>';
+			internalNotesEl.querySelector('.ecc-internal-note-open')?.addEventListener('click', function () {
+				openInternalNoteEditor(email);
 			});
 			loadInternalNotes(email);
 		}
