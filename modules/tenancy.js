@@ -26,6 +26,10 @@ const tenantSchema = new mongoose.Schema(
 				email: { type: String, default: '' },
 				email_triage: { type: String, default: '' },
 			},
+			email: {
+				auto_triage_incoming: { type: Boolean, default: false },
+				send_draft_emails_automatically: { type: Boolean, default: false },
+			},
 		},
 	},
 	{ timestamps: true },

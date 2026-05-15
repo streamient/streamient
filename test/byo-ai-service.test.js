@@ -52,7 +52,7 @@ describe('BYO AI service', () => {
 		config.appUrl = 'https://app.kumbukum.com';
 		config.llm.googleApiKey = 'env-gemini';
 		config.llm.openaiApiKey = 'env-openai';
-		tenant = { host_id: 'host-1', plan: 'pro', settings: { byo_ai: baseByoAi(), ai_instructions: baseAiInstructions() } };
+		tenant = { host_id: 'host-1', plan: 'pro', settings: { byo_ai: baseByoAi(), ai_instructions: baseAiInstructions(), email: {} } };
 
 		Tenant.findOne = () => ({
 			select: () => ({
@@ -206,6 +206,39 @@ describe('BYO AI service', () => {
 			email: 'Prioritize support replies.',
 			email_triage: 'Escalate billing issues.',
 		});
+	});
+
+	it('stores email settings as booleans with false defaults', async () => {
+		let settings = await getByoAiSettings('host-1');
+		assert.deepEqual(settings.email_settings, {
+			auto_triage_incoming: false,
+			send_draft_emails_automatically: false,
+		});
+
+		settings = await updateByoAiSettings('host-1', {
+			email_settings: {
+				auto_triage_incoming: true,
+				send_draft_emails_automatically: true,
+			},
+		});
+
+		assert.equal(tenant.settings.email.auto_triage_incoming, true);
+		assert.equal(tenant.settings.email.send_draft_emails_automatically, true);
+		assert.deepEqual(settings.email_settings, {
+			auto_triage_incoming: true,
+			send_draft_emails_automatically: true,
+		});
+	});
+
+	it('validates email setting keys and types', async () => {
+		await assert.rejects(
+			updateByoAiSettings('host-1', { email_settings: { unknown: true } }),
+			/Unknown email setting/,
+		);
+		await assert.rejects(
+			updateByoAiSettings('host-1', { email_settings: { auto_triage_incoming: 'true' } }),
+			/auto_triage_incoming must be a boolean/,
+		);
 	});
 
 	it('uses distinct Typesense conversation model IDs per LLM scope', () => {

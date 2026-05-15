@@ -89,7 +89,7 @@ describe('BYO AI API', () => {
 			name: 'Test Account',
 			is_active: true,
 			plan: 'pro',
-			settings: { byo_ai: baseByoAi(), ai_instructions: baseAiInstructions() },
+			settings: { byo_ai: baseByoAi(), ai_instructions: baseAiInstructions(), email: {} },
 		};
 
 		User.findById = () => ({
@@ -184,6 +184,36 @@ describe('BYO AI API', () => {
 			assert.equal(saveJson.settings.instructions.global, 'Use company policy.');
 			assert.equal(saveJson.settings.instructions.email, 'Draft email replies politely.');
 			assert.equal(saveJson.settings.instructions.email_triage, 'Triage support first.');
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
+	it('lets hosted Pro account admins save email settings', async () => {
+		const server = await createServer();
+		try {
+			const saveResponse = await request(server, 'PUT', '/settings/byo-ai', {
+				email_settings: {
+					auto_triage_incoming: true,
+					send_draft_emails_automatically: true,
+				},
+			});
+			const saveJson = await saveResponse.json();
+
+			assert.equal(saveResponse.status, 200);
+			assert.deepEqual(saveJson.settings.email_settings, {
+				auto_triage_incoming: true,
+				send_draft_emails_automatically: true,
+			});
+
+			const getResponse = await request(server, 'GET', '/settings/byo-ai');
+			const getJson = await getResponse.json();
+
+			assert.equal(getResponse.status, 200);
+			assert.deepEqual(getJson.settings.email_settings, {
+				auto_triage_incoming: true,
+				send_draft_emails_automatically: true,
+			});
 		} finally {
 			await new Promise((resolve) => server.close(resolve));
 		}

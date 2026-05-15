@@ -16,7 +16,7 @@ import { emitToTenant } from '../modules/socket.js';
 import { getConnectionsForItem, invalidateGraphCache, removeLinksForItem } from './graph_service.js';
 import * as audit from './audit_service.js';
 import { emailAiCompletion, emailTriageCompletion } from '../modules/llm_client.js';
-import { getAiInstructions } from './byo_ai_service.js';
+import { getAiInstructions, getEmailSettings } from './byo_ai_service.js';
 import { sanitizeEmailHtml } from '../modules/email_html_sanitizer.js';
 
 const MAX_ATTACHMENT_SIZE = 50 * 1024 * 1024;
@@ -360,6 +360,21 @@ function emitEmailCreatedOrUpdated(host_id, event, email) {
 	emitToTenant(host_id, 'counts:refresh');
 }
 
+export async function maybeAutoTriageIncomingEmail(host_id, userId, email, options = {}) {
+	if (!email || email.triaged) return null;
+	if ((email.mailbox || 'inbox') !== 'inbox') return null;
+
+	const settings = await getEmailSettings(host_id);
+	if (!settings.auto_triage_incoming) return null;
+
+	return triageInboxEmails(host_id, userId, {
+		...(options.triageOptions || {}),
+		email_id: email._id?.toString?.() || email._id,
+		limit: 1,
+		ctx: options.ctx,
+	});
+}
+
 async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 	if (!normalized.subject && !normalized.text_content && !normalized.html_content && !normalized.attachment_text_content) {
 		throw new Error('Email content is empty after normalization');
@@ -418,6 +433,16 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 		invalidateGraphCache(host_id).catch(() => {});
 		audit.log({ action: 'create', resource: 'email', resource_id: email._id.toString(), user_id: userId, host_id, ...ctx });
 		removeDocument(host_id, 'emails', email._id.toString()).catch((err) => console.error('Typesense remove error:', err.message));
+	}
+	if (created && !ctx.skipSideEffects) {
+		const autoTriage = maybeAutoTriageIncomingEmail(host_id, userId, email, {
+			ctx,
+			triageOptions: ctx.autoTriageOptions,
+		}).catch((err) => {
+			console.error(`Incoming email auto-triage error: ${err.message}`);
+			return null;
+		});
+		if (ctx.awaitAutoTriage) await autoTriage;
 	}
 	return email;
 }
@@ -1206,6 +1231,7 @@ export async function triageInboxEmails(host_id, userId, options = {}) {
 	const limit = Math.min(parseInt(options.limit, 10) || 25, 100);
 	const projectId = options.project || null;
 	const query = buildEmailListQuery(host_id, projectId, { mailbox: 'inbox', triaged: false });
+	if (options.email_id) query._id = options.email_id;
 	const emails = await Email.find(query)
 		.sort({ updatedAt: -1 })
 		.limit(limit)

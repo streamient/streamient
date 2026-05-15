@@ -5,6 +5,7 @@ import { encrypt, decrypt } from '../modules/encryption.js';
 export const BYO_AI_SCOPES = ['global', 'email'];
 export const BYO_AI_PROVIDERS = ['openai', 'gemini'];
 export const AI_INSTRUCTION_SCOPES = ['global', 'email', 'email_triage'];
+export const EMAIL_SETTING_FIELDS = ['auto_triage_incoming', 'send_draft_emails_automatically'];
 
 const PROVIDER_FIELDS = {
 	openai: 'openai_api_key',
@@ -46,6 +47,13 @@ function summarizeProvider(tenant, scope, provider) {
 	};
 }
 
+export function summarizeEmailSettings(tenant) {
+	return {
+		auto_triage_incoming: Boolean(tenant?.settings?.email?.auto_triage_incoming),
+		send_draft_emails_automatically: Boolean(tenant?.settings?.email?.send_draft_emails_automatically),
+	};
+}
+
 export function summarizeByoAiSettings(tenant) {
 	const summary = {};
 	for (const scope of BYO_AI_SCOPES) {
@@ -59,11 +67,12 @@ export function summarizeByoAiSettings(tenant) {
 		email: tenant?.settings?.ai_instructions?.email || '',
 		email_triage: tenant?.settings?.ai_instructions?.email_triage || '',
 	};
+	summary.email_settings = summarizeEmailSettings(tenant);
 	return summary;
 }
 
 export async function getByoAiSettings(hostId) {
-	const tenant = await Tenant.findOne({ host_id: hostId }).select('settings.byo_ai settings.ai_instructions').lean();
+	const tenant = await Tenant.findOne({ host_id: hostId }).select('settings.byo_ai settings.ai_instructions settings.email').lean();
 	return summarizeByoAiSettings(tenant);
 }
 
@@ -74,7 +83,7 @@ export async function updateByoAiSettings(hostId, payload = {}) {
 
 	const update = {};
 	for (const key of Object.keys(payload)) {
-		if (key === 'instructions') continue;
+		if (key === 'instructions' || key === 'email_settings') continue;
 		if (!BYO_AI_SCOPES.includes(key)) {
 			throw new Error(`Unknown BYO AI scope: ${key}`);
 		}
@@ -124,6 +133,22 @@ export async function updateByoAiSettings(hostId, payload = {}) {
 		}
 	}
 
+	if (payload.email_settings !== undefined) {
+		if (!payload.email_settings || typeof payload.email_settings !== 'object' || Array.isArray(payload.email_settings)) {
+			throw new Error('Email settings payload must be an object');
+		}
+		for (const key of Object.keys(payload.email_settings)) {
+			if (!EMAIL_SETTING_FIELDS.includes(key)) {
+				throw new Error(`Unknown email setting: ${key}`);
+			}
+			const value = payload.email_settings[key];
+			if (typeof value !== 'boolean') {
+				throw new Error(`${key} must be a boolean`);
+			}
+			update[`settings.email.${key}`] = value;
+		}
+	}
+
 	if (Object.keys(update).length === 0) {
 		return getByoAiSettings(hostId);
 	}
@@ -132,9 +157,14 @@ export async function updateByoAiSettings(hostId, payload = {}) {
 		{ host_id: hostId },
 		{ $set: update },
 		{ returnDocument: 'after' },
-	).select('settings.byo_ai settings.ai_instructions').lean();
+	).select('settings.byo_ai settings.ai_instructions settings.email').lean();
 
 	return summarizeByoAiSettings(tenant);
+}
+
+export async function getEmailSettings(hostId) {
+	const tenant = await Tenant.findOne({ host_id: hostId }).select('settings.email').lean();
+	return summarizeEmailSettings(tenant);
 }
 
 export async function getAiInstructions(hostId) {

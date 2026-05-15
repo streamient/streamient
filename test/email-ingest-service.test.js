@@ -261,9 +261,248 @@ describe('Email ingest service', () => {
 			Email.create = originalCreate;
 			Email.find = originalFind;
 		}
-	});
+		});
 
-	it('updates duplicates by message_id only within the same host', async () => {
+		it('auto-triages only the newly created inbox email when enabled', async () => {
+			const emailId = { toString: () => 'email-auto-1' };
+			let createdEmail = null;
+			let triageQuery = null;
+			let updatePayload = null;
+			const originalFindOne = Email.findOne;
+			const originalCreate = Email.create;
+			const originalFind = Email.find;
+			const originalFindOneAndUpdate = Email.findOneAndUpdate;
+			const originalBulkWrite = EmailLabel.bulkWrite;
+			const originalLabelFind = EmailLabel.find;
+			const originalTenantFindOne = Tenant.findOne;
+
+			Email.findOne = async () => null;
+			Email.create = async (payload) => {
+				createdEmail = { _id: emailId, ...payload };
+				return createdEmail;
+			};
+			Email.find = (query) => ({
+				select: () => ({
+					lean: async () => [],
+				}),
+				sort: () => ({
+					limit: () => ({
+						lean: async () => {
+							triageQuery = query;
+							return [createdEmail];
+						},
+					}),
+				}),
+			});
+			Email.findOneAndUpdate = async (query, update) => {
+				assert.equal(query._id, emailId);
+				updatePayload = update.$set;
+				return { _id: emailId, ...createdEmail, ...update.$set };
+			};
+			EmailLabel.bulkWrite = async () => ({});
+			EmailLabel.find = () => ({
+				sort: () => ({
+					lean: async () => [],
+				}),
+			});
+			Tenant.findOne = () => ({
+				select: () => ({
+					lean: async () => ({
+						settings: {
+							email: { auto_triage_incoming: true, send_draft_emails_automatically: true },
+							ai_instructions: {},
+						},
+					}),
+				}),
+			});
+
+			try {
+				const email = await ingestEmail(userId, 'host-1', {
+					project: '507f1f77bcf86cd799439011',
+					parsed_email: {
+						message_id: '<auto-triage@example.com>',
+						from: 'sender@example.com',
+						to: 'to@example.com',
+						subject: 'Auto triage',
+						text: 'Please reply',
+					},
+				}, {
+					channel: 'api',
+					awaitAutoTriage: true,
+					autoTriageOptions: {
+						run_id: 'auto-run-1',
+						skipSideEffects: true,
+						searchKnowledgeFn: async () => ({}),
+						getThreadFn: async () => [],
+						getConnectionsFn: async () => ({ links: [], tag_connections: [] }),
+						completionFn: async () => '{"primary_action":"reply-required","labels":["reply-required"],"summary":"Needs reply","reason":"Sender asked a question","confidence":0.9,"action_points":[{"text":"Reply","type":"reply"}],"related_context":[],"mailbox_action":"keep-inbox"}',
+					},
+				});
+
+				assert.equal(email._id, emailId);
+				assert.equal(triageQuery._id, 'email-auto-1');
+				assert.equal(triageQuery.host_id, 'host-1');
+				assert.equal(triageQuery.mailbox, 'inbox');
+				assert.equal(triageQuery.triaged, false);
+				assert.equal(updatePayload.triaged, true);
+				assert.equal(updatePayload.triage_run_id, 'auto-run-1');
+				assert.equal(updatePayload.triage_summary, 'Needs reply');
+			} finally {
+				Email.findOne = originalFindOne;
+				Email.create = originalCreate;
+				Email.find = originalFind;
+				Email.findOneAndUpdate = originalFindOneAndUpdate;
+				EmailLabel.bulkWrite = originalBulkWrite;
+				EmailLabel.find = originalLabelFind;
+				Tenant.findOne = originalTenantFindOne;
+			}
+		});
+
+		it('does not auto-triage when only draft auto-send is enabled', async () => {
+			const originalFindOne = Email.findOne;
+			const originalCreate = Email.create;
+			const originalFind = Email.find;
+			const originalFindOneAndUpdate = Email.findOneAndUpdate;
+			const originalTenantFindOne = Tenant.findOne;
+			let triageUpdateCalled = false;
+
+			Email.findOne = async () => null;
+			Email.create = async (payload) => ({ _id: { toString: () => 'email-draft-setting-1' }, ...payload });
+			Email.find = () => ({
+				select: () => ({
+					lean: async () => [],
+				}),
+			});
+			Email.findOneAndUpdate = async () => {
+				triageUpdateCalled = true;
+				return null;
+			};
+			Tenant.findOne = () => ({
+				select: () => ({
+					lean: async () => ({
+						settings: {
+							email: { auto_triage_incoming: false, send_draft_emails_automatically: true },
+							ai_instructions: {},
+						},
+					}),
+				}),
+			});
+
+			try {
+				const email = await ingestEmail(userId, 'host-1', {
+					project: '507f1f77bcf86cd799439011',
+					parsed_email: {
+						message_id: '<draft-setting@example.com>',
+						from: 'sender@example.com',
+						to: 'to@example.com',
+						subject: 'Draft setting',
+						text: 'No triage should run',
+					},
+				}, { channel: 'api', awaitAutoTriage: true });
+
+				assert.equal(email.triaged, false);
+				assert.equal(triageUpdateCalled, false);
+			} finally {
+				Email.findOne = originalFindOne;
+				Email.create = originalCreate;
+				Email.find = originalFind;
+				Email.findOneAndUpdate = originalFindOneAndUpdate;
+				Tenant.findOne = originalTenantFindOne;
+			}
+		});
+
+		it('does not fail ingestion when automatic triage fails', async () => {
+			const emailId = { toString: () => 'email-auto-fail-1' };
+			let createdEmail = null;
+			let updatePayload = null;
+			const originalFindOne = Email.findOne;
+			const originalCreate = Email.create;
+			const originalFind = Email.find;
+			const originalFindOneAndUpdate = Email.findOneAndUpdate;
+			const originalBulkWrite = EmailLabel.bulkWrite;
+			const originalLabelFind = EmailLabel.find;
+			const originalTenantFindOne = Tenant.findOne;
+			const originalConsoleError = console.error;
+
+			Email.findOne = async () => null;
+			Email.create = async (payload) => {
+				createdEmail = { _id: emailId, ...payload };
+				return createdEmail;
+			};
+			Email.find = () => ({
+				select: () => ({
+					lean: async () => [],
+				}),
+				sort: () => ({
+					limit: () => ({
+						lean: async () => [createdEmail],
+					}),
+				}),
+			});
+			Email.findOneAndUpdate = async (query, update) => {
+				updatePayload = update.$set;
+				return { _id: query._id, ...createdEmail, ...update.$set };
+			};
+			EmailLabel.bulkWrite = async () => ({});
+			EmailLabel.find = () => ({
+				sort: () => ({
+					lean: async () => [],
+				}),
+			});
+			Tenant.findOne = () => ({
+				select: () => ({
+					lean: async () => ({
+						settings: {
+							email: { auto_triage_incoming: true, send_draft_emails_automatically: false },
+							ai_instructions: {},
+						},
+					}),
+				}),
+			});
+			console.error = () => {};
+
+			try {
+				const email = await ingestEmail(userId, 'host-1', {
+					project: '507f1f77bcf86cd799439011',
+					parsed_email: {
+						message_id: '<auto-fail@example.com>',
+						from: 'sender@example.com',
+						to: 'to@example.com',
+						subject: 'Auto triage fail',
+						text: 'Please reply',
+					},
+				}, {
+					channel: 'api',
+					awaitAutoTriage: true,
+					autoTriageOptions: {
+						run_id: 'auto-run-fail',
+						skipSideEffects: true,
+						searchKnowledgeFn: async () => ({}),
+						getThreadFn: async () => [],
+						getConnectionsFn: async () => ({ links: [], tag_connections: [] }),
+						completionFn: async () => {
+							throw new Error('Provider unavailable');
+						},
+					},
+				});
+
+				assert.equal(email._id, emailId);
+				assert.equal(updatePayload.triage_status, 'failed');
+				assert.equal(updatePayload.triage_error, 'Provider unavailable');
+				assert.equal(updatePayload.triage_run_id, 'auto-run-fail');
+			} finally {
+				Email.findOne = originalFindOne;
+				Email.create = originalCreate;
+				Email.find = originalFind;
+				Email.findOneAndUpdate = originalFindOneAndUpdate;
+				EmailLabel.bulkWrite = originalBulkWrite;
+				EmailLabel.find = originalLabelFind;
+				Tenant.findOne = originalTenantFindOne;
+				console.error = originalConsoleError;
+			}
+		});
+
+		it('updates duplicates by message_id only within the same host', async () => {
 		const existing = { _id: 'email-1', host_id: 'host-1' };
 		let createCalled = false;
 		let updateQuery = null;

@@ -17,7 +17,10 @@ include ../../../includes/avatar
 	if can_manage_restricted_settings && byo_ai_enabled
 		a.list-group-item.list-group-item-action(href="/settings/byo-ai" class=(title === 'AI' ? 'active' : ''))
 			!= icon('sparkle', 'me-2')
-			| AI
+			span AI
+		a.list-group-item.list-group-item-action(href="/settings/email" class=(title === 'Email settings' ? 'active' : ''))
+			!= icon('email', 'me-2')
+			span Email settings
 	if can_manage_restricted_settings
 		a.list-group-item.list-group-item-action(href="/settings/typesense" class=(title === 'Typesense' ? 'active' : ''))
 			!= icon('search', 'me-2')

@@ -13,7 +13,7 @@ script.
 		}
 
 		function renderStatus(settings) {
-			document.querySelectorAll('[data-status]').forEach(function(el) {
+			form.querySelectorAll('[data-status]').forEach(function(el) {
 				var parts = el.dataset.status.split(':');
 				var scope = parts[0];
 				var field = parts[1];
@@ -22,8 +22,11 @@ script.
 				el.classList.toggle('text-success', configured);
 				el.classList.toggle('text-muted', !configured);
 			});
-			document.querySelectorAll('[data-instruction-scope]').forEach(function(el) {
+			form.querySelectorAll('[data-instruction-scope]').forEach(function(el) {
 				el.value = settings?.instructions?.[el.dataset.instructionScope] || '';
+			});
+			form.querySelectorAll('[data-email-setting]').forEach(function(el) {
+				el.checked = !!settings?.email_settings?.[el.dataset.emailSetting];
 			});
 		}
 
@@ -39,7 +42,7 @@ script.
 			}
 		}
 
-			form.addEventListener('submit', async function(e) {
+		form.addEventListener('submit', async function(e) {
 			e.preventDefault();
 			var payload = {};
 			form.querySelectorAll('input[data-scope][data-field]').forEach(function(input) {
@@ -52,7 +55,12 @@ script.
 			form.querySelectorAll('[data-instruction-scope]').forEach(function(input) {
 				instructionPayload[input.dataset.instructionScope] = input.value.trim();
 			});
-			payload.instructions = instructionPayload;
+			if (Object.keys(instructionPayload).length > 0) payload.instructions = instructionPayload;
+			var emailSettingsPayload = {};
+			form.querySelectorAll('[data-email-setting]').forEach(function(input) {
+				emailSettingsPayload[input.dataset.emailSetting] = input.checked;
+			});
+			if (Object.keys(emailSettingsPayload).length > 0) payload.email_settings = emailSettingsPayload;
 
 			if (Object.keys(payload).length === 0) {
 				showSuccess('No BYO AI changes');
@@ -65,13 +73,13 @@ script.
 					input.value = '';
 				});
 				renderStatus(data.settings || {});
-				showSuccess('BYO AI settings saved');
+				showSuccess('Settings saved');
 			} catch (err) {
 				showError(err.message);
 			}
 		});
 
-		document.querySelectorAll('[data-clear-byo]').forEach(function(button) {
+		form.querySelectorAll('[data-clear-byo]').forEach(function(button) {
 			button.addEventListener('click', async function() {
 				var parts = button.dataset.clearByo.split(':');
 				var scope = parts[0];

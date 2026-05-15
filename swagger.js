@@ -369,6 +369,13 @@ const swaggerSpec = {
                     email_triage: { type: 'string', description: 'Email triage and classification instructions.' },
                 },
             },
+            EmailSettings: {
+                type: 'object',
+                properties: {
+                    auto_triage_incoming: { type: 'boolean', description: 'Automatically triage newly ingested inbox emails.' },
+                    send_draft_emails_automatically: { type: 'boolean', description: 'Saved preference for future automatic draft sending. No sending behavior is currently triggered.' },
+                },
+            },
             GitRepo: {
                 type: 'object',
                 properties: {
@@ -1584,6 +1591,7 @@ const swaggerSpec = {
                                                 global: { $ref: '#/components/schemas/ByoAiScopeSettings' },
                                                 email: { $ref: '#/components/schemas/ByoAiScopeSettings' },
                                                 instructions: { $ref: '#/components/schemas/ByoAiInstructions' },
+                                                email_settings: { $ref: '#/components/schemas/EmailSettings' },
                                             },
                                         },
                                     },
@@ -1608,6 +1616,7 @@ const swaggerSpec = {
                                     global: { $ref: '#/components/schemas/ByoAiScopeUpdate' },
                                     email: { $ref: '#/components/schemas/ByoAiScopeUpdate' },
                                     instructions: { $ref: '#/components/schemas/ByoAiInstructions' },
+                                    email_settings: { $ref: '#/components/schemas/EmailSettings' },
                                 },
                             },
                         },
@@ -1627,6 +1636,7 @@ const swaggerSpec = {
                                                 global: { $ref: '#/components/schemas/ByoAiScopeSettings' },
                                                 email: { $ref: '#/components/schemas/ByoAiScopeSettings' },
                                                 instructions: { $ref: '#/components/schemas/ByoAiInstructions' },
+                                                email_settings: { $ref: '#/components/schemas/EmailSettings' },
                                             },
                                         },
                                     },

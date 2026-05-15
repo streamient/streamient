@@ -493,6 +493,13 @@
           "text_content": {
             "type": "string"
           },
+          "html_content": {
+            "type": "string",
+            "description": "Sanitized HTML email body. Remote image URLs are stored on data-kk-remote-src until explicitly loaded by a client."
+          },
+          "html_content_has_remote_images": {
+            "type": "boolean"
+          },
           "attachment_text_content": {
             "type": "string"
           },
@@ -957,6 +964,19 @@
           "email_triage": {
             "type": "string",
             "description": "Email triage and classification instructions."
+          }
+        }
+      },
+      "EmailSettings": {
+        "type": "object",
+        "properties": {
+          "auto_triage_incoming": {
+            "type": "boolean",
+            "description": "Automatically triage newly ingested inbox emails."
+          },
+          "send_draft_emails_automatically": {
+            "type": "boolean",
+            "description": "Saved preference for future automatic draft sending. No sending behavior is currently triggered."
           }
         }
       },
@@ -1486,31 +1506,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "order",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": [
-                "asc",
-                "desc"
-              ],
-              "default": "asc"
-            }
-          },
-          {
-            "name": "include",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": [
-                "draft"
-              ]
-            },
-            "description": "Comma-separated includes. Use draft to include the active thread draft."
           }
         ],
         "responses": {
@@ -2886,7 +2881,11 @@
                   },
                   "parsed_email": {
                     "type": "object",
-                    "description": "Mailparser-like JSON payload"
+                    "description": "Mailparser-like JSON payload. HTML may be supplied as html, html_content, or body_html and is sanitized before storage."
+                  },
+                  "html_content": {
+                    "type": "string",
+                    "description": "Optional HTML body for flat parsed payloads. Sanitized before storage."
                   },
                   "triaged": {
                     "type": "boolean",
@@ -3181,6 +3180,10 @@
                   "text_content": {
                     "type": "string"
                   },
+                  "html_content": {
+                    "type": "string",
+                    "description": "Sanitized before storage. Send an empty string to clear stored HTML."
+                  },
                   "from": {
                     "type": "array",
                     "items": {
@@ -3323,6 +3326,31 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "default": "asc"
+            }
+          },
+          {
+            "name": "include",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "draft"
+              ]
+            },
+            "description": "Comma-separated includes. Use draft to include the active thread draft."
           }
         ],
         "responses": {
@@ -4790,6 +4818,9 @@
                         },
                         "instructions": {
                           "$ref": "#/components/schemas/ByoAiInstructions"
+                        },
+                        "email_settings": {
+                          "$ref": "#/components/schemas/EmailSettings"
                         }
                       }
                     }
@@ -4831,6 +4862,9 @@
                   },
                   "instructions": {
                     "$ref": "#/components/schemas/ByoAiInstructions"
+                  },
+                  "email_settings": {
+                    "$ref": "#/components/schemas/EmailSettings"
                   }
                 }
               }
@@ -4856,6 +4890,9 @@
                         },
                         "instructions": {
                           "$ref": "#/components/schemas/ByoAiInstructions"
+                        },
+                        "email_settings": {
+                          "$ref": "#/components/schemas/EmailSettings"
                         }
                       }
                     }

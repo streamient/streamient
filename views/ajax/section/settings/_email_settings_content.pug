@@ -1,0 +1,81 @@
+h4.mb-4 Email settings
+
+form#byo-ai-form
+	.card.mb-5
+		.card-body
+			h6.mb-3 Email automation
+			.row.g-3
+				.col-md-6
+					.form-check
+						input.form-check-input#email-auto-triage(type="checkbox" data-email-setting="auto_triage_incoming")
+						label.form-check-label(for="email-auto-triage") Triage incoming emails automatically
+				.col-md-6
+					.form-check
+						input.form-check-input#email-send-drafts(type="checkbox" data-email-setting="send_draft_emails_automatically")
+						label.form-check-label(for="email-send-drafts") Send draft emails automatically
+			.form-text.mt-2 Draft sending is saved for later and does not send emails yet.
+
+	.card
+		.card-body
+			.row.g-4
+				.col-lg-7
+					.mb-3
+						label.form-label(for="byo-email-instructions") Custom email instructions
+						textarea.form-control.form-control-sm#byo-email-instructions(
+							rows="6"
+							autocomplete="off"
+							autocorrect="off"
+							autocapitalize="off"
+							spellcheck="false"
+							data-instruction-scope="email"
+							data-1p-ignore="true"
+							data-op-ignore="true"
+							data-lpignore="true"
+							data-bwignore="true"
+							data-form-type="other"
+						)
+						.form-text
+							span.d-block Examples:
+							span.d-block - Draft replies in a warm, professional tone.
+							span.d-block - Mention billing issues before product suggestions.
+							span.d-block - Ask one clarifying question when context is missing.
+					.mb-3
+						label.form-label(for="byo-email-triage-instructions") Custom email triage instructions
+						textarea.form-control.form-control-sm#byo-email-triage-instructions(
+							rows="6"
+							autocomplete="off"
+							autocorrect="off"
+							autocapitalize="off"
+							spellcheck="false"
+							data-instruction-scope="email_triage"
+							data-1p-ignore="true"
+							data-op-ignore="true"
+							data-lpignore="true"
+							data-bwignore="true"
+							data-form-type="other"
+						)
+						.form-text
+							span.d-block Examples:
+							span.d-block - Keep invoices and security alerts in the inbox.
+							span.d-block - Mark newsletters and receipts as no-action.
+							span.d-block - Escalate legal, billing, and cancellation requests.
+				.col-lg-5
+					h6.mb-3 Email AI provider keys
+					p.text-muted.small Used only when a prompt is explicitly scoped to emails.
+					.mb-3
+						label.form-label(for="byo-email-openai") OpenAI API key
+						.input-group.input-group-sm
+							input.form-control.form-control-sm#byo-email-openai(type="password" autocomplete="off" data-scope="email" data-field="openai_api_key" aria-describedby="byo-email-openai-help")
+							button.btn.btn-outline-secondary(type="button" data-clear-byo="email:openai_api_key") Clear
+						.form-text#byo-email-openai-help
+							span(data-status="email:openai_api_key") Loading...
+					.mb-3
+						label.form-label(for="byo-email-gemini") Gemini API key
+						.input-group.input-group-sm
+							input.form-control.form-control-sm#byo-email-gemini(type="password" autocomplete="off" data-scope="email" data-field="gemini_api_key" aria-describedby="byo-email-gemini-help")
+							button.btn.btn-outline-secondary(type="button" data-clear-byo="email:gemini_api_key") Clear
+						.form-text#byo-email-gemini-help
+							span(data-status="email:gemini_api_key") Loading...
+	.d-flex.justify-content-end.mt-3
+		button.btn.btn-primary.btn-sm(type="submit") Save Changes
+#byo-ai-result.d-none.mt-3
