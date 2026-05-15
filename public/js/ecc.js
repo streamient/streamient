@@ -57,7 +57,14 @@
 		{ slug: 'sent', name: 'Sent', icon: 'send' },
 		{ slug: 'spam', name: 'Spam', icon: 'warning' },
 	];
-	var SYSTEM_TRIAGE_LABELS = ['waiting', 'triaged', 'human-do', 'reply-required', 'no-action', 'spam'];
+	var SYSTEM_TRIAGE_LABELS = ['reply-required', 'human-do', 'waiting', 'no-action', 'triaged', 'spam'];
+	var TRIAGE_ACTION_NAMES = {
+		'reply-required': 'Review',
+		'human-do': 'Human Do',
+		waiting: 'Waiting',
+		'no-action': 'No action',
+		spam: 'Spam',
+	};
 
 	function addWindowListener(event, handler) {
 		window.addEventListener(event, handler);
@@ -799,7 +806,7 @@
 			}).filter(Boolean).join(' - ');
 			var labels = renderVisibleLabels(email);
 			var triageMeta = [
-				email.triage_primary_action ? '<span class="badge text-bg-light me-1">' + escapeHtml(email.triage_primary_action) + '</span>' : '',
+				email.triage_primary_action ? '<span class="badge text-bg-light me-1">' + escapeHtml(TRIAGE_ACTION_NAMES[email.triage_primary_action] || email.triage_primary_action) + '</span>' : '',
 				email.triage_status === 'failed' ? '<span class="badge text-bg-danger me-1">Failed</span>' : '',
 				email.triage_draft_id ? '<span class="badge text-bg-info me-1">Draft</span>' : '',
 			].filter(Boolean).join('');

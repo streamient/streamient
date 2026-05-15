@@ -27,6 +27,10 @@ else
 					!= icon('email', 'me-2')
 					span Inbox
 					span.badge.text-bg-secondary.ms-auto 0
+				button.list-group-item.list-group-item-action.d-flex.align-items-center(type="button" data-mailbox="drafts")
+					!= icon('draft', 'me-2')
+					span Drafts
+					span.badge.text-bg-secondary.ms-auto 0
 				button.list-group-item.list-group-item-action.d-flex.align-items-center(type="button" data-mailbox="archived")
 					!= icon('archive', 'me-2')
 					span Archived
@@ -38,10 +42,6 @@ else
 				button.list-group-item.list-group-item-action.d-flex.align-items-center(type="button" data-mailbox="spam")
 					!= icon('warning', 'me-2')
 					span Spam
-					span.badge.text-bg-secondary.ms-auto 0
-				button.list-group-item.list-group-item-action.d-flex.align-items-center(type="button" data-mailbox="drafts")
-					!= icon('draft', 'me-2')
-					span Drafts
 					span.badge.text-bg-secondary.ms-auto 0
 				button.list-group-item.list-group-item-action.d-flex.align-items-center(type="button" data-mailbox="trash")
 					!= icon('delete', 'me-2')

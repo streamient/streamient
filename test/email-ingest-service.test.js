@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, parseTriageResult, triageInboxEmails, backfillEmailTriageState, askEmailAi, buildTriageContext, resetEmailTriage, updateEmail } from '../services/email_ingest_service.js';
+import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailLabels, parseTriageResult, triageInboxEmails, backfillEmailTriageState, askEmailAi, buildTriageContext, resetEmailTriage, updateEmail } from '../services/email_ingest_service.js';
 import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
 import { EmailLabel } from '../model/email_label.js';
@@ -531,6 +531,46 @@ describe('Email ingest service', () => {
 			assert.equal(findQuery.triaged, false);
 		} finally {
 			Email.find = originalFind;
+		}
+	});
+
+	it('lists default email labels in beginner-friendly order with current names', async () => {
+		let bulkOps = [];
+		const originalBulkWrite = EmailLabel.bulkWrite;
+		const originalLabelFind = EmailLabel.find;
+		const originalEmailCountDocuments = Email.countDocuments;
+		const originalDraftCountDocuments = EmailDraft.countDocuments;
+
+		EmailLabel.bulkWrite = async (ops) => {
+			bulkOps = ops;
+			return {};
+		};
+		EmailLabel.find = () => ({
+			sort: () => ({
+				lean: async () => [
+					{ _id: 'waiting', slug: 'waiting', name: 'Waiting', color: '#0d6efd', is_system: true },
+					{ _id: 'triaged', slug: 'triaged', name: 'Done', color: '#198754', is_system: true },
+					{ _id: 'human-do', slug: 'human-do', name: 'Human Do', color: '#fd7e14', is_system: true },
+					{ _id: 'reply-required', slug: 'reply-required', name: 'Review', color: '#dc3545', is_system: true },
+					{ _id: 'no-action', slug: 'no-action', name: 'No action', color: '#6c757d', is_system: true },
+					{ _id: 'spam', slug: 'spam', name: 'Spam', color: '#212529', is_system: true },
+				],
+			}),
+		});
+		Email.countDocuments = async () => 0;
+		EmailDraft.countDocuments = async () => 0;
+
+		try {
+			const result = await listEmailLabels('host-1');
+
+			assert.deepEqual(result.labels.map((label) => label.name), ['Review', 'Human Do', 'Waiting', 'No action', 'Done', 'Spam']);
+			assert.equal(bulkOps.find((op) => op.updateOne.filter.slug === 'reply-required').updateOne.update.$set.name, 'Review');
+			assert.equal(bulkOps.find((op) => op.updateOne.filter.slug === 'triaged').updateOne.update.$set.name, 'Done');
+		} finally {
+			EmailLabel.bulkWrite = originalBulkWrite;
+			EmailLabel.find = originalLabelFind;
+			Email.countDocuments = originalEmailCountDocuments;
+			EmailDraft.countDocuments = originalDraftCountDocuments;
 		}
 	});
 

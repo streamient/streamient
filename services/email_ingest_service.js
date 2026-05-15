@@ -21,15 +21,16 @@ import { sanitizeEmailHtml } from '../modules/email_html_sanitizer.js';
 
 const MAX_ATTACHMENT_SIZE = 50 * 1024 * 1024;
 const DEFAULT_EMAIL_LABELS = [
+	{ slug: 'reply-required', name: 'Review', color: '#dc3545' },
+	{ slug: 'human-do', name: 'Human Do', color: '#fd7e14' },
 	{ slug: 'waiting', name: 'Waiting', color: '#0d6efd' },
-	{ slug: 'triaged', name: 'Triaged', color: '#198754' },
-	{ slug: 'human-do', name: 'Human do', color: '#fd7e14' },
-	{ slug: 'reply-required', name: 'Reply required', color: '#dc3545' },
 	{ slug: 'no-action', name: 'No action', color: '#6c757d' },
+	{ slug: 'triaged', name: 'Done', color: '#198754' },
 	{ slug: 'spam', name: 'Spam', color: '#212529' },
 ];
 const SYSTEM_LABEL_SLUGS = DEFAULT_EMAIL_LABELS.map((label) => label.slug);
-const PRIMARY_TRIAGE_LABELS = ['waiting', 'human-do', 'reply-required', 'no-action', 'spam'];
+const DEFAULT_EMAIL_LABEL_ORDER = new Map(DEFAULT_EMAIL_LABELS.map((label, index) => [label.slug, index]));
+const PRIMARY_TRIAGE_LABELS = ['reply-required', 'human-do', 'waiting', 'no-action', 'spam'];
 const TRIAGE_ACTIONS = PRIMARY_TRIAGE_LABELS;
 const MAILBOX_ACTIONS = ['none', 'keep-inbox', 'archive', 'spam'];
 const TRIAGE_STATUSES = ['pending', 'complete', 'failed'];
@@ -435,10 +436,14 @@ export async function ensureDefaultEmailLabels(host_id) {
 		updateOne: {
 			filter: { host_id, slug: label.slug },
 			update: {
-				$setOnInsert: {
-					...label,
-					host_id,
+				$set: {
+					name: label.name,
+					color: label.color,
 					is_system: true,
+				},
+				$setOnInsert: {
+					slug: label.slug,
+					host_id,
 					is_active: true,
 				},
 			},
@@ -447,7 +452,13 @@ export async function ensureDefaultEmailLabels(host_id) {
 	}));
 
 	if (ops.length) await EmailLabel.bulkWrite(ops, { ordered: false });
-	return EmailLabel.find({ host_id, is_active: { $ne: false } }).sort({ is_system: -1, name: 1 }).lean();
+	const labels = await EmailLabel.find({ host_id, is_active: { $ne: false } }).sort({ is_system: -1, name: 1 }).lean();
+	return labels.sort((a, b) => {
+		const aOrder = DEFAULT_EMAIL_LABEL_ORDER.has(a.slug) ? DEFAULT_EMAIL_LABEL_ORDER.get(a.slug) : Number.MAX_SAFE_INTEGER;
+		const bOrder = DEFAULT_EMAIL_LABEL_ORDER.has(b.slug) ? DEFAULT_EMAIL_LABEL_ORDER.get(b.slug) : Number.MAX_SAFE_INTEGER;
+		if (aOrder !== bOrder) return aOrder - bOrder;
+		return String(a.name || '').localeCompare(String(b.name || ''));
+	});
 }
 
 function buildEmailListQuery(host_id, projectId, filters = {}) {
