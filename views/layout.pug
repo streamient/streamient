@@ -240,8 +240,24 @@ html(lang="en")
 										.form-text Thread
 											#rm-email-thread.small
 							#rm-email-pane-body.d-none.px-3.pb-2
-								.form-text Body / Attachment Text
-								#rm-email-content.preview-container.border.rounded.p-3(style="min-height:220px; white-space:pre-wrap")
+								.d-flex.justify-content-between.align-items-center.mb-2
+									.form-text Body
+									.d-flex.align-items-center.gap-2
+										.btn-group.btn-group-sm#rm-email-body-mode(role="group" aria-label="Email body mode")
+											button.btn.btn-outline-secondary.active#rm-email-html-btn(type="button")
+												span HTML
+											button.btn.btn-outline-secondary#rm-email-text-btn(type="button")
+												span Text
+										.btn-group.btn-group-sm#rm-email-theme-mode(role="group" aria-label="Email HTML theme")
+											button.btn.btn-outline-secondary.active#rm-email-dark-btn(type="button")
+												span Dark
+											button.btn.btn-outline-secondary#rm-email-original-btn(type="button")
+												span Original
+										button.btn.btn-outline-secondary.btn-sm.d-none#rm-email-load-images-btn(type="button")
+											span Load images
+								#rm-email-content.preview-container.border.rounded.p-0(style="min-height:220px")
+									iframe#rm-email-html-frame.d-none(title="Email HTML body" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer")
+									pre#rm-email-text-content.mb-0.p-3(style="white-space:pre-wrap")
 
 						//- Loading placeholder
 						#result-modal-loading.text-center.py-4.d-none
@@ -275,6 +291,7 @@ html(lang="en")
 			var __ws_url = "#{ws_url}";
 			var __host_id = "#{host_id}";
 			var __user_name = "#{user ? user.name : ''}";
+			var __static_base = "/static/v-#{v}";
 			var __avatar_colors = ['#6366f1','#8b5cf6','#ec4899','#f43f5e','#f97316','#eab308','#22c55e','#14b8a6','#06b6d4','#3b82f6'];
 			function makeAvatar(name, size) {
 				size = size || 'xs';
@@ -287,6 +304,8 @@ html(lang="en")
 			}
 		script(src=`/static/v-${v}/js/vendor.js` type="module")
 		script(src=`/static/v-${v}/js/editor.js` type="module")
+		script(src=`/static/v-${v}/js/iframe_resizer_parent.js`)
+		script(src=`/static/v-${v}/js/email_iframe_renderer.js`)
 		script(src=`/static/v-${v}/js/chat.js`)
 		script(src=`/static/v-${v}/js/app.js`)
 		script(src=`/static/v-${v}/js/notes.js`)

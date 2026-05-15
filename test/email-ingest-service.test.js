@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, listEmails, parseTriageResult, triageInboxEmails, backfillEmailTriageState, askEmailAi, buildTriageContext, resetEmailTriage } from '../services/email_ingest_service.js';
+import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, parseTriageResult, triageInboxEmails, backfillEmailTriageState, askEmailAi, buildTriageContext, resetEmailTriage, updateEmail } from '../services/email_ingest_service.js';
 import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
 import { EmailLabel } from '../model/email_label.js';
@@ -35,6 +35,56 @@ describe('Email ingest service', () => {
 		assert.deepEqual(normalized.bcc, ['hidden@example.com']);
 		assert.equal(normalized.subject, 'Hello world');
 		assert.equal(normalized.text_content, 'Hello Team');
+		assert.match(normalized.html_content, /<p>Hello <b>Team<\/b><\/p>/);
+		assert.equal(normalized.html_content_has_remote_images, false);
+	});
+
+	it('sanitizes parsed HTML and rewrites remote image URLs', async () => {
+		const normalized = await parseEmailInput({
+			parsed_email: {
+				message_id: '<html-sanitize@example.com>',
+				from: 'sender@example.com',
+				to: 'to@example.com',
+				subject: 'HTML sanitize',
+				html: '<div onclick="alert(1)" style="color:red;background-image:url(https://evil.example/x)">Hi<script>alert(1)</script><img src="https://cdn.example/image.png" onerror="alert(2)"><img src="cid:local-image"></div>',
+			},
+		});
+
+		assert.match(normalized.text_content, /Hi/);
+		assert.equal(normalized.html_content_has_remote_images, true);
+		assert.match(normalized.html_content, /data-kk-remote-src="https:\/\/cdn\.example\/image\.png"/);
+		assert.match(normalized.html_content, /<img src="cid:local-image" \/>/);
+		assert.doesNotMatch(normalized.html_content, /script|onclick|onerror|background-image/i);
+		assert.doesNotMatch(normalized.html_content, /<img\s+src="https:\/\/cdn\.example\/image\.png"/);
+	});
+
+	it('stores sanitized HTML from raw multipart email', async () => {
+		const raw = [
+			'Message-ID: <raw-html@example.com>',
+			'From: Sender <sender@example.com>',
+			'To: Team <team@example.com>',
+			'Subject: Raw HTML',
+			'MIME-Version: 1.0',
+			'Content-Type: multipart/alternative; boundary="abc"',
+			'',
+			'--abc',
+			'Content-Type: text/plain; charset=utf-8',
+			'',
+			'Plain body',
+			'--abc',
+			'Content-Type: text/html; charset=utf-8',
+			'',
+			'<table><tr><td style="color:#333">HTML body</td></tr></table><form><input name="x"></form>',
+			'--abc--',
+		].join('\r\n');
+
+		const normalized = await parseEmailInput({ raw_email: raw });
+
+		assert.equal(normalized.message_id, 'raw-html@example.com');
+		assert.equal(normalized.text_content, 'Plain body');
+		assert.match(normalized.html_content, /<table>/);
+		assert.match(normalized.html_content, /HTML body/);
+		assert.doesNotMatch(normalized.html_content, /form|input/i);
 	});
 
 	it('normalizes forwarded payload fields without attachment text', () => {
@@ -74,7 +124,32 @@ describe('Email ingest service', () => {
 
 		assert.equal(normalized.message_id, 'htmlonly@example.com');
 		assert.equal(normalized.text_content, 'Hello HTML Only');
+		assert.match(normalized.html_content, /<div>Hello <strong>HTML<\/strong><br \/>Only<\/div>/);
 		assert.equal(normalized.attachment_text_content, '');
+	});
+
+	it('sanitizes HTML updates before storing', async () => {
+		const originalFindOneAndUpdate = Email.findOneAndUpdate;
+		let updatePayload = null;
+
+		Email.findOneAndUpdate = async (query, update) => {
+			assert.deepEqual(query, { _id: 'email-1', host_id: 'host-1' });
+			updatePayload = update.$set;
+			return { _id: 'email-1', host_id: 'host-1', ...update.$set };
+		};
+
+		try {
+			const email = await updateEmail('host-1', 'email-1', {
+				html_content: '<p onclick="alert(1)">Updated<img src="https://cdn.example/update.png"></p>',
+			});
+
+			assert.equal(updatePayload.html_content_has_remote_images, true);
+			assert.match(updatePayload.html_content, /data-kk-remote-src="https:\/\/cdn\.example\/update\.png"/);
+			assert.doesNotMatch(updatePayload.html_content, /onclick|<img\s+src="https:\/\/cdn\.example\/update\.png"/);
+			assert.equal(email.html_content, updatePayload.html_content);
+		} finally {
+			Email.findOneAndUpdate = originalFindOneAndUpdate;
+		}
 	});
 
 	it('reads forwarded payload fields from raw header strings and header lines', () => {
@@ -339,6 +414,74 @@ describe('Email ingest service', () => {
 		}
 	});
 
+	it('builds newest-first thread and resolves the active thread draft', async () => {
+		const root = {
+			_id: { toString: () => '1' },
+			message_id: 'msg-a@example.com',
+			references: ['msg-b@example.com'],
+			createdAt: '2026-01-01T10:00:00.000Z',
+		};
+		const parent = {
+			_id: { toString: () => '2' },
+			message_id: 'msg-b@example.com',
+			references: [],
+			createdAt: '2026-01-01T09:00:00.000Z',
+		};
+		const reply = {
+			_id: { toString: () => '3' },
+			message_id: 'msg-c@example.com',
+			references: ['msg-a@example.com'],
+			createdAt: '2026-01-01T11:00:00.000Z',
+		};
+
+		const originalFindOne = Email.findOne;
+		const originalFind = Email.find;
+		const originalDraftFindOne = EmailDraft.findOne;
+		let draftQuery = null;
+		let draftSort = null;
+
+		Email.findOne = () => ({
+			lean: async () => root,
+		});
+		Email.find = (query) => ({
+			lean: async () => {
+				const messageId = query?.$or?.[0]?.message_id || query?.$or?.[1]?.references;
+				if (messageId === 'msg-a@example.com') return [root, reply];
+				if (messageId === 'msg-b@example.com') return [parent];
+				return [];
+			},
+		});
+		EmailDraft.findOne = (query) => {
+			draftQuery = query;
+			return {
+				sort: (sort) => {
+					draftSort = sort;
+					return {
+						lean: async () => ({ _id: 'draft-1', source_email: '1', status: 'draft' }),
+					};
+				},
+			};
+		};
+
+		try {
+			const thread = await getEmailThread('host-1', '1', { order: 'desc' });
+			assert.deepEqual(thread.map((item) => item.message_id), ['msg-c@example.com', 'msg-a@example.com', 'msg-b@example.com']);
+
+			const draft = await getEmailThreadDraft('host-1', thread);
+			assert.deepEqual(draftQuery, {
+				host_id: 'host-1',
+				source_email: { $in: ['3', '1', '2'] },
+				status: { $ne: 'discarded' },
+			});
+			assert.deepEqual(draftSort, { updatedAt: -1 });
+			assert.equal(draft._id, 'draft-1');
+		} finally {
+			Email.findOne = originalFindOne;
+			Email.find = originalFind;
+			EmailDraft.findOne = originalDraftFindOne;
+		}
+	});
+
 	it('includes sender in email Typesense documents', () => {
 		const doc = toTypesenseDoc('emails', {
 			_id: '507f1f77bcf86cd799439055',
@@ -349,6 +492,7 @@ describe('Email ingest service', () => {
 			cc: [],
 			bcc: [],
 			text_content: 'hello world',
+			html_content: '<p>do not index</p>',
 			attachment_text_content: '',
 			message_id: 'msg-1@example.com',
 			references: [],
@@ -359,6 +503,7 @@ describe('Email ingest service', () => {
 		assert.deepEqual(doc.from, ['sender@example.com']);
 		assert.deepEqual(doc.to, ['to@example.com']);
 		assert.equal(doc.subject, 'Hello from sender test');
+		assert.equal(doc.html_content, undefined);
 	});
 
 	it('lists default ECC inbox as untriaged emails across projects', async () => {

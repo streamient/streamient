@@ -13,8 +13,17 @@
 	var moveMenu;
 	var trashBtn;
 	var resetTriageBtn;
+	var viewHeader;
 	var viewTitle;
 	var viewSubtitle;
+	var listWrap;
+	var detailEl;
+	var detailBackBtn;
+	var detailOpenBtn;
+	var detailTitle;
+	var detailSubtitle;
+	var detailDraftEl;
+	var detailThreadEl;
 	var aiPanel;
 	var aiSubtitle;
 	var openEmailBtn;
@@ -35,6 +44,8 @@
 	var activeLabel = '';
 	var selectedProject = '';
 	var selectedEmail = null;
+	var detailActive = false;
+	var pendingEmailId = '';
 	var selectedIds = new Set();
 	var emailAiMessages = [];
 	var windowListeners = [];
@@ -64,8 +75,284 @@
 			return new Date(value).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 		}
 
+		function formatDateTime(value) {
+			if (!value) return '';
+			return new Date(value).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+		}
+
 		function emailId(email) {
 			return String(email?._id || email?.id || '');
+		}
+
+		function draftSourceEmailId(draft) {
+			return String(draft?.source_email?._id || draft?.source_email || '');
+		}
+
+		function replaceChildren(node) {
+			if (!node) return;
+			while (node.firstChild) node.removeChild(node.firstChild);
+		}
+
+		function textNode(tagName, className, text) {
+			var node = document.createElement(tagName);
+			if (className) node.className = className;
+			node.textContent = text || '';
+			return node;
+		}
+
+		function appendMeta(container, label, value) {
+			if (!value) return;
+			var row = document.createElement('div');
+			row.className = 'mb-2 text-break';
+			var labelEl = textNode('span', 'small text-muted me-1', label + ':');
+			var valueEl = textNode('span', '', value);
+			row.appendChild(labelEl);
+			row.appendChild(valueEl);
+			container.appendChild(row);
+		}
+
+		function listSummary(items, fallback) {
+			return (items || []).filter(Boolean).join(', ') || fallback || '';
+		}
+
+		function emailBody(email) {
+			return [email?.text_content, email?.attachment_text_content].filter(Boolean).join('\n\n');
+		}
+
+		function cleanEmailText(value) {
+			var lines = [];
+			var rawLines = String(value || '')
+				.split(/\r?\n/g)
+				.map(function (line) {
+					return line.trim();
+				});
+			for (var i = 0; i < rawLines.length; i++) {
+				var line = rawLines[i];
+				if (!line || line === '--') continue;
+				if (/^-*\s*hmstopparser\s*-*$/i.test(line)
+					|| /^on .{1,300}\b(wrote|replied):$/i.test(line)
+					|| /^(from|sent|date|to|cc|subject)\s*:/i.test(line)) break;
+				if (/^-+\s*please reply above this line\s*-+$/i.test(line)) continue;
+				lines.push(line);
+			}
+			return lines
+				.join('\n')
+				.replace(/^--\s*/, '')
+				.trim();
+		}
+
+		function emailExcerpt(email) {
+			return email?.excerpt || cleanEmailText(email?.text_content || email?.attachment_text_content || '').replace(/\s+/g, ' ').slice(0, 180);
+		}
+
+		function emailHtmlFrameSrcdoc(html, loadRemoteImages) {
+			return window.kkEmailIframeRenderer?.buildSrcdoc({
+				html: html,
+				loadRemoteImages: loadRemoteImages,
+				theme: window.kkEmailIframeRenderer?.defaultTheme() || 'dark',
+			}) || '';
+		}
+
+		function resizeEmailHtmlFrame(frame) {
+			try {
+				var doc = frame.contentDocument;
+				if (!doc?.body) return;
+				var height = Math.max(220, doc.documentElement.scrollHeight, doc.body.scrollHeight);
+				frame.style.height = height + 'px';
+			} catch {
+				frame.style.height = '420px';
+			}
+		}
+
+		function initEmailHtmlFrameResize(frame) {
+			if (window.kkEmailIframeRenderer?.initResize) {
+				window.kkEmailIframeRenderer.initResize(frame);
+				return;
+			}
+			resizeEmailHtmlFrame(frame);
+		}
+
+		function emailHtmlWithRemoteImages(html, loadRemoteImages) {
+			return window.kkEmailIframeRenderer?.htmlWithRemoteImages(html, loadRemoteImages) || html;
+		}
+
+		function renderBodyHtml(value, loadRemoteImages, theme, email) {
+			var frame = document.createElement('iframe');
+			frame.className = 'ecc-detail-html-frame';
+			frame.title = 'Email HTML body';
+			frame.setAttribute('sandbox', 'allow-scripts allow-popups allow-popups-to-escape-sandbox');
+			frame.setAttribute('referrerpolicy', 'no-referrer');
+			initEmailHtmlFrameResize(frame);
+			frame.srcdoc = window.kkEmailIframeRenderer?.buildSrcdoc({
+				html: String(value || ''),
+				loadRemoteImages: loadRemoteImages,
+				theme: theme,
+				subject: email?.subject || '',
+				from: listSummary(email?.from, ''),
+			}) || emailHtmlFrameSrcdoc(String(value || ''), loadRemoteImages);
+			return frame;
+		}
+
+		function renderEmailBody(email) {
+			var wrapper = document.createElement('div');
+			var header = document.createElement('div');
+			header.className = 'd-flex justify-content-between align-items-center gap-3 mb-2';
+			header.appendChild(textNode('div', 'small text-muted', 'Body'));
+
+			var controls = document.createElement('div');
+			controls.className = 'd-flex align-items-center gap-2';
+			var modeGroup = document.createElement('div');
+			modeGroup.className = 'btn-group btn-group-sm';
+			modeGroup.setAttribute('role', 'group');
+			modeGroup.setAttribute('aria-label', 'Email body mode');
+			var htmlBtn = textNode('button', 'btn btn-outline-secondary', 'HTML');
+			htmlBtn.type = 'button';
+			var textBtn = textNode('button', 'btn btn-outline-secondary', 'Text');
+			textBtn.type = 'button';
+			modeGroup.appendChild(htmlBtn);
+			modeGroup.appendChild(textBtn);
+			var themeGroup = document.createElement('div');
+			themeGroup.className = 'btn-group btn-group-sm';
+			themeGroup.setAttribute('role', 'group');
+			themeGroup.setAttribute('aria-label', 'Email HTML theme');
+			var darkBtn = textNode('button', 'btn btn-outline-secondary', 'Dark');
+			darkBtn.type = 'button';
+			var originalBtn = textNode('button', 'btn btn-outline-secondary', 'Original');
+			originalBtn.type = 'button';
+			themeGroup.appendChild(darkBtn);
+			themeGroup.appendChild(originalBtn);
+			var loadImagesBtn = textNode('button', 'btn btn-outline-secondary btn-sm', 'Load images');
+			loadImagesBtn.type = 'button';
+			controls.appendChild(modeGroup);
+			controls.appendChild(themeGroup);
+			controls.appendChild(loadImagesBtn);
+			header.appendChild(controls);
+			wrapper.appendChild(header);
+
+			var bodyWrap = document.createElement('div');
+			wrapper.appendChild(bodyWrap);
+
+			var html = email?.html_content || '';
+			var text = emailBody(email);
+			var hasHtml = Boolean(html);
+			var hasText = Boolean(cleanEmailText(text));
+			var hasRemoteImages = hasHtml && Boolean(email?.html_content_has_remote_images);
+			var remoteImagesLoaded = false;
+			var mode = hasHtml ? 'html' : 'text';
+			var theme = window.kkEmailIframeRenderer?.defaultTheme() || 'dark';
+
+			function render() {
+				htmlBtn.disabled = !hasHtml;
+				textBtn.disabled = !hasText;
+				htmlBtn.classList.toggle('active', mode === 'html');
+				textBtn.classList.toggle('active', mode === 'text');
+				darkBtn.classList.toggle('active', theme === 'dark');
+				originalBtn.classList.toggle('active', theme === 'original');
+				themeGroup.classList.toggle('d-none', !hasHtml || mode !== 'html');
+				loadImagesBtn.classList.toggle('d-none', !hasRemoteImages || remoteImagesLoaded || mode !== 'html');
+				replaceChildren(bodyWrap);
+				if (mode === 'html' && hasHtml) {
+					var htmlValue = emailHtmlWithRemoteImages(html, remoteImagesLoaded);
+					bodyWrap.appendChild(renderBodyHtml(htmlValue, remoteImagesLoaded, theme, email));
+				} else {
+					bodyWrap.appendChild(renderBodyText(text || '(empty)'));
+				}
+			}
+
+			htmlBtn.addEventListener('click', function () {
+				if (!hasHtml) return;
+				mode = 'html';
+				render();
+			});
+			textBtn.addEventListener('click', function () {
+				if (!hasText) return;
+				mode = 'text';
+				render();
+			});
+			darkBtn.addEventListener('click', function () {
+				theme = 'dark';
+				mode = 'html';
+				render();
+			});
+			originalBtn.addEventListener('click', function () {
+				theme = 'original';
+				mode = 'html';
+				render();
+			});
+			loadImagesBtn.addEventListener('click', function () {
+				remoteImagesLoaded = true;
+				mode = 'html';
+				render();
+			});
+
+			render();
+			return wrapper;
+		}
+
+		function normalizeEccMailbox(value) {
+			var mailbox = String(value || '').trim();
+			return ['inbox', 'archived', 'sent', 'spam', 'drafts', 'trash'].includes(mailbox) ? mailbox : 'inbox';
+		}
+
+		function readUrlState() {
+			var params = new URLSearchParams(window.location.search);
+			var raw = params.get('g');
+			if (!raw || !window.JSURL) return {};
+			return window.JSURL.tryParse(raw, {}) || {};
+		}
+
+		function applyUrlState() {
+			var state = readUrlState();
+			var ecc = state.ecc || {};
+			selectedProject = String(state.project_id || '');
+			if (ecc.label) {
+				activeLabel = String(ecc.label || '');
+				activeMailbox = '';
+			} else {
+				activeLabel = '';
+				activeMailbox = normalizeEccMailbox(ecc.mailbox || 'inbox');
+			}
+			pendingEmailId = String(ecc.email_id || '');
+		}
+
+		function writeUrlState(emailIdOverride) {
+			if (!window.JSURL || window.location.pathname !== '/ecc') return;
+			var state = readUrlState();
+			if (selectedProject) {
+				state.project_id = selectedProject;
+				window.currentProjectId = selectedProject;
+			} else {
+				delete state.project_id;
+				window.currentProjectId = null;
+			}
+			state.ecc = {};
+			if (activeLabel) {
+				state.ecc.label = activeLabel;
+			} else {
+				state.ecc.mailbox = activeMailbox || 'inbox';
+			}
+			var emailIdValue = emailIdOverride === undefined ? (detailActive ? emailId(selectedEmail) : '') : emailIdOverride;
+			if (emailIdValue) state.ecc.email_id = emailIdValue;
+			var qs = '?g=' + window.JSURL.stringify(state);
+			history.replaceState({ spaPath: '/ecc' }, '', '/ecc' + qs);
+		}
+
+		function renderBodyText(value) {
+			var body = document.createElement('div');
+			body.className = 'ecc-detail-body';
+			var raw = cleanEmailText(value) || '(empty)';
+			var lines = raw.split(/\r?\n/);
+			lines.forEach(function (line) {
+				var row = document.createElement('div');
+				var trimmed = line.trim();
+				row.className = 'ecc-detail-body-line';
+				if (!trimmed) row.classList.add('is-empty');
+				if (/^(>|&gt;)/.test(trimmed) || /^on .+wrote:$/i.test(trimmed)) row.classList.add('is-quoted');
+				if (/^(\*?(from|de|sent|envoy|envoye|to|a|subject|objet)\s*:)/i.test(trimmed)) row.classList.add('is-meta');
+				row.textContent = line || ' ';
+				body.appendChild(row);
+			});
+			return body;
 		}
 
 		function newRunId() {
@@ -129,7 +416,7 @@
 	function updateSelectAllButton() {
 		if (!selectAllBtn) return;
 		var checkboxes = getEmailCheckboxes();
-		var enabled = activeMailbox !== 'drafts' && checkboxes.length > 0;
+		var enabled = !detailActive && activeMailbox !== 'drafts' && checkboxes.length > 0;
 		var selectedCount = checkboxes.filter(function (checkbox) {
 			return selectedIds.has(checkbox.value);
 		}).length;
@@ -143,15 +430,15 @@
 
 	function updateTriageButton() {
 		if (!triageBtn) return;
-		triageBtn.classList.toggle('d-none', activeLabel || activeMailbox !== 'inbox');
+		triageBtn.classList.toggle('d-none', detailActive || activeLabel || activeMailbox !== 'inbox');
 	}
 
 	function updateActionBar() {
 		if (!actionBar || !actionCount) return;
 		var count = selectedIds.size;
 		actionCount.textContent = count + ' selected';
-		actionBar.classList.toggle('d-none', count === 0 || activeMailbox === 'drafts');
-		actionBar.classList.toggle('d-flex', count > 0 && activeMailbox !== 'drafts');
+		actionBar.classList.toggle('d-none', detailActive || count === 0 || activeMailbox === 'drafts');
+		actionBar.classList.toggle('d-flex', !detailActive && count > 0 && activeMailbox !== 'drafts');
 		if (trashBtn) trashBtn.classList.toggle('d-none', activeMailbox === 'trash');
 		updateSelectAllButton();
 		updateTriageButton();
@@ -215,10 +502,10 @@
 	}
 
 	function renderEmailAi(email) {
-		if (!aiPanel || !aiSubtitle || !openEmailBtn) return;
+		if (!aiPanel) return;
 		if (!email) {
-			aiSubtitle.textContent = 'No email active.';
-			openEmailBtn.classList.add('d-none');
+			if (aiSubtitle) aiSubtitle.textContent = 'No email active.';
+			openEmailBtn?.classList.add('d-none');
 			aiMessagesEl = null;
 			aiInputEl = null;
 			aiSendBtn = null;
@@ -233,16 +520,9 @@
 		var subject = email.subject || '(No subject)';
 		var sender = (email.from || []).join(', ') || '(unknown sender)';
 		var labels = renderVisibleLabels(email);
-		aiSubtitle.textContent = subject;
-		openEmailBtn.classList.remove('d-none');
+		if (aiSubtitle) aiSubtitle.textContent = subject;
+		openEmailBtn?.classList.remove('d-none');
 		aiPanel.innerHTML = '<div class="ecc-ai-content">'
-			+ '<div class="ecc-ai-section">'
-			+ '<h6 class="mb-2">Email context</h6>'
-			+ '<div class="small text-muted mb-1">From</div>'
-			+ '<div class="mb-2 text-break">' + escapeHtml(sender) + '</div>'
-			+ '<div class="small text-muted mb-1">Subject</div>'
-			+ '<div class="mb-0 text-break">' + escapeHtml(subject) + '</div>'
-			+ '</div>'
 			+ '<div class="ecc-ai-section">'
 			+ '<h6 class="mb-2">AI triage</h6>'
 			+ (labels ? '<div class="mb-2">' + labels + '</div>' : '<div class="text-muted small mb-2">No labels yet.</div>')
@@ -250,6 +530,13 @@
 			+ '<p class="mb-2">' + escapeHtml(email.triage_summary || 'Not triaged yet.') + '</p>'
 			+ '<div class="small text-muted mb-1">Reason</div>'
 			+ '<p class="mb-0">' + escapeHtml(email.triage_reason || 'No AI reason saved yet.') + '</p>'
+			+ '</div>'
+			+ '<div class="ecc-ai-section">'
+			+ '<h6 class="mb-2">Email context</h6>'
+			+ '<div class="small text-muted mb-1">From</div>'
+			+ '<div class="mb-2 text-break">' + escapeHtml(sender) + '</div>'
+			+ '<div class="small text-muted mb-1">Subject</div>'
+			+ '<div class="mb-0 text-break">' + escapeHtml(subject) + '</div>'
 			+ '</div>'
 			+ '<div class="ecc-ai-section ecc-email-chat">'
 			+ '<h6 class="mb-2">Ask Email AI</h6>'
@@ -346,6 +633,8 @@
 			button.addEventListener('click', function () {
 				activeLabel = button.dataset.label || '';
 				activeMailbox = '';
+				pendingEmailId = '';
+				writeUrlState('');
 				loadAll();
 			});
 		});
@@ -372,11 +661,139 @@
 			return email.in_trash !== true && mailbox === activeMailbox;
 		}
 
+		function showListView() {
+			detailActive = false;
+			viewHeader?.classList.remove('d-none');
+			listWrap?.classList.remove('d-none');
+			detailEl?.classList.add('d-none');
+			updateActionBar();
+		}
+
+		function backToListView() {
+			selectedEmail = null;
+			pendingEmailId = '';
+			showListView();
+			writeUrlState('');
+		}
+
+		function showDetailView() {
+			detailActive = true;
+			viewHeader?.classList.add('d-none');
+			listWrap?.classList.add('d-none');
+			detailEl?.classList.remove('d-none');
+			updateActionBar();
+		}
+
+		function showDetailLoading(emailId) {
+			showDetailView();
+			if (detailTitle) detailTitle.textContent = 'Loading email';
+			if (detailSubtitle) detailSubtitle.textContent = emailId || '';
+			if (detailDraftEl) {
+				replaceChildren(detailDraftEl);
+				detailDraftEl.appendChild(textNode('div', 'text-muted small', 'Loading draft.'));
+			}
+			if (detailThreadEl) {
+				replaceChildren(detailThreadEl);
+				detailThreadEl.appendChild(textNode('div', 'list-group-item text-muted', 'Loading thread.'));
+			}
+		}
+
+		function showDetailError(message) {
+			showDetailView();
+			if (detailTitle) detailTitle.textContent = 'Email detail';
+			if (detailSubtitle) detailSubtitle.textContent = 'Unable to load email.';
+			if (detailDraftEl) replaceChildren(detailDraftEl);
+			if (detailThreadEl) {
+				replaceChildren(detailThreadEl);
+				detailThreadEl.appendChild(textNode('div', 'list-group-item text-danger', message || 'Failed to load email.'));
+			}
+		}
+
+		function renderDraftDetail(draft) {
+			if (!detailDraftEl) return;
+			replaceChildren(detailDraftEl);
+			if (!draft) return;
+			var card = document.createElement('div');
+			card.className = 'ecc-detail-card ecc-detail-draft';
+
+			var header = document.createElement('div');
+			header.className = 'd-flex justify-content-between align-items-start gap-3 mb-3';
+			var titleWrap = document.createElement('div');
+			titleWrap.className = 'min-w-0';
+			titleWrap.appendChild(textNode('h6', 'mb-1 text-truncate', draft.subject || '(No subject)'));
+			titleWrap.appendChild(textNode('div', 'small text-muted', 'Draft reply'));
+			header.appendChild(titleWrap);
+			header.appendChild(textNode('small', 'text-muted text-nowrap', formatDateTime(draft.updatedAt)));
+			card.appendChild(header);
+
+			appendMeta(card, 'To', listSummary(draft.to, '(no recipients)'));
+			appendMeta(card, 'Cc', listSummary(draft.cc, ''));
+			card.appendChild(textNode('div', 'small text-muted mb-1', 'Body'));
+			card.appendChild(renderBodyText(draft.body_text || draft.body_html || ''));
+
+			var badge = textNode('span', 'badge ecc-detail-draft-badge mt-3', draft.status || 'draft');
+			card.appendChild(badge);
+			detailDraftEl.appendChild(card);
+		}
+
+		function renderThreadMessage(email, options) {
+			var item = document.createElement('div');
+			item.className = 'list-group-item ecc-detail-message';
+			var dateText = formatDateTime(email.createdAt || email.updatedAt);
+			if (options?.hideRepeatedHeader) {
+				if (dateText) item.appendChild(textNode('small', 'd-block text-muted text-end mb-2', dateText));
+			} else {
+				var header = document.createElement('div');
+				header.className = 'd-flex align-items-start gap-3 mb-3';
+				header.classList.add('justify-content-between');
+				var titleWrap = document.createElement('div');
+				titleWrap.className = 'min-w-0';
+				titleWrap.appendChild(textNode('h6', 'mb-1 text-truncate', email.subject || '(No subject)'));
+				titleWrap.appendChild(textNode('div', 'small text-muted text-break', listSummary(email.from, '(unknown sender)')));
+				header.appendChild(titleWrap);
+				header.appendChild(textNode('small', 'text-muted text-nowrap', dateText));
+				item.appendChild(header);
+			}
+
+			appendMeta(item, 'To', listSummary(email.to, '(no recipients)'));
+			appendMeta(item, 'Cc', listSummary(email.cc, ''));
+			item.appendChild(renderEmailBody(email));
+			return item;
+		}
+
+		function renderEmailDetail(email, thread, draft) {
+			var messages = Array.isArray(thread) ? thread : [];
+			var selected = email || messages[0] || null;
+			if (detailTitle) detailTitle.textContent = selected?.subject || '(No subject)';
+			if (detailSubtitle) {
+				detailSubtitle.textContent = selected
+					? listSummary(selected.from, '(unknown sender)')
+					: 'No email found.';
+			}
+			renderDraftDetail(draft || null);
+			if (!detailThreadEl) return;
+			replaceChildren(detailThreadEl);
+			if (!messages.length) {
+				detailThreadEl.appendChild(textNode('div', 'list-group-item text-muted', 'No thread messages found.'));
+				return;
+			}
+			var group = document.createElement('div');
+			group.className = 'list-group';
+			var selectedId = emailId(selected);
+			messages.forEach(function (message) {
+				var messageId = emailId(message);
+				group.appendChild(renderThreadMessage(message, {
+					hideRepeatedHeader: Boolean(selectedId && messageId && selectedId === messageId),
+				}));
+			});
+			detailThreadEl.appendChild(group);
+		}
+
 		function renderEmailItemHtml(email) {
 			var subject = email.subject || '(No subject)';
 			var senders = (email.from || []).slice(0, 2).join(', ') || '(unknown sender)';
 			var recipients = (email.to || []).slice(0, 2).join(', ') || '(no recipients)';
-			var body = (email.triage_summary || email.text_content || email.attachment_text_content || '').slice(0, 180);
+			var body = (email.triage_summary || emailExcerpt(email) || '').slice(0, 180);
 			var actionPoints = (email.triage_action_points || []).slice(0, 2).map(function (item) {
 				return item.text;
 			}).filter(Boolean).join(' - ');
@@ -408,13 +825,13 @@
 		function bindEmailItem(item) {
 			item.addEventListener('click', function (event) {
 				if (event.target.closest('.ecc-email-select-wrap')) return;
-				toggleEmailSelection(item);
+				selectEmail(item.dataset.id || '');
 			});
 			item.addEventListener('keydown', function (event) {
 				if (event.target.closest('.ecc-email-select-wrap')) return;
 				if (event.key === 'Enter' || event.key === ' ') {
 					event.preventDefault();
-					toggleEmailSelection(item);
+					selectEmail(item.dataset.id || '');
 				}
 			});
 			var checkbox = item.querySelector('.ecc-email-select');
@@ -423,6 +840,18 @@
 			});
 			checkbox?.addEventListener('change', function () {
 				setEmailSelected(checkbox, checkbox.checked);
+			});
+		}
+
+		function bindDraftItem(item) {
+			item.addEventListener('click', function () {
+				selectEmail(item.dataset.sourceEmail || '');
+			});
+			item.addEventListener('keydown', function (event) {
+				if (event.key === 'Enter' || event.key === ' ') {
+					event.preventDefault();
+					selectEmail(item.dataset.sourceEmail || '');
+				}
 			});
 		}
 
@@ -437,6 +866,7 @@
 
 	function renderEmails(emails) {
 		if (!listEl) return;
+		showListView();
 		selectedIds.clear();
 		updateActionBar();
 		renderMoveMenu();
@@ -460,6 +890,7 @@
 
 	function renderDrafts(drafts) {
 		if (!listEl) return;
+		showListView();
 		selectedIds.clear();
 		updateActionBar();
 		renderMoveMenu();
@@ -474,7 +905,8 @@
 		listEl.innerHTML = drafts.map(function (draft) {
 			var recipients = (draft.to || []).slice(0, 2).join(', ') || '(no recipients)';
 			var body = (draft.body_text || '').slice(0, 180);
-			return '<div class="list-group-item">'
+			var sourceEmailId = draftSourceEmailId(draft);
+			return '<div class="list-group-item list-group-item-action ecc-email-item" role="button" tabindex="0" data-source-email="' + escapeHtml(sourceEmailId) + '">'
 				+ '<div class="d-flex justify-content-between align-items-start gap-3 min-w-0">'
 				+ '<div class="min-w-0 flex-grow-1">'
 				+ '<div class="fw-semibold text-truncate">' + escapeHtml(draft.subject || '(No subject)') + '</div>'
@@ -486,22 +918,39 @@
 				+ '</div>'
 				+ '</div>';
 		}).join('');
+		listEl.querySelectorAll('.ecc-email-item').forEach(function (button) {
+			bindDraftItem(button);
+		});
 		updateActionBar();
 	}
 
-	async function selectEmail(emailId) {
+	async function selectEmail(id) {
+		if (!id) return;
+		pendingEmailId = id;
+		writeUrlState(id);
+		showDetailLoading(id);
 		try {
-			var res = await api('GET', '/emails/' + emailId);
-			var email = res.email || res;
+			var res = await api('GET', '/emails/' + encodeURIComponent(id) + '/thread?order=desc&include=draft');
+			var thread = res.thread || [];
+			var email = thread.find(function (item) {
+				return emailId(item) === id;
+			}) || thread[0] || null;
+			if (!email) throw new Error('Email not found');
 			selectedEmail = email;
+			pendingEmailId = '';
 			emailAiMessages = [];
 			listEl?.querySelectorAll('.ecc-email-item').forEach(function (item) {
-				var active = item.dataset.id === emailId;
+				var active = item.dataset.id === id || item.dataset.sourceEmail === id;
 				item.classList.toggle('is-active', active);
 			});
+			renderEmailDetail(email, thread, res.draft || null);
 			renderEmailAi(email);
 		} catch (err) {
-			showError('Failed to load email: ' + (err.message || 'Unknown error'));
+			selectedEmail = null;
+			pendingEmailId = '';
+			emailAiMessages = [];
+			renderEmailAi(null);
+			showDetailError(err.message || 'Failed to load email.');
 		}
 	}
 
@@ -513,6 +962,8 @@
 			id: email._id,
 			title: email.subject || '(No subject)',
 			from: email.from || [],
+			html_content: email.html_content || '',
+			html_content_has_remote_images: Boolean(email.html_content_has_remote_images),
 			text_content: [email.text_content, email.attachment_text_content].filter(Boolean).join('\n\n'),
 		});
 	}
@@ -581,6 +1032,7 @@
 
 		async function loadEmails() {
 			if (!listEl) return;
+			showListView();
 			listEl.innerHTML = '<div class="list-group-item text-muted">Loading emails...</div>';
 			selectedIds.clear();
 			updateActionBar();
@@ -748,6 +1200,8 @@
 				completeTriageProgress(result);
 				activeMailbox = 'inbox';
 				activeLabel = '';
+				pendingEmailId = '';
+				writeUrlState('');
 				await loadAll();
 				if ((result.processed || 0) > 0 && !(result.triaged || 0) && (result.errors || []).length) {
 					showError((result.errors[0] || {}).error || 'Inbox triage failed');
@@ -786,8 +1240,17 @@
 		moveMenu = document.getElementById('ecc-move-menu');
 		trashBtn = document.getElementById('ecc-trash-btn');
 		resetTriageBtn = document.getElementById('ecc-reset-triage-btn');
+		viewHeader = document.getElementById('ecc-view-header');
 		viewTitle = document.getElementById('ecc-view-title');
 		viewSubtitle = document.getElementById('ecc-view-subtitle');
+		listWrap = document.getElementById('ecc-list-wrap');
+		detailEl = document.getElementById('ecc-detail');
+		detailBackBtn = document.getElementById('ecc-detail-back-btn');
+		detailOpenBtn = document.getElementById('ecc-detail-open-btn');
+		detailTitle = document.getElementById('ecc-detail-title');
+		detailSubtitle = document.getElementById('ecc-detail-subtitle');
+		detailDraftEl = document.getElementById('ecc-detail-draft');
+		detailThreadEl = document.getElementById('ecc-detail-thread');
 		aiPanel = document.getElementById('ecc-ai-panel');
 		aiSubtitle = document.getElementById('ecc-ai-subtitle');
 		openEmailBtn = document.getElementById('ecc-open-email-btn');
@@ -805,8 +1268,12 @@
 		activeLabel = '';
 		selectedProject = '';
 		selectedEmail = null;
+		detailActive = false;
+		pendingEmailId = '';
 		triageRunId = '';
 		triageProgress = null;
+		applyUrlState();
+		if (projectSelect) projectSelect.value = selectedProject;
 		selectedIds.clear();
 		emailAiMessages = [];
 		renderEmailAi(null);
@@ -817,24 +1284,37 @@
 			button.addEventListener('click', function () {
 				activeMailbox = button.dataset.mailbox || 'inbox';
 				activeLabel = '';
+				pendingEmailId = '';
+				writeUrlState('');
 				loadAll();
 			});
 		});
 		projectSelect?.addEventListener('change', function () {
 			selectedProject = projectSelect.value || '';
+			pendingEmailId = '';
+			writeUrlState('');
 			loadAll();
 		});
 		triageBtn?.addEventListener('click', triageInbox);
-		refreshBtn?.addEventListener('click', loadAll);
+		refreshBtn?.addEventListener('click', function () {
+			var emailIdToRestore = detailActive ? emailId(selectedEmail) : '';
+			loadAll().then(function () {
+				if (emailIdToRestore) selectEmail(emailIdToRestore);
+			});
+		});
 		selectAllBtn?.addEventListener('click', toggleSelectAll);
 		trashBtn?.addEventListener('click', trashSelected);
 		resetTriageBtn?.addEventListener('click', resetSelectedTriage);
 		openEmailBtn?.addEventListener('click', openSelectedEmail);
+		detailBackBtn?.addEventListener('click', backToListView);
+		detailOpenBtn?.addEventListener('click', openSelectedEmail);
 		addWindowListener('item-modal-deleted', onModalDeleted);
 		addWindowListener('email:created', handleEmailSocketEvent);
 		addWindowListener('email:updated', handleEmailSocketEvent);
 		addWindowListener('email:deleted', handleEmailDeleted);
-		loadAll();
+		loadAll().then(function () {
+			if (pendingEmailId) selectEmail(pendingEmailId);
+		});
 	}
 
 	function unmount() {
@@ -857,6 +1337,14 @@
 		resetTriageBtn = null;
 		viewTitle = null;
 		viewSubtitle = null;
+		listWrap = null;
+		detailEl = null;
+		detailBackBtn = null;
+		detailOpenBtn = null;
+		detailTitle = null;
+		detailSubtitle = null;
+		detailDraftEl = null;
+		detailThreadEl = null;
 		aiPanel = null;
 		aiSubtitle = null;
 		openEmailBtn = null;
@@ -874,6 +1362,7 @@
 		aiInputEl = null;
 		aiSendBtn = null;
 		selectedEmail = null;
+		detailActive = false;
 		triageRunId = '';
 		triageProgress = null;
 		selectedIds.clear();

@@ -64,10 +64,11 @@ The route accepts parsed email JSON with normal email fields:
 	"from": "sender@example.com",
 	"subject": "Project update",
 	"text": "Email body text",
+	"html": "<table><tr><td>Email body HTML</td></tr></table>",
 	"message_id": "<message-id@example.com>",
 	"references": "<previous-message@example.com>",
 	"in_reply_to": "<previous-message@example.com>"
 }
 ```
 
-Only text content is stored. If a forwarded email has no plain text body, Kumbukum strips the HTML body and stores the resulting text. Attachments are ignored. Kumbukum rejects forwarded email unless the recipient domain exactly matches `EMAIL_FORWARD_DOMAIN`.
+Kumbukum stores plain text for search and AI, and stores sanitized HTML separately for display. If a forwarded email has no plain text body, Kumbukum strips the HTML body and stores the resulting text fallback. Remote image URLs in stored HTML are blocked by default and can be loaded explicitly in the email viewer. Existing stored emails cannot be backfilled unless they are re-ingested because raw HTML was not stored before this feature. Attachments are ignored. Kumbukum rejects forwarded email unless the recipient domain exactly matches `EMAIL_FORWARD_DOMAIN`.

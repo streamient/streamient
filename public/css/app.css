@@ -424,6 +424,64 @@ small,
 	color: var(--tag-color);
 }
 
+.ecc-detail-card {
+	border: 1px solid var(--bs-border-color);
+	border-radius: 0.5rem;
+	padding: 0.85rem;
+	min-width: 0;
+	overflow: hidden;
+	background: rgba(var(--bs-body-color-rgb), 0.02);
+}
+
+.ecc-detail-draft {
+	border-left: 3px solid var(--bs-primary);
+	background: rgba(var(--bs-primary-rgb), 0.08);
+	color: var(--bs-body-color);
+}
+
+.ecc-detail-draft-badge {
+	border: 1px solid rgba(var(--bs-primary-rgb), 0.35);
+	background: rgba(var(--bs-primary-rgb), 0.14);
+	color: var(--bs-body-color);
+}
+
+.ecc-detail-message {
+	min-width: 0;
+	overflow: hidden;
+}
+
+.ecc-detail-body {
+	max-width: 78ch;
+	overflow-wrap: anywhere;
+	font-size: 0.9rem;
+	line-height: 1.55;
+	color: var(--bs-body-color);
+}
+
+.ecc-detail-body-line {
+	min-height: 1.4em;
+	white-space: pre-wrap;
+}
+
+.ecc-detail-body-line.is-empty {
+	min-height: 0.9rem;
+}
+
+.ecc-detail-body-line.is-meta,
+.ecc-detail-body-line.is-quoted {
+	color: var(--bs-secondary-color);
+	font-size: 0.84rem;
+}
+
+.ecc-detail-html-frame {
+	width: 100%;
+	min-height: 220px;
+	border: 1px solid var(--bs-border-color);
+	border-radius: 0.5rem;
+	background: var(--bs-body-bg);
+	display: block;
+}
+
 .ecc-ai-empty {
 	border: 1px dashed var(--bs-border-color);
 	border-radius: 0.5rem;
@@ -918,6 +976,23 @@ small,
 	display: flex;
 	flex-direction: column;
 	gap: 0.5rem;
+}
+
+#rm-email-html-frame {
+	width: 100%;
+	min-height: 220px;
+	border: 0;
+	background: var(--bs-body-bg);
+	display: block;
+}
+
+#rm-email-text-content {
+	min-height: 220px;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	border: 0;
+	overflow-wrap: anywhere;
 }
 
 .rm-email-thread-item {

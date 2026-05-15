@@ -142,6 +142,64 @@ describe('Email draft API', () => {
 		}
 	});
 
+	it('returns newest-first email thread with active draft', async () => {
+		const root = {
+			_id: { toString: () => '1' },
+			message_id: 'msg-a@example.com',
+			references: ['msg-b@example.com'],
+			subject: 'Root',
+			createdAt: '2026-01-01T10:00:00.000Z',
+		};
+		const parent = {
+			_id: { toString: () => '2' },
+			message_id: 'msg-b@example.com',
+			references: [],
+			subject: 'Parent',
+			createdAt: '2026-01-01T09:00:00.000Z',
+		};
+		const reply = {
+			_id: { toString: () => '3' },
+			message_id: 'msg-c@example.com',
+			references: ['msg-a@example.com'],
+			subject: 'Reply',
+			createdAt: '2026-01-01T11:00:00.000Z',
+		};
+		let draftQuery = null;
+
+		Email.findOne = () => ({
+			lean: async () => root,
+		});
+		Email.find = (query) => ({
+			lean: async () => {
+				const messageId = query?.$or?.[0]?.message_id || query?.$or?.[1]?.references;
+				if (messageId === 'msg-a@example.com') return [root, reply];
+				if (messageId === 'msg-b@example.com') return [parent];
+				return [];
+			},
+		});
+		EmailDraft.findOne = (query) => {
+			draftQuery = query;
+			return {
+				sort: () => ({
+					lean: async () => ({ _id: 'draft-1', source_email: '1', status: 'draft', body_text: 'Reply draft' }),
+				}),
+			};
+		};
+
+		const server = await createServer();
+		try {
+			const response = await request(server, 'GET', '/emails/1/thread?order=desc&include=draft');
+			const json = await readJson(response);
+
+			assert.equal(response.status, 200);
+			assert.deepEqual(json.thread.map((item) => item.message_id), ['msg-c@example.com', 'msg-a@example.com', 'msg-b@example.com']);
+			assert.deepEqual(draftQuery.status, { $ne: 'discarded' });
+			assert.equal(json.draft._id, 'draft-1');
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
 	it('returns email triage status with optional email and draft payloads', async () => {
 		let listQuery = null;
 		let singleQuery = null;

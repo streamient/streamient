@@ -17,6 +17,7 @@ import { getConnectionsForItem, invalidateGraphCache, removeLinksForItem } from 
 import * as audit from './audit_service.js';
 import { chatModelCompletion } from '../modules/llm_client.js';
 import { getAiInstructions } from './byo_ai_service.js';
+import { sanitizeEmailHtml } from '../modules/email_html_sanitizer.js';
 
 const MAX_ATTACHMENT_SIZE = 50 * 1024 * 1024;
 const DEFAULT_EMAIL_LABELS = [
@@ -198,6 +199,14 @@ function normalizeForwardedBodyText(parsed) {
 	return striptags(html, [], ' ').replace(/\s+/g, ' ').trim();
 }
 
+function normalizeHtmlContent(value) {
+	const sanitized = sanitizeEmailHtml(value);
+	return {
+		html_content: sanitized.html,
+		html_content_has_remote_images: sanitized.hasRemoteImages,
+	};
+}
+
 function toBuffer(content, transferEncoding) {
 	if (!content) return null;
 	if (Buffer.isBuffer(content)) return content;
@@ -255,6 +264,7 @@ export async function parseEmailInput(data) {
 			bcc: normalizeRecipientList(parsed.bcc),
 			subject: String(parsed.subject || '').trim(),
 			text_content: normalizeBodyText(parsed),
+			...normalizeHtmlContent(parsed.html),
 			attachment_text_content: await extractAttachmentTextContent(parsed.attachments || []),
 			raw_hash: crypto.createHash('sha256').update(data.raw_email).digest('hex'),
 		};
@@ -275,6 +285,7 @@ export async function parseEmailInput(data) {
 		bcc: normalizeRecipientList(parsed.bcc || getParsedHeaderValue(parsed, 'bcc')),
 		subject: String(parsed.subject || '').trim(),
 		text_content: normalizeBodyText(parsed),
+		...normalizeHtmlContent(parsed.html || parsed.html_content || parsed.body_html),
 		attachment_text_content: await extractAttachmentTextContent(parsed.attachments || []),
 		raw_hash: parsed.raw_hash || '',
 	};
@@ -296,6 +307,7 @@ export function parseForwardedEmailInput(data) {
 		bcc: normalizeRecipientList(parsed.bcc || getParsedHeaderValue(parsed, 'bcc')),
 		subject: String(parsed.subject || getParsedHeaderValue(parsed, 'subject') || '').trim(),
 		text_content: normalizeForwardedBodyText(parsed),
+		...normalizeHtmlContent(parsed.html || parsed.html_content || parsed.body_html),
 		attachment_text_content: '',
 		raw_hash: parsed.raw_hash || '',
 	};
@@ -341,8 +353,13 @@ async function createEmailThreadLinks(email, userId, host_id, options = {}) {
 	if (created && !options.skipSideEffects) invalidateGraphCache(host_id).catch(() => {});
 }
 
+function emitEmailCreatedOrUpdated(host_id, event, email) {
+	emitToTenant(host_id, event, email);
+	emitToTenant(host_id, 'counts:refresh');
+}
+
 async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
-	if (!normalized.subject && !normalized.text_content && !normalized.attachment_text_content) {
+	if (!normalized.subject && !normalized.text_content && !normalized.html_content && !normalized.attachment_text_content) {
 		throw new Error('Email content is empty after normalization');
 	}
 
@@ -372,6 +389,7 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 	};
 
 	let email;
+	let created = false;
 	if (normalized.message_id) {
 		const existing = await Email.findOne({ message_id: normalized.message_id });
 		if (existing && existing.host_id !== host_id) {
@@ -385,14 +403,16 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 			);
 		} else {
 			email = await Email.create(payload);
+			created = true;
 		}
 	} else {
 		email = await Email.create(payload);
+		created = true;
 	}
 
 	await createEmailThreadLinks(email, userId, host_id, { skipSideEffects: ctx.skipSideEffects });
 	if (!ctx.skipSideEffects) {
-		emitToTenant(host_id, 'email:created', email);
+		emitEmailCreatedOrUpdated(host_id, created ? 'email:created' : 'email:updated', email);
 		invalidateGraphCache(host_id).catch(() => {});
 		audit.log({ action: 'create', resource: 'email', resource_id: email._id.toString(), user_id: userId, host_id, ...ctx });
 		removeDocument(host_id, 'emails', email._id.toString()).catch((err) => console.error('Typesense remove error:', err.message));
@@ -630,6 +650,11 @@ export async function updateEmail(host_id, emailId, data, ctx = {}) {
 	const update = {};
 	if (data.subject !== undefined) update.subject = data.subject;
 	if (data.text_content !== undefined) update.text_content = data.text_content;
+	if (data.html_content !== undefined || data.html !== undefined || data.body_html !== undefined) {
+		const sanitized = normalizeHtmlContent(data.html_content ?? data.html ?? data.body_html);
+		update.html_content = sanitized.html_content;
+		update.html_content_has_remote_images = sanitized.html_content_has_remote_images;
+	}
 	if (data.from !== undefined) update.from = normalizeRecipientList(data.from);
 	if (data.to !== undefined) update.to = normalizeRecipientList(data.to);
 	if (data.cc !== undefined) update.cc = normalizeRecipientList(data.cc);
@@ -733,6 +758,7 @@ export async function deleteEmail(host_id, emailId, ctx = {}) {
 		removeDocument(host_id, 'emails', emailId).catch((err) => console.error('Typesense remove error:', err.message));
 		removeLinksForItem(host_id, emailId).catch((err) => console.error('Remove links error:', err.message));
 		emitToTenant(host_id, 'email:deleted', { _id: emailId });
+		emitToTenant(host_id, 'counts:refresh');
 		invalidateGraphCache(host_id).catch(() => {});
 		if (ctx.user_id) audit.log({ action: 'delete', resource: 'email', resource_id: emailId, host_id, ...ctx });
 	}
@@ -1328,7 +1354,13 @@ export async function updateEmailDraft(host_id, draftId, data, ctx = {}) {
 	return draft;
 }
 
-export async function getEmailThread(host_id, emailId) {
+function emailThreadSortTime(email) {
+	const value = email.createdAt || email.updatedAt;
+	const time = value ? new Date(value).getTime() : 0;
+	return Number.isFinite(time) ? time : 0;
+}
+
+export async function getEmailThread(host_id, emailId, { order = 'asc' } = {}) {
 	const root = await Email.findOne({ _id: emailId, host_id, in_trash: { $ne: true } }).lean();
 	if (!root) return [];
 
@@ -1377,5 +1409,20 @@ export async function getEmailThread(host_id, emailId) {
 		}
 	}
 
-	return threadDocs.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+	return threadDocs.sort((a, b) => {
+		const delta = emailThreadSortTime(a) - emailThreadSortTime(b);
+		return order === 'desc' ? -delta : delta;
+	});
+}
+
+export async function getEmailThreadDraft(host_id, thread = []) {
+	const sourceIds = thread.map((email) => stringifyObjectId(email._id)).filter(Boolean);
+	if (!sourceIds.length) return null;
+	return EmailDraft.findOne({
+		host_id,
+		source_email: { $in: sourceIds },
+		status: { $ne: 'discarded' },
+	})
+		.sort({ updatedAt: -1 })
+		.lean();
 }

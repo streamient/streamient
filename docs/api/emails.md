@@ -2,6 +2,39 @@
 
 Email endpoints require the email feature and normal API authentication.
 
+## Ingest
+
+```http
+POST /api/v1/emails
+```
+
+Send either `raw_email` or a mailparser-like `parsed_email`. HTML bodies are accepted from `html`, `html_content`, or `body_html`, sanitized before storage, and returned as `html_content`.
+
+Remote image URLs in stored HTML are rewritten to `data-kk-remote-src` and flagged with `html_content_has_remote_images`. Existing emails cannot be backfilled unless they are re-ingested because raw HTML was not stored before this feature.
+
+```json
+{
+	"project": "optional-project-id",
+	"parsed_email": {
+		"from": "sender@example.com",
+		"to": "team@example.com",
+		"subject": "Project update",
+		"text": "Plain text fallback",
+		"html": "<table><tr><td>HTML body</td></tr></table>"
+	}
+}
+```
+
+## Read
+
+```http
+GET /api/v1/emails
+GET /api/v1/emails/:id
+GET /api/v1/emails/:id/thread
+```
+
+Email read responses include sanitized `html_content`, `html_content_has_remote_images`, and `excerpt`. The excerpt is derived from visible HTML when available and strips parser control lines such as reply-above markers.
+
 ## Triage status
 
 Use triage status endpoints when an external system only needs classification state, routing action, and optional embedded message/draft data.

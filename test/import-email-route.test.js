@@ -112,6 +112,8 @@ describe('Email forwarding import route', () => {
 			assert.equal(response.status, 200);
 			assert.deepEqual(json, { accepted: true, email_id: 'email-2' });
 			assert.equal(createdPayload.text_content, 'Hello HTML Only');
+			assert.match(createdPayload.html_content, /<p>Hello <strong>HTML<\/strong><\/p><p>Only<\/p>/);
+			assert.equal(createdPayload.html_content_has_remote_images, false);
 			assert.equal(createdPayload.attachment_text_content, '');
 		} finally {
 			await new Promise((resolve) => server.close(resolve));

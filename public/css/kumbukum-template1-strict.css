@@ -783,6 +783,29 @@ body.kk-template1 #rm-email-thread {
   flex-direction: column;
   gap: 0.5rem;
 }
+body.kk-template1 #rm-email-html-frame {
+  width: 100%;
+  min-height: 220px;
+  border: 0;
+  background: #0f141b;
+  display: block;
+}
+body.kk-template1 .ecc-detail-html-frame {
+  width: 100%;
+  min-height: 220px;
+  border: 1px solid #2a386d !important;
+  border-radius: 0.5rem;
+  background: #0f141b;
+  display: block;
+}
+body.kk-template1 #rm-email-text-content {
+  min-height: 220px;
+  background: transparent;
+  color: inherit !important;
+  font: inherit;
+  border: 0;
+  overflow-wrap: anywhere;
+}
 body.kk-template1 .rm-email-thread-item {
   width: 100%;
   padding: 0.7rem 0.8rem;
