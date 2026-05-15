@@ -162,6 +162,27 @@ function normalizeRecipientList(value) {
 	return [];
 }
 
+const DRAFT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function normalizeDraftRecipientList(value, fieldName) {
+	const recipients = [...new Set(normalizeRecipientList(value))];
+	const invalid = recipients.filter((recipient) => !DRAFT_EMAIL_RE.test(recipient));
+	if (invalid.length) throw new Error(`${fieldName} contains invalid email address`);
+	return recipients;
+}
+
+function normalizeDraftHtml(value) {
+	return sanitizeEmailHtml(value).html.slice(0, 20000);
+}
+
+function textFromDraftHtml(value) {
+	return striptags(String(value || ''))
+		.replace(/\u00a0/g, ' ')
+		.replace(/[ \t]+\n/g, '\n')
+		.replace(/\n{3,}/g, '\n\n')
+		.trim();
+}
+
 function normalizeSlug(value) {
 	return String(value || '')
 		.trim()
@@ -1253,9 +1274,13 @@ export async function useEmailReplySuggestion(host_id, emailId, data = {}, ctx =
 	const email = await Email.findOne({ _id: emailId, host_id, in_trash: false }).lean();
 	if (!email) return null;
 
-	const bodyText = String(data.body_text || data.text || data.body || '').trim().slice(0, 12000);
+	const bodyHtml = data.body_html !== undefined || data.html !== undefined ? normalizeDraftHtml(data.body_html ?? data.html) : '';
+	const bodyText = String(data.body_text || data.text || data.body || textFromDraftHtml(bodyHtml)).trim().slice(0, 12000);
 	if (!bodyText) throw new Error('body_text required');
 	const subject = String(data.subject || '').trim().slice(0, 300) || `Re: ${email.subject || '(No subject)'}`;
+	const to = data.to !== undefined ? normalizeDraftRecipientList(data.to, 'to') : (email.from || []);
+	const cc = data.cc !== undefined ? normalizeDraftRecipientList(data.cc, 'cc') : [];
+	const bcc = data.bcc !== undefined ? normalizeDraftRecipientList(data.bcc, 'bcc') : [];
 	const before = ctx.user_id
 		? await EmailDraft.findOne({ source_email: email._id, host_id, generated_by_triage: false, status: { $ne: 'discarded' } }).sort({ updatedAt: -1 }).lean()
 		: null;
@@ -1264,12 +1289,12 @@ export async function useEmailReplySuggestion(host_id, emailId, data = {}, ctx =
 		{
 			$set: {
 				from: (email.to || [])[0] || '',
-				to: email.from || [],
-				cc: [],
-				bcc: [],
+				to,
+				cc,
+				bcc,
 				subject,
 				body_text: bodyText,
-				body_html: '',
+				body_html: bodyHtml,
 				status: 'draft',
 				confidence: null,
 				project: email.project,
@@ -1860,12 +1885,15 @@ export async function getEmailDraft(host_id, draftId) {
 
 export async function updateEmailDraft(host_id, draftId, data, ctx = {}) {
 	const update = {};
-	if (data.to !== undefined) update.to = normalizeRecipientList(data.to);
-	if (data.cc !== undefined) update.cc = normalizeRecipientList(data.cc);
-	if (data.bcc !== undefined) update.bcc = normalizeRecipientList(data.bcc);
+	if (data.to !== undefined) update.to = normalizeDraftRecipientList(data.to, 'to');
+	if (data.cc !== undefined) update.cc = normalizeDraftRecipientList(data.cc, 'cc');
+	if (data.bcc !== undefined) update.bcc = normalizeDraftRecipientList(data.bcc, 'bcc');
 	if (data.subject !== undefined) update.subject = String(data.subject || '').trim();
 	if (data.body_text !== undefined) update.body_text = String(data.body_text || '');
-	if (data.body_html !== undefined) update.body_html = String(data.body_html || '');
+	if (data.body_html !== undefined) {
+		update.body_html = normalizeDraftHtml(data.body_html);
+		if (data.body_text === undefined) update.body_text = textFromDraftHtml(update.body_html);
+	}
 	if (data.status !== undefined && ['draft', 'ready', 'discarded'].includes(data.status)) update.status = data.status;
 	if (Object.keys(update).length === 0) return getEmailDraft(host_id, draftId);
 

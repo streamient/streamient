@@ -24,6 +24,7 @@
 	var detailDate;
 	var detailDraftEl;
 	var detailThreadEl;
+	var internalNotesEl;
 	var aiPanel;
 	var aiSubtitle;
 	var openEmailBtn;
@@ -49,6 +50,9 @@
 	var selectedIds = new Set();
 	var emailAiMessages = [];
 	var emailReplySuggestions = [];
+	var currentDraft = null;
+	var draftEditor = null;
+	var noteEditor = null;
 	var windowListeners = [];
 	var triageRunId = '';
 	var triageProgress = null;
@@ -106,6 +110,25 @@
 			if (className) node.className = className;
 			node.textContent = text || '';
 			return node;
+		}
+
+		function plainTextToHtml(value) {
+			var text = String(value || '').trim();
+			if (!text) return '';
+			return text.split(/\n{2,}/).map(function (paragraph) {
+				return '<p>' + escapeHtml(paragraph).replace(/\n/g, '<br>') + '</p>';
+			}).join('');
+		}
+
+		function listToInputValue(items) {
+			return (items || []).filter(Boolean).join(', ');
+		}
+
+		function inputValueToList(value) {
+			return String(value || '')
+				.split(',')
+				.map(function (item) { return item.trim(); })
+				.filter(Boolean);
 		}
 
 		function listSummary(items, fallback) {
@@ -746,6 +769,9 @@
 
 		function showListView() {
 			detailActive = false;
+			destroyDraftEditor();
+			destroyNoteEditor();
+			internalNotesEl?.classList.add('d-none');
 			viewHeader?.classList.remove('d-none');
 			listWrap?.classList.remove('d-none');
 			detailEl?.classList.add('d-none');
@@ -781,6 +807,7 @@
 				replaceChildren(detailThreadEl);
 				detailThreadEl.appendChild(textNode('div', 'list-group-item text-muted', 'Loading thread.'));
 			}
+			renderInternalNotesPanel(null);
 		}
 
 		function currentEmailAiScope() {
@@ -826,12 +853,84 @@
 				replaceChildren(detailThreadEl);
 				detailThreadEl.appendChild(textNode('div', 'list-group-item text-danger', message || 'Failed to load email.'));
 			}
+			renderInternalNotesPanel(null);
+		}
+
+		function destroyDraftEditor() {
+			if (draftEditor) {
+				draftEditor.destroy();
+				draftEditor = null;
+			}
+		}
+
+		function destroyNoteEditor() {
+			if (noteEditor) {
+				noteEditor.destroy();
+				noteEditor = null;
+			}
+		}
+
+		function initEmailEditor(container, content, placeholder) {
+			container.innerHTML = '';
+			if (window.KumbukumEditor?.createEmailEditor) {
+				return window.KumbukumEditor.createEmailEditor(container, { content: content || '', placeholder: placeholder || 'Write...' });
+			}
+			var fallback = document.createElement('div');
+			fallback.className = 'form-control form-control-sm';
+			fallback.contentEditable = 'true';
+			fallback.innerHTML = content || '';
+			container.appendChild(fallback);
+			return {
+				getHTML: function () { return fallback.innerHTML; },
+				getText: function () { return fallback.textContent || ''; },
+				commands: {
+					setContent: function (nextContent) { fallback.innerHTML = nextContent || ''; },
+				},
+				destroy: function () {},
+			};
+		}
+
+		function draftEditorContent(draft) {
+			return draft?.body_html || plainTextToHtml(draft?.body_text || '');
+		}
+
+		function draftPayloadFromForm(card) {
+			return {
+				to: inputValueToList(card.querySelector('.ecc-draft-to')?.value),
+				cc: inputValueToList(card.querySelector('.ecc-draft-cc')?.value),
+				bcc: inputValueToList(card.querySelector('.ecc-draft-bcc')?.value),
+				subject: card.querySelector('.ecc-draft-subject')?.value || '',
+				body_html: draftEditor?.getHTML?.() || '',
+				body_text: draftEditor?.getText?.() || '',
+				status: 'draft',
+			};
+		}
+
+		async function saveDraftFromCard(card, draft) {
+			if (!selectedEmail || !card) return;
+			var button = card.querySelector('.ecc-draft-save');
+			if (button) button.disabled = true;
+			try {
+				var payload = draftPayloadFromForm(card);
+				var res = draft?._id
+					? await api('PUT', '/email-drafts/' + encodeURIComponent(draft._id), payload)
+					: await api('POST', '/emails/' + encodeURIComponent(selectedEmail._id) + '/draft-reply', payload);
+				currentDraft = res.draft || null;
+				renderDraftDetail(currentDraft);
+				showSuccess('Draft saved');
+				if (activeMailbox === 'drafts') loadLabels().catch(() => {});
+			} catch (err) {
+				showError(err.message || 'Failed to save draft');
+				if (button) button.disabled = false;
+			}
 		}
 
 		function renderDraftDetail(draft) {
 			if (!detailDraftEl) return;
+			destroyDraftEditor();
+			currentDraft = draft || null;
 			replaceChildren(detailDraftEl);
-			if (!draft) return;
+			if (!draft && !selectedEmail) return;
 			var card = document.createElement('div');
 			card.className = 'ecc-detail-card ecc-detail-draft';
 
@@ -839,16 +938,43 @@
 			header.className = 'd-flex justify-content-between align-items-start gap-3 mb-3';
 			var titleWrap = document.createElement('div');
 			titleWrap.className = 'min-w-0';
-			titleWrap.appendChild(textNode('h6', 'mb-1 text-truncate', draft.subject || '(No subject)'));
-			titleWrap.appendChild(textNode('div', 'small text-muted', 'Draft reply'));
+			titleWrap.appendChild(textNode('h6', 'mb-1 text-truncate', draft ? 'Draft reply' : 'New draft reply'));
+			titleWrap.appendChild(textNode('div', 'small text-muted', 'Manual recipients only in this phase.'));
 			header.appendChild(titleWrap);
-			header.appendChild(textNode('small', 'text-muted text-nowrap', formatDateTime(draft.updatedAt)));
+			if (draft?.updatedAt) header.appendChild(textNode('small', 'text-muted text-nowrap', formatDateTime(draft.updatedAt)));
 			card.appendChild(header);
 
-			card.appendChild(renderBodyText(draft.body_text || draft.body_html || ''));
+			var fields = document.createElement('div');
+			fields.className = 'ecc-draft-fields';
+			fields.innerHTML = ''
+				+ '<div class="mb-2"><label class="form-label small mb-1">To</label><input type="text" class="form-control form-control-sm ecc-draft-to"></div>'
+				+ '<div class="row g-2 mb-2">'
+				+ '<div class="col-md-6"><label class="form-label small mb-1">Cc</label><input type="text" class="form-control form-control-sm ecc-draft-cc"></div>'
+				+ '<div class="col-md-6"><label class="form-label small mb-1">Bcc</label><input type="text" class="form-control form-control-sm ecc-draft-bcc"></div>'
+				+ '</div>'
+				+ '<div class="mb-2"><label class="form-label small mb-1">Subject</label><input type="text" class="form-control form-control-sm ecc-draft-subject"></div>'
+				+ '<div class="mb-3"><label class="form-label small mb-1">Message</label><div class="ecc-draft-editor"></div></div>';
+			card.appendChild(fields);
 
-			var badge = textNode('span', 'badge ecc-detail-draft-badge mt-3', draft.status || 'draft');
-			card.appendChild(badge);
+			fields.querySelector('.ecc-draft-to').value = listToInputValue(draft?.to || []);
+			fields.querySelector('.ecc-draft-cc').value = listToInputValue(draft?.cc || []);
+			fields.querySelector('.ecc-draft-bcc').value = listToInputValue(draft?.bcc || []);
+			fields.querySelector('.ecc-draft-subject').value = draft?.subject || (selectedEmail?.subject ? 'Re: ' + selectedEmail.subject : '');
+			draftEditor = initEmailEditor(fields.querySelector('.ecc-draft-editor'), draftEditorContent(draft), 'Write a reply...');
+
+			var footer = document.createElement('div');
+			footer.className = 'd-flex justify-content-between align-items-center gap-3';
+			footer.appendChild(textNode('span', 'badge ecc-detail-draft-badge', draft?.status || 'draft'));
+			var actions = document.createElement('div');
+			actions.className = 'd-flex gap-2';
+			var saveButton = textNode('button', 'btn btn-primary btn-sm ecc-draft-save', 'Save draft');
+			saveButton.type = 'button';
+			actions.appendChild(saveButton);
+			footer.appendChild(actions);
+			card.appendChild(footer);
+			saveButton.addEventListener('click', function () {
+				saveDraftFromCard(card, currentDraft);
+			});
 			detailDraftEl.appendChild(card);
 		}
 
@@ -900,6 +1026,82 @@
 				}));
 			});
 			detailThreadEl.appendChild(group);
+			renderInternalNotesPanel(selected);
+		}
+
+		function renderInternalNoteList(notes) {
+			var list = internalNotesEl?.querySelector('.ecc-internal-notes-list');
+			if (!list) return;
+			if (!notes.length) {
+				list.innerHTML = '<div class="text-muted small">No internal notes yet.</div>';
+				return;
+			}
+			list.innerHTML = notes.map(function (note) {
+				var owner = note.owner?.name || note.owner?.email || 'Team member';
+				var date = formatDateTime(note.createdAt);
+				var content = note.content || plainTextToHtml(note.text_content || '');
+				return '<div class="ecc-internal-note">'
+					+ '<div class="d-flex justify-content-between gap-2 mb-1">'
+					+ '<span class="small fw-semibold text-truncate">' + escapeHtml(owner) + '</span>'
+					+ '<time class="small text-muted text-nowrap">' + escapeHtml(date) + '</time>'
+					+ '</div>'
+					+ '<div class="ecc-internal-note-body">' + content + '</div>'
+					+ '</div>';
+			}).join('');
+		}
+
+		async function loadInternalNotes(email) {
+			if (!internalNotesEl || !email?._id) return;
+			var list = internalNotesEl.querySelector('.ecc-internal-notes-list');
+			if (list) list.innerHTML = '<div class="text-muted small">Loading notes...</div>';
+			try {
+				var res = await api('GET', '/emails/' + encodeURIComponent(email._id) + '/internal-notes');
+				renderInternalNoteList(res.notes || []);
+			} catch (err) {
+				if (list) list.innerHTML = '<div class="text-danger small">' + escapeHtml(err.message || 'Failed to load notes') + '</div>';
+			}
+		}
+
+		function renderInternalNotesPanel(email) {
+			if (!internalNotesEl) return;
+			destroyNoteEditor();
+			if (!email?._id) {
+				internalNotesEl.classList.add('d-none');
+				internalNotesEl.innerHTML = '';
+				return;
+			}
+			internalNotesEl.classList.remove('d-none');
+			internalNotesEl.innerHTML = ''
+				+ '<div class="d-flex justify-content-between align-items-center gap-2 mb-3">'
+				+ '<h6 class="mb-0">Internal notes</h6>'
+				+ '<span class="badge text-bg-light">Private</span>'
+				+ '</div>'
+				+ '<div class="ecc-internal-notes-list mb-3"></div>'
+				+ '<div class="ecc-internal-note-editor mb-2"></div>'
+				+ '<div class="d-flex justify-content-end">'
+				+ '<button type="button" class="btn btn-primary btn-sm ecc-internal-note-save">Add note</button>'
+				+ '</div>';
+			noteEditor = initEmailEditor(internalNotesEl.querySelector('.ecc-internal-note-editor'), '', 'Add an internal note...');
+			internalNotesEl.querySelector('.ecc-internal-note-save')?.addEventListener('click', async function (event) {
+				var button = event.currentTarget;
+				var payload = {
+					content: noteEditor?.getHTML?.() || '',
+					text_content: noteEditor?.getText?.() || '',
+				};
+				if (!payload.text_content.trim()) return;
+				button.disabled = true;
+				try {
+					await api('POST', '/emails/' + encodeURIComponent(email._id) + '/internal-notes', payload);
+					noteEditor?.commands?.setContent?.('');
+					await loadInternalNotes(email);
+					showSuccess('Internal note added');
+				} catch (err) {
+					showError(err.message || 'Failed to add internal note');
+				} finally {
+					button.disabled = false;
+				}
+			});
+			loadInternalNotes(email);
 		}
 
 		function renderEmailItemHtml(email) {
@@ -1414,6 +1616,7 @@
 		detailDate = document.getElementById('ecc-detail-date');
 		detailDraftEl = document.getElementById('ecc-detail-draft');
 		detailThreadEl = document.getElementById('ecc-detail-thread');
+		internalNotesEl = document.getElementById('ecc-internal-notes');
 		aiPanel = document.getElementById('ecc-ai-panel');
 		aiSubtitle = document.getElementById('ecc-ai-subtitle');
 		openEmailBtn = document.getElementById('ecc-open-email-btn');
@@ -1507,6 +1710,7 @@
 		detailDate = null;
 		detailDraftEl = null;
 		detailThreadEl = null;
+		internalNotesEl = null;
 		aiPanel = null;
 		aiSubtitle = null;
 		openEmailBtn = null;
@@ -1525,6 +1729,9 @@
 		aiSendBtn = null;
 		selectedEmail = null;
 		detailActive = false;
+		currentDraft = null;
+		destroyDraftEditor();
+		destroyNoteEditor();
 		triageRunId = '';
 		triageProgress = null;
 		selectedIds.clear();

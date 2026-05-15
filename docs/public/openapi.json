@@ -710,6 +710,45 @@
           }
         }
       },
+      "EmailInternalNote": {
+        "type": "object",
+        "properties": {
+          "_id": {
+            "type": "string"
+          },
+          "source_email": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "owner": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object"
+              }
+            ]
+          },
+          "content": {
+            "type": "string",
+            "description": "Sanitized internal note HTML. Never included in outbound email content."
+          },
+          "text_content": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "EmailIdentity": {
         "type": "object",
         "properties": {
@@ -3634,6 +3673,128 @@
         }
       }
     },
+    "/emails/{id}/internal-notes": {
+      "get": {
+        "tags": [
+          "Emails"
+        ],
+        "summary": "List internal notes for an email thread",
+        "description": "Returns private team notes for the selected email thread. Internal notes are never included in outbound email content.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "notes": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/EmailInternalNote"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Emails"
+        ],
+        "summary": "Create an internal email note",
+        "description": "Stores a private team note against the selected email thread. The note is not sent to the email sender.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "type": "string",
+                    "description": "Sanitized before storage."
+                  },
+                  "text_content": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "note": {
+                      "$ref": "#/components/schemas/EmailInternalNote"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/emails/{id}/ai": {
       "post": {
         "tags": [
@@ -3866,8 +4027,31 @@
                   "subject": {
                     "type": "string"
                   },
+                  "to": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Manual recipients for this phase. No recipient fetching or autocomplete is performed."
+                  },
+                  "cc": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "bcc": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "body_text": {
                     "type": "string"
+                  },
+                  "body_html": {
+                    "type": "string",
+                    "description": "Sanitized before storage."
                   }
                 }
               }

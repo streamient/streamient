@@ -13,6 +13,7 @@ import { detectFileType } from '../modules/file_detect.js';
 import * as memoryService from '../services/memory_service.js';
 import * as urlService from '../services/url_service.js';
 import * as emailIngestService from '../services/email_ingest_service.js';
+import * as emailInternalNoteService from '../services/email_internal_note_service.js';
 import { searchKnowledge, aiChatSearch, processChat, processChatStream } from '../services/ai_chat_service.js';
 import { listConversations, deleteConversation } from '../modules/typesense.js';
 import * as trashService from '../services/trash_service.js';
@@ -456,6 +457,22 @@ router.get('/emails/:id/thread', requireEmailFeatureAccess, async (req, res) => 
 	res.json(payload);
 });
 
+router.get('/emails/:id/internal-notes', requireEmailFeatureAccess, async (req, res) => {
+	const notes = await emailInternalNoteService.listEmailInternalNotes(req.host_id, req.params.id);
+	if (!notes) return res.status(404).json({ error: 'Email not found' });
+	res.json({ notes });
+});
+
+router.post('/emails/:id/internal-notes', requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const note = await emailInternalNoteService.createEmailInternalNote(req.userId, req.host_id, req.params.id, req.body || {}, auditCtx(req));
+		if (!note) return res.status(404).json({ error: 'Email not found' });
+		res.status(201).json({ note });
+	} catch (err) {
+		res.status(400).json({ error: err.message || 'Internal note failed' });
+	}
+});
+
 router.post('/emails/:id/ai', requireEmailFeatureAccess, async (req, res) => {
 	try {
 		const result = await emailIngestService.askEmailAi(req.host_id, req.params.id, req.body?.query);
@@ -563,9 +580,13 @@ router.get('/email-drafts/:id', requireEmailFeatureAccess, async (req, res) => {
 });
 
 router.put('/email-drafts/:id', requireEmailFeatureAccess, async (req, res) => {
-	const draft = await emailIngestService.updateEmailDraft(req.host_id, req.params.id, req.body || {}, auditCtx(req));
-	if (!draft) return res.status(404).json({ error: 'Email draft not found' });
-	res.json({ draft });
+	try {
+		const draft = await emailIngestService.updateEmailDraft(req.host_id, req.params.id, req.body || {}, auditCtx(req));
+		if (!draft) return res.status(404).json({ error: 'Email draft not found' });
+		res.json({ draft });
+	} catch (err) {
+		res.status(400).json({ error: err.message || 'Email draft update failed' });
+	}
 });
 
 // ---- URLs ----

@@ -5,6 +5,7 @@ import { Memory } from '../model/memory.js';
 import { Url } from '../model/url.js';
 import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
+import { EmailInternalNote } from '../model/email_internal_note.js';
 import { EmailIdentity } from '../model/email_identity.js';
 import { Project } from '../model/project.js';
 import { GraphLink } from '../model/graph_link.js';
@@ -71,6 +72,7 @@ export async function deleteTenantData(hostId, tenantId = null, deps = {}) {
 		Url,
 			Email,
 			EmailDraft,
+			EmailInternalNote,
 			EmailIdentity,
 			Project,
 		GraphLink,
@@ -110,6 +112,7 @@ export async function deleteTenantData(hostId, tenantId = null, deps = {}) {
 		models.Url.deleteMany({ host_id: hostId }),
 			models.Email.deleteMany({ host_id: hostId }),
 			models.EmailDraft.deleteMany({ host_id: hostId }),
+			models.EmailInternalNote.deleteMany({ host_id: hostId }),
 			models.EmailIdentity.deleteMany({ host_id: hostId }),
 			models.Project.deleteMany({ host_id: hostId }),
 		models.GraphLink.deleteMany({ host_id: hostId }),

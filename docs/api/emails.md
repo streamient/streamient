@@ -31,9 +31,13 @@ Remote image URLs in stored HTML are rewritten to `data-kk-remote-src` and flagg
 GET /api/v1/emails
 GET /api/v1/emails/:id
 GET /api/v1/emails/:id/thread
+GET /api/v1/emails/:id/internal-notes
+POST /api/v1/emails/:id/internal-notes
 ```
 
 Email read responses include sanitized `html_content`, `html_content_has_remote_images`, and `excerpt`. The excerpt is derived from visible HTML when available and strips parser control lines such as reply-above markers.
+
+Internal notes are private team notes for the email thread. They are stored separately from email drafts and are never included in outbound email content.
 
 ## Email AI
 
@@ -73,6 +77,8 @@ Response:
 ```
 
 Use `/emails/:id/ai` for questions about one selected email. It includes retrieved Kumbukum context by searching the selected email's project first, then all projects only when no project records are found. Use `/emails/:id/summarize` to generate and save `triage_summary`, `/emails/:id/suggest-replies` to return two structured reply choices with the same project-first context lookup, and `/emails/:id/draft-reply` to turn one choice into a draft.
+
+Draft updates accept manually entered recipient arrays in `to`, `cc`, and `bcc`, plus `subject`, `body_text`, and sanitized `body_html`. Recipient lookup, autocomplete, and default recipient fetching are not part of this phase.
 
 ## Triage status
 

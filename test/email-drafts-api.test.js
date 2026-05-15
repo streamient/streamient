@@ -7,6 +7,7 @@ import { User } from '../model/user.js';
 import { TenantMember } from '../model/tenant_member.js';
 import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
+import { EmailInternalNote } from '../model/email_internal_note.js';
 
 async function createServer() {
 	const { default: apiRoutes } = await import(`../routes/api.js?email_drafts_test=${Date.now()}_${Math.random()}`);
@@ -50,6 +51,8 @@ describe('Email draft API', () => {
 	const originalDraftFind = EmailDraft.find;
 	const originalDraftFindOne = EmailDraft.findOne;
 	const originalDraftFindOneAndUpdate = EmailDraft.findOneAndUpdate;
+	const originalInternalNoteFind = EmailInternalNote.find;
+	const originalInternalNoteCreate = EmailInternalNote.create;
 
 	beforeEach(() => {
 		config.isHosted = false;
@@ -89,6 +92,8 @@ describe('Email draft API', () => {
 		EmailDraft.find = originalDraftFind;
 		EmailDraft.findOne = originalDraftFindOne;
 		EmailDraft.findOneAndUpdate = originalDraftFindOneAndUpdate;
+		EmailInternalNote.find = originalInternalNoteFind;
+		EmailInternalNote.create = originalInternalNoteCreate;
 	});
 
 	it('lists and updates email drafts', async () => {
@@ -129,14 +134,127 @@ describe('Email draft API', () => {
 			const updateResponse = await request(server, 'PUT', '/email-drafts/507f1f77bcf86cd799439099', {
 				status: 'ready',
 				body_text: 'Updated draft',
+				body_html: '<p><strong>Updated draft</strong><script>alert(1)</script></p>',
+				to: 'Customer <customer@example.com>, second@example.com',
+				cc: '',
+				bcc: ['hidden@example.com'],
 			});
 			const updateJson = await readJson(updateResponse);
 
 			assert.equal(updateResponse.status, 200);
 			assert.equal(updatePayload.query._id, '507f1f77bcf86cd799439099');
 			assert.equal(updatePayload.query.host_id, 'host-1');
+			assert.deepEqual(updatePayload.update.$set.to, ['customer@example.com', 'second@example.com']);
+			assert.deepEqual(updatePayload.update.$set.cc, []);
+			assert.deepEqual(updatePayload.update.$set.bcc, ['hidden@example.com']);
+			assert.equal(updatePayload.update.$set.body_html, '<p><strong>Updated draft</strong></p>');
 			assert.equal(updateJson.draft.status, 'ready');
 			assert.equal(updateJson.draft.body_text, 'Updated draft');
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
+	it('rejects invalid manual draft recipients', async () => {
+		EmailDraft.findOneAndUpdate = () => {
+			throw new Error('should not update invalid recipients');
+		};
+
+		const server = await createServer();
+		try {
+			const response = await request(server, 'PUT', '/email-drafts/507f1f77bcf86cd799439099', {
+				to: 'not-an-email',
+				body_text: 'Hello',
+			});
+			const json = await readJson(response);
+
+			assert.equal(response.status, 400);
+			assert.match(json.error, /to contains invalid email address/);
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
+	it('stores internal email notes separately from draft payloads', async () => {
+		const root = {
+			_id: { toString: () => 'email-1' },
+			message_id: 'msg-a@example.com',
+			references: [],
+			project: 'project-1',
+			owner: '507f1f77bcf86cd799439011',
+			host_id: 'host-1',
+		};
+		let noteFindQuery = null;
+		let notePayload = null;
+		let draftUpdate = null;
+
+		Email.findOne = () => ({
+			lean: async () => root,
+		});
+		Email.find = () => ({
+			lean: async () => [root],
+		});
+		EmailInternalNote.find = (query) => {
+			noteFindQuery = query;
+			return {
+				populate: () => ({
+					sort: () => ({
+						lean: async () => [{
+							_id: 'note-1',
+							content: '<p>Private note</p>',
+							text_content: 'Private note',
+							owner: { name: 'Nitai' },
+						}],
+					}),
+				}),
+			};
+		};
+		EmailInternalNote.create = async (payload) => {
+			notePayload = payload;
+			return {
+				_id: { toString: () => 'note-1' },
+				...payload,
+				populate: async () => ({ _id: 'note-1', ...payload, owner: { name: 'Nitai' } }),
+			};
+		};
+		EmailDraft.findOne = () => ({
+			lean: async () => ({ _id: '507f1f77bcf86cd799439099', status: 'draft' }),
+		});
+		EmailDraft.findOneAndUpdate = (query, update) => {
+			draftUpdate = update.$set;
+			return {
+				lean: async () => ({ _id: query._id, ...update.$set }),
+			};
+		};
+
+		const server = await createServer();
+		try {
+			const createResponse = await request(server, 'POST', '/emails/email-1/internal-notes', {
+				content: '<p>Private note</p>',
+				text_content: 'Private note',
+			});
+			const createJson = await readJson(createResponse);
+
+			assert.equal(createResponse.status, 201);
+			assert.equal(notePayload.host_id, 'host-1');
+			assert.equal(notePayload.source_email, root._id);
+			assert.equal(notePayload.content, '<p>Private note</p>');
+			assert.equal(createJson.note.text_content, 'Private note');
+
+			const listResponse = await request(server, 'GET', '/emails/email-1/internal-notes');
+			const listJson = await readJson(listResponse);
+
+			assert.equal(listResponse.status, 200);
+			assert.deepEqual(noteFindQuery.source_email.$in, ['email-1']);
+			assert.equal(listJson.notes[0].text_content, 'Private note');
+
+			await request(server, 'PUT', '/email-drafts/507f1f77bcf86cd799439099', {
+				to: 'customer@example.com',
+				body_text: 'Customer reply',
+			});
+			assert.equal(draftUpdate.text_content, undefined);
+			assert.equal(draftUpdate.content, undefined);
+			assert.equal(draftUpdate.body_text, 'Customer reply');
 		} finally {
 			await new Promise((resolve) => server.close(resolve));
 		}

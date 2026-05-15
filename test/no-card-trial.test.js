@@ -232,6 +232,7 @@ describe('no-card trial tenant cleanup', () => {
 				'Url',
 					'Email',
 					'EmailDraft',
+					'EmailInternalNote',
 					'EmailIdentity',
 					'Project',
 			'GraphLink',
@@ -293,6 +294,7 @@ describe('no-card trial tenant cleanup', () => {
 		});
 
 		assert.equal(calls.Email.host_id, 'host-1');
+		assert.equal(calls.EmailInternalNote.host_id, 'host-1');
 		assert.equal(calls.GraphLink.host_id, 'host-1');
 		assert.equal(calls.OAuthRefreshToken.host_id, 'host-1');
 		assert.deepEqual(calls.UserPasskey.user.$in, ['user-1']);
