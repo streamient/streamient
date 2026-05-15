@@ -564,6 +564,7 @@ small,
 }
 
 .ecc-detail-message {
+	border: 0;
 	min-width: 0;
 	overflow: hidden;
 }
@@ -594,8 +595,8 @@ small,
 .ecc-detail-html-frame {
 	width: 100%;
 	min-height: 220px;
-	border: 1px solid var(--bs-border-color);
-	border-radius: 0.5rem;
+	border: 0;
+	border-radius: 0;
 	background: var(--bs-body-bg);
 	display: block;
 }

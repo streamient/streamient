@@ -214,6 +214,9 @@ body.kk-template1 #main-content .preview-container{
 body.kk-template1 #main-content .list-group-item + .list-group-item {
   margin-top: 6px;
 }
+body.kk-template1 #main-content .ecc-detail-message {
+  border: 0 !important;
+}
 body.kk-template1 #main-content .list-group-item strong {
   color: #c8d2f0;
   font-weight: 600;
@@ -845,8 +848,8 @@ body.kk-template1 #rm-email-html-frame {
 body.kk-template1 .ecc-detail-html-frame {
   width: 100%;
   min-height: 220px;
-  border: 1px solid #2a386d !important;
-  border-radius: 0.5rem;
+  border: 0 !important;
+  border-radius: 0;
   background: #0f141b;
   display: block;
 }
