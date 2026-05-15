@@ -549,6 +549,8 @@ function bindProjectEmailIdentityForm(bodyEl, projectId) {
 	var form = bodyEl.querySelector('#project-email-identity-form');
 	var cancelBtn = bodyEl.querySelector('#project-email-identity-cancel');
 	if (!formWrap || !form) return;
+	var formHomeParent = formWrap.parentNode;
+	var formHomeNextSibling = formWrap.nextSibling;
 
 	function field(id) {
 		return bodyEl.querySelector(id);
@@ -558,7 +560,23 @@ function bindProjectEmailIdentityForm(bodyEl, projectId) {
 		return value === true || value === 'true' || value === '1' || value === 'on';
 	}
 
-	function showIdentityForm(identity) {
+	function placeIdentityForm(row) {
+		var divider = field('#project-email-identity-form-wrap .project-email-identity-form-divider');
+		if (row) {
+			row.insertAdjacentElement('afterend', formWrap);
+			formWrap.classList.add('list-group-item');
+			divider?.classList.add('d-none');
+			return;
+		}
+		formWrap.classList.remove('list-group-item');
+		divider?.classList.remove('d-none');
+		if (formHomeParent && formWrap.parentNode !== formHomeParent) {
+			formHomeParent.insertBefore(formWrap, formHomeNextSibling);
+		}
+	}
+
+	function showIdentityForm(identity, row) {
+		placeIdentityForm(row);
 		var isEdit = Boolean(identity?.id);
 		field('#project-email-identity-id').value = identity?.id || '';
 		field('#project-email-identity-name').value = identity?.name || '';
@@ -579,18 +597,19 @@ function bindProjectEmailIdentityForm(bodyEl, projectId) {
 		field('#project-email-identity-name')?.focus();
 	}
 
-	function toggleIdentityForm(identity) {
+	function toggleIdentityForm(identity, row) {
 		if (!formWrap.classList.contains('d-none') && field('#project-email-identity-id').value === identity?.id) {
 			hideIdentityForm();
 			return;
 		}
-		showIdentityForm(identity);
+		showIdentityForm(identity, row);
 	}
 
 	function hideIdentityForm() {
 		form.reset();
 		field('#project-email-identity-id').value = '';
 		formWrap.classList.add('d-none');
+		placeIdentityForm(null);
 	}
 
 	addBtn?.addEventListener('click', function () {
@@ -601,19 +620,20 @@ function bindProjectEmailIdentityForm(bodyEl, projectId) {
 
 	bodyEl.querySelectorAll('.project-email-identity-row').forEach(function (row) {
 		row.addEventListener('click', function () {
-			toggleIdentityForm(row.dataset);
+			toggleIdentityForm(row.dataset, row);
 		});
 		row.addEventListener('keydown', function (e) {
 			if (e.key !== 'Enter' && e.key !== ' ') return;
 			e.preventDefault();
-			toggleIdentityForm(row.dataset);
+			toggleIdentityForm(row.dataset, row);
 		});
 	});
 
 	bodyEl.querySelectorAll('.project-email-identity-edit').forEach(function (button) {
 		button.addEventListener('click', function (e) {
 			e.stopPropagation();
-			toggleIdentityForm(button.closest('.project-email-identity-row')?.dataset || button.dataset);
+			var row = button.closest('.project-email-identity-row');
+			toggleIdentityForm(row?.dataset || button.dataset, row);
 		});
 	});
 
