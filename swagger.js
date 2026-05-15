@@ -247,6 +247,25 @@ const swaggerSpec = {
 	                    updatedAt: { type: 'string', format: 'date-time' },
 	                },
 	            },
+	            EmailInternalNote: {
+	                type: 'object',
+	                properties: {
+	                    _id: { type: 'string' },
+	                    source_email: { type: 'string' },
+	                    project: { type: 'string' },
+	                    owner: {
+	                        oneOf: [
+	                            { type: 'string' },
+	                            { type: 'object' },
+	                        ],
+	                    },
+	                    parent_note: { type: 'string', nullable: true },
+	                    content: { type: 'string', description: 'Sanitized internal note HTML. Never included in outbound email content.' },
+	                    text_content: { type: 'string' },
+	                    createdAt: { type: 'string', format: 'date-time' },
+	                    updatedAt: { type: 'string', format: 'date-time' },
+	                },
+	            },
 	            EmailDraft: {
 	                type: 'object',
 	                properties: {
@@ -1262,6 +1281,66 @@ const swaggerSpec = {
                 ],
                 responses: {
                     200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { thread: { type: 'array', items: { $ref: '#/components/schemas/Email' } }, draft: { $ref: '#/components/schemas/EmailDraft', nullable: true } } } } } },
+                },
+            },
+        },
+        '/emails/{id}/internal-notes': {
+            get: {
+                tags: ['Emails'],
+                summary: 'List internal notes for an email thread',
+                description: 'Returns private team notes for the selected email thread. Internal notes are never included in outbound email content.',
+                parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+                responses: {
+                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { notes: { type: 'array', items: { $ref: '#/components/schemas/EmailInternalNote' } } } } } } },
+                    404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+                },
+            },
+            post: {
+                tags: ['Emails'],
+                summary: 'Create an internal email note',
+                description: 'Stores a private team note or threaded reply against the selected email thread. The note is not sent to the email sender.',
+                parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+                requestBody: {
+                    required: true,
+                    content: { 'application/json': { schema: { type: 'object', properties: { content: { type: 'string', description: 'Sanitized before storage.' }, text_content: { type: 'string' }, parent_note: { type: 'string', nullable: true } } } } },
+                },
+                responses: {
+                    201: { description: 'Created', content: { 'application/json': { schema: { type: 'object', properties: { note: { $ref: '#/components/schemas/EmailInternalNote' } } } } } },
+                    400: { description: 'Bad request', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+                    404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+                },
+            },
+        },
+        '/emails/{id}/internal-notes/{noteId}': {
+            put: {
+                tags: ['Emails'],
+                summary: 'Update an internal email note',
+                parameters: [
+                    { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+                    { name: 'noteId', in: 'path', required: true, schema: { type: 'string' } },
+                ],
+                requestBody: {
+                    required: true,
+                    content: { 'application/json': { schema: { type: 'object', properties: { content: { type: 'string', description: 'Sanitized before storage.' }, text_content: { type: 'string' } } } } },
+                },
+                responses: {
+                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { note: { $ref: '#/components/schemas/EmailInternalNote' } } } } } },
+                    400: { description: 'Bad request', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+                    404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+                },
+            },
+            delete: {
+                tags: ['Emails'],
+                summary: 'Delete an internal email note',
+                description: 'Deletes an internal note only when it has no replies.',
+                parameters: [
+                    { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+                    { name: 'noteId', in: 'path', required: true, schema: { type: 'string' } },
+                ],
+                responses: {
+                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { message: { type: 'string' } } } } } },
+                    400: { description: 'Bad request', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+                    404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
                 },
             },
         },

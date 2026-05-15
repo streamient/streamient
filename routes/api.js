@@ -473,6 +473,26 @@ router.post('/emails/:id/internal-notes', requireEmailFeatureAccess, async (req,
 	}
 });
 
+router.put('/emails/:id/internal-notes/:noteId', requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const note = await emailInternalNoteService.updateEmailInternalNote(req.host_id, req.params.id, req.params.noteId, req.body || {}, auditCtx(req));
+		if (!note) return res.status(404).json({ error: 'Internal note not found' });
+		res.json({ note });
+	} catch (err) {
+		res.status(400).json({ error: err.message || 'Internal note update failed' });
+	}
+});
+
+router.delete('/emails/:id/internal-notes/:noteId', requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const note = await emailInternalNoteService.deleteEmailInternalNote(req.host_id, req.params.id, req.params.noteId, auditCtx(req), req.query.client_request_id);
+		if (!note) return res.status(404).json({ error: 'Internal note not found' });
+		res.json({ message: 'Internal note deleted' });
+	} catch (err) {
+		res.status(400).json({ error: err.message || 'Internal note delete failed' });
+	}
+});
+
 router.post('/emails/:id/ai', requireEmailFeatureAccess, async (req, res) => {
 	try {
 		const result = await emailIngestService.askEmailAi(req.host_id, req.params.id, req.body?.query);

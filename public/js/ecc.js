@@ -54,9 +54,14 @@
 	var draftEditor = null;
 	var draftEditorHost = null;
 	var noteEditor = null;
+	var noteEditorHost = null;
+	var currentInternalNotes = [];
+	var selectedEmailThreadSourceIds = [];
+	var pendingInternalNoteSocketEvents = [];
 	var windowListeners = [];
 	var triageRunId = '';
 	var triageProgress = null;
+	var INTERNAL_NOTE_PREVIEW_LIMIT = 150;
 	var MAILBOX_ACTIONS = [
 		{ slug: 'inbox', name: 'Inbox', icon: 'email' },
 		{ slug: 'archived', name: 'Archived', icon: 'archive' },
@@ -536,6 +541,8 @@
 		if (!email) {
 			if (aiSubtitle) aiSubtitle.textContent = 'No email active.';
 			openEmailBtn?.classList.add('d-none');
+			internalNotesEl = null;
+			currentInternalNotes = [];
 			renderEmailListAi();
 			return;
 		}
@@ -551,6 +558,17 @@
 				? '<p class="mb-3">' + escapeHtml(summary) + '</p>'
 				: '<button type="button" class="btn btn-outline-primary btn-sm mb-3" id="ecc-email-summarize">Summarize email</button>')
 			+ (labels ? '<div>' + labels + '</div>' : '')
+			+ '</div>'
+			+ '<div class="ecc-ai-section ecc-internal-notes" data-ecc-internal-notes>'
+			+ '<div class="d-flex justify-content-between align-items-center gap-2 mb-3">'
+			+ '<div class="d-flex align-items-center gap-2 min-w-0">'
+			+ '<h6 class="mb-0">Internal notes</h6>'
+			+ '<span class="badge text-bg-light">Private</span>'
+			+ '</div>'
+			+ '<button type="button" class="btn btn-outline-primary btn-sm ecc-internal-note-open">Add note</button>'
+			+ '</div>'
+			+ '<div class="ecc-internal-note-editor d-none mb-3"></div>'
+			+ '<div class="ecc-internal-notes-list"></div>'
 			+ '</div>'
 			+ '<div class="ecc-ai-section">'
 			+ '<div class="d-flex justify-content-between align-items-center gap-2 mb-3">'
@@ -573,9 +591,14 @@
 			+ '</div>'
 			+ '</div>'
 			+ '</div>';
+		internalNotesEl = aiPanel.querySelector('[data-ecc-internal-notes]');
 		aiMessagesEl = document.getElementById('ecc-email-ai-messages');
 		aiInputEl = document.getElementById('ecc-email-ai-input');
 		aiSendBtn = document.getElementById('ecc-email-ai-send');
+		internalNotesEl?.querySelector('.ecc-internal-note-open')?.addEventListener('click', function () {
+			openInternalNoteEditor(email, { mode: 'add' });
+		});
+		loadInternalNotes(email);
 		renderEmailAiMessages();
 		renderReplySuggestions();
 		document.getElementById('ecc-email-summarize')?.addEventListener('click', summarizeSelectedEmail);
@@ -884,10 +907,211 @@
 				noteEditor.destroy();
 				noteEditor = null;
 			}
-			var noteEditorEl = internalNotesEl?.querySelector('.ecc-internal-note-editor');
-			if (noteEditorEl) {
+			if (noteEditorHost) {
+				noteEditorHost.innerHTML = '';
+				noteEditorHost.classList.add('d-none');
+				noteEditorHost = null;
+				return;
+			}
+			var noteEditorEls = internalNotesEl?.querySelectorAll('.ecc-internal-note-editor, .ecc-internal-note-inline-editor') || [];
+			noteEditorEls.forEach(function (noteEditorEl) {
 				noteEditorEl.innerHTML = '';
 				noteEditorEl.classList.add('d-none');
+			});
+		}
+
+		function resetNoteEditorHosts() {
+			var noteEditorEls = internalNotesEl?.querySelectorAll('.ecc-internal-note-editor, .ecc-internal-note-inline-editor') || [];
+			noteEditorEls.forEach(function (noteEditorEl) {
+				noteEditorEl.innerHTML = '';
+				noteEditorEl.classList.add('d-none');
+			});
+			noteEditorHost = null;
+		}
+
+		function objectIdValue(value) {
+			return String(value?._id || value || '');
+		}
+
+		function internalNoteId(note) {
+			return objectIdValue(note?._id || note?.id);
+		}
+
+		function internalNoteParentId(note) {
+			return objectIdValue(note?.parent_note);
+		}
+
+		function internalNoteOwner(note) {
+			return note?.owner?.name || note?.owner?.email || 'Team member';
+		}
+
+		function internalNoteContent(note) {
+			return note?.content || plainTextToHtml(note?.text_content || '');
+		}
+
+		function internalNotePreview(note) {
+			var text = String(note?.text_content || '').trim();
+			if (!text) text = String(note?.content || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+			return text.length > INTERNAL_NOTE_PREVIEW_LIMIT
+				? text.slice(0, INTERNAL_NOTE_PREVIEW_LIMIT).trim() + '...'
+				: text;
+		}
+
+		function internalNoteIsLong(note) {
+			return String(note?.text_content || '').trim().length > INTERNAL_NOTE_PREVIEW_LIMIT;
+		}
+
+		function internalNoteTime(note) {
+			var time = new Date(note?.createdAt || note?.updatedAt || 0).getTime();
+			return Number.isFinite(time) ? time : 0;
+		}
+
+		function groupInternalNotes(notes) {
+			var byId = new Map();
+			var roots = [];
+			(notes || []).forEach(function (note) {
+				note._children = [];
+				byId.set(internalNoteId(note), note);
+			});
+			(notes || []).forEach(function (note) {
+				var parentId = internalNoteParentId(note);
+				var parent = parentId ? byId.get(parentId) : null;
+				if (parent) {
+					parent._children.push(note);
+				} else {
+					roots.push(note);
+				}
+			});
+			byId.forEach(function (note) {
+				note._children.sort(function (a, b) {
+					return internalNoteTime(a) - internalNoteTime(b);
+				});
+			});
+			roots.sort(function (a, b) {
+				return internalNoteTime(b) - internalNoteTime(a);
+			});
+			return roots;
+		}
+
+		function suppressNextInternalNoteSocket(eventName, detail) {
+			pendingInternalNoteSocketEvents.push({
+				eventName: eventName,
+				client_request_id: String(detail?.client_request_id || ''),
+				source_email: String(detail?.source_email || ''),
+				parent_note: String(detail?.parent_note || ''),
+				expiresAt: Date.now() + 3000,
+			});
+		}
+
+		function consumeSuppressedInternalNoteSocket(eventName, detail) {
+			var now = Date.now();
+			pendingInternalNoteSocketEvents = pendingInternalNoteSocketEvents.filter(function (item) {
+				return item.expiresAt > now;
+			});
+			var index = pendingInternalNoteSocketEvents.findIndex(function (item) {
+				if (item.client_request_id && item.client_request_id === String(detail?.client_request_id || '')) return item.eventName === eventName;
+				return item.eventName === eventName
+					&& (!item.source_email || item.source_email === String(detail?.source_email || ''))
+					&& (!item.parent_note || item.parent_note === String(detail?.parent_note || ''));
+			});
+			if (index < 0) return false;
+			pendingInternalNoteSocketEvents.splice(index, 1);
+			return true;
+		}
+
+		function internalNoteClientRequestId() {
+			if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+			return String(Date.now()) + '-' + Math.random().toString(36).slice(2);
+		}
+
+		function eventAffectsSelectedThread(detail) {
+			if (!selectedEmail?._id || !detail) return false;
+			var sourceIds = Array.isArray(detail.thread_source_ids) ? detail.thread_source_ids.map(String) : [];
+			var selectedIds = selectedEmailThreadSourceIds.length ? selectedEmailThreadSourceIds : [emailId(selectedEmail)];
+			if (sourceIds.some(function (sourceId) { return selectedIds.includes(sourceId); })) return true;
+			return selectedIds.includes(String(detail.source_email || ''));
+		}
+
+		function handleInternalNoteSocketEvent(event) {
+			var detail = event.detail || {};
+			if (consumeSuppressedInternalNoteSocket(event.type, detail)) return;
+			if (!detailActive || !eventAffectsSelectedThread(detail)) return;
+			loadInternalNotes(selectedEmail);
+		}
+
+		function bindInternalNoteActions(email) {
+			if (!internalNotesEl || !email?._id) return;
+			internalNotesEl.querySelectorAll('.ecc-internal-note-toggle').forEach(function (button) {
+				button.addEventListener('click', function () {
+					var noteEl = button.closest('.ecc-internal-note');
+					var expanded = noteEl?.classList.toggle('is-expanded');
+					button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+				});
+			});
+			internalNotesEl.querySelectorAll('.ecc-internal-note-reply').forEach(function (button) {
+				button.addEventListener('click', function () {
+					var note = currentInternalNotes.find(function (item) { return internalNoteId(item) === button.dataset.noteId; });
+					openInternalNoteEditor(email, { mode: 'reply', parentNoteId: button.dataset.noteId, note: note });
+				});
+			});
+			internalNotesEl.querySelectorAll('.ecc-internal-note-edit').forEach(function (button) {
+				button.addEventListener('click', function () {
+					var note = currentInternalNotes.find(function (item) { return internalNoteId(item) === button.dataset.noteId; });
+					if (note) openInternalNoteEditor(email, { mode: 'edit', note: note });
+				});
+			});
+			internalNotesEl.querySelectorAll('.ecc-internal-note-delete').forEach(function (button) {
+				button.addEventListener('click', function () {
+					deleteInternalNote(email, button.dataset.noteId);
+				});
+			});
+		}
+
+		function renderInternalNote(note, email, depth) {
+			var id = internalNoteId(note);
+			var children = note._children || [];
+			var hasReplies = children.length > 0;
+			var isLong = internalNoteIsLong(note);
+			var depthClass = depth > 0 ? ' ecc-internal-note-reply-item' : '';
+			return '<div class="ecc-internal-note' + depthClass + '" data-note-id="' + escapeHtml(id) + '">'
+				+ '<div class="d-flex justify-content-between gap-2 ecc-internal-note-meta mb-1">'
+				+ '<span class="fw-semibold text-truncate">' + escapeHtml(internalNoteOwner(note)) + '</span>'
+				+ '<time class="text-muted text-nowrap">' + escapeHtml(formatDateTime(note.createdAt)) + '</time>'
+				+ '</div>'
+				+ '<div class="ecc-internal-note-preview">' + escapeHtml(internalNotePreview(note)) + '</div>'
+				+ '<div class="ecc-internal-note-body">' + internalNoteContent(note) + '</div>'
+				+ (isLong
+					? '<button type="button" class="btn btn-link btn-sm p-0 ecc-internal-note-toggle" aria-expanded="false">'
+						+ kkIcon('arrow_drop_down', 'me-1')
+						+ '<span>read more</span>'
+						+ '</button>'
+					: '')
+				+ '<div class="d-flex align-items-center gap-3 mt-2 ecc-internal-note-actions">'
+				+ '<button type="button" class="btn btn-link btn-sm p-0 ecc-internal-note-reply" data-note-id="' + escapeHtml(id) + '">Reply</button>'
+				+ '<button type="button" class="btn btn-link btn-sm p-0 ecc-internal-note-edit" data-note-id="' + escapeHtml(id) + '">Edit</button>'
+				+ (hasReplies ? '' : '<button type="button" class="btn btn-link btn-sm p-0 text-danger ecc-internal-note-delete" data-note-id="' + escapeHtml(id) + '">Delete</button>')
+				+ '</div>'
+				+ '<div class="ecc-internal-note-inline-editor d-none mt-2" data-note-editor-host="' + escapeHtml(id) + '"></div>'
+				+ (children.length
+					? '<div class="ecc-internal-note-replies">' + children.map(function (child) {
+						return renderInternalNote(child, email, depth + 1);
+					}).join('') + '</div>'
+					: '')
+				+ '</div>';
+		}
+
+		async function deleteInternalNote(email, noteId) {
+			if (!email?._id || !noteId) return;
+			var confirmed = await confirmAction('Delete internal note', 'This internal note will be deleted.');
+			if (!confirmed) return;
+			var clientRequestId = internalNoteClientRequestId();
+			suppressNextInternalNoteSocket('email-internal-note:deleted', { client_request_id: clientRequestId });
+			try {
+				await api('DELETE', '/emails/' + encodeURIComponent(email._id) + '/internal-notes/' + encodeURIComponent(noteId) + '?client_request_id=' + encodeURIComponent(clientRequestId));
+				await loadInternalNotes(email);
+				showSuccess('Internal note deleted');
+			} catch (err) {
+				showError(err.message || 'Failed to delete internal note');
 			}
 		}
 
@@ -1060,28 +1284,21 @@
 				}));
 			});
 			detailThreadEl.appendChild(group);
-			renderInternalNotesPanel(selected);
 		}
 
 		function renderInternalNoteList(notes) {
 			var list = internalNotesEl?.querySelector('.ecc-internal-notes-list');
 			if (!list) return;
+			currentInternalNotes = notes || [];
+			destroyNoteEditor();
 			if (!notes.length) {
 				list.innerHTML = '<div class="text-muted small">No internal notes yet.</div>';
 				return;
 			}
-			list.innerHTML = notes.map(function (note) {
-				var owner = note.owner?.name || note.owner?.email || 'Team member';
-				var date = formatDateTime(note.createdAt);
-				var content = note.content || plainTextToHtml(note.text_content || '');
-				return '<div class="ecc-internal-note">'
-					+ '<div class="d-flex justify-content-between gap-2 mb-1">'
-					+ '<span class="small fw-semibold text-truncate">' + escapeHtml(owner) + '</span>'
-					+ '<time class="small text-muted text-nowrap">' + escapeHtml(date) + '</time>'
-					+ '</div>'
-					+ '<div class="ecc-internal-note-body">' + content + '</div>'
-					+ '</div>';
+			list.innerHTML = groupInternalNotes(notes).map(function (note) {
+				return renderInternalNote(note, selectedEmail, 0);
 			}).join('');
+			bindInternalNoteActions(selectedEmail);
 		}
 
 		async function loadInternalNotes(email) {
@@ -1096,19 +1313,28 @@
 			}
 		}
 
-		function openInternalNoteEditor(email) {
+		function openInternalNoteEditor(email, options) {
 			if (!internalNotesEl || !email?._id) return;
+			var mode = options?.mode || 'add';
+			var note = options?.note || null;
+			var noteId = internalNoteId(note);
 			destroyNoteEditor();
-			var noteEditorEl = internalNotesEl.querySelector('.ecc-internal-note-editor');
+			resetNoteEditorHosts();
+			var noteEditorEl = mode === 'add'
+				? internalNotesEl.querySelector('.ecc-internal-note-editor')
+				: internalNotesEl.querySelector('[data-note-editor-host="' + CSS.escape(mode === 'edit' ? noteId : options?.parentNoteId) + '"]');
 			if (!noteEditorEl) return;
+			noteEditorHost = noteEditorEl;
 			noteEditorEl.classList.remove('d-none');
+			var saveText = mode === 'reply' ? 'Save reply' : (mode === 'edit' ? 'Save changes' : 'Save note');
+			var placeholder = mode === 'reply' ? 'Write a reply...' : (mode === 'edit' ? 'Edit internal note...' : 'Add an internal note...');
 			noteEditorEl.innerHTML = ''
 				+ '<div class="ecc-internal-note-editor-body mb-2"></div>'
 				+ '<div class="d-flex justify-content-end gap-2">'
 				+ '<button type="button" class="btn btn-outline-secondary btn-sm ecc-internal-note-cancel">Cancel</button>'
-				+ '<button type="button" class="btn btn-primary btn-sm ecc-internal-note-save">Save note</button>'
+				+ '<button type="button" class="btn btn-primary btn-sm ecc-internal-note-save">' + saveText + '</button>'
 				+ '</div>';
-			noteEditor = initEmailEditor(noteEditorEl.querySelector('.ecc-internal-note-editor-body'), '', 'Add an internal note...');
+			noteEditor = initEmailEditor(noteEditorEl.querySelector('.ecc-internal-note-editor-body'), mode === 'edit' ? internalNoteContent(note) : '', placeholder);
 			noteEditorEl.querySelector('.ecc-internal-note-cancel')?.addEventListener('click', destroyNoteEditor);
 			noteEditorEl.querySelector('.ecc-internal-note-save')?.addEventListener('click', async function (event) {
 				var button = event.currentTarget;
@@ -1116,15 +1342,24 @@
 					content: noteEditor?.getHTML?.() || '',
 					text_content: noteEditor?.getText?.() || '',
 				};
+				var clientRequestId = internalNoteClientRequestId();
+				payload.client_request_id = clientRequestId;
+				if (mode === 'reply') payload.parent_note = options?.parentNoteId || '';
 				if (!payload.text_content.trim()) return;
 				button.disabled = true;
 				try {
-					await api('POST', '/emails/' + encodeURIComponent(email._id) + '/internal-notes', payload);
+					if (mode === 'edit') {
+						suppressNextInternalNoteSocket('email-internal-note:updated', { client_request_id: clientRequestId });
+						await api('PUT', '/emails/' + encodeURIComponent(email._id) + '/internal-notes/' + encodeURIComponent(noteId), payload);
+					} else {
+						suppressNextInternalNoteSocket('email-internal-note:created', { client_request_id: clientRequestId });
+						await api('POST', '/emails/' + encodeURIComponent(email._id) + '/internal-notes', payload);
+					}
 					destroyNoteEditor();
 					await loadInternalNotes(email);
-					showSuccess('Internal note added');
+					showSuccess(mode === 'edit' ? 'Internal note updated' : 'Internal note added');
 				} catch (err) {
-					showError(err.message || 'Failed to add internal note');
+					showError(err.message || 'Failed to save internal note');
 					button.disabled = false;
 				}
 			});
@@ -1150,7 +1385,7 @@
 				+ '<div class="ecc-internal-note-editor d-none mb-3"></div>'
 				+ '<div class="ecc-internal-notes-list"></div>';
 			internalNotesEl.querySelector('.ecc-internal-note-open')?.addEventListener('click', function () {
-				openInternalNoteEditor(email);
+				openInternalNoteEditor(email, { mode: 'add' });
 			});
 			loadInternalNotes(email);
 		}
@@ -1346,6 +1581,9 @@
 		try {
 			var res = await api('GET', '/emails/' + encodeURIComponent(id) + '/thread?order=desc&include=draft');
 			var thread = res.thread || [];
+			selectedEmailThreadSourceIds = thread.map(function (item) {
+				return emailId(item);
+			}).filter(Boolean);
 			var email = thread.find(function (item) {
 				return emailId(item) === id;
 			}) || thread[0] || null;
@@ -1362,6 +1600,7 @@
 			renderEmailAi(email);
 		} catch (err) {
 			selectedEmail = null;
+			selectedEmailThreadSourceIds = [];
 			pendingEmailId = '';
 			emailAiMessages = [];
 			emailReplySuggestions = [];
@@ -1728,6 +1967,9 @@
 		addWindowListener('email:created', handleEmailSocketEvent);
 		addWindowListener('email:updated', handleEmailSocketEvent);
 		addWindowListener('email:deleted', handleEmailDeleted);
+		addWindowListener('email-internal-note:created', handleInternalNoteSocketEvent);
+		addWindowListener('email-internal-note:updated', handleInternalNoteSocketEvent);
+		addWindowListener('email-internal-note:deleted', handleInternalNoteSocketEvent);
 		loadAll().then(function () {
 			if (pendingEmailId) selectEmail(pendingEmailId);
 		});

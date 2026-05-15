@@ -52,7 +52,11 @@ describe('Email draft API', () => {
 	const originalDraftFindOne = EmailDraft.findOne;
 	const originalDraftFindOneAndUpdate = EmailDraft.findOneAndUpdate;
 	const originalInternalNoteFind = EmailInternalNote.find;
+	const originalInternalNoteFindOne = EmailInternalNote.findOne;
 	const originalInternalNoteCreate = EmailInternalNote.create;
+	const originalInternalNoteFindOneAndUpdate = EmailInternalNote.findOneAndUpdate;
+	const originalInternalNoteFindOneAndDelete = EmailInternalNote.findOneAndDelete;
+	const originalInternalNoteCountDocuments = EmailInternalNote.countDocuments;
 
 	beforeEach(() => {
 		config.isHosted = false;
@@ -93,7 +97,11 @@ describe('Email draft API', () => {
 		EmailDraft.findOne = originalDraftFindOne;
 		EmailDraft.findOneAndUpdate = originalDraftFindOneAndUpdate;
 		EmailInternalNote.find = originalInternalNoteFind;
+		EmailInternalNote.findOne = originalInternalNoteFindOne;
 		EmailInternalNote.create = originalInternalNoteCreate;
+		EmailInternalNote.findOneAndUpdate = originalInternalNoteFindOneAndUpdate;
+		EmailInternalNote.findOneAndDelete = originalInternalNoteFindOneAndDelete;
+		EmailInternalNote.countDocuments = originalInternalNoteCountDocuments;
 	});
 
 	it('lists and updates email drafts', async () => {
@@ -255,6 +263,128 @@ describe('Email draft API', () => {
 			assert.equal(draftUpdate.text_content, undefined);
 			assert.equal(draftUpdate.content, undefined);
 			assert.equal(draftUpdate.body_text, 'Customer reply');
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
+	it('threads, edits, and deletes internal email notes', async () => {
+		const root = {
+			_id: { toString: () => 'email-1' },
+			message_id: 'msg-a@example.com',
+			references: [],
+			project: 'project-1',
+			owner: '507f1f77bcf86cd799439011',
+			host_id: 'host-1',
+		};
+		const replyEmail = {
+			_id: { toString: () => 'email-2' },
+			message_id: 'msg-b@example.com',
+			references: ['msg-a@example.com'],
+			project: 'project-1',
+			owner: '507f1f77bcf86cd799439011',
+			host_id: 'host-1',
+		};
+		const createdPayloads = [];
+		let updatePayload = null;
+		let deleteQuery = null;
+		let replyCount = 0;
+
+		Email.findOne = () => ({
+			lean: async () => root,
+		});
+		Email.find = () => ({
+			lean: async () => [root, replyEmail],
+		});
+		EmailInternalNote.findOne = (query) => ({
+			lean: async () => {
+				if (query._id === 'parent-note') return { _id: 'parent-note', source_email: root._id, host_id: 'host-1' };
+				if (query._id === 'note-edit') return { _id: 'note-edit', content: '<p>Old</p>', text_content: 'Old' };
+				return null;
+			},
+		});
+		EmailInternalNote.create = async (payload) => {
+			createdPayloads.push(payload);
+			return {
+				_id: { toString: () => createdPayloads.length === 1 ? 'root-note' : 'reply-note' },
+				...payload,
+				populate: async () => ({ _id: createdPayloads.length === 1 ? 'root-note' : 'reply-note', ...payload, owner: { name: 'Nitai' } }),
+			};
+		};
+		EmailInternalNote.findOneAndUpdate = (query, update) => {
+			updatePayload = { query, update };
+			return {
+				populate: async () => ({ _id: query._id, ...update.$set, owner: { name: 'Nitai' } }),
+			};
+		};
+		EmailInternalNote.countDocuments = async () => replyCount;
+		EmailInternalNote.findOneAndDelete = async (query) => {
+			deleteQuery = query;
+			return { _id: query._id, source_email: root._id, parent_note: null };
+		};
+
+		const server = await createServer();
+		try {
+			const rootResponse = await request(server, 'POST', '/emails/email-1/internal-notes', {
+				content: '<p>Root note</p>',
+				text_content: 'Root note',
+			});
+			const rootJson = await readJson(rootResponse);
+
+			assert.equal(rootResponse.status, 201);
+			assert.equal(rootJson.note.text_content, 'Root note');
+			assert.equal(createdPayloads[0].parent_note, null);
+
+			const replyResponse = await request(server, 'POST', '/emails/email-1/internal-notes', {
+				content: '<p>Reply note</p>',
+				text_content: 'Reply note',
+				parent_note: 'parent-note',
+				client_request_id: 'client-request-1',
+			});
+			const replyJson = await readJson(replyResponse);
+
+			assert.equal(replyResponse.status, 201);
+			assert.equal(replyJson.note.text_content, 'Reply note');
+			assert.equal(createdPayloads[1].parent_note, 'parent-note');
+			assert.equal(createdPayloads[1].client_request_id, undefined);
+
+			const invalidParentResponse = await request(server, 'POST', '/emails/email-1/internal-notes', {
+				content: '<p>Bad reply</p>',
+				text_content: 'Bad reply',
+				parent_note: 'other-thread-note',
+			});
+			const invalidParentJson = await readJson(invalidParentResponse);
+
+			assert.equal(invalidParentResponse.status, 400);
+			assert.match(invalidParentJson.error, /Parent note not found/);
+
+			const updateResponse = await request(server, 'PUT', '/emails/email-1/internal-notes/note-edit', {
+				content: '<p>Edited note</p>',
+				text_content: 'Edited note',
+			});
+			const updateJson = await readJson(updateResponse);
+
+			assert.equal(updateResponse.status, 200);
+			assert.equal(updatePayload.query._id, 'note-edit');
+			assert.deepEqual(updatePayload.query.source_email.$in, ['email-1', 'email-2']);
+			assert.equal(updatePayload.update.$set.text_content, 'Edited note');
+			assert.equal(updateJson.note.text_content, 'Edited note');
+
+			replyCount = 1;
+			const blockedDeleteResponse = await request(server, 'DELETE', '/emails/email-1/internal-notes/parent-note');
+			const blockedDeleteJson = await readJson(blockedDeleteResponse);
+
+			assert.equal(blockedDeleteResponse.status, 400);
+			assert.match(blockedDeleteJson.error, /replies/);
+
+			replyCount = 0;
+			const deleteResponse = await request(server, 'DELETE', '/emails/email-1/internal-notes/reply-note');
+			const deleteJson = await readJson(deleteResponse);
+
+			assert.equal(deleteResponse.status, 200);
+			assert.equal(deleteJson.message, 'Internal note deleted');
+			assert.equal(deleteQuery._id, 'reply-note');
+			assert.deepEqual(deleteQuery.source_email.$in, ['email-1', 'email-2']);
 		} finally {
 			await new Promise((resolve) => server.close(resolve));
 		}

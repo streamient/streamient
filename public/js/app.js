@@ -880,6 +880,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 			'memory:created', 'memory:updated', 'memory:deleted',
 			'url:created', 'url:updated', 'url:deleted',
 			'email:created', 'email:updated', 'email:deleted',
+			'email-internal-note:created', 'email-internal-note:updated', 'email-internal-note:deleted',
 			'counts:refresh',
 		];
 		for (const evt of crudEvents) {

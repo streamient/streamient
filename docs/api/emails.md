@@ -33,11 +33,13 @@ GET /api/v1/emails/:id
 GET /api/v1/emails/:id/thread
 GET /api/v1/emails/:id/internal-notes
 POST /api/v1/emails/:id/internal-notes
+PUT /api/v1/emails/:id/internal-notes/:noteId
+DELETE /api/v1/emails/:id/internal-notes/:noteId
 ```
 
 Email read responses include sanitized `html_content`, `html_content_has_remote_images`, and `excerpt`. The excerpt is derived from visible HTML when available and strips parser control lines such as reply-above markers.
 
-Internal notes are private team notes for the email thread. They are stored separately from email drafts and are never included in outbound email content.
+Internal notes are private team notes for the email thread. They are stored separately from email drafts and are never included in outbound email content. Notes can be threaded with `parent_note`, edited by tenant team members, and deleted only when they have no replies.
 
 ## Email AI
 
