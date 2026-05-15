@@ -35,6 +35,33 @@ function requireByoAiWebAccess(req, res, next) {
 	return res.redirect(is_hosted ? '/settings/subscription' : '/settings/profile');
 }
 
+function getUsageTotals(projects, counts) {
+	const totals = { notes: 0, memory: 0, urls: 0, emails: 0, projects: projects.length };
+	for (const pc of Object.values(counts || {})) {
+		totals.notes += pc.notes || 0;
+		totals.memory += pc.memory || 0;
+		totals.urls += pc.urls || 0;
+		totals.emails += pc.emails || 0;
+	}
+	return totals;
+}
+
+async function renderUsageSettings(req, res, view) {
+	let counts = {};
+	let usageLoadError = false;
+	try {
+		counts = await getProjectCounts(req.host_id);
+	} catch (err) {
+		console.error('Usage settings counts error:', err);
+		usageLoadError = true;
+	}
+	res.render(view, {
+		title: 'Usage',
+		usageTotals: getUsageTotals(res.locals.projects || [], counts),
+		usageLoadError,
+	});
+}
+
 // Inject user + sidebar data into all views
 router.use(async (req, res, next) => {
 	const [user, projects, tenant] = await Promise.all([
@@ -100,7 +127,7 @@ router.get('/settings/tokens', (req, res) => res.render('settings/tokens', { tit
 router.get('/settings/byo-ai', requireRestrictedSettingsAccess, requireByoAiWebAccess, (req, res) => res.render('settings/byo_ai', { title: 'AI' }));
 router.get('/settings/email', requireRestrictedSettingsAccess, requireByoAiWebAccess, (req, res) => res.render('settings/email', { title: 'Email settings' }));
 router.get('/settings/typesense', requireRestrictedSettingsAccess, (req, res) => res.render('settings/typesense', { title: 'Typesense' }));
-router.get('/settings/usage', (req, res) => res.render('settings/usage', { title: 'Usage' }));
+router.get('/settings/usage', (req, res) => renderUsageSettings(req, res, 'settings/usage'));
 router.get('/settings/export', requireRestrictedSettingsAccess, (req, res) => res.render('settings/export', { title: 'Export' }));
 router.get('/settings/activity-logs', requireRestrictedSettingsAccess, (req, res) => res.render('settings/activity_logs', { title: 'Activity Logs' }));
 if (is_hosted) {
@@ -123,7 +150,7 @@ router.get('/ajax/section/settings/tokens', (req, res) => res.render('ajax/secti
 router.get('/ajax/section/settings/byo-ai', requireRestrictedSettingsAccess, requireByoAiWebAccess, (req, res) => res.render('ajax/section/settings/byo_ai', { title: 'AI' }));
 router.get('/ajax/section/settings/email', requireRestrictedSettingsAccess, requireByoAiWebAccess, (req, res) => res.render('ajax/section/settings/email', { title: 'Email settings' }));
 router.get('/ajax/section/settings/typesense', requireRestrictedSettingsAccess, (req, res) => res.render('ajax/section/settings/typesense', { title: 'Typesense' }));
-router.get('/ajax/section/settings/usage', (req, res) => res.render('ajax/section/settings/usage', { title: 'Usage' }));
+router.get('/ajax/section/settings/usage', (req, res) => renderUsageSettings(req, res, 'ajax/section/settings/usage'));
 router.get('/ajax/section/settings/export', requireRestrictedSettingsAccess, (req, res) => res.render('ajax/section/settings/export', { title: 'Export' }));
 router.get('/ajax/section/settings/activity-logs', requireRestrictedSettingsAccess, (req, res) => res.render('ajax/section/settings/activity_logs', { title: 'Activity Logs' }));
 if (is_hosted) {
