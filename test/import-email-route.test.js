@@ -6,6 +6,8 @@ import config from '../config.js';
 import importRoutes from '../routes/import.js';
 import { Project } from '../model/project.js';
 import { Email } from '../model/email.js';
+import { AuditLog } from '../model/audit_log.js';
+import { Tenant } from '../modules/tenancy.js';
 
 function createServer() {
 	const app = express();
@@ -24,11 +26,19 @@ function request(server, body) {
 
 describe('Email forwarding import route', () => {
 	const projectId = '507f1f77bcf86cd799439011';
+	const emailIds = [
+		'507f1f77bcf86cd799439101',
+		'507f1f77bcf86cd799439102',
+		'507f1f77bcf86cd799439103',
+	];
 	const originalEmailForwardDomain = config.emailForwardDomain;
 	const originalProjectFindOne = Project.findOne;
 	const originalEmailFindOne = Email.findOne;
 	const originalEmailCreate = Email.create;
 	const originalEmailFind = Email.find;
+	const originalEmailUpdateOne = Email.updateOne;
+	const originalTenantFindOne = Tenant.findOne;
+	const originalAuditLogCreate = AuditLog.create;
 
 	beforeEach(() => {
 		config.emailForwardDomain = 'email.kumbukum.com';
@@ -42,7 +52,7 @@ describe('Email forwarding import route', () => {
 		});
 		Email.findOne = async () => null;
 		Email.create = async (payload) => ({
-			_id: { toString: () => 'email-1' },
+			_id: { toString: () => emailIds[0] },
 			...payload,
 		});
 		Email.find = () => ({
@@ -50,6 +60,13 @@ describe('Email forwarding import route', () => {
 				lean: async () => [],
 			}),
 		});
+		Email.updateOne = async () => ({ modifiedCount: 1 });
+		Tenant.findOne = () => ({
+			select: () => ({
+				lean: async () => ({ settings: { email: { auto_triage_incoming: false }, ai_instructions: {} } }),
+			}),
+		});
+		AuditLog.create = async () => ({});
 	});
 
 	afterEach(() => {
@@ -58,13 +75,16 @@ describe('Email forwarding import route', () => {
 		Email.findOne = originalEmailFindOne;
 		Email.create = originalEmailCreate;
 		Email.find = originalEmailFind;
+		Email.updateOne = originalEmailUpdateOne;
+		Tenant.findOne = originalTenantFindOne;
+		AuditLog.create = originalAuditLogCreate;
 	});
 
 	it('ingests forwarded text email and ignores attachments', async () => {
 		let createdPayload = null;
 		Email.create = async (payload) => {
 			createdPayload = payload;
-			return { _id: { toString: () => 'email-1' }, ...payload };
+			return { _id: { toString: () => emailIds[0] }, ...payload };
 		};
 
 		const server = createServer();
@@ -81,7 +101,7 @@ describe('Email forwarding import route', () => {
 			const json = await response.json();
 
 			assert.equal(response.status, 200);
-			assert.deepEqual(json, { accepted: true, email_id: 'email-1' });
+			assert.deepEqual(json, { accepted: true, email_id: emailIds[0] });
 			assert.equal(createdPayload.source, 'emailforwarding');
 			assert.equal(createdPayload.project, projectId);
 			assert.equal(createdPayload.text_content, 'Forwarded text');
@@ -95,7 +115,7 @@ describe('Email forwarding import route', () => {
 		let createdPayload = null;
 		Email.create = async (payload) => {
 			createdPayload = payload;
-			return { _id: { toString: () => 'email-2' }, ...payload };
+			return { _id: { toString: () => emailIds[1] }, ...payload };
 		};
 
 		const server = createServer();
@@ -110,7 +130,7 @@ describe('Email forwarding import route', () => {
 			const json = await response.json();
 
 			assert.equal(response.status, 200);
-			assert.deepEqual(json, { accepted: true, email_id: 'email-2' });
+			assert.deepEqual(json, { accepted: true, email_id: emailIds[1] });
 			assert.equal(createdPayload.text_content, 'Hello HTML Only');
 			assert.match(createdPayload.html_content, /<p>Hello <strong>HTML<\/strong><\/p><p>Only<\/p>/);
 			assert.equal(createdPayload.html_content_has_remote_images, false);
@@ -124,7 +144,7 @@ describe('Email forwarding import route', () => {
 		let createdPayload = null;
 		Email.create = async (payload) => {
 			createdPayload = payload;
-			return { _id: { toString: () => 'email-3' }, ...payload };
+			return { _id: { toString: () => emailIds[2] }, ...payload };
 		};
 
 		const server = createServer();
@@ -150,7 +170,7 @@ describe('Email forwarding import route', () => {
 			const json = await response.json();
 
 			assert.equal(response.status, 200);
-			assert.deepEqual(json, { accepted: true, email_id: 'email-3' });
+			assert.deepEqual(json, { accepted: true, email_id: emailIds[2] });
 			assert.equal(createdPayload.project, projectId);
 			assert.deepEqual(createdPayload.to, ['nitai@fastmail.com']);
 			assert.deepEqual(createdPayload.from, ['nitai@helpmonks.com']);

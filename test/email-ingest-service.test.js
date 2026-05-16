@@ -141,7 +141,7 @@ describe('Email ingest service', () => {
 		try {
 			const email = await updateEmail('host-1', 'email-1', {
 				html_content: '<p onclick="alert(1)">Updated<img src="https://cdn.example/update.png"></p>',
-			});
+			}, { skipSideEffects: true });
 
 			assert.equal(updatePayload.html_content_has_remote_images, true);
 			assert.match(updatePayload.html_content, /data-kk-remote-src="https:\/\/cdn\.example\/update\.png"/);
@@ -168,6 +168,40 @@ describe('Email ingest service', () => {
 		assert.deepEqual(normalized.to, ['507f1f77bcf86cd799439011@email.kumbukum.com']);
 		assert.equal(normalized.subject, 'Header subject');
 		assert.equal(normalized.text_content, 'Header body');
+	});
+
+	it('indexes updated emails immediately after Mongo commit', async () => {
+		let indexed = null;
+		let indexStateUpdate = null;
+		const originalFindOneAndUpdate = Email.findOneAndUpdate;
+
+		Email.findOneAndUpdate = async (query, update) => ({
+			_id: '507f1f77bcf86cd799439099',
+			host_id: query.host_id,
+			project: '507f1f77bcf86cd799439011',
+			subject: update.$set.subject,
+			mailbox: 'inbox',
+			triaged: false,
+			in_trash: false,
+		});
+
+		try {
+			await updateEmail('host-1', '507f1f77bcf86cd799439099', { subject: 'Fresh subject' }, {
+				indexEmailFn: async (hostId, type, email) => {
+					indexed = { hostId, type, email };
+				},
+				updateEmailIndexStateFn: async (query, update, options) => {
+					indexStateUpdate = { query, update, options };
+				},
+			});
+
+			assert.equal(indexed.hostId, 'host-1');
+			assert.equal(indexed.type, 'emails');
+			assert.equal(indexed.email.subject, 'Fresh subject');
+			assert.deepEqual(indexStateUpdate.update, { $set: { is_indexed: true } });
+		} finally {
+			Email.findOneAndUpdate = originalFindOneAndUpdate;
+		}
 	});
 
 	it('uses Forward Email session fields when parsed address fields are absent', () => {
@@ -329,6 +363,8 @@ describe('Email ingest service', () => {
 				}, {
 					channel: 'api',
 					awaitAutoTriage: true,
+					indexEmailFn: async () => {},
+					updateEmailIndexStateFn: async () => {},
 					autoTriageOptions: {
 						run_id: 'auto-run-1',
 						skipSideEffects: true,
@@ -398,7 +434,12 @@ describe('Email ingest service', () => {
 						subject: 'Draft setting',
 						text: 'No triage should run',
 					},
-				}, { channel: 'api', awaitAutoTriage: true });
+				}, {
+					channel: 'api',
+					awaitAutoTriage: true,
+					indexEmailFn: async () => {},
+					updateEmailIndexStateFn: async () => {},
+				});
 
 				assert.equal(email.triaged, false);
 				assert.equal(triageUpdateCalled, false);
@@ -756,6 +797,13 @@ describe('Email ingest service', () => {
 		assert.equal(intent.search_text, '');
 	});
 
+	it('treats scoped mailbox summaries as current-view wildcard searches', () => {
+		const intent = parseEmailAiQuery('Summarize this mailbox');
+
+		assert.equal(intent.mode, 'summary');
+		assert.equal(intent.search_text, '');
+	});
+
 	it('builds Typesense filters from current ECC scope and Email AI intent', () => {
 		const filter = buildEmailAiTypesenseFilter(
 			{ project: 'project-1', mailbox: 'inbox', triaged: false },
@@ -841,7 +889,20 @@ describe('Email ingest service', () => {
 				},
 				completionFn: async ({ messages }) => {
 					assert.match(messages[1].content, /Support elsewhere/);
-					return 'One support request found outside the selected project.';
+					assert.match(messages[0].content, /Return only valid JSON/);
+					return JSON.stringify({
+						overview: 'One support request found outside the selected project.',
+						groups: [{
+							title: 'Needs attention',
+							items: [{
+								subject: 'Support elsewhere',
+								from: 'sender@example.com',
+								summary: 'A support request needs review.',
+								status: 'Reply needed',
+							}],
+						}],
+						next_steps: ['Open the support email.'],
+					});
 				},
 			});
 
@@ -851,6 +912,8 @@ describe('Email ingest service', () => {
 			assert.equal(result.context_scope, 'all-projects');
 			assert.equal(result.scope.project, '');
 			assert.equal(result.answer, 'One support request found outside the selected project.');
+			assert.equal(result.summary.groups[0].items[0].subject, 'Support elsewhere');
+			assert.equal(result.summary.next_steps[0], 'Open the support email.');
 		} finally {
 			Tenant.findOne = originalTenantFindOne;
 		}
@@ -1051,7 +1114,7 @@ describe('Email ingest service', () => {
 		};
 
 		try {
-			const result = await resetEmailTriage('host-1', 'email-reset-1');
+			const result = await resetEmailTriage('host-1', 'email-reset-1', { skipSideEffects: true });
 
 			assert.equal(result.mailbox, 'inbox');
 			assert.deepEqual(result.labels, []);

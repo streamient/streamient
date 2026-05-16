@@ -184,7 +184,13 @@ describe('Outgoing email service', () => {
 		};
 		EmailDraft.findOneAndUpdate = () => queryResult({ _id: 'draft-1', status: 'discarded' });
 
-		const result = await outgoingEmailService.processOutgoingEmail('outgoing-1');
+		const indexed = [];
+		const result = await outgoingEmailService.processOutgoingEmail('outgoing-1', {
+			indexEmailFn: async (hostId, type, email) => {
+				indexed.push({ hostId, type, email });
+			},
+			updateEmailIndexStateFn: async () => {},
+		});
 
 		assert.equal(outgoing.status, 'sent');
 		assert.equal(result.email._id, 'sent-email-1');
@@ -198,5 +204,6 @@ describe('Outgoing email service', () => {
 		assert.equal(sourceUpdate.update.$set.triaged, true);
 		assert.ok(sourceUpdate.update.$set.triaged_at instanceof Date);
 		assert.equal(sourceUpdate.update.$addToSet.labels, 'triaged');
+		assert.deepEqual(indexed.map((item) => item.email._id), ['email-1', 'sent-email-1']);
 	});
 });

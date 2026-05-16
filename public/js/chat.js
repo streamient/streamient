@@ -28,7 +28,7 @@ function initChat() {
 	function showWelcome() {
 		if (chatWelcome) chatWelcome.classList.remove('d-none');
 	}
-	document.querySelectorAll('.chat-example-btn').forEach((btn) => {
+	chatWelcome?.querySelectorAll('.chat-example-btn').forEach((btn) => {
 		btn.addEventListener('click', () => {
 			input.value = btn.textContent;
 			hideWelcome();

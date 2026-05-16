@@ -10,7 +10,7 @@ import { MongoQueue, MongoWorker } from '../modules/mongo_queue.js';
 import { decrypt } from '../modules/encryption.js';
 import { emitToTenant } from '../modules/socket.js';
 import { invalidateGraphCache } from './graph_service.js';
-import { removeDocument } from '../modules/typesense.js';
+import { indexEmailNow } from './email_index_service.js';
 import * as audit from './audit_service.js';
 
 const SEND_QUEUE = 'send_outgoing_email';
@@ -211,7 +211,7 @@ async function markOutgoingError(outgoing, error) {
 	emitToTenant(outgoing.host_id, 'counts:refresh');
 }
 
-async function markSourceEmailHandled(outgoing) {
+async function markSourceEmailHandled(outgoing, options = {}) {
 	const handledAt = new Date();
 	const sourceEmail = await Email.findOneAndUpdate(
 		{ _id: outgoing.source_email, host_id: outgoing.host_id, in_trash: false },
@@ -228,12 +228,15 @@ async function markSourceEmailHandled(outgoing) {
 		{ returnDocument: 'after' },
 	);
 	if (!sourceEmail) return null;
-	removeDocument(outgoing.host_id, 'emails', sourceEmail._id.toString()).catch((err) => console.error('Typesense remove error:', err.message));
+	await indexEmailNow(outgoing.host_id, sourceEmail, {
+		indexFn: options.indexEmailFn,
+		updateFn: options.updateEmailIndexStateFn,
+	});
 	emitToTenant(outgoing.host_id, 'email:updated', sourceEmail);
 	return sourceEmail;
 }
 
-export async function processOutgoingEmail(outgoingId) {
+export async function processOutgoingEmail(outgoingId, options = {}) {
 	const outgoing = await OutgoingEmail.findOneAndUpdate(
 		{ _id: outgoingId, status: 'queued', send_after: { $lte: new Date() } },
 		{ $set: { status: 'sending', error: '' }, $inc: { attempts: 1 } },
@@ -294,8 +297,11 @@ export async function processOutgoingEmail(outgoingId) {
 			{ $set: { status: 'discarded' } },
 			{ returnDocument: 'after' },
 		).lean();
-		const sourceEmail = await markSourceEmailHandled(outgoing);
-		removeDocument(outgoing.host_id, 'emails', sentEmail._id.toString()).catch((err) => console.error('Typesense remove error:', err.message));
+		const sourceEmail = await markSourceEmailHandled(outgoing, options);
+		await indexEmailNow(outgoing.host_id, sentEmail, {
+			indexFn: options.indexEmailFn,
+			updateFn: options.updateEmailIndexStateFn,
+		});
 		invalidateGraphCache(outgoing.host_id).catch(() => {});
 		emitToTenant(outgoing.host_id, 'email:created', sentEmail);
 		emitDraft(outgoing.host_id, 'email-draft:updated', draft);

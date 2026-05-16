@@ -12,13 +12,14 @@ import { EmailLabel } from '../model/email_label.js';
 import { GraphLink } from '../model/graph_link.js';
 import { extractText } from './import_service.js';
 import { detectFileType } from '../modules/file_detect.js';
-import { searchCollection, searchAll, removeDocument } from '../modules/typesense.js';
+import { searchCollection, searchAll } from '../modules/typesense.js';
 import { emitToTenant } from '../modules/socket.js';
 import { getConnectionsForItem, invalidateGraphCache, removeLinksForItem } from './graph_service.js';
 import * as audit from './audit_service.js';
 import { emailAiCompletion, emailTriageCompletion } from '../modules/llm_client.js';
 import { getAiInstructions, getEmailSettings } from './byo_ai_service.js';
 import { sanitizeEmailHtml } from '../modules/email_html_sanitizer.js';
+import { indexEmailNow, removeEmailFromIndexNow } from './email_index_service.js';
 
 const MAX_ATTACHMENT_SIZE = 50 * 1024 * 1024;
 const DEFAULT_EMAIL_LABELS = [
@@ -507,10 +508,10 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 
 	await createEmailThreadLinks(email, userId, host_id, { skipSideEffects: ctx.skipSideEffects });
 	if (!ctx.skipSideEffects) {
+		await indexEmailNow(host_id, email, { indexFn: ctx.indexEmailFn, updateFn: ctx.updateEmailIndexStateFn });
 		emitEmailCreatedOrUpdated(host_id, created ? 'email:created' : 'email:updated', email);
 		invalidateGraphCache(host_id).catch(() => {});
 		audit.log({ action: 'create', resource: 'email', resource_id: email._id.toString(), user_id: userId, host_id, ...ctx });
-		removeDocument(host_id, 'emails', email._id.toString()).catch((err) => console.error('Typesense remove error:', err.message));
 	}
 	if (created && !ctx.skipSideEffects) {
 		const autoTriage = maybeAutoTriageIncomingEmail(host_id, userId, email, {
@@ -840,7 +841,7 @@ export async function updateEmail(host_id, emailId, data, ctx = {}) {
 	);
 
 	if (email) {
-		removeDocument(host_id, 'emails', emailId).catch((err) => console.error('Typesense remove error:', err.message));
+		if (!ctx.skipSideEffects) await indexEmailNow(host_id, email, { indexFn: ctx.indexEmailFn, updateFn: ctx.updateEmailIndexStateFn });
 		emitToTenant(host_id, 'email:updated', email);
 		invalidateGraphCache(host_id).catch(() => {});
 		if (ctx.user_id) {
@@ -889,7 +890,7 @@ export async function resetEmailTriage(host_id, emailId, ctx = {}) {
 			),
 			GraphLink.deleteMany({ host_id, source_id: email._id, source_type: 'emails', label: 'triage-context' }),
 		]);
-		removeDocument(host_id, 'emails', emailId).catch((err) => console.error('Typesense remove error:', err.message));
+		if (!ctx.skipSideEffects) await indexEmailNow(host_id, email, { indexFn: ctx.indexEmailFn, updateFn: ctx.updateEmailIndexStateFn });
 		emitToTenant(host_id, 'email:updated', email);
 		emitToTenant(host_id, 'counts:refresh');
 		invalidateGraphCache(host_id).catch(() => {});
@@ -905,11 +906,11 @@ export async function resetEmailTriage(host_id, emailId, ctx = {}) {
 export async function deleteEmail(host_id, emailId, ctx = {}) {
 	const email = await Email.findOneAndUpdate(
 		{ _id: emailId, host_id, in_trash: { $ne: true } },
-		{ $set: { in_trash: true, trashed_at: new Date() } },
+		{ $set: { in_trash: true, trashed_at: new Date(), is_indexed: false } },
 		{ returnDocument: 'after' },
 	);
 	if (email) {
-		removeDocument(host_id, 'emails', emailId).catch((err) => console.error('Typesense remove error:', err.message));
+		await removeEmailFromIndexNow(host_id, emailId, { removeFn: ctx.removeEmailIndexFn, updateFn: ctx.updateEmailIndexStateFn });
 		removeLinksForItem(host_id, emailId).catch((err) => console.error('Remove links error:', err.message));
 		emitToTenant(host_id, 'email:deleted', { _id: emailId });
 		emitToTenant(host_id, 'counts:refresh');
@@ -1034,6 +1035,7 @@ function normalizeEmailAiSearchText(query, intent) {
 export function parseEmailAiQuery(query = '') {
 	const raw = String(query || '').trim();
 	const lower = raw.toLowerCase();
+	const scopedViewRequest = /\b(this|current)\s+(mailbox|view)\b/i.test(raw);
 	const emailAddresses = [...new Set((raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || []).map(extractEmailAddress).filter(Boolean))];
 	const from = findEmailAddressNearWord(raw, 'from');
 	const to = findEmailAddressNearWord(raw, 'to');
@@ -1056,7 +1058,7 @@ export function parseEmailAiQuery(query = '') {
 	};
 	intent.search_text = normalizeEmailAiSearchText(raw, intent);
 	if (!intent.search_text && !intent.from_email && !intent.to_email && !intent.cc_email && !intent.bcc_email && !intent.participant_email && !intent.status && !intent.mailbox) {
-		intent.search_text = lower.includes('recent') ? '' : raw;
+		intent.search_text = lower.includes('recent') || scopedViewRequest ? '' : raw;
 	}
 	return intent;
 }
@@ -1162,6 +1164,57 @@ function buildEmailAiAnswer({ mode, count, emails, query }) {
 	return `Showing ${shown} matching "${query}".`;
 }
 
+function cleanMailboxSummaryText(value, maxLength = 300) {
+	return String(value || '')
+		.replace(/\*\*/g, '')
+		.replace(/^[-*]\s+/gm, '')
+		.replace(/\s+/g, ' ')
+		.trim()
+		.slice(0, maxLength);
+}
+
+function parseMailboxSummaryJson(content) {
+	const raw = String(content || '').trim();
+	const withoutFence = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+	const start = withoutFence.indexOf('{');
+	const end = withoutFence.lastIndexOf('}');
+	if (start === -1 || end <= start) return null;
+	try {
+		return JSON.parse(withoutFence.slice(start, end + 1));
+	} catch {
+		return null;
+	}
+}
+
+function normalizeMailboxSummary(parsed, fallbackText = '') {
+	if (!parsed || typeof parsed !== 'object') {
+		const overview = cleanMailboxSummaryText(fallbackText, 500);
+		return overview ? { overview, groups: [], next_steps: [] } : null;
+	}
+
+	const groups = Array.isArray(parsed.groups)
+		? parsed.groups.slice(0, 4).map((group) => ({
+			title: cleanMailboxSummaryText(group?.title, 80) || 'Other',
+			items: Array.isArray(group?.items)
+				? group.items.slice(0, 6).map((item) => ({
+					subject: cleanMailboxSummaryText(item?.subject, 120),
+					from: cleanMailboxSummaryText(item?.from, 120),
+					summary: cleanMailboxSummaryText(item?.summary, 240),
+					status: cleanMailboxSummaryText(item?.status, 120),
+				})).filter((item) => item.subject || item.summary)
+				: [],
+		})).filter((group) => group.items.length)
+		: [];
+
+	const nextSteps = Array.isArray(parsed.next_steps)
+		? parsed.next_steps.slice(0, 5).map((step) => cleanMailboxSummaryText(step, 180)).filter(Boolean)
+		: [];
+	const overview = cleanMailboxSummaryText(parsed.overview || fallbackText, 500);
+	return overview || groups.length || nextSteps.length
+		? { overview, groups, next_steps: nextSteps }
+		: null;
+}
+
 async function summarizeEmailAiResults(host_id, prompt, emails, completionFn = emailAiCompletion) {
 	const instructions = await getAiInstructions(host_id);
 	const context = emails.slice(0, 20).map((email, index) => [
@@ -1179,7 +1232,11 @@ async function summarizeEmailAiResults(host_id, prompt, emails, completionFn = e
 			{
 				role: 'system',
 				content: [
-					'Answer as an email assistant summarizing a set of matched emails. Be concise and use only the provided email list.',
+					'Answer as an email assistant summarizing a set of matched emails.',
+					'Return only valid JSON, no Markdown, no bullet characters, no code fence.',
+					'Use this shape: {"overview":"one concise sentence","groups":[{"title":"Needs attention","items":[{"subject":"email subject","from":"sender or sender domain","summary":"one concise sentence","status":"what matters or no action needed"}]}],"next_steps":["short action"]}.',
+					'Group similar emails together. Prefer groups like Needs attention, Informational, Receipts, Releases, Tests, or Security. Keep item summaries short and useful.',
+					'Use only the provided email list.',
 					instructions.global ? `Global instructions:\n${instructions.global}` : '',
 					instructions.email ? `Email AI instructions:\n${instructions.email}` : '',
 				].filter(Boolean).join('\n\n'),
@@ -1187,7 +1244,12 @@ async function summarizeEmailAiResults(host_id, prompt, emails, completionFn = e
 			{ role: 'user', content: `Matched emails:\n${context || '(none)'}\n\nUser request:\n${prompt}` },
 		],
 	});
-	return String(content || '').trim();
+	const raw = String(content || '').trim();
+	const summary = normalizeMailboxSummary(parseMailboxSummaryJson(raw), raw);
+	return {
+		answer: summary?.overview || cleanMailboxSummaryText(raw, 500) || 'I found matching emails, but could not summarize them.',
+		summary,
+	};
 }
 
 export async function askEmailListAi(host_id, query, scope = {}, options = {}) {
@@ -1221,9 +1283,15 @@ export async function askEmailListAi(host_id, query, scope = {}, options = {}) {
 	const emails = hits.map((hit) => emailFromTypesenseDocument(hit.document || {}));
 	const count = intent.mode === 'count' ? emails.length : emails.length;
 	const mode = intent.mode === 'summary' ? 'summary' : (intent.mode === 'count' ? 'count' : (searchQuery === '*' ? 'list' : 'search'));
-	const answer = intent.mode === 'summary' && emails.length
-		? await summarizeEmailAiResults(host_id, prompt, emails, options.completionFn || emailAiCompletion)
-		: buildEmailAiAnswer({ mode, count, emails, query: prompt });
+	let summary = null;
+	let answer;
+	if (intent.mode === 'summary' && emails.length) {
+		const summaryResult = await summarizeEmailAiResults(host_id, prompt, emails, options.completionFn || emailAiCompletion);
+		summary = summaryResult.summary;
+		answer = summaryResult.answer;
+	} else {
+		answer = buildEmailAiAnswer({ mode, count, emails, query: prompt });
+	}
 
 	return {
 		answer,
@@ -1232,6 +1300,7 @@ export async function askEmailListAi(host_id, query, scope = {}, options = {}) {
 		mode,
 		scope: effectiveScope,
 		context_scope: contextScope,
+		summary,
 	};
 }
 
@@ -1941,7 +2010,7 @@ export async function triageInboxEmails(host_id, userId, options = {}) {
 				if (linkedCount) linked += linkedCount;
 				if ((email.mailbox || 'inbox') !== updated.mailbox) moved += 1;
 				if (!options.skipSideEffects) {
-					removeDocument(host_id, 'emails', email._id.toString()).catch((err) => console.error('Typesense remove error:', err.message));
+					await indexEmailNow(host_id, updated, { indexFn: options.indexEmailFn, updateFn: options.updateEmailIndexStateFn });
 					emitToTenant(host_id, 'email:updated', updated);
 				}
 				results.push({
@@ -1968,7 +2037,10 @@ export async function triageInboxEmails(host_id, userId, options = {}) {
 				},
 				{ returnDocument: 'after' },
 			).catch(() => null);
-			if (failed && !options.skipSideEffects) emitToTenant(host_id, 'email:updated', failed);
+			if (failed && !options.skipSideEffects) {
+				await indexEmailNow(host_id, failed, { indexFn: options.indexEmailFn, updateFn: options.updateEmailIndexStateFn });
+				emitToTenant(host_id, 'email:updated', failed);
+			}
 			errors.push({ email_id: email._id.toString(), error: err.message });
 		}
 	}

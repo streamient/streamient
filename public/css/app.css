@@ -937,6 +937,59 @@ small,
 	color: var(--bs-body-color);
 }
 
+.ecc-mailbox-summary {
+	white-space: normal;
+}
+
+.ecc-mailbox-summary-overview {
+	font-weight: 600;
+	margin-bottom: 0.75rem;
+}
+
+.ecc-mailbox-summary-group {
+	border-top: 1px solid var(--bs-border-color);
+	padding-top: 0.65rem;
+	margin-top: 0.65rem;
+}
+
+.ecc-mailbox-summary-group h6 {
+	font-size: 0.76rem;
+	font-weight: 700;
+	margin-bottom: 0.45rem;
+	text-transform: uppercase;
+}
+
+.ecc-mailbox-summary-group ul {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.ecc-mailbox-summary-group li {
+	margin-bottom: 0.6rem;
+}
+
+.ecc-mailbox-summary-group li:last-child {
+	margin-bottom: 0;
+}
+
+.ecc-mailbox-summary-subject {
+	font-weight: 700;
+	line-height: 1.25;
+}
+
+.ecc-mailbox-summary-meta {
+	color: var(--bs-secondary-color);
+	font-size: 0.74rem;
+	line-height: 1.25;
+	margin-top: 0.15rem;
+}
+
+.ecc-mailbox-summary-text {
+	line-height: 1.35;
+	margin-top: 0.2rem;
+}
+
 @media (max-width: 991.98px) {
 	.ecc-shell {
 		grid-template-columns: 1fr;

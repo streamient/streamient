@@ -843,10 +843,58 @@
 		}
 		aiMessagesEl.innerHTML = emailAiMessages.map(function (message) {
 			return '<div class="ecc-email-ai-message ' + escapeHtml(message.role) + '">'
-				+ escapeHtml(message.text)
+				+ renderEmailAiMessageContent(message)
 				+ '</div>';
 		}).join('');
 		aiMessagesEl.scrollTop = aiMessagesEl.scrollHeight;
+	}
+
+	function renderEmailAiMessageContent(message) {
+		if (message.summary && typeof message.summary === 'object') {
+			return renderMailboxSummary(message.summary, message.text || '');
+		}
+		return escapeHtml(message.text || '');
+	}
+
+	function renderMailboxSummary(summary, fallbackText) {
+		var groups = Array.isArray(summary.groups) ? summary.groups : [];
+		var steps = Array.isArray(summary.next_steps) ? summary.next_steps : [];
+		var html = '<div class="ecc-mailbox-summary">';
+		if (summary.overview || fallbackText) {
+			html += '<p class="ecc-mailbox-summary-overview">' + escapeHtml(summary.overview || fallbackText) + '</p>';
+		}
+		groups.forEach(function (group) {
+			var items = Array.isArray(group.items) ? group.items : [];
+			if (!items.length) return;
+			html += '<section class="ecc-mailbox-summary-group">'
+				+ '<h6>' + escapeHtml(group.title || 'Other') + '</h6>'
+				+ '<ul>';
+			items.forEach(function (item) {
+				html += '<li>'
+					+ '<div class="ecc-mailbox-summary-subject">' + escapeHtml(item.subject || 'No subject') + '</div>';
+				if (item.from || item.status) {
+					html += '<div class="ecc-mailbox-summary-meta">'
+						+ escapeHtml([item.from, item.status].filter(Boolean).join(' - '))
+						+ '</div>';
+				}
+				if (item.summary) {
+					html += '<div class="ecc-mailbox-summary-text">' + escapeHtml(item.summary) + '</div>';
+				}
+				html += '</li>';
+			});
+			html += '</ul></section>';
+		});
+		if (steps.length) {
+			html += '<section class="ecc-mailbox-summary-group">'
+				+ '<h6>Next steps</h6>'
+				+ '<ul>';
+			steps.forEach(function (step) {
+				html += '<li><div class="ecc-mailbox-summary-text">' + escapeHtml(step) + '</div></li>';
+			});
+			html += '</ul></section>';
+		}
+		html += '</div>';
+		return html;
 	}
 
 	async function summarizeSelectedEmail() {
@@ -933,7 +981,7 @@
 			var res = selectedEmail
 				? await api('POST', '/emails/' + selectedEmail._id + '/ai', { query: query })
 				: await api('POST', '/emails/ai', { query: query, scope: currentEmailAiScope() });
-			emailAiMessages.push({ role: 'assistant', text: res.answer || '' });
+			emailAiMessages.push({ role: 'assistant', text: res.answer || '', summary: res.summary || null });
 			if (!selectedEmail && Array.isArray(res.emails) && res.mode !== 'count') {
 				renderEmailAiResultEmails(res.emails, res.answer || '', res.count || 0);
 			}
@@ -948,7 +996,9 @@
 
 	function bindEmailAiExampleButtons() {
 		aiPanel?.querySelectorAll('.ecc-email-ai-example').forEach(function (button) {
-			button.addEventListener('click', function () {
+			button.addEventListener('click', function (event) {
+				event.preventDefault();
+				event.stopPropagation();
 				if (!aiInputEl) return;
 				aiInputEl.value = button.textContent || '';
 				sendEmailAiMessage();
