@@ -31,6 +31,7 @@
       "views/",
       "src/",
       "public/css/app.css",
+      "public/js/autofill_guard.js",
       "public/js/auth.js"
     ],
     "ext": "js,pug,css",
