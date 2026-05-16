@@ -729,19 +729,17 @@
 		openEmailBtn?.classList.remove('d-none');
 		aiPanel.innerHTML = '<div class="ecc-ai-content">'
 			+ '<div class="ecc-ai-section">'
-			+ '<h6 class="mb-2">Summary</h6>'
-			+ (summary
-				? '<p class="mb-3">' + escapeHtml(summary) + '</p>'
-				: '<button type="button" class="btn btn-outline-primary btn-sm mb-3" id="ecc-email-summarize">Summarize email</button>')
+			+ '<div class="d-flex justify-content-between align-items-center gap-2 mb-3">'
+			+ '<h6 class="mb-0">Summary</h6>'
+			+ '<button type="button" class="btn btn-outline-primary btn-sm ecc-ai-action-btn" id="ecc-email-summarize">Summarize email</button>'
+			+ '</div>'
+			+ (summary ? '<p class="mb-3">' + escapeHtml(summary) + '</p>' : '')
 			+ (labels ? '<div>' + labels + '</div>' : '')
 			+ '</div>'
 			+ '<div class="ecc-ai-section ecc-internal-notes" data-ecc-internal-notes>'
 			+ '<div class="d-flex justify-content-between align-items-center gap-2 mb-3">'
-			+ '<div class="d-flex align-items-center gap-2 min-w-0">'
 			+ '<h6 class="mb-0">Internal notes</h6>'
-			+ '<span class="badge text-bg-light">Private</span>'
-			+ '</div>'
-			+ '<button type="button" class="btn btn-outline-primary btn-sm ecc-internal-note-open">Add note</button>'
+			+ '<button type="button" class="btn btn-outline-primary btn-sm ecc-ai-action-btn ecc-internal-note-open">Add note</button>'
 			+ '</div>'
 			+ '<div class="ecc-internal-note-editor d-none mb-3"></div>'
 			+ '<div class="ecc-internal-notes-list"></div>'
@@ -749,18 +747,24 @@
 			+ '<div class="ecc-ai-section ecc-email-reply-options">'
 			+ '<div class="d-flex justify-content-between align-items-center gap-2 mb-3">'
 			+ '<h6 class="mb-0">Reply options</h6>'
-			+ '<button type="button" class="btn btn-outline-primary btn-sm" id="ecc-email-suggest-reply">Suggest a reply</button>'
+			+ '<button type="button" class="btn btn-outline-primary btn-sm ecc-ai-action-btn" id="ecc-email-suggest-reply">Suggest a reply</button>'
 			+ '</div>'
 			+ '<div class="ecc-email-reply-suggestions" id="ecc-email-reply-suggestions"></div>'
 			+ '</div>'
 			+ '<div class="ecc-ai-section ecc-email-chat">'
 			+ '<h6 class="mb-2">Ask Email AI</h6>'
+			+ '<div class="ecc-email-ai-examples mb-3">'
+			+ '<button type="button" class="chat-example-btn ecc-email-ai-example mb-1">What is this email asking for?</button>'
+			+ '<button type="button" class="chat-example-btn ecc-email-ai-example mb-1">What context do we have on this sender?</button>'
+			+ '<button type="button" class="chat-example-btn ecc-email-ai-example mb-1">List follow-up tasks</button>'
+			+ '<button type="button" class="chat-example-btn ecc-email-ai-example mb-1">Draft a concise reply</button>'
+			+ '</div>'
 			+ '<div class="ecc-email-ai-messages" id="ecc-email-ai-messages"></div>'
 			+ '<div class="ecc-email-ai-composer">'
 			+ '<label class="form-label small mb-1" for="ecc-email-ai-input">Message</label>'
 			+ '<div class="input-group input-group-sm">'
 			+ '<input type="text" class="form-control form-control-sm" id="ecc-email-ai-input" autocomplete="off">'
-			+ '<button type="button" class="btn btn-primary btn-sm" id="ecc-email-ai-send" title="Send">'
+			+ '<button type="button" class="btn btn-primary btn-sm ecc-ai-send-btn" id="ecc-email-ai-send" title="Send">'
 			+ kkIcon('send')
 			+ '</button>'
 			+ '</div>'
@@ -786,6 +790,7 @@
 				sendEmailAiMessage();
 			}
 		});
+		bindEmailAiExampleButtons();
 	}
 
 	function clearReplySuggestionsAutoClose() {
@@ -814,14 +819,14 @@
 		}
 		if (!emailReplySuggestions.length) {
 			clearReplySuggestionsAutoClose();
-			el.innerHTML = '<div class="text-muted small">No reply suggestions yet.</div>';
+			el.innerHTML = '';
 			return;
 		}
 		el.innerHTML = emailReplySuggestions.map(function (reply, index) {
 			return '<div class="ecc-email-reply-option mb-3">'
 				+ '<div class="small fw-semibold mb-2">' + escapeHtml(reply.title || ('Reply ' + (index + 1))) + '</div>'
 				+ '<div class="small mb-2 text-break">' + escapeHtml(reply.body_text || '') + '</div>'
-				+ '<button type="button" class="btn btn-primary btn-sm ecc-email-use-reply" data-index="' + index + '">Use reply</button>'
+				+ '<button type="button" class="btn btn-primary btn-sm ecc-ai-action-btn ecc-email-use-reply" data-index="' + index + '">Use reply</button>'
 				+ '</div>';
 		}).join('');
 		el.querySelectorAll('.ecc-email-use-reply').forEach(function (button) {
@@ -833,7 +838,7 @@
 	function renderEmailAiMessages() {
 		if (!aiMessagesEl) return;
 		if (!emailAiMessages.length) {
-			aiMessagesEl.innerHTML = '<div class="text-muted small">No messages yet.</div>';
+			aiMessagesEl.innerHTML = '';
 			return;
 		}
 		aiMessagesEl.innerHTML = emailAiMessages.map(function (message) {
@@ -939,6 +944,16 @@
 			renderEmailAiMessages();
 			aiInputEl.focus();
 		}
+	}
+
+	function bindEmailAiExampleButtons() {
+		aiPanel?.querySelectorAll('.ecc-email-ai-example').forEach(function (button) {
+			button.addEventListener('click', function () {
+				if (!aiInputEl) return;
+				aiInputEl.value = button.textContent || '';
+				sendEmailAiMessage();
+			});
+		});
 	}
 
 	function updateViewText() {
@@ -1812,7 +1827,7 @@
 			currentInternalNotes = notes || [];
 			destroyNoteEditor();
 			if (!notes.length) {
-				list.innerHTML = '<div class="text-muted small">No internal notes yet.</div>';
+				list.innerHTML = '';
 				return;
 			}
 			list.innerHTML = groupInternalNotes(notes).map(function (note) {
@@ -1896,11 +1911,8 @@
 			internalNotesEl.classList.remove('d-none');
 			internalNotesEl.innerHTML = ''
 				+ '<div class="d-flex justify-content-between align-items-center gap-2 mb-3">'
-				+ '<div class="d-flex align-items-center gap-2 min-w-0">'
 				+ '<h6 class="mb-0">Internal notes</h6>'
-				+ '<span class="badge text-bg-light">Private</span>'
-				+ '</div>'
-				+ '<button type="button" class="btn btn-outline-primary btn-sm ecc-internal-note-open">Add note</button>'
+				+ '<button type="button" class="btn btn-outline-primary btn-sm ecc-ai-action-btn ecc-internal-note-open">Add note</button>'
 				+ '</div>'
 				+ '<div class="ecc-internal-note-editor d-none mb-3"></div>'
 				+ '<div class="ecc-internal-notes-list"></div>';
@@ -1981,7 +1993,7 @@
 				+ '<label class="form-label small mb-1" for="ecc-email-ai-input">Message</label>'
 				+ '<div class="input-group input-group-sm">'
 				+ '<input type="text" class="form-control form-control-sm" id="ecc-email-ai-input" autocomplete="off">'
-				+ '<button type="button" class="btn btn-primary btn-sm" id="ecc-email-ai-send" title="Send">'
+				+ '<button type="button" class="btn btn-primary btn-sm ecc-ai-send-btn" id="ecc-email-ai-send" title="Send">'
 				+ kkIcon('send')
 				+ '</button>'
 				+ '</div>'
@@ -1999,13 +2011,7 @@
 					sendEmailAiMessage();
 				}
 			});
-			aiPanel.querySelectorAll('.ecc-email-ai-example').forEach(function (button) {
-				button.addEventListener('click', function () {
-					if (!aiInputEl) return;
-					aiInputEl.value = button.textContent || '';
-					sendEmailAiMessage();
-				});
-			});
+			bindEmailAiExampleButtons();
 		}
 
 		function bindDraftItem(item) {

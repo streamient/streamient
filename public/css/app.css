@@ -862,6 +862,13 @@ small,
 	overflow: hidden;
 }
 
+.ecc-ai-action-btn {
+	--bs-btn-padding-y: 0.18rem;
+	--bs-btn-padding-x: 0.45rem;
+	--bs-btn-font-size: 0.75rem;
+	line-height: 1.2;
+}
+
 .ecc-email-chat {
 	display: flex;
 	flex: 1 1 0;
@@ -886,6 +893,15 @@ small,
 
 .ecc-email-ai-composer {
 	flex: 0 0 auto;
+}
+
+.ecc-ai-send-btn {
+	align-items: center;
+	display: inline-flex;
+	justify-content: center;
+	min-width: 2rem;
+	padding-left: 0.45rem;
+	padding-right: 0.45rem;
 }
 
 .ecc-email-reply-option {
