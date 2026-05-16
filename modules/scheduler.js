@@ -1,6 +1,6 @@
 import { Cron } from 'croner';
 import { reindexDue } from './crawler.js';
-import { indexMissing } from './typesense.js';
+import { indexMissing, removeDocument } from './typesense.js';
 import { User } from '../model/user.js';
 import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
@@ -10,8 +10,11 @@ import { sendTrialEnding3DayEmail, sendTrialEnding24HourEmail, sendTrialExpiredE
 import { cleanupExpiredExports } from '../services/export_service.js';
 import { runScheduledSync } from '../services/git_sync_service.js';
 import { deleteTenantData } from '../services/account_cleanup_service.js';
+import { removeLinksForItem } from '../services/graph_service.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const EMAIL_RETENTION_DAYS = 30;
+const EMAIL_RETENTION_BATCH_SIZE = 500;
 
 async function sendTrialReminder(userModel, user, fieldName, now, sendEmail) {
 	const endDate = new Date(user.trial_ends_at).toLocaleDateString();
@@ -112,10 +115,67 @@ export async function runTrialLifecycle({
 	};
 }
 
+function buildExpiredEmailRetentionQuery(cutoff) {
+	return {
+		$or: [
+			{ in_trash: true, trashed_at: { $lte: cutoff } },
+			{ in_trash: { $ne: true }, mailbox: 'spam', updatedAt: { $lte: cutoff } },
+		],
+	};
+}
+
+async function cleanupDeletedEmailReferences(email, removeSearchDocument, removeGraphLinks) {
+	const emailId = email._id?.toString ? email._id.toString() : String(email._id || '');
+	if (!emailId || !email.host_id) return;
+
+	await Promise.all([
+		Promise.resolve(removeSearchDocument(email.host_id, 'emails', emailId)).catch((err) => {
+			console.error('Typesense remove error:', err.message);
+		}),
+		Promise.resolve(removeGraphLinks(email.host_id, emailId)).catch((err) => {
+			console.error('Graph link cleanup error:', err.message);
+		}),
+	]);
+}
+
+export async function runEmailRetentionCleanup({
+	now = new Date(),
+	emailModel = Email,
+	removeSearchDocument = removeDocument,
+	removeGraphLinks = removeLinksForItem,
+	batchSize = EMAIL_RETENTION_BATCH_SIZE,
+} = {}) {
+	const cutoff = new Date(now.getTime() - EMAIL_RETENTION_DAYS * DAY_MS);
+	const query = buildExpiredEmailRetentionQuery(cutoff);
+	let deleted = 0;
+
+	while (true) {
+		const emails = await emailModel
+			.find(query)
+			.select('_id host_id')
+			.limit(batchSize)
+			.lean();
+
+		if (!emails.length) break;
+
+		const ids = emails.map((email) => email._id);
+		const result = await emailModel.deleteMany({ _id: { $in: ids } });
+		const deletedInBatch = result?.deletedCount ?? emails.length;
+		deleted += deletedInBatch;
+
+		await Promise.all(emails.map((email) => cleanupDeletedEmailReferences(email, removeSearchDocument, removeGraphLinks)));
+
+		if (deletedInBatch === 0 || emails.length < batchSize) break;
+	}
+
+	return { deleted, cutoff };
+}
+
 /**
  * Schedule crawl reindexing for due URLs every 10 minutes.
  * Schedule trial-ending reminders daily at 9 AM.
  * Schedule Typesense catch-up indexing every 5 minutes.
+ * Schedule spam/trash email retention cleanup daily.
  */
 export function startScheduler() {
 	let crawlReindexRunning = false;
@@ -162,6 +222,16 @@ export function startScheduler() {
 		}
 	});
 
+	// Email retention: permanently delete spam/trash emails older than 30 days.
+	new Cron('30 2 * * *', async () => {
+		try {
+			const summary = await runEmailRetentionCleanup();
+			console.log(`Email retention cleanup complete: deleted ${summary.deleted} email(s)`);
+		} catch (err) {
+			console.error('Email retention cleanup error:', err);
+		}
+	});
+
 	// Git repo sync every 10 minutes
 	new Cron('*/10 * * * *', async () => {
 		try {
@@ -172,5 +242,5 @@ export function startScheduler() {
 		}
 	});
 
-	console.log('Scheduler started: due crawl every 10min, trial lifecycle at 09:00, batch index every 20s, export cleanup hourly, git sync every 10min');
+	console.log('Scheduler started: due crawl every 10min, trial lifecycle at 09:00, batch index every 20s, export cleanup hourly, email retention daily at 02:30, git sync every 10min');
 }
