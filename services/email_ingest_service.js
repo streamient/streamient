@@ -1984,6 +1984,10 @@ export async function updateEmailDraft(host_id, draftId, data, ctx = {}) {
 		{ $set: update },
 		{ returnDocument: 'after' },
 	).lean();
+	if (draft) {
+		emitToTenant(host_id, 'email-draft:updated', draft);
+		emitToTenant(host_id, 'counts:refresh');
+	}
 	if (draft && ctx.user_id) {
 		const details = audit.diffSnapshot(before, draft);
 		audit.log({ action: 'update', resource: 'email_draft', resource_id: draftId, host_id, details, ...ctx });
@@ -1999,6 +2003,10 @@ export async function discardEmailDraft(host_id, draftId, ctx = {}) {
 		{ $set: { status: 'discarded' } },
 		{ returnDocument: 'after' },
 	).lean();
+	if (draft) {
+		emitToTenant(host_id, 'email-draft:updated', draft);
+		emitToTenant(host_id, 'counts:refresh');
+	}
 	if (draft && ctx.user_id) {
 		const details = audit.diffSnapshot(before, draft);
 		audit.log({ action: 'delete', resource: 'email_draft', resource_id: draftId, host_id, details, ...ctx });

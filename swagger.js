@@ -287,6 +287,34 @@ const swaggerSpec = {
 	                    updatedAt: { type: 'string', format: 'date-time' },
 	                },
 	            },
+	            OutgoingEmail: {
+	                type: 'object',
+	                properties: {
+	                    _id: { type: 'string' },
+	                    draft: { type: 'string' },
+	                    source_email: { type: 'string' },
+	                    email_identity: { type: 'string' },
+	                    from: { type: 'string', format: 'email' },
+	                    to: { type: 'array', items: { type: 'string', format: 'email' } },
+	                    cc: { type: 'array', items: { type: 'string', format: 'email' } },
+	                    bcc: { type: 'array', items: { type: 'string', format: 'email' } },
+	                    subject: { type: 'string' },
+	                    body_text: { type: 'string' },
+	                    body_html: { type: 'string' },
+	                    message_id: { type: 'string' },
+	                    in_reply_to: { type: 'string' },
+	                    references: { type: 'array', items: { type: 'string' } },
+	                    status: { type: 'string', enum: ['queued', 'sending', 'sent', 'error', 'canceled'] },
+	                    send_after: { type: 'string', format: 'date-time' },
+	                    sent_at: { type: 'string', format: 'date-time', nullable: true },
+	                    error: { type: 'string' },
+	                    attempts: { type: 'integer' },
+	                    project: { type: 'string' },
+	                    host_id: { type: 'string' },
+	                    createdAt: { type: 'string', format: 'date-time' },
+	                    updatedAt: { type: 'string', format: 'date-time' },
+	                },
+	            },
 	            EmailIdentity: {
 	                type: 'object',
 	                properties: {
@@ -1636,6 +1664,32 @@ const swaggerSpec = {
 	                responses: {
 	                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { message: { type: 'string' }, draft: { $ref: '#/components/schemas/EmailDraft' } } } } } },
 	                    404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+	                },
+	            },
+	        },
+	        '/email-drafts/{id}/send': {
+	            post: {
+	                tags: ['Emails'],
+	                summary: 'Queue an email draft for sending',
+	                description: 'Queues a reply draft for sending after a fixed 10-second abort window.',
+	                parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+	                responses: {
+	                    202: { description: 'Queued', content: { 'application/json': { schema: { type: 'object', properties: { outgoing_email: { $ref: '#/components/schemas/OutgoingEmail' }, abort_until: { type: 'string', format: 'date-time' } } } } } },
+	                    400: { description: 'Validation error', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+	                    404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+	                },
+	            },
+	        },
+	        '/outgoing-emails/{id}/cancel': {
+	            post: {
+	                tags: ['Emails'],
+	                summary: 'Cancel a queued outgoing email',
+	                description: 'Cancels a queued outgoing email before the worker starts sending and restores the draft.',
+	                parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+	                responses: {
+	                    200: { description: 'Canceled', content: { 'application/json': { schema: { type: 'object', properties: { outgoing_email: { $ref: '#/components/schemas/OutgoingEmail' }, draft: { $ref: '#/components/schemas/EmailDraft' } } } } } },
+	                    404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+	                    409: { description: 'Already sending', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
 	                },
 	            },
 	        },

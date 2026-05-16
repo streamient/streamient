@@ -14,6 +14,7 @@ import * as memoryService from '../services/memory_service.js';
 import * as urlService from '../services/url_service.js';
 import * as emailIngestService from '../services/email_ingest_service.js';
 import * as emailInternalNoteService from '../services/email_internal_note_service.js';
+import * as outgoingEmailService from '../services/outgoing_email_service.js';
 import { searchKnowledge, aiChatSearch, processChat, processChatStream } from '../services/ai_chat_service.js';
 import { listConversations, deleteConversation } from '../modules/typesense.js';
 import * as trashService from '../services/trash_service.js';
@@ -638,6 +639,26 @@ router.delete('/email-drafts/:id', requireEmailFeatureAccess, async (req, res) =
 	const draft = await emailIngestService.discardEmailDraft(req.host_id, req.params.id, auditCtx(req));
 	if (!draft) return res.status(404).json({ error: 'Email draft not found' });
 	res.json({ draft, message: 'Email draft deleted' });
+});
+
+router.post('/email-drafts/:id/send', requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const result = await outgoingEmailService.queueDraftSend(req.host_id, req.params.id, auditCtx(req));
+		if (!result) return res.status(404).json({ error: 'Email draft not found' });
+		res.status(202).json(result);
+	} catch (err) {
+		res.status(400).json({ error: err.message || 'Email send queue failed' });
+	}
+});
+
+router.post('/outgoing-emails/:id/cancel', requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const result = await outgoingEmailService.cancelOutgoingEmail(req.host_id, req.params.id, auditCtx(req));
+		if (!result) return res.status(404).json({ error: 'Outgoing email not found' });
+		res.json(result);
+	} catch (err) {
+		res.status(err.status || 400).json({ error: err.message || 'Outgoing email cancel failed' });
+	}
 });
 
 // ---- URLs ----

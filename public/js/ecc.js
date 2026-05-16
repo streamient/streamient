@@ -1409,10 +1409,11 @@
 				draftAutosaveDirty = false;
 				setDraftSaveStatus(card, 'Saved', '');
 				if (!silent) {
-					destroyDraftEditor();
+					if (!options?.keepOpen) destroyDraftEditor();
 					showSuccess('Draft saved');
 				}
 				if (activeMailbox === 'drafts' || (!hadDraft && currentDraft?._id)) loadLabels().catch(() => {});
+				return currentDraft;
 			} catch (err) {
 				if (silent) {
 					setDraftSaveStatus(card, err.message || 'Autosave failed', 'error');
@@ -1420,6 +1421,78 @@
 					showError(err.message || 'Failed to save draft');
 					if (button) button.disabled = false;
 				}
+				if (options?.throwOnError) throw err;
+			}
+		}
+
+		function renderOutgoingQueuedNotice(outgoing, abortUntil, email) {
+			if (!detailDraftEl) return;
+			destroyDraftEditor();
+			replaceChildren(detailDraftEl);
+			var card = document.createElement('div');
+			card.className = 'alert alert-info d-flex justify-content-between align-items-center gap-3 mb-3 ecc-outgoing-queued';
+			var textWrap = document.createElement('div');
+			textWrap.className = 'min-w-0';
+			var countdown = textNode('div', 'fw-semibold', 'Sending in 10 seconds');
+			var detail = textNode('div', 'small', 'You can abort before sending starts.');
+			textWrap.appendChild(countdown);
+			textWrap.appendChild(detail);
+			var abortButton = textNode('button', 'btn btn-outline-danger btn-sm text-nowrap', 'Abort');
+			abortButton.type = 'button';
+			card.appendChild(textWrap);
+			card.appendChild(abortButton);
+			detailDraftEl.appendChild(card);
+
+			var abortTime = new Date(abortUntil || Date.now() + 10000).getTime();
+			var timer = setInterval(function () {
+				var remaining = Math.max(0, Math.ceil((abortTime - Date.now()) / 1000));
+				countdown.textContent = remaining > 0 ? 'Sending in ' + remaining + ' seconds' : 'Sending...';
+				if (remaining <= 0) {
+					clearInterval(timer);
+					abortButton.disabled = true;
+				}
+			}, 250);
+
+			abortButton.addEventListener('click', async function () {
+				abortButton.disabled = true;
+				try {
+					var res = await api('POST', '/outgoing-emails/' + encodeURIComponent(outgoing._id) + '/cancel', {});
+					clearInterval(timer);
+					currentDraft = res.draft || currentDraft;
+					renderDraftDetail(currentDraft);
+					await openReplyEditor(email || selectedEmail, detailDraftEl);
+					showSuccess('Send aborted');
+				} catch (err) {
+					showError(err.message || 'Failed to abort send');
+					abortButton.disabled = false;
+				}
+			});
+		}
+
+		async function sendDraftFromCard(card, draft, sourceEmail) {
+			var replyEmail = sourceEmail || selectedEmail;
+			if (!replyEmail || !card) return;
+			var sendButton = card.querySelector('.ecc-draft-send');
+			var saveButton = card.querySelector('.ecc-draft-save');
+			if (sendButton) sendButton.disabled = true;
+			if (saveButton) saveButton.disabled = true;
+			setDraftSaveStatus(card, 'Queueing send...', '');
+			try {
+				var savedDraft = await saveDraftFromCard(card, draft || currentDraft, replyEmail, {
+					silent: true,
+					keepOpen: true,
+					throwOnError: true,
+				});
+				if (!savedDraft?._id) throw new Error('Draft could not be saved before sending');
+				var res = await api('POST', '/email-drafts/' + encodeURIComponent(savedDraft._id) + '/send', {});
+				currentDraft = savedDraft;
+				renderOutgoingQueuedNotice(res.outgoing_email, res.abort_until, replyEmail);
+				loadLabels().catch(() => {});
+			} catch (err) {
+				showError(err.message || 'Failed to queue send');
+				if (sendButton) sendButton.disabled = false;
+				if (saveButton) saveButton.disabled = false;
+				setDraftSaveStatus(card, err.message || 'Send failed', 'error');
 			}
 		}
 
@@ -1542,11 +1615,15 @@
 			}
 			var cancelButton = textNode('button', 'btn btn-outline-secondary btn-sm', 'Cancel');
 			cancelButton.type = 'button';
-			var saveButton = textNode('button', 'btn btn-primary btn-sm ecc-draft-save', 'Save draft');
+			var saveButton = textNode('button', 'btn btn-outline-secondary btn-sm ecc-draft-save', 'Save draft');
 			saveButton.type = 'button';
 			saveButton.disabled = identities.length === 0;
+			var sendButton = textNode('button', 'btn btn-primary btn-sm ecc-draft-send', 'Send');
+			sendButton.type = 'button';
+			sendButton.disabled = identities.length === 0;
 			actions.appendChild(cancelButton);
 			actions.appendChild(saveButton);
+			actions.appendChild(sendButton);
 			footer.appendChild(actions);
 			card.appendChild(footer);
 			host.appendChild(card);
@@ -1565,6 +1642,9 @@
 			cancelButton.addEventListener('click', destroyDraftEditor);
 			saveButton.addEventListener('click', function () {
 				saveDraftFromCard(card, currentDraft, email);
+			});
+			sendButton.addEventListener('click', function () {
+				sendDraftFromCard(card, currentDraft, email);
 			});
 			if (identities.length > 0) startDraftAutosave(card, email);
 		}
@@ -2143,6 +2223,37 @@
 			updateTriageProgressFromEmail(email);
 		}
 
+		function handleDraftSocketEvent() {
+			if (activeMailbox === 'drafts') loadEmails().catch(() => {});
+			loadLabels().catch(() => {});
+		}
+
+		function handleOutgoingSent(event) {
+			var detail = event.detail || {};
+			var outgoing = detail.outgoing_email || {};
+			var sentEmail = detail.email || null;
+			if (sentEmail) applyEmailSocketUpdate(sentEmail);
+			loadLabels().catch(() => {});
+			var sourceId = String(outgoing.source_email || '');
+			if (detailActive && sourceId && selectedEmailThreadSourceIds.includes(sourceId)) {
+				selectEmail(sentEmail?._id || emailId(selectedEmail)).catch(() => {});
+			}
+		}
+
+		function handleOutgoingError(event) {
+			var detail = event.detail || {};
+			var outgoing = detail.outgoing_email || {};
+			var draft = detail.draft || null;
+			showError(detail.error || 'Email sending failed');
+			loadLabels().catch(() => {});
+			var sourceId = String(outgoing.source_email || draft?.source_email || '');
+			if (detailActive && sourceId && selectedEmailThreadSourceIds.includes(sourceId)) {
+				currentDraft = draft || currentDraft;
+				renderDraftDetail(currentDraft);
+				openReplyEditor(selectedEmail, detailDraftEl).catch(() => {});
+			}
+		}
+
 		function handleEmailDeleted(event) {
 			removeEmailFromList(emailId(event.detail || {}));
 			loadLabels().catch(() => {});
@@ -2343,9 +2454,14 @@
 		addWindowListener('email:created', handleEmailSocketEvent);
 		addWindowListener('email:updated', handleEmailSocketEvent);
 		addWindowListener('email:deleted', handleEmailDeleted);
+		addWindowListener('email-draft:created', handleDraftSocketEvent);
+		addWindowListener('email-draft:updated', handleDraftSocketEvent);
+		addWindowListener('email-draft:deleted', handleDraftSocketEvent);
 		addWindowListener('email-internal-note:created', handleInternalNoteSocketEvent);
 		addWindowListener('email-internal-note:updated', handleInternalNoteSocketEvent);
 		addWindowListener('email-internal-note:deleted', handleInternalNoteSocketEvent);
+		addWindowListener('outgoing-email:sent', handleOutgoingSent);
+		addWindowListener('outgoing-email:error', handleOutgoingError);
 		loadAll().then(function () {
 			if (pendingEmailId) selectEmail(pendingEmailId);
 		});

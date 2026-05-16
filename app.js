@@ -219,6 +219,13 @@ async function start() {
 		return;
 	}
 
+	if (SERVER_MODE === 'email-worker') {
+		const { startOutgoingEmailWorker } = await import('./services/outgoing_email_service.js');
+		await startOutgoingEmailWorker();
+		console.log(`Kumbukum email worker running [${config.env}]`);
+		return;
+	}
+
 	const server = app.listen(config.port, () => {
 		console.log(`Kumbukum ${SERVER_MODE} running on port ${config.port} [${config.env}]`);
 	});

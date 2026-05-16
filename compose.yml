@@ -1,264 +1,280 @@
 x-env: &env
-    NODE_ENV: development
-    KUMBUKUM_APP: web
-    PORT: 3000
-    MONGO_URI: ${DEV_KUMBUKUM_MONGODB_URI}
-    REDIS_URL: ${DEV_REDIS_URL:-redis://redis:6379}
-    TYPESENSE_HOST: ${DEV_TYPESENSE_HOST:-typesense}
-    TYPESENSE_PORT: 8108
-    TYPESENSE_API_KEY: ${DEV_TYPESENSE_KEY:-kumbukum-dev-key}
-    TYPESENSE_NODES: ""
-    SESSION_SECRET: dev-session-secret-change-me
-    JWT_SECRET: dev-jwt-secret-change-me
-    ENABLE_SIGNUP: "true"
-    SMTP_HOST: "mailpit"
-    SMTP_PORT: 1025
-    SMTP_USER: ""
-    SMTP_PASS: ""
-    SMTP_FROM: "noreply@localhost"
-    CHAT_AI_MODEL: "gpt-5.4-mini"
-    CHAT_AI_MODEL_PROVIDER: openai
-    NL_SEARCH_MODEL: "gpt-5.4-mini"
-    NL_SEARCH_MODEL_PROVIDER: openai
-    TS_CONVERSATION_MODEL: "gpt-5.4-mini"
-    TS_CONVERSATION_MODEL_PROVIDER: openai
-    EMAIL_AI_MODEL: "gpt-5.4-mini"
-    EMAIL_AI_MODEL_PROVIDER: openai
-    EMAIL_TRIAGE_MODEL: "gpt-5.4-mini"
-    EMAIL_TRIAGE_MODEL_PROVIDER: openai
-    OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
-    GOOGLE_API_KEY: "${GOOGLE_API_KEY:-}"
-    APP_URL: http://localhost:3000
-    MCP_BASE_URL: http://localhost:3002
-    WS_URL: ""
-    EMAIL_FORWARD_DOMAIN: "email.kumbukum.com"
-    API_BASE_URL: http://app:3000
-    SCREENSHOT_URL: ${DEV_SCREENSHOT_URL:-http://screenshot:3000}
-    SCREENSHOT_SECRET: "${SCREENSHOT_SECRET:-change-me-screenshot-secret}" # openssl rand -hex 32
-    SYSADMIN_EMAIL: "sysadmin@localhost"
-    SYSADMIN_PASSWORD: "sysadminpassword"
-    ENABLE_OPENPANEL: "${ENABLE_OPENPANEL:-false}"
-    OPENPANEL_CLIENT_ID: "${OPENPANEL_CLIENT_ID:-}"
-    OPENPANEL_CLIENT_SECRET: "${OPENPANEL_CLIENT_SECRET:-}"
-    OPENPANEL_API_URL: "${OPENPANEL_API_URL:-}"
-    SENTRY_DSN_KUMBUKUM: "${SENTRY_DSN_KUMBUKUM:-}"
-    SENTRY_DSN: "${SENTRY_DSN:-}"
-    ENABLE_SENTRY: "${ENABLE_SENTRY:-false}"
-    SENTRY_ENABLED: "${SENTRY_ENABLED:-false}"
-    SENTRY_TUNNEL_PROJECT_IDS: "${SENTRY_TUNNEL_PROJECT_IDS:-}"
-    ENABLE_OTEL: "${ENABLE_OTEL:-false}"
-    OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
-    OTEL_EXPORTER_OTLP_INSECURE: "${OTEL_EXPORTER_OTLP_INSECURE:-}"
-    OTEL_EXPORTER_OTLP_PROTOCOL: "${OTEL_EXPORTER_OTLP_PROTOCOL:-}"
-    OTEL_TRACES_EXPORTER: "${OTEL_TRACES_EXPORTER:-}"
-    OTEL_METRICS_EXPORTER: "${OTEL_METRICS_EXPORTER:-}"
-    OTEL_LOGS_EXPORTER: "${OTEL_LOGS_EXPORTER:-}"
-    OTEL_EXPORTER_OTLP_TIMEOUT: "${OTEL_EXPORTER_OTLP_TIMEOUT:-}"
-    OTEL_BSP_EXPORT_TIMEOUT: "${OTEL_BSP_EXPORT_TIMEOUT:-}"
-    OTEL_BSP_SCHEDULE_DELAY: "${OTEL_BSP_SCHEDULE_DELAY:-}"
-    OTEL_BSP_MAX_QUEUE_SIZE: "${OTEL_BSP_MAX_QUEUE_SIZE:-}"
-    OTEL_BSP_MAX_EXPORT_BATCH_SIZE: "${OTEL_BSP_MAX_EXPORT_BATCH_SIZE:-}"
-    OTEL_TRACES_SAMPLER: "${OTEL_TRACES_SAMPLER:-}"
-    OTEL_TRACES_SAMPLER_ARG: "${OTEL_TRACES_SAMPLER_ARG:-}"
-    STRIPE_SECRET_KEY: "${STRIPE_SECRET_KEY:-}"
-    STRIPE_WEBHOOK_SECRET: "${STRIPE_WEBHOOK_SECRET:-}"
-    STRIPE_PRICE_ID: "${STRIPE_PRICE_ID:-}"
-    STRIPE_STARTER_PRICE_ID: "${STRIPE_STARTER_PRICE_ID:-}"
-    STRIPE_PRO_PRICE_ID: "${STRIPE_PRO_PRICE_ID:-}"
-    STRIPE_PORTAL_CONFIG_ID: "${STRIPE_PORTAL_CONFIG_ID:-}"
-    GIT_ENCRYPTION_KEY: "${GIT_ENCRYPTION_KEY:-}"
+  NODE_ENV: development
+  KUMBUKUM_APP: web
+  PORT: 3000
+  MONGO_URI: ${DEV_KUMBUKUM_MONGODB_URI}
+  REDIS_URL: ${DEV_REDIS_URL:-redis://redis:6379}
+  TYPESENSE_HOST: ${DEV_TYPESENSE_HOST:-typesense}
+  TYPESENSE_PORT: 8108
+  TYPESENSE_API_KEY: ${DEV_TYPESENSE_KEY:-kumbukum-dev-key}
+  TYPESENSE_NODES: ""
+  SESSION_SECRET: dev-session-secret-change-me
+  JWT_SECRET: dev-jwt-secret-change-me
+  ENABLE_SIGNUP: "true"
+  SMTP_HOST: "mailpit"
+  SMTP_PORT: 1025
+  SMTP_USER: ""
+  SMTP_PASS: ""
+  SMTP_FROM: "noreply@localhost"
+  CHAT_AI_MODEL: "gpt-5.4-mini"
+  CHAT_AI_MODEL_PROVIDER: openai
+  NL_SEARCH_MODEL: "gpt-5.4-mini"
+  NL_SEARCH_MODEL_PROVIDER: openai
+  TS_CONVERSATION_MODEL: "gpt-5.4-mini"
+  TS_CONVERSATION_MODEL_PROVIDER: openai
+  EMAIL_AI_MODEL: "gpt-5.4-mini"
+  EMAIL_AI_MODEL_PROVIDER: openai
+  EMAIL_TRIAGE_MODEL: "gpt-5.4-mini"
+  EMAIL_TRIAGE_MODEL_PROVIDER: openai
+  OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+  GOOGLE_API_KEY: "${GOOGLE_API_KEY:-}"
+  APP_URL: http://localhost:3000
+  MCP_BASE_URL: http://localhost:3002
+  WS_URL: ""
+  EMAIL_FORWARD_DOMAIN: "email.kumbukum.com"
+  API_BASE_URL: http://app:3000
+  SCREENSHOT_URL: ${DEV_SCREENSHOT_URL:-http://screenshot:3000}
+  SCREENSHOT_SECRET: "${SCREENSHOT_SECRET:-change-me-screenshot-secret}" # openssl rand -hex 32
+  SYSADMIN_EMAIL: "sysadmin@localhost"
+  SYSADMIN_PASSWORD: "sysadminpassword"
+  ENABLE_OPENPANEL: "${ENABLE_OPENPANEL:-false}"
+  OPENPANEL_CLIENT_ID: "${OPENPANEL_CLIENT_ID:-}"
+  OPENPANEL_CLIENT_SECRET: "${OPENPANEL_CLIENT_SECRET:-}"
+  OPENPANEL_API_URL: "${OPENPANEL_API_URL:-}"
+  SENTRY_DSN_KUMBUKUM: "${SENTRY_DSN_KUMBUKUM:-}"
+  SENTRY_DSN: "${SENTRY_DSN:-}"
+  ENABLE_SENTRY: "${ENABLE_SENTRY:-false}"
+  SENTRY_ENABLED: "${SENTRY_ENABLED:-false}"
+  SENTRY_TUNNEL_PROJECT_IDS: "${SENTRY_TUNNEL_PROJECT_IDS:-}"
+  ENABLE_OTEL: "${ENABLE_OTEL:-false}"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
+  OTEL_EXPORTER_OTLP_INSECURE: "${OTEL_EXPORTER_OTLP_INSECURE:-}"
+  OTEL_EXPORTER_OTLP_PROTOCOL: "${OTEL_EXPORTER_OTLP_PROTOCOL:-}"
+  OTEL_TRACES_EXPORTER: "${OTEL_TRACES_EXPORTER:-}"
+  OTEL_METRICS_EXPORTER: "${OTEL_METRICS_EXPORTER:-}"
+  OTEL_LOGS_EXPORTER: "${OTEL_LOGS_EXPORTER:-}"
+  OTEL_EXPORTER_OTLP_TIMEOUT: "${OTEL_EXPORTER_OTLP_TIMEOUT:-}"
+  OTEL_BSP_EXPORT_TIMEOUT: "${OTEL_BSP_EXPORT_TIMEOUT:-}"
+  OTEL_BSP_SCHEDULE_DELAY: "${OTEL_BSP_SCHEDULE_DELAY:-}"
+  OTEL_BSP_MAX_QUEUE_SIZE: "${OTEL_BSP_MAX_QUEUE_SIZE:-}"
+  OTEL_BSP_MAX_EXPORT_BATCH_SIZE: "${OTEL_BSP_MAX_EXPORT_BATCH_SIZE:-}"
+  OTEL_TRACES_SAMPLER: "${OTEL_TRACES_SAMPLER:-}"
+  OTEL_TRACES_SAMPLER_ARG: "${OTEL_TRACES_SAMPLER_ARG:-}"
+  STRIPE_SECRET_KEY: "${STRIPE_SECRET_KEY:-}"
+  STRIPE_WEBHOOK_SECRET: "${STRIPE_WEBHOOK_SECRET:-}"
+  STRIPE_PRICE_ID: "${STRIPE_PRICE_ID:-}"
+  STRIPE_STARTER_PRICE_ID: "${STRIPE_STARTER_PRICE_ID:-}"
+  STRIPE_PRO_PRICE_ID: "${STRIPE_PRO_PRICE_ID:-}"
+  STRIPE_PORTAL_CONFIG_ID: "${STRIPE_PORTAL_CONFIG_ID:-}"
+  GIT_ENCRYPTION_KEY: "${GIT_ENCRYPTION_KEY:-}"
 
 services:
-    # ---------------------------------------------------------------
-    # One-shot service: installs / syncs node_modules before any app
-    # container starts. Every service that needs node_modules must
-    # depend on this with condition: service_completed_successfully.
-    # ---------------------------------------------------------------
-    init:
-        extends:
-            file: ./compose.base.yml
-            service: base
-        build:
-            context: .
-            dockerfile: ./docker/dockerfiles/dev.Dockerfile
-        environment:
-            <<: *env
-        restart: "no"
-        command: ["/bin/bash", "-c", "
-            if [ ! -d node_modules ] || [ package.json -nt node_modules/.installed ] || [ pnpm-lock.yaml -nt node_modules/.installed ]; then
-                echo '[init] Installing / syncing dependencies...';
-                pnpm install;
-                touch node_modules/.installed;
-                echo '[init] Done';
-            else
-                echo '[init] Dependencies up to date';
-            fi
-        "]
-        networks:
-          - hmnet16
+  # ---------------------------------------------------------------
+  # One-shot service: installs / syncs node_modules before any app
+  # container starts. Every service that needs node_modules must
+  # depend on this with condition: service_completed_successfully.
+  # ---------------------------------------------------------------
+  init:
+    extends:
+      file: ./compose.base.yml
+      service: base
+    build:
+      context: .
+      dockerfile: ./docker/dockerfiles/dev.Dockerfile
+    environment:
+      <<: *env
+    restart: "no"
+    command: ["/bin/bash", "-c", "
+      if [ ! -d node_modules ] || [ package.json -nt node_modules/.installed ] || [ pnpm-lock.yaml -nt node_modules/.installed ]; then
+        echo '[init] Installing / syncing dependencies...';
+        pnpm install;
+        touch node_modules/.installed;
+        echo '[init] Done';
+      else
+        echo '[init] Dependencies up to date';
+      fi
+    "]
+    networks:
+      - hmnet16
 
-    app:
-        extends:
-            file: ./compose.base.yml
-            service: base
-        command: ["npm", "run", "dev"]
-        ports:
-            - "3000:3000"
-        environment:
-            <<: *env
-        dns:
-            - 100.100.100.100
-        healthcheck:
-            test: ["CMD", "curl", "-sf", "http://localhost:3000/health"]
-            interval: 30s
-            timeout: 10s
-            retries: 3
-            start_period: 30s
-        depends_on:
-            init:
-                condition: service_completed_successfully
-            # mongo-init:
-            #     condition: service_completed_successfully
-            # redis:
-            #     condition: service_started
-            # typesense:
-            #     condition: service_started
-        networks:
-          - hmnet16
-
-    mcp:
-        extends:
-            file: ./compose.base.yml
-            service: base
-        working_dir: /opt/kumbukum/apps/mcp
-        command: ["npm", "run", "start"]
-        ports:
-            - "3002:3002"
-        environment:
-            <<: *env
-            KUMBUKUM_APP: mcp
-            PORT: 3002
-        restart: unless-stopped
-        healthcheck:
-            test: ["CMD", "curl", "-sf", "http://localhost:3002/health"]
-            interval: 30s
-            timeout: 10s
-            retries: 3
-            start_period: 30s
-        depends_on:
-            init:
-                condition: service_completed_successfully
-        networks:
-          - hmnet16
-
-    scheduler:
-        extends:
-            file: ./compose.base.yml
-            service: base
-        command: ["npm", "run", "start"]
-        environment:
-            <<: *env
-            KUMBUKUM_APP: scheduler
-            SERVER_MODE: scheduler
-        restart: unless-stopped
-        depends_on:
-            init:
-                condition: service_completed_successfully
-        networks:
-          - hmnet16
-
-    # mongodb:
-    #     image: percona/percona-server-mongodb:6.0
-    #     ports:
-    #         - "27017"
-    #     volumes:
-    #         - mongo_data:/data/db
-    #     command: mongod --setParameter perconaTelemetry=false --replSet rs0 --bind_ip_all
-    #     environment:
-    #         PERCONA_TELEMETRY_DISABLE: 1
-
+  app:
+    extends:
+      file: ./compose.base.yml
+      service: base
+    command: ["npm", "run", "dev"]
+    ports:
+      - "3000:3000"
+    environment:
+      <<: *env
+    dns:
+      - 100.100.100.100
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      init:
+        condition: service_completed_successfully
     # mongo-init:
-    #     image: percona/percona-server-mongodb:6.0
-    #     depends_on:
-    #         mongodb:
-    #             condition: service_started
-    #     volumes:
-    #         - ./docker/mongo-init-replset.sh:/docker-entrypoint-initdb.d/init.sh:ro
-    #     entrypoint: /bin/bash
-    #     command: /docker-entrypoint-initdb.d/init.sh
-    #     environment:
-    #         PERCONA_TELEMETRY_DISABLE: 1
-    #         MONGO_HOST: mongo
-
+    #     condition: service_completed_successfully
     # redis:
-    #     image: redis:8
-    #     command: redis-server --appendonly yes --port 6379 --save ""
-    #     volumes:
-    #         - redis_data:/data
-    #     healthcheck:
-    #         test: ["CMD", "redis-cli", "ping"]
-    #         interval: 30s
-    #         timeout: 10s
-    #         retries: 3
-    #         start_period: 30s
-
+    #     condition: service_started
     # typesense:
-    #     image: typesense/typesense:30.2
-    #     ports:
-    #         - "8108:8108"
-    #     volumes:
-    #         - typesense_data:/data
-    #     command: --data-dir /data --api-key=kumbukum-dev-key
+    #     condition: service_started
+    networks:
+      - hmnet16
 
-    # ── Mailpit (dev mail catcher) ──────────────────────────────
-    # mailpit:
-    #     image: axllent/mailpit:latest
-    #     restart: unless-stopped
-    #     ports:
-    #         - "8025:8025"   # Web UI
-    #     expose:
-    #         - "1025"        # SMTP
+  mcp:
+    extends:
+      file: ./compose.base.yml
+      service: base
+    working_dir: /opt/kumbukum/apps/mcp
+    command: ["npm", "run", "start"]
+    ports:
+      - "3002:3002"
+    environment:
+      <<: *env
+      KUMBUKUM_APP: mcp
+      PORT: 3002
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    networks:
+      - hmnet16
 
-    # caddy:
-    #     image: caddy:latest
-    #     cap_add:
-    #         - NET_ADMIN
-    #     ports:
-    #         - "80:80"
-    #         - "443:443"
-    #         - "443:443/udp"
-    #     volumes:
-    #         - ./docker/config/caddy/Caddyfile:/etc/caddy/Caddyfile
-    #         - caddy_data:/data
-    #         - caddy_config:/config
-    #         - /etc/hostname:/etc/hostname:ro
-    #     depends_on:
-    #         - app
-    #         - redis
-    #         - typesense
-    #     dns:
-    #         - 100.100.100.100
+  scheduler:
+    extends:
+      file: ./compose.base.yml
+      service: base
+    command: ["npm", "run", "start"]
+    environment:
+      <<: *env
+      KUMBUKUM_APP: scheduler
+      SERVER_MODE: scheduler
+    restart: unless-stopped
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    networks:
+      - hmnet16
 
-    # screenshot:
-    #     image: ghcr.io/kumbukum/screenshot:latest
-    #     restart: unless-stopped
-    #     init: true
-    #     ports:
-    #         - 3000
-    #     environment:
-    #         PORT: 3000
-    #     shm_size: '2g'
-    #     hostname: screenshot
+  email-worker:
+    extends:
+      file: ./compose.base.yml
+      service: base
+    command: ["npm", "run", "start"]
+    environment:
+      <<: *env
+      KUMBUKUM_APP: email-worker
+      SERVER_MODE: email-worker
+    restart: unless-stopped
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    networks:
+      - hmnet16
+
+# mongodb:
+#     image: percona/percona-server-mongodb:6.0
+#     ports:
+#         - "27017"
+#     volumes:
+#         - mongo_data:/data/db
+#     command: mongod --setParameter perconaTelemetry=false --replSet rs0 --bind_ip_all
+#     environment:
+#         PERCONA_TELEMETRY_DISABLE: 1
+
+# mongo-init:
+#     image: percona/percona-server-mongodb:6.0
+#     depends_on:
+#         mongodb:
+#             condition: service_started
+#     volumes:
+#         - ./docker/mongo-init-replset.sh:/docker-entrypoint-initdb.d/init.sh:ro
+#     entrypoint: /bin/bash
+#     command: /docker-entrypoint-initdb.d/init.sh
+#     environment:
+#         PERCONA_TELEMETRY_DISABLE: 1
+#         MONGO_HOST: mongo
+
+# redis:
+#     image: redis:8
+#     command: redis-server --appendonly yes --port 6379 --save ""
+#     volumes:
+#         - redis_data:/data
+#     healthcheck:
+#         test: ["CMD", "redis-cli", "ping"]
+#         interval: 30s
+#         timeout: 10s
+#         retries: 3
+#         start_period: 30s
+
+# typesense:
+#     image: typesense/typesense:30.2
+#     ports:
+#         - "8108:8108"
+#     volumes:
+#         - typesense_data:/data
+#     command: --data-dir /data --api-key=kumbukum-dev-key
+
+# ── Mailpit (dev mail catcher) ──────────────────────────────
+# mailpit:
+#     image: axllent/mailpit:latest
+#     restart: unless-stopped
+#     ports:
+#         - "8025:8025"   # Web UI
+#     expose:
+#         - "1025"        # SMTP
+
+# caddy:
+#     image: caddy:latest
+#     cap_add:
+#         - NET_ADMIN
+#     ports:
+#         - "80:80"
+#         - "443:443"
+#         - "443:443/udp"
+#     volumes:
+#         - ./docker/config/caddy/Caddyfile:/etc/caddy/Caddyfile
+#         - caddy_data:/data
+#         - caddy_config:/config
+#         - /etc/hostname:/etc/hostname:ro
+#     depends_on:
+#         - app
+#         - redis
+#         - typesense
+#     dns:
+#         - 100.100.100.100
+
+# screenshot:
+#     image: ghcr.io/kumbukum/screenshot:latest
+#     restart: unless-stopped
+#     init: true
+#     ports:
+#         - 3000
+#     environment:
+#         PORT: 3000
+#     shm_size: '2g'
+#     hostname: screenshot
 
 
 volumes:
-    node_modules:
-    pnpm_store:
-    mongo_data:
-    typesense_data:
-    redis_data:
-    caddy_data:
-    caddy_config:
+  node_modules:
+  pnpm_store:
+  mongo_data:
+  typesense_data:
+  redis_data:
+  caddy_data:
+  caddy_config:
 
 networks:
   hmnet16:
