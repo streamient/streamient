@@ -61,6 +61,7 @@
 	var draftSaveChain = Promise.resolve();
 	var draftSendInProgress = false;
 	var draftRecipientTagifies = [];
+	var pendingLocalDraftDeleteIds = new Set();
 	var noteEditor = null;
 	var noteEditorHost = null;
 	var currentInternalNotes = [];
@@ -1475,6 +1476,25 @@
 			});
 		}
 
+		function markLocalDraftDelete(draftId) {
+			var id = String(draftId || '');
+			if (!id) return;
+			pendingLocalDraftDeleteIds.add(id);
+			window.setTimeout(function () {
+				pendingLocalDraftDeleteIds.delete(id);
+			}, 10000);
+		}
+
+		function shouldIgnoreLocalDraftDeleteEvent(event) {
+			var draft = event?.detail || {};
+			var id = String(draft?._id || draft?.id || '');
+			var status = String(draft?.status || '');
+			if (!id || !pendingLocalDraftDeleteIds.has(id)) return false;
+			if (event?.type !== 'email-draft:deleted' && status !== 'discarded') return false;
+			pendingLocalDraftDeleteIds.delete(id);
+			return true;
+		}
+
 		async function deleteDraft(draftId, options) {
 			if (!draftId) return;
 			var silent = Boolean(options?.silent);
@@ -1482,7 +1502,13 @@
 				var confirmed = await confirmAction('Delete Draft', 'This draft will be deleted.');
 				if (!confirmed) return;
 			}
-			await api('DELETE', '/email-drafts/' + encodeURIComponent(draftId));
+			markLocalDraftDelete(draftId);
+			try {
+				await api('DELETE', '/email-drafts/' + encodeURIComponent(draftId));
+			} catch (err) {
+				pendingLocalDraftDeleteIds.delete(String(draftId || ''));
+				throw err;
+			}
 			if (String(currentDraft?._id || '') === String(draftId)) currentDraft = null;
 			destroyDraftEditor();
 			if (!silent) showSuccess('Draft deleted');
@@ -1865,8 +1891,8 @@
 			noteEditorEl.innerHTML = ''
 				+ '<div class="ecc-internal-note-editor-body mb-2"></div>'
 				+ '<div class="d-flex justify-content-end gap-2">'
-				+ '<button type="button" class="btn btn-outline-secondary btn-sm ecc-internal-note-cancel">Cancel</button>'
-				+ '<button type="button" class="btn btn-primary btn-sm ecc-internal-note-save">' + saveText + '</button>'
+				+ '<button type="button" class="btn btn-outline-secondary btn-sm ecc-ai-action-btn ecc-internal-note-cancel">Cancel</button>'
+				+ '<button type="button" class="btn btn-primary btn-sm ecc-ai-action-btn ecc-internal-note-save">' + saveText + '</button>'
 				+ '</div>';
 			noteEditor = initEmailEditor(noteEditorEl.querySelector('.ecc-internal-note-editor-body'), mode === 'edit' ? internalNoteContent(note) : '', placeholder);
 			noteEditorEl.querySelector('.ecc-internal-note-cancel')?.addEventListener('click', destroyNoteEditor);
@@ -2221,6 +2247,7 @@
 		var confirmed = await confirmAction('Delete Drafts', ids.length + ' draft(s) will be deleted.');
 		if (!confirmed) return;
 		try {
+			ids.forEach(markLocalDraftDelete);
 			await Promise.all(ids.map(function (id) {
 				return api('DELETE', '/email-drafts/' + encodeURIComponent(id));
 			}));
@@ -2228,6 +2255,9 @@
 			clearSelection();
 			await loadAll();
 		} catch (err) {
+			ids.forEach(function (id) {
+				pendingLocalDraftDeleteIds.delete(String(id || ''));
+			});
 			showError(err.message || 'Failed to delete drafts');
 		}
 	}
@@ -2352,7 +2382,8 @@
 			updateTriageProgressFromEmail(email);
 		}
 
-		function handleDraftSocketEvent() {
+		function handleDraftSocketEvent(event) {
+			if (shouldIgnoreLocalDraftDeleteEvent(event)) return;
 			if (activeMailbox === 'drafts') loadEmails().catch(() => {});
 			loadLabels().catch(() => {});
 		}

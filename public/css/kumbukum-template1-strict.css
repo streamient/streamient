@@ -338,6 +338,14 @@ body.kk-template1 #chat-sidebar .btn.btn-outline-secondary{
   background:#121a34!important;
 }
 
+body.kk-template1 #main-content .ecc-ai-action-btn {
+  --bs-btn-padding-y: 0.12rem;
+  --bs-btn-padding-x: 0.38rem;
+  --bs-btn-font-size: 0.7rem;
+  border-radius:7px;
+  line-height:1.15;
+}
+
 /* Forms + text contrast */
 body.kk-template1 .form-control,
 body.kk-template1 .form-select{

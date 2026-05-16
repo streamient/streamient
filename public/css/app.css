@@ -863,10 +863,10 @@ small,
 }
 
 .ecc-ai-action-btn {
-	--bs-btn-padding-y: 0.18rem;
-	--bs-btn-padding-x: 0.45rem;
-	--bs-btn-font-size: 0.75rem;
-	line-height: 1.2;
+	--bs-btn-padding-y: 0.12rem;
+	--bs-btn-padding-x: 0.38rem;
+	--bs-btn-font-size: 0.7rem;
+	line-height: 1.15;
 }
 
 .ecc-email-chat {
