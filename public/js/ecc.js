@@ -57,6 +57,8 @@
 	var draftAutosaveTimer = null;
 	var draftAutosaveDirty = false;
 	var draftAutosaveSaving = false;
+	var draftSaveChain = Promise.resolve();
+	var draftSendInProgress = false;
 	var draftRecipientTagifies = [];
 	var noteEditor = null;
 	var noteEditorHost = null;
@@ -144,14 +146,78 @@
 				.filter(Boolean);
 		}
 
-		function recipientInputValueToList(input) {
-			var tagify = input?._kkTagify;
-			if (tagify) {
-				return (tagify.value || [])
-					.map(function (item) { return normalizeEmailAddress(item.value); })
-					.filter(Boolean);
+		function uniqueRecipientList(items) {
+			var seen = new Set();
+			return (items || [])
+				.map(normalizeEmailAddress)
+				.filter(function (item) {
+					if (!item || seen.has(item)) return false;
+					seen.add(item);
+					return true;
+				});
+		}
+
+		function tagifyItemValue(item) {
+			if (typeof item === 'string') return item;
+			return item?.value || item?.email || item?.address || item?.text || '';
+		}
+
+		function tagifyDomValueToList(tagify) {
+			var values = [];
+			var tagNodes = [];
+			if (tagify?.getTagElms) {
+				tagNodes = Array.from(tagify.getTagElms() || []);
+			} else if (tagify?.DOM?.scope) {
+				tagNodes = Array.from(tagify.DOM.scope.querySelectorAll('.tagify__tag') || []);
 			}
-			return inputValueToList(input?.value);
+			tagNodes.forEach(function (node) {
+				var data = node.__tagifyTagData || {};
+				values.push(tagifyItemValue(data) || node.textContent || '');
+			});
+			if (tagify?.DOM?.input) values.push(tagify.DOM.input.textContent || tagify.DOM.input.innerText || '');
+			return uniqueRecipientList(values);
+		}
+
+		function recipientControlDomValueToList(input) {
+			var root = input?.closest?.('.ecc-recipient-control') || input?.parentElement;
+			if (!root) return [];
+			var values = [];
+			root.querySelectorAll('.tagify__tag').forEach(function (node) {
+				var data = node.__tagifyTagData || {};
+				values.push(tagifyItemValue(data) || node.getAttribute('value') || node.getAttribute('title') || node.textContent || '');
+			});
+			root.querySelectorAll('.tagify__input').forEach(function (node) {
+				values.push(node.textContent || node.innerText || '');
+			});
+			return uniqueRecipientList(values);
+		}
+
+		function commitTagifyInput(tagify) {
+			if (!tagify) return;
+			var pending = uniqueRecipientList([
+				tagify.state?.inputText || '',
+				tagify.DOM?.input?.textContent || tagify.DOM?.input?.innerText || '',
+			]);
+			if (pending.length) tagify.addTags(pending, true);
+			if (tagify.update) tagify.update();
+		}
+
+		function recipientInputValueToList(input) {
+			var tagify = input?._kkTagify || input?.__tagify;
+			var domValues = recipientControlDomValueToList(input);
+			if (tagify) {
+				commitTagifyInput(tagify);
+				return uniqueRecipientList([
+					...(tagify.value || []).map(tagifyItemValue),
+					...tagifyDomValueToList(tagify),
+					...inputValueToList(input?.value),
+					...domValues,
+				]);
+			}
+			return uniqueRecipientList([
+				...inputValueToList(input?.value),
+				...domValues,
+			]);
 		}
 
 		function normalizeEmailAddress(value) {
@@ -1014,6 +1080,7 @@
 			}
 			draftAutosaveDirty = false;
 			draftAutosaveSaving = false;
+			draftSendInProgress = false;
 			draftRecipientTagifies.forEach(function (tagify) {
 				try {
 					tagify.destroy();
@@ -1393,36 +1460,42 @@
 		}
 
 		async function saveDraftFromCard(card, draft, sourceEmail, options) {
-			var silent = Boolean(options?.silent);
-			var replyEmail = sourceEmail || selectedEmail;
-			if (!replyEmail || !card) return;
-			var button = card.querySelector('.ecc-draft-save');
-			if (button && !silent) button.disabled = true;
-			if (silent) setDraftSaveStatus(card, 'Saving...', '');
-			try {
-				var hadDraft = Boolean(draft?._id || currentDraft?._id);
-				var payload = draftPayloadFromForm(card);
-				var res = draft?._id
-					? await api('PUT', '/email-drafts/' + encodeURIComponent(draft._id), payload)
-					: await api('POST', '/emails/' + encodeURIComponent(replyEmail._id) + '/draft-reply', payload);
-				currentDraft = res.draft || null;
-				draftAutosaveDirty = false;
-				setDraftSaveStatus(card, 'Saved', '');
-				if (!silent) {
-					if (!options?.keepOpen) destroyDraftEditor();
-					showSuccess('Draft saved');
+			var runSave = async function () {
+				var silent = Boolean(options?.silent);
+				var replyEmail = sourceEmail || selectedEmail;
+				if (!replyEmail || !card) return;
+				var button = card.querySelector('.ecc-draft-save');
+				if (button && !silent) button.disabled = true;
+				if (silent) setDraftSaveStatus(card, 'Saving...', '');
+				try {
+					var draftToSave = draft || currentDraft;
+					var hadDraft = Boolean(draftToSave?._id || currentDraft?._id);
+					var payload = draftPayloadFromForm(card);
+					var res = draftToSave?._id
+						? await api('PUT', '/email-drafts/' + encodeURIComponent(draftToSave._id), payload)
+						: await api('POST', '/emails/' + encodeURIComponent(replyEmail._id) + '/draft-reply', payload);
+					currentDraft = res.draft || null;
+					draftAutosaveDirty = false;
+					setDraftSaveStatus(card, 'Saved', '');
+					if (!silent) {
+						if (!options?.keepOpen) destroyDraftEditor();
+						showSuccess('Draft saved');
+					}
+					if (activeMailbox === 'drafts' || (!hadDraft && currentDraft?._id)) loadLabels().catch(() => {});
+					return currentDraft;
+				} catch (err) {
+					if (silent) {
+						setDraftSaveStatus(card, err.message || 'Autosave failed', 'error');
+					} else {
+						showError(err.message || 'Failed to save draft');
+						if (button) button.disabled = false;
+					}
+					if (options?.throwOnError) throw err;
 				}
-				if (activeMailbox === 'drafts' || (!hadDraft && currentDraft?._id)) loadLabels().catch(() => {});
-				return currentDraft;
-			} catch (err) {
-				if (silent) {
-					setDraftSaveStatus(card, err.message || 'Autosave failed', 'error');
-				} else {
-					showError(err.message || 'Failed to save draft');
-					if (button) button.disabled = false;
-				}
-				if (options?.throwOnError) throw err;
-			}
+			};
+			var nextSave = draftSaveChain.catch(() => {}).then(runSave);
+			draftSaveChain = nextSave.catch(() => {});
+			return nextSave;
 		}
 
 		function renderOutgoingQueuedNotice(outgoing, abortUntil, email) {
@@ -1477,6 +1550,7 @@
 			if (sendButton) sendButton.disabled = true;
 			if (saveButton) saveButton.disabled = true;
 			setDraftSaveStatus(card, 'Queueing send...', '');
+			draftSendInProgress = true;
 			try {
 				var savedDraft = await saveDraftFromCard(card, draft || currentDraft, replyEmail, {
 					silent: true,
@@ -1484,7 +1558,7 @@
 					throwOnError: true,
 				});
 				if (!savedDraft?._id) throw new Error('Draft could not be saved before sending');
-				var res = await api('POST', '/email-drafts/' + encodeURIComponent(savedDraft._id) + '/send', {});
+				var res = await api('POST', '/email-drafts/' + encodeURIComponent(savedDraft._id) + '/send', draftPayloadFromForm(card));
 				currentDraft = savedDraft;
 				renderOutgoingQueuedNotice(res.outgoing_email, res.abort_until, replyEmail);
 				loadLabels().catch(() => {});
@@ -1493,6 +1567,7 @@
 				if (sendButton) sendButton.disabled = false;
 				if (saveButton) saveButton.disabled = false;
 				setDraftSaveStatus(card, err.message || 'Send failed', 'error');
+				draftSendInProgress = false;
 			}
 		}
 
@@ -1500,7 +1575,7 @@
 			draftAutosaveDirty = false;
 			draftAutosaveSaving = false;
 			draftAutosaveTimer = setInterval(async function () {
-				if (!draftAutosaveDirty || draftAutosaveSaving) return;
+				if (!draftAutosaveDirty || draftAutosaveSaving || draftSendInProgress) return;
 				draftAutosaveSaving = true;
 				try {
 					await saveDraftFromCard(card, currentDraft, email, { silent: true });

@@ -12,7 +12,7 @@ const outgoingEmailSchema = new mongoose.Schema(
 		subject: { type: String, trim: true, default: '' },
 		body_text: { type: String, default: '' },
 		body_html: { type: String, default: '' },
-		message_id: { type: String, trim: true, default: '', index: true },
+		message_id: { type: String, trim: true, default: '' },
 		in_reply_to: { type: String, trim: true, default: '' },
 		references: [{ type: String, trim: true }],
 		status: { type: String, enum: ['queued', 'sending', 'sent', 'error', 'canceled'], default: 'queued', index: true },

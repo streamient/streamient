@@ -1671,8 +1671,27 @@ const swaggerSpec = {
 	            post: {
 	                tags: ['Emails'],
 	                summary: 'Queue an email draft for sending',
-	                description: 'Queues a reply draft for sending after a fixed 10-second abort window.',
+	                description: 'Applies an optional latest draft snapshot, then queues a reply draft for sending after a fixed 10-second abort window.',
 	                parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+	                requestBody: {
+	                    required: false,
+	                    content: {
+	                        'application/json': {
+	                            schema: {
+	                                type: 'object',
+	                                properties: {
+	                                    from: { type: 'string' },
+	                                    to: { type: 'array', items: { type: 'string' } },
+	                                    cc: { type: 'array', items: { type: 'string' } },
+	                                    bcc: { type: 'array', items: { type: 'string' } },
+	                                    subject: { type: 'string' },
+	                                    body_text: { type: 'string' },
+	                                    body_html: { type: 'string' },
+	                                },
+	                            },
+	                        },
+	                    },
+	                },
 	                responses: {
 	                    202: { description: 'Queued', content: { 'application/json': { schema: { type: 'object', properties: { outgoing_email: { $ref: '#/components/schemas/OutgoingEmail' }, abort_until: { type: 'string', format: 'date-time' } } } } } },
 	                    400: { description: 'Validation error', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },

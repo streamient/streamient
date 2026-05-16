@@ -643,6 +643,10 @@ router.delete('/email-drafts/:id', requireEmailFeatureAccess, async (req, res) =
 
 router.post('/email-drafts/:id/send', requireEmailFeatureAccess, async (req, res) => {
 	try {
+		if (Object.keys(req.body || {}).length) {
+			const draft = await emailIngestService.updateEmailDraft(req.host_id, req.params.id, req.body || {}, auditCtx(req));
+			if (!draft) return res.status(404).json({ error: 'Email draft not found' });
+		}
 		const result = await outgoingEmailService.queueDraftSend(req.host_id, req.params.id, auditCtx(req));
 		if (!result) return res.status(404).json({ error: 'Email draft not found' });
 		res.status(202).json(result);

@@ -18,6 +18,7 @@ describe('Outgoing email service', () => {
 
 	beforeEach(() => {
 		originals.emailFindOne = Email.findOne;
+		originals.emailFindOneAndUpdate = Email.findOneAndUpdate;
 		originals.emailCreate = Email.create;
 		originals.draftFindOne = EmailDraft.findOne;
 		originals.draftFindOneAndUpdate = EmailDraft.findOneAndUpdate;
@@ -32,6 +33,7 @@ describe('Outgoing email service', () => {
 
 	afterEach(() => {
 		Email.findOne = originals.emailFindOne;
+		Email.findOneAndUpdate = originals.emailFindOneAndUpdate;
 		Email.create = originals.emailCreate;
 		EmailDraft.findOne = originals.draftFindOne;
 		EmailDraft.findOneAndUpdate = originals.draftFindOneAndUpdate;
@@ -127,6 +129,7 @@ describe('Outgoing email service', () => {
 	it('sends queued outgoing mail with reply headers and creates a sent email', async () => {
 		let mailOptions = null;
 		let createdEmail = null;
+		let sourceUpdate = null;
 		const outgoing = {
 			_id: 'outgoing-1',
 			draft: 'draft-1',
@@ -168,6 +171,17 @@ describe('Outgoing email service', () => {
 			createdEmail = { _id: 'sent-email-1', ...payload };
 			return createdEmail;
 		};
+		Email.findOneAndUpdate = async (filter, update) => {
+			sourceUpdate = { filter, update };
+			return {
+				_id: filter._id,
+				host_id: filter.host_id,
+				mailbox: 'inbox',
+				triaged: update.$set.triaged,
+				triaged_at: update.$set.triaged_at,
+				labels: ['reply-required', update.$addToSet.labels],
+			};
+		};
 		EmailDraft.findOneAndUpdate = () => queryResult({ _id: 'draft-1', status: 'discarded' });
 
 		const result = await outgoingEmailService.processOutgoingEmail('outgoing-1');
@@ -180,5 +194,9 @@ describe('Outgoing email service', () => {
 		assert.equal(createdEmail.mailbox, 'sent');
 		assert.equal(createdEmail.message_id, 'reply@example.com');
 		assert.equal(createdEmail.in_reply_to, 'source@example.com');
+		assert.deepEqual(sourceUpdate.filter, { _id: 'email-1', host_id: 'host-1', in_trash: false });
+		assert.equal(sourceUpdate.update.$set.triaged, true);
+		assert.ok(sourceUpdate.update.$set.triaged_at instanceof Date);
+		assert.equal(sourceUpdate.update.$addToSet.labels, 'triaged');
 	});
 });

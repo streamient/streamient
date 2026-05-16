@@ -211,6 +211,28 @@ async function markOutgoingError(outgoing, error) {
 	emitToTenant(outgoing.host_id, 'counts:refresh');
 }
 
+async function markSourceEmailHandled(outgoing) {
+	const handledAt = new Date();
+	const sourceEmail = await Email.findOneAndUpdate(
+		{ _id: outgoing.source_email, host_id: outgoing.host_id, in_trash: false },
+		{
+			$set: {
+				triaged: true,
+				triaged_at: handledAt,
+				is_indexed: false,
+			},
+			$addToSet: {
+				labels: 'triaged',
+			},
+		},
+		{ returnDocument: 'after' },
+	);
+	if (!sourceEmail) return null;
+	removeDocument(outgoing.host_id, 'emails', sourceEmail._id.toString()).catch((err) => console.error('Typesense remove error:', err.message));
+	emitToTenant(outgoing.host_id, 'email:updated', sourceEmail);
+	return sourceEmail;
+}
+
 export async function processOutgoingEmail(outgoingId) {
 	const outgoing = await OutgoingEmail.findOneAndUpdate(
 		{ _id: outgoingId, status: 'queued', send_after: { $lte: new Date() } },
@@ -272,11 +294,12 @@ export async function processOutgoingEmail(outgoingId) {
 			{ $set: { status: 'discarded' } },
 			{ returnDocument: 'after' },
 		).lean();
+		const sourceEmail = await markSourceEmailHandled(outgoing);
 		removeDocument(outgoing.host_id, 'emails', sentEmail._id.toString()).catch((err) => console.error('Typesense remove error:', err.message));
 		invalidateGraphCache(outgoing.host_id).catch(() => {});
 		emitToTenant(outgoing.host_id, 'email:created', sentEmail);
 		emitDraft(outgoing.host_id, 'email-draft:updated', draft);
-		emitOutgoing(outgoing.host_id, 'outgoing-email:sent', outgoing, { email: sentEmail, draft });
+		emitOutgoing(outgoing.host_id, 'outgoing-email:sent', outgoing, { email: sentEmail, draft, source_email: sourceEmail });
 		emitToTenant(outgoing.host_id, 'counts:refresh');
 		return { outgoing_email: publicOutgoing(outgoing), email: sentEmail };
 	} catch (err) {

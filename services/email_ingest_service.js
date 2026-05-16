@@ -139,6 +139,9 @@ function normalizeRecipientList(value) {
 			.flatMap((entry) => {
 				if (typeof entry === 'string') return extractEmailAddress(entry);
 				if (entry?.address) return extractEmailAddress(entry.address);
+				if (typeof entry?.value === 'string') return extractEmailAddress(entry.value);
+				if (entry?.email) return extractEmailAddress(entry.email);
+				if (entry?.text) return extractEmailAddress(entry.text);
 				if (Array.isArray(entry?.value)) {
 					return entry.value
 						.map((item) => extractEmailAddress(item?.address || item?.text || item))

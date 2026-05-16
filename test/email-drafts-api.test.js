@@ -206,6 +206,38 @@ describe('Email draft API', () => {
 		}
 	});
 
+	it('normalizes Tagify recipient objects in draft updates', async () => {
+		let updatePayload = null;
+		EmailDraft.findOne = () => ({
+			lean: async () => ({ _id: '507f1f77bcf86cd799439099', project: 'project-1', status: 'draft' }),
+		});
+		EmailDraft.findOneAndUpdate = (query, update) => {
+			updatePayload = update.$set;
+			return {
+				lean: async () => ({ _id: query._id, ...update.$set }),
+			};
+		};
+
+		const server = await createServer();
+		try {
+			const response = await request(server, 'PUT', '/email-drafts/507f1f77bcf86cd799439099', {
+				to: [{ value: 'nitai@fastmail.com' }],
+				cc: [{ email: 'copy@example.com' }],
+				bcc: [{ text: 'Hidden <hidden@example.com>' }],
+				body_text: 'Hello',
+			});
+			const json = await readJson(response);
+
+			assert.equal(response.status, 200);
+			assert.deepEqual(updatePayload.to, ['nitai@fastmail.com']);
+			assert.deepEqual(updatePayload.cc, ['copy@example.com']);
+			assert.deepEqual(updatePayload.bcc, ['hidden@example.com']);
+			assert.deepEqual(json.draft.to, ['nitai@fastmail.com']);
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
 	it('defaults and validates draft from against project outbound identities', async () => {
 		let draftPayload = null;
 		const identities = [
