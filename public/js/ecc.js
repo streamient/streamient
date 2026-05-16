@@ -80,13 +80,6 @@
 	];
 	var SYSTEM_TRIAGE_LABELS = ['reply-required', 'human-do', 'waiting', 'no-action', 'triaged', 'spam'];
 	var DRAFT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-	var TRIAGE_ACTION_NAMES = {
-		'reply-required': 'Review',
-		'human-do': 'Human Do',
-		waiting: 'Waiting',
-		'no-action': 'No action',
-		spam: 'Spam',
-	};
 
 	function addWindowListener(event, handler) {
 		window.addEventListener(event, handler);
@@ -671,15 +664,6 @@
 		return labels.map(function (label) {
 			return '<span class="badge ecc-email-label me-1">' + escapeHtml(label) + '</span>';
 		}).join('');
-	}
-
-	function shouldShowTriageActionBadge(email) {
-		if (!email.triage_primary_action) return false;
-		return email.triage_primary_action !== activeLabel;
-	}
-
-	function shouldShowDraftBadge(email) {
-		return !activeLabel && Boolean(email.triage_draft_id);
 	}
 
 	function setEmailSelected(checkbox, selected) {
@@ -2004,12 +1988,6 @@
 			var actionPoints = (email.triage_action_points || []).slice(0, 2).map(function (item) {
 				return item.text;
 			}).filter(Boolean).join(' - ');
-			var labels = renderVisibleLabels(email);
-			var triageMeta = [
-				shouldShowTriageActionBadge(email) ? '<span class="badge text-bg-light me-1">' + escapeHtml(TRIAGE_ACTION_NAMES[email.triage_primary_action] || email.triage_primary_action) + '</span>' : '',
-				email.triage_status === 'failed' ? '<span class="badge text-bg-danger me-1">Failed</span>' : '',
-				shouldShowDraftBadge(email) ? '<span class="badge text-bg-info me-1">Draft</span>' : '',
-			].filter(Boolean).join('');
 			return '<div class="list-group-item list-group-item-action ecc-email-item" role="button" tabindex="0" data-id="' + escapeHtml(emailId(email)) + '" data-thread-key="' + escapeHtml(emailThreadKey(email)) + '">'
 				+ '<div class="d-flex justify-content-between align-items-start gap-3 min-w-0">'
 				+ '<div class="form-check ecc-email-select-wrap">'
@@ -2023,8 +2001,6 @@
 				+ '<div class="fw-semibold text-truncate ecc-email-subject">' + escapeHtml(subject) + '</div>'
 				+ (body ? '<div class="ecc-email-excerpt text-muted text-truncate">' + escapeHtml(body) + '</div>' : '')
 				+ (actionPoints ? '<div class="small text-body text-truncate mt-1">' + escapeHtml(actionPoints) + '</div>' : '')
-				+ (triageMeta ? '<div class="mt-2">' + triageMeta + '</div>' : '')
-				+ (labels ? '<div class="mt-2">' + labels + '</div>' : '')
 				+ '</div>'
 				+ '</div>'
 				+ '</div>';

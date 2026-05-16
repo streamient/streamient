@@ -1720,6 +1720,9 @@ function flattenKnowledgeResults(results, currentEmailId) {
 }
 
 function currentProjectIdForEmailContext(email = {}, options = {}) {
+	if (String(options.context_scope || options.contextScope || '').trim() === 'all-projects' || options.all_projects === true) {
+		return '';
+	}
 	return stringifyObjectId(options.project || options.project_id || email.project?._id || email.project) || '';
 }
 

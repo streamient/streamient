@@ -541,7 +541,12 @@ router.post('/emails/:id/summarize', requireEmailFeatureAccess, async (req, res)
 
 router.post('/emails/:id/suggest-replies', requireEmailFeatureAccess, async (req, res) => {
 	try {
-		const result = await emailIngestService.suggestEmailReplies(req.host_id, req.params.id);
+		const options = {
+			context_scope: req.body?.context_scope,
+			contextScope: req.body?.contextScope,
+			all_projects: req.body?.all_projects,
+		};
+		const result = await emailIngestService.suggestEmailReplies(req.host_id, req.params.id, options);
 		if (!result) return res.status(404).json({ error: 'Email not found' });
 		res.json(result);
 	} catch (err) {

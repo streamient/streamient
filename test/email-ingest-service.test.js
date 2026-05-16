@@ -1529,6 +1529,48 @@ describe('Email ingest service', () => {
 			}
 		});
 
+		it('can force reply suggestions to search all projects first', async () => {
+			const originalEmailFindOne = Email.findOne;
+			const originalTenantFindOne = Tenant.findOne;
+			const searchOptions = [];
+
+			Email.findOne = () => ({
+				lean: async () => ({
+					_id: 'email-1',
+					project: 'project-1',
+					subject: 'Support request',
+					from: ['sender@example.com'],
+					to: ['team@example.com'],
+					text_content: 'Can you help me configure this?',
+				}),
+			});
+			Tenant.findOne = () => ({
+				select: () => ({
+					lean: async () => ({ settings: { ai_instructions: {} } }),
+				}),
+			});
+
+			try {
+				const result = await suggestEmailReplies('host-1', 'email-1', {
+					context_scope: 'all-projects',
+					searchKnowledgeFn: async (_hostId, _query, options) => {
+						searchOptions.push(options);
+						return {
+							notes: { hits: [{ document: { id: 'note-1', title: 'Setup guide', text_content: 'Use the setup guide.' } }] },
+						};
+					},
+					completionFn: async () => '{"replies":[{"title":"Option A","body_text":"Happy to help."},{"title":"Option B","body_text":"Send over the details."}]}',
+				});
+
+				assert.equal(searchOptions.length, 1);
+				assert.equal(searchOptions[0].projectId, undefined);
+				assert.equal(result.context_scope, 'all-projects');
+			} finally {
+				Email.findOne = originalEmailFindOne;
+				Tenant.findOne = originalTenantFindOne;
+			}
+		});
+
 		it('suggests From email addresses from project first and then tenant fallback', async () => {
 			const calls = [];
 			const result = await suggestFromEmailAddresses('host-1', {
