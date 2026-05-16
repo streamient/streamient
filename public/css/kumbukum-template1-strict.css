@@ -346,6 +346,12 @@ body.kk-template1 #main-content .ecc-ai-action-btn {
   line-height:1.15;
 }
 
+body.kk-template1 .kk-email-body-controls .btn.btn-outline-secondary {
+  padding:4px 9px;
+  font-size:.82rem;
+  line-height:1.35;
+}
+
 /* Forms + text contrast */
 body.kk-template1 .form-control,
 body.kk-template1 .form-select{
@@ -572,7 +578,7 @@ body.kk-template1 #chat-sidebar .btn.btn-outline-secondary:hover {
   color: #fff !important;
   border-color: #5a6ca8 !important;
 }
-body.kk-template1 #main-content .ecc-email-body-controls .btn.btn-outline-secondary.active {
+body.kk-template1 .kk-email-body-controls .btn.btn-outline-secondary.active {
   background: #6c757d !important;
   border-color: #6c757d !important;
   color: #fff !important;

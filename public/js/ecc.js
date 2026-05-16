@@ -382,7 +382,7 @@
 			}
 
 			var controls = document.createElement('div');
-			controls.className = 'd-flex align-items-center gap-2 ecc-email-body-controls';
+			controls.className = 'd-flex align-items-center gap-2 kk-email-body-controls ecc-email-body-controls';
 			var modeGroup = document.createElement('div');
 			modeGroup.className = 'btn-group btn-group-sm';
 			modeGroup.setAttribute('role', 'group');
