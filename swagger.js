@@ -1137,6 +1137,7 @@ const swaggerSpec = {
             get: {
                 tags: ['Emails'],
                 summary: 'List emails',
+                description: 'Sent mailbox results are collapsed to one latest sent email per thread.',
                 parameters: [
                     { $ref: '#/components/parameters/page' },
                     { $ref: '#/components/parameters/limit' },
@@ -1439,6 +1440,7 @@ const swaggerSpec = {
 	            post: {
 	                tags: ['Emails'],
 	                summary: 'Create or update a draft from a reply suggestion',
+	                description: 'When the selected email is a sent reply, the draft is created or updated against the latest non-sent message in the thread.',
 	                parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
 	                requestBody: {
 	                    required: true,
@@ -1522,6 +1524,7 @@ const swaggerSpec = {
             get: {
                 tags: ['Emails'],
                 summary: 'List email labels and command center counts',
+                description: 'Sent mailbox counts are collapsed to one count per thread.',
                 parameters: [
                     { $ref: '#/components/parameters/project' },
 	                    { name: 'mailbox', in: 'query', schema: { type: 'string', enum: ['inbox', 'archived', 'sent', 'spam', 'drafts', 'trash'] } },

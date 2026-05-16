@@ -37,7 +37,7 @@ PUT /api/v1/emails/:id/internal-notes/:noteId
 DELETE /api/v1/emails/:id/internal-notes/:noteId
 ```
 
-Email read responses include sanitized `html_content`, `html_content_has_remote_images`, and `excerpt`. The excerpt is derived from visible HTML when available and strips parser control lines such as reply-above markers.
+Email read responses include sanitized `html_content`, `html_content_has_remote_images`, and `excerpt`. The excerpt is derived from visible HTML when available and strips parser control lines such as reply-above markers. `GET /api/v1/emails?mailbox=sent` returns one latest sent email per thread, and Sent counts use the same thread-collapsed behavior.
 
 Internal notes are private team notes for the email thread. They are stored separately from email drafts and are never included in outbound email content. Notes can be threaded with `parent_note`, edited by tenant team members, and deleted only when they have no replies.
 
@@ -80,7 +80,7 @@ Response:
 
 Use `/emails/:id/ai` for questions about one selected email. It includes retrieved Kumbukum context by searching the selected email's project first, then all projects only when no project records are found. Use `/emails/:id/summarize` to generate and save `triage_summary`, `/emails/:id/suggest-replies` to return two structured reply choices with the same project-first context lookup, and `/emails/:id/draft-reply` to turn one choice into a draft.
 
-Draft updates accept `from`, recipient arrays in `to`, `cc`, and `bcc`, plus `subject`, `body_text`, and sanitized `body_html`. `from` must match a configured outbound email identity for the email project when identities exist. `to`, `cc`, and `bcc` are limited to 10 addresses each.
+Draft updates accept `from`, recipient arrays in `to`, `cc`, and `bcc`, plus `subject`, `body_text`, and sanitized `body_html`. `from` must match a configured outbound email identity for the email project when identities exist. `to`, `cc`, and `bcc` are limited to 10 addresses each. When the selected email is a sent reply, `/emails/:id/draft-reply` creates or updates the draft against the latest non-sent message in that thread.
 
 Draft deletion uses `DELETE /api/v1/email-drafts/:id` and marks the draft as `discarded`, which removes it from active draft lists.
 

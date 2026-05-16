@@ -584,13 +584,51 @@ function buildEmailListQuery(host_id, projectId, filters = {}) {
 	return query;
 }
 
+function emailThreadKey(email = {}) {
+	const firstReference = Array.isArray(email.references) ? email.references.find((ref) => canonicalMessageId(ref)) : '';
+	return canonicalMessageId(firstReference)
+		|| canonicalMessageId(email.in_reply_to)
+		|| canonicalMessageId(email.message_id)
+		|| String(email._id || email.id || '');
+}
+
+function emailSortTime(email = {}) {
+	const value = email.updatedAt || email.createdAt;
+	const time = value ? new Date(value).getTime() : 0;
+	return Number.isFinite(time) ? time : 0;
+}
+
+function collapseEmailsByThread(emails = []) {
+	const byThread = new Map();
+	for (const email of emails) {
+		const key = emailThreadKey(email);
+		const existing = byThread.get(key);
+		if (!existing || emailSortTime(email) > emailSortTime(existing)) byThread.set(key, email);
+	}
+	return [...byThread.values()].sort((a, b) => emailSortTime(b) - emailSortTime(a));
+}
+
+async function countSentEmailThreads(host_id, projectId) {
+	const query = buildEmailListQuery(host_id, projectId, { mailbox: 'sent' });
+	const emails = await Email.find(query).select('_id message_id references in_reply_to updatedAt createdAt').lean();
+	return collapseEmailsByThread(emails).length;
+}
+
 export async function listEmails(host_id, projectId, { page = 1, limit = 50, mailbox, label, triaged } = {}) {
 	const query = buildEmailListQuery(host_id, projectId, { mailbox, label, triaged });
+	const safePage = Math.max(1, parseInt(page, 10) || 1);
+	const safeLimit = Math.max(1, parseInt(limit, 10) || 50);
 
+	if (mailbox === 'sent' && !label) {
+		const emails = await Email.find(query)
+			.sort({ updatedAt: -1 })
+			.lean();
+		return collapseEmailsByThread(emails).slice((safePage - 1) * safeLimit, safePage * safeLimit);
+	}
 	return Email.find(query)
 		.sort({ updatedAt: -1 })
-		.skip((page - 1) * limit)
-		.limit(limit);
+		.skip((safePage - 1) * safeLimit)
+		.limit(safeLimit);
 }
 
 function applyTriageStatusFilters(query, filters = {}) {
@@ -726,7 +764,7 @@ export async function listEmailLabels(host_id, filters = {}) {
 		Promise.all([
 			Email.countDocuments(buildEmailListQuery(host_id, projectId, { mailbox: 'inbox', triaged: false })),
 			Email.countDocuments(buildEmailListQuery(host_id, projectId, { mailbox: 'archived' })),
-			Email.countDocuments(buildEmailListQuery(host_id, projectId, { mailbox: 'sent' })),
+			countSentEmailThreads(host_id, projectId),
 			Email.countDocuments(buildEmailListQuery(host_id, projectId, { mailbox: 'spam' })),
 			EmailDraft.countDocuments({ host_id, status: { $ne: 'discarded' }, ...(projectId ? { project: projectId } : {}) }),
 			Email.countDocuments({ host_id, in_trash: true, ...(projectId ? { project: projectId } : {}) }),
@@ -1349,22 +1387,29 @@ export async function suggestEmailReplies(host_id, emailId, options = {}) {
 	return { replies, context_scope: context.context_scope };
 }
 
+async function resolveDraftReplyTargetEmail(host_id, email) {
+	if (!email?._id) return email;
+	const thread = await getEmailThread(host_id, email._id, { order: 'desc' });
+	return thread.find((item) => (item.mailbox || 'inbox') !== 'sent') || email;
+}
+
 export async function useEmailReplySuggestion(host_id, emailId, data = {}, ctx = {}) {
 	const email = await Email.findOne({ _id: emailId, host_id, in_trash: false }).lean();
 	if (!email) return null;
+	const replyTargetEmail = await resolveDraftReplyTargetEmail(host_id, email);
 
 	const bodyHtml = data.body_html !== undefined || data.html !== undefined ? normalizeDraftHtml(data.body_html ?? data.html) : '';
 	const bodyText = String(data.body_text || data.text || data.body || textFromDraftHtml(bodyHtml)).trim().slice(0, 12000);
-	const subject = String(data.subject || '').trim().slice(0, 300) || `Re: ${email.subject || '(No subject)'}`;
-	const from = await resolveDraftFrom(host_id, email.project, data.from, (email.to || [])[0] || '');
-	const to = data.to !== undefined ? normalizeDraftRecipientList(data.to, 'to') : normalizeDraftRecipientList(email.from || [], 'to');
+	const subject = String(data.subject || '').trim().slice(0, 300) || `Re: ${replyTargetEmail.subject || '(No subject)'}`;
+	const from = await resolveDraftFrom(host_id, replyTargetEmail.project, data.from, (replyTargetEmail.to || [])[0] || '');
+	const to = data.to !== undefined ? normalizeDraftRecipientList(data.to, 'to') : normalizeDraftRecipientList(replyTargetEmail.from || [], 'to');
 	const cc = data.cc !== undefined ? normalizeDraftRecipientList(data.cc, 'cc') : [];
 	const bcc = data.bcc !== undefined ? normalizeDraftRecipientList(data.bcc, 'bcc') : [];
 	const before = ctx.user_id
-		? await EmailDraft.findOne({ source_email: email._id, host_id, generated_by_triage: false, status: { $ne: 'discarded' } }).sort({ updatedAt: -1 }).lean()
+		? await EmailDraft.findOne({ source_email: replyTargetEmail._id, host_id, generated_by_triage: false, status: { $ne: 'discarded' } }).sort({ updatedAt: -1 }).lean()
 		: null;
 	const draft = await EmailDraft.findOneAndUpdate(
-		{ source_email: email._id, host_id, generated_by_triage: false, status: { $ne: 'discarded' } },
+		{ source_email: replyTargetEmail._id, host_id, generated_by_triage: false, status: { $ne: 'discarded' } },
 		{
 			$set: {
 				from,
@@ -1376,8 +1421,8 @@ export async function useEmailReplySuggestion(host_id, emailId, data = {}, ctx =
 				body_html: bodyHtml,
 				status: 'draft',
 				confidence: null,
-				project: email.project,
-				owner: ctx.user_id || email.owner,
+				project: replyTargetEmail.project,
+				owner: ctx.user_id || replyTargetEmail.owner,
 				host_id,
 				generated_by_triage: false,
 			},

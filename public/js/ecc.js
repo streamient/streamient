@@ -45,6 +45,7 @@
 	var activeLabel = '';
 	var selectedProject = '';
 	var selectedEmail = null;
+	var replyTargetEmail = null;
 	var detailActive = false;
 	var pendingEmailId = '';
 	var selectedIds = new Set();
@@ -109,6 +110,26 @@
 
 		function emailId(email) {
 			return String(email?._id || email?.id || '');
+		}
+
+		function emailThreadKey(email) {
+			var firstReference = (email?.references || []).find(function (ref) {
+				return String(ref || '').trim();
+			});
+			var normalizeMessageId = function (value) {
+				return String(value || '').trim().replace(/^<+|>+$/g, '').toLowerCase();
+			};
+			return normalizeMessageId(firstReference)
+				|| normalizeMessageId(email?.in_reply_to)
+				|| normalizeMessageId(email?.message_id)
+				|| emailId(email);
+		}
+
+		function latestReplyTargetFromThread(thread, fallbackEmail) {
+			var messages = Array.isArray(thread) ? thread : [];
+			return messages.find(function (item) {
+				return (item?.mailbox || 'inbox') !== 'sent';
+			}) || fallbackEmail || null;
 		}
 
 		function draftSourceEmailId(draft) {
@@ -997,6 +1018,7 @@
 
 			function backToListView() {
 				selectedEmail = null;
+				replyTargetEmail = null;
 				pendingEmailId = '';
 				showListView();
 				renderEmailAi(null);
@@ -1040,6 +1062,7 @@
 			if (!listEl) return;
 			showListView();
 			selectedEmail = null;
+			replyTargetEmail = null;
 			selectedIds.clear();
 			updateActionBar();
 			renderMoveMenu();
@@ -1596,15 +1619,24 @@
 
 		async function openReplyEditor(email, host) {
 			if (!email?._id || !host) return;
+			if (draftEditorHost === host) {
+				destroyDraftEditor();
+				return;
+			}
 			destroyDraftEditor();
+			var replyEmail = replyTargetEmail || email;
 			draftEditorHost = host;
 			host.classList.remove('d-none');
 			host.innerHTML = '<div class="text-muted small mb-3">Loading draft editor...</div>';
 
 			var draft = currentDraft || null;
+			if (draft?._id && draftSourceEmailId(draft) !== emailId(replyEmail)) {
+				draft = null;
+				currentDraft = null;
+			}
 			var identities = [];
 			try {
-				identities = await loadComposeEmailIdentities(email);
+				identities = await loadComposeEmailIdentities(replyEmail);
 			} catch {
 				identities = [];
 			}
@@ -1647,10 +1679,10 @@
 				var label = (identity.name ? identity.name + ' <' + identity.email + '>' : identity.email);
 				return '<option value="' + escapeHtml(normalizeEmailAddress(identity.email)) + '">' + escapeHtml(label) + '</option>';
 			}).join('');
-			fromSelect.value = defaultDraftFrom(draft, email, identities);
+			fromSelect.value = defaultDraftFrom(draft, replyEmail, identities);
 			fromSelect.disabled = identities.length === 0;
 			fields.querySelector('.ecc-draft-identity-warning')?.classList.toggle('d-none', identities.length > 0);
-			fields.querySelector('.ecc-draft-subject').value = draft?.subject || (email?.subject ? 'Re: ' + email.subject : '');
+			fields.querySelector('.ecc-draft-subject').value = draft?.subject || (replyEmail?.subject ? 'Re: ' + replyEmail.subject : '');
 			fields.querySelector('.ecc-draft-cc-row')?.classList.toggle('d-none', !(draft?.cc || []).length);
 			fields.querySelector('.ecc-draft-bcc-row')?.classList.toggle('d-none', !(draft?.bcc || []).length);
 			fields.querySelector('.ecc-draft-show-cc')?.classList.toggle('d-none', Boolean((draft?.cc || []).length));
@@ -1660,9 +1692,9 @@
 				if (!input.classList.contains('ecc-draft-to') && !input.classList.contains('ecc-draft-cc') && !input.classList.contains('ecc-draft-bcc')) input.addEventListener('input', markDirty);
 				input.addEventListener('change', markDirty);
 			});
-			setupDraftRecipientTagify(fields.querySelector('.ecc-draft-to'), email, draft?.to?.length ? draft.to : (email?.from || []), markDirty);
-			setupDraftRecipientTagify(fields.querySelector('.ecc-draft-cc'), email, draft?.cc || [], markDirty);
-			setupDraftRecipientTagify(fields.querySelector('.ecc-draft-bcc'), email, draft?.bcc || [], markDirty);
+			setupDraftRecipientTagify(fields.querySelector('.ecc-draft-to'), replyEmail, draft?.to?.length ? draft.to : (replyEmail?.from || []), markDirty);
+			setupDraftRecipientTagify(fields.querySelector('.ecc-draft-cc'), replyEmail, draft?.cc || [], markDirty);
+			setupDraftRecipientTagify(fields.querySelector('.ecc-draft-bcc'), replyEmail, draft?.bcc || [], markDirty);
 			fields.querySelector('.ecc-draft-show-cc')?.addEventListener('click', function () {
 				fields.querySelector('.ecc-draft-cc-row')?.classList.remove('d-none');
 				fields.querySelector('.ecc-draft-show-cc')?.classList.add('d-none');
@@ -1716,12 +1748,12 @@
 			}
 			cancelButton.addEventListener('click', destroyDraftEditor);
 			saveButton.addEventListener('click', function () {
-				saveDraftFromCard(card, currentDraft, email);
+				saveDraftFromCard(card, currentDraft, replyEmail);
 			});
 			sendButton.addEventListener('click', function () {
-				sendDraftFromCard(card, currentDraft, email);
+				sendDraftFromCard(card, currentDraft, replyEmail);
 			});
-			if (identities.length > 0) startDraftAutosave(card, email);
+			if (identities.length > 0) startDraftAutosave(card, replyEmail);
 		}
 
 		function renderThreadMessage(email, options) {
@@ -1891,7 +1923,7 @@
 				email.triage_status === 'failed' ? '<span class="badge text-bg-danger me-1">Failed</span>' : '',
 				shouldShowDraftBadge(email) ? '<span class="badge text-bg-info me-1">Draft</span>' : '',
 			].filter(Boolean).join('');
-			return '<div class="list-group-item list-group-item-action ecc-email-item" role="button" tabindex="0" data-id="' + escapeHtml(emailId(email)) + '">'
+			return '<div class="list-group-item list-group-item-action ecc-email-item" role="button" tabindex="0" data-id="' + escapeHtml(emailId(email)) + '" data-thread-key="' + escapeHtml(emailThreadKey(email)) + '">'
 				+ '<div class="d-flex justify-content-between align-items-start gap-3 min-w-0">'
 				+ '<div class="form-check ecc-email-select-wrap">'
 				+ '<input class="form-check-input ecc-email-select" type="checkbox" value="' + escapeHtml(emailId(email)) + '" aria-label="Select email">'
@@ -2001,6 +2033,7 @@
 			if (!listEl || listEl.querySelector('.ecc-email-item')) return;
 			listEl.innerHTML = '<div class="list-group-item text-muted ecc-email-empty">No emails for this view.</div>';
 			selectedEmail = null;
+			replyTargetEmail = null;
 			emailAiMessages = [];
 			emailReplySuggestions = [];
 			renderEmailAi(null);
@@ -2016,6 +2049,7 @@
 		if (!emails.length) {
 			listEl.innerHTML = '<div class="list-group-item text-muted ecc-email-empty">No emails for this view.</div>';
 			selectedEmail = null;
+			replyTargetEmail = null;
 			emailAiMessages = [];
 			emailReplySuggestions = [];
 			renderEmailAi(null);
@@ -2023,6 +2057,7 @@
 			return;
 		}
 		selectedEmail = null;
+		replyTargetEmail = null;
 		emailAiMessages = [];
 		emailReplySuggestions = [];
 		renderEmailAi(null);
@@ -2093,6 +2128,7 @@
 			}) || thread[0] || null;
 			if (!email) throw new Error('Email not found');
 			selectedEmail = email;
+			replyTargetEmail = latestReplyTargetFromThread(thread, email);
 			pendingEmailId = '';
 			emailAiMessages = [];
 			emailReplySuggestions = [];
@@ -2101,6 +2137,7 @@
 				var draftRes = await api('GET', '/email-drafts/' + encodeURIComponent(options.draftId));
 				draft = draftRes.draft || draft;
 			}
+			if (draft?._id && draftSourceEmailId(draft) !== emailId(replyTargetEmail)) draft = null;
 			listEl?.querySelectorAll('.ecc-email-item').forEach(function (item) {
 				var active = item.dataset.id === id || item.dataset.sourceEmail === id || item.dataset.id === options?.draftId;
 				item.classList.toggle('is-active', active);
@@ -2110,6 +2147,7 @@
 			renderEmailAi(email);
 		} catch (err) {
 			selectedEmail = null;
+			replyTargetEmail = null;
 			selectedEmailThreadSourceIds = [];
 			pendingEmailId = '';
 			emailAiMessages = [];
@@ -2257,8 +2295,17 @@
 					updateActionBar();
 					showEmptyEmailsIfNeeded();
 				}
-				if (emailId(selectedEmail) === id) renderEmailAi(null);
+				if (emailId(selectedEmail) === id) {
+					replyTargetEmail = null;
+					renderEmailAi(null);
+				}
 				return;
+			}
+			if (activeMailbox === 'sent') {
+				var threadKey = emailThreadKey(email);
+				listEl.querySelectorAll('.ecc-email-item[data-thread-key="' + CSS.escape(threadKey) + '"]').forEach(function (item) {
+					if (item.dataset.id !== id) item.remove();
+				});
 			}
 			var wrapper = document.createElement('div');
 			wrapper.innerHTML = renderEmailItemHtml(email);
@@ -2277,6 +2324,7 @@
 			}
 			if (emailId(selectedEmail) === id) {
 				selectedEmail = email;
+				if ((email.mailbox || 'inbox') !== 'sent') replyTargetEmail = email;
 				renderEmailAi(email);
 			}
 			updateActionBar();
@@ -2287,7 +2335,10 @@
 			listEl.querySelector('.ecc-email-item[data-id="' + CSS.escape(id) + '"]')?.remove();
 			selectedIds.delete(id);
 			updateActionBar();
-			if (emailId(selectedEmail) === id) renderEmailAi(null);
+			if (emailId(selectedEmail) === id) {
+				replyTargetEmail = null;
+				renderEmailAi(null);
+			}
 			showEmptyEmailsIfNeeded();
 		}
 
@@ -2486,6 +2537,7 @@
 		activeLabel = '';
 		selectedProject = '';
 		selectedEmail = null;
+		replyTargetEmail = null;
 		detailActive = false;
 		pendingEmailId = '';
 		triageRunId = '';
@@ -2588,6 +2640,7 @@
 		aiInputEl = null;
 		aiSendBtn = null;
 		selectedEmail = null;
+		replyTargetEmail = null;
 		detailActive = false;
 		currentDraft = null;
 		destroyDraftEditor();

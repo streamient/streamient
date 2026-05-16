@@ -884,11 +884,61 @@ describe('Email ingest service', () => {
 		}
 	});
 
+	it('collapses sent emails by thread and keeps the newest sent reply', async () => {
+		let findQuery = null;
+		const originalFind = Email.find;
+		const sentOlder = {
+			_id: 'sent-older',
+			message_id: 'sent-older@example.com',
+			in_reply_to: 'root@example.com',
+			references: ['root@example.com'],
+			mailbox: 'sent',
+			updatedAt: '2026-01-01T10:00:00.000Z',
+		};
+		const sentNewest = {
+			_id: 'sent-newest',
+			message_id: 'sent-newest@example.com',
+			in_reply_to: 'root@example.com',
+			references: ['root@example.com'],
+			mailbox: 'sent',
+			updatedAt: '2026-01-01T11:00:00.000Z',
+		};
+		const sentOtherThread = {
+			_id: 'sent-other',
+			message_id: 'sent-other@example.com',
+			in_reply_to: 'other-root@example.com',
+			references: ['other-root@example.com'],
+			mailbox: 'sent',
+			updatedAt: '2026-01-01T09:00:00.000Z',
+		};
+
+		Email.find = (query) => {
+			findQuery = query;
+			return {
+				sort: () => ({
+					lean: async () => [sentNewest, sentOlder, sentOtherThread],
+				}),
+			};
+		};
+
+		try {
+			const emails = await listEmails('host-1', 'project-1', { mailbox: 'sent' });
+
+			assert.equal(findQuery.host_id, 'host-1');
+			assert.equal(findQuery.project, 'project-1');
+			assert.equal(findQuery.mailbox, 'sent');
+			assert.deepEqual(emails.map((email) => email._id), ['sent-newest', 'sent-other']);
+		} finally {
+			Email.find = originalFind;
+		}
+	});
+
 	it('lists default email labels in beginner-friendly order and hides internal done label', async () => {
 		let bulkOps = [];
 		const originalBulkWrite = EmailLabel.bulkWrite;
 		const originalLabelFind = EmailLabel.find;
 		const originalEmailCountDocuments = Email.countDocuments;
+		const originalEmailFind = Email.find;
 		const originalDraftCountDocuments = EmailDraft.countDocuments;
 
 		EmailLabel.bulkWrite = async (ops) => {
@@ -908,6 +958,14 @@ describe('Email ingest service', () => {
 			}),
 		});
 		Email.countDocuments = async () => 0;
+		Email.find = () => ({
+			select: () => ({
+				lean: async () => [
+					{ _id: 'sent-1', message_id: 'sent-1@example.com', in_reply_to: 'root@example.com', references: ['root@example.com'] },
+					{ _id: 'sent-2', message_id: 'sent-2@example.com', in_reply_to: 'root@example.com', references: ['root@example.com'] },
+				],
+			}),
+		});
 		EmailDraft.countDocuments = async () => 0;
 
 		try {
@@ -915,12 +973,14 @@ describe('Email ingest service', () => {
 
 			assert.deepEqual(result.labels.map((label) => label.name), ['Review', 'Human Do', 'Waiting', 'Spam', 'No action']);
 			assert.ok(!result.labels.some((label) => label.slug === 'triaged'));
+			assert.equal(result.mailboxes.find((mailbox) => mailbox.slug === 'sent').count, 1);
 			assert.equal(bulkOps.find((op) => op.updateOne.filter.slug === 'reply-required').updateOne.update.$set.name, 'Review');
 			assert.equal(bulkOps.find((op) => op.updateOne.filter.slug === 'triaged').updateOne.update.$set.name, 'Done');
 		} finally {
 			EmailLabel.bulkWrite = originalBulkWrite;
 			EmailLabel.find = originalLabelFind;
 			Email.countDocuments = originalEmailCountDocuments;
+			Email.find = originalEmailFind;
 			EmailDraft.countDocuments = originalDraftCountDocuments;
 		}
 	});

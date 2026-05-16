@@ -251,16 +251,26 @@ describe('Email draft API', () => {
 				}),
 			}),
 		});
+		const email = {
+			_id: 'email-1',
+			message_id: 'inbound@example.com',
+			references: [],
+			in_reply_to: '',
+			mailbox: 'inbox',
+			project: 'project-1',
+			owner: '507f1f77bcf86cd799439011',
+			from: ['customer@example.com'],
+			to: ['Support <support@example.com>'],
+			subject: 'Question',
+			host_id: 'host-1',
+		};
 		Email.findOne = () => ({
 			lean: async () => ({
-				_id: 'email-1',
-				project: 'project-1',
-				owner: '507f1f77bcf86cd799439011',
-				from: ['customer@example.com'],
-				to: ['Support <support@example.com>'],
-				subject: 'Question',
-				host_id: 'host-1',
+				...email,
 			}),
+		});
+		Email.find = () => ({
+			lean: async () => [email],
 		});
 		EmailDraft.findOne = () => ({
 			sort: () => ({
@@ -298,6 +308,162 @@ describe('Email draft API', () => {
 
 			assert.equal(rejectedResponse.status, 400);
 			assert.match(rejectedJson.error, /from must match a configured outbound email address/);
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
+	it('creates draft replies against the latest non-sent thread message when selected email is sent', async () => {
+		let draftQuery = null;
+		let draftPayload = null;
+		const sent = {
+			_id: 'sent-1',
+			message_id: 'sent-1@example.com',
+			references: ['root@example.com'],
+			in_reply_to: 'root@example.com',
+			mailbox: 'sent',
+			project: 'project-1',
+			owner: '507f1f77bcf86cd799439011',
+			from: ['support@example.com'],
+			to: ['old-customer@example.com'],
+			subject: 'Re: Question',
+			host_id: 'host-1',
+			createdAt: '2026-01-01T11:00:00.000Z',
+		};
+		const root = {
+			_id: 'root-1',
+			message_id: 'root@example.com',
+			references: [],
+			in_reply_to: '',
+			mailbox: 'inbox',
+			project: 'project-1',
+			owner: '507f1f77bcf86cd799439011',
+			from: ['old-customer@example.com'],
+			to: ['support@example.com'],
+			subject: 'Question',
+			host_id: 'host-1',
+			createdAt: '2026-01-01T10:00:00.000Z',
+		};
+		const latestInbound = {
+			_id: 'latest-inbound',
+			message_id: 'latest@example.com',
+			references: ['root@example.com'],
+			in_reply_to: 'sent-1@example.com',
+			mailbox: 'inbox',
+			project: 'project-1',
+			owner: '507f1f77bcf86cd799439011',
+			from: ['new-customer@example.com'],
+			to: ['Support <support@example.com>'],
+			subject: 'Follow-up',
+			host_id: 'host-1',
+			createdAt: '2026-01-01T12:00:00.000Z',
+		};
+
+		EmailIdentity.find = () => ({
+			select: () => ({
+				sort: () => ({
+					lean: async () => [{ _id: 'identity-support', email: 'support@example.com', name: 'Support', signature: '' }],
+				}),
+			}),
+		});
+		Email.findOne = (query) => ({
+			lean: async () => {
+				if (String(query._id) === 'latest-inbound') return latestInbound;
+				if (String(query._id) === 'root-1') return root;
+				return sent;
+			},
+		});
+		Email.find = (query) => ({
+			lean: async () => {
+				const messageId = query?.$or?.[0]?.message_id || query?.$or?.[1]?.references || query?.$or?.[2]?.in_reply_to;
+				if (messageId === 'sent-1@example.com') return [sent, latestInbound];
+				if (messageId === 'root@example.com') return [root, sent, latestInbound];
+				if (messageId === 'latest@example.com') return [latestInbound];
+				return [];
+			},
+		});
+		EmailDraft.findOne = (query) => {
+			draftQuery = query;
+			return {
+				sort: () => ({
+					lean: async () => null,
+				}),
+			};
+		};
+		EmailDraft.findOneAndUpdate = (query, update) => {
+			draftQuery = query;
+			draftPayload = update.$set;
+			return { _id: 'draft-1', source_email: query.source_email, ...update.$set };
+		};
+
+		const server = await createServer();
+		try {
+			const response = await request(server, 'POST', '/emails/sent-1/draft-reply', {
+				body_text: 'Reply body',
+			});
+			const json = await readJson(response);
+
+			assert.equal(response.status, 200);
+			assert.equal(String(draftQuery.source_email), 'latest-inbound');
+			assert.equal(draftPayload.from, 'support@example.com');
+			assert.deepEqual(draftPayload.to, ['new-customer@example.com']);
+			assert.equal(draftPayload.subject, 'Re: Follow-up');
+			assert.equal(json.draft.source_email, 'latest-inbound');
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
+	it('falls back to the selected sent email when a thread has no non-sent message', async () => {
+		let draftPayload = null;
+		const sent = {
+			_id: 'sent-only',
+			message_id: 'sent-only@example.com',
+			references: [],
+			in_reply_to: '',
+			mailbox: 'sent',
+			project: 'project-1',
+			owner: '507f1f77bcf86cd799439011',
+			from: ['support@example.com'],
+			to: ['customer@example.com'],
+			subject: 'Sent only',
+			host_id: 'host-1',
+			createdAt: '2026-01-01T11:00:00.000Z',
+		};
+
+		EmailIdentity.find = () => ({
+			select: () => ({
+				sort: () => ({
+					lean: async () => [{ _id: 'identity-support', email: 'support@example.com', name: 'Support', signature: '' }],
+				}),
+			}),
+		});
+		Email.findOne = () => ({
+			lean: async () => sent,
+		});
+		Email.find = () => ({
+			lean: async () => [sent],
+		});
+		EmailDraft.findOne = () => ({
+			sort: () => ({
+				lean: async () => null,
+			}),
+		});
+		EmailDraft.findOneAndUpdate = (query, update) => {
+			draftPayload = update.$set;
+			return { _id: 'draft-1', source_email: query.source_email, ...update.$set };
+		};
+
+		const server = await createServer();
+		try {
+			const response = await request(server, 'POST', '/emails/sent-only/draft-reply', {
+				body_text: 'Reply body',
+			});
+			const json = await readJson(response);
+
+			assert.equal(response.status, 200);
+			assert.equal(json.draft.source_email, 'sent-only');
+			assert.deepEqual(draftPayload.to, ['support@example.com']);
 		} finally {
 			await new Promise((resolve) => server.close(resolve));
 		}
