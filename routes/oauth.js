@@ -229,8 +229,7 @@ router.post('/oauth/register', async (req, res) => {
 			source: 'dynamic',
 		});
 		return res.status(201).json({
-			...client,
-			client_secret,
+			...oauthService.mapDynamicRegistrationClientResponse(client, { clientSecret: client_secret }),
 			client_id_issued_at: Math.floor(Date.now() / 1000),
 			client_secret_expires_at: client_secret ? 0 : undefined,
 		});

@@ -284,6 +284,23 @@ function mapClientRecord(client, { includeSecret = false, secret = null } = {}) 
 	return data;
 }
 
+export function mapDynamicRegistrationClientResponse(client, { clientSecret = null } = {}) {
+	const data = {
+		client_id: client.client_id,
+		client_name: client.client_name,
+		redirect_uris: client.redirect_uris || [],
+		grant_types: client.grant_types || ['authorization_code', 'refresh_token'],
+		response_types: client.response_types || ['code'],
+		token_endpoint_auth_method: client.token_endpoint_auth_method || 'none',
+	};
+
+	for (const field of ['client_uri', 'logo_uri', 'jwks', 'jwks_uri']) {
+		if (client[field]) data[field] = client[field];
+	}
+	if (clientSecret) data.client_secret = clientSecret;
+	return data;
+}
+
 async function fetchClientMetadataDocument(clientId) {
 	const url = validateClientMetadataDocumentUrl(clientId);
 	const cached = CLIENT_METADATA_CACHE.get(url);
@@ -467,7 +484,11 @@ export async function authenticateClientForToken({ clientId, clientSecret, clien
 	}
 
 	if (client.token_endpoint_auth_method === 'private_key_jwt') {
-		await verifyPrivateKeyJwtClientAssertion({ client, clientAssertionType, clientAssertion });
+		if (clientAssertion) {
+			await verifyPrivateKeyJwtClientAssertion({ client, clientAssertionType, clientAssertion });
+		} else if (clientAssertionType) {
+			throw new OAuthError('invalid_client', 'client_assertion is required for private_key_jwt clients', 401);
+		}
 		return client;
 	}
 	if (client.token_endpoint_auth_method !== 'none') {
