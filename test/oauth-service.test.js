@@ -97,6 +97,33 @@ describe('oauth helpers', () => {
 		);
 	});
 
+	it('accepts reverse-domain private-use redirect URIs for native clients', () => {
+		const parsed = parseAuthorizationRequest({
+			client_id: 'https://example.com/oauth/client.json',
+			redirect_uri: 'com.raycast-x:/oauth/callback',
+			response_type: 'code',
+			code_challenge: 'challenge',
+			code_challenge_method: 'S256',
+			resource: 'http://localhost:3002/mcp',
+		});
+
+		assert.equal(parsed.redirect_uri, 'com.raycast-x:/oauth/callback');
+	});
+
+	it('rejects non-reverse-domain private-use redirect URI schemes', () => {
+		assert.throws(
+			() => parseAuthorizationRequest({
+				client_id: 'https://example.com/oauth/client.json',
+				redirect_uri: 'raycast:/oauth/callback',
+				response_type: 'code',
+				code_challenge: 'challenge',
+				code_challenge_method: 'S256',
+				resource: 'http://localhost:3002/mcp',
+			}),
+			(err) => err.oauthError === 'invalid_redirect_uri',
+		);
+	});
+
 	it('signs and verifies MCP access tokens for allowed audiences', () => {
 		const token = signMcpAccessToken({
 			userId: 'user-1',
@@ -172,6 +199,24 @@ describe('oauth helpers', () => {
 			const client = await authenticateClientForToken({
 				clientId: metadata.client_id,
 				clientAssertionType,
+				clientAssertion,
+			});
+
+			assert.equal(client.client_id, metadata.client_id);
+			assert.equal(client.token_endpoint_auth_method, 'private_key_jwt');
+		} finally {
+			restoreFetch();
+		}
+	});
+
+	it('authenticates private_key_jwt metadata clients when assertion type is omitted', async () => {
+		const { privateKey, metadata } = await buildPrivateKeyJwtClient();
+		const restoreFetch = mockMetadataFetch(metadata);
+		const clientAssertion = await signClientAssertion(privateKey, metadata.client_id);
+
+		try {
+			const client = await authenticateClientForToken({
+				clientId: metadata.client_id,
 				clientAssertion,
 			});
 
