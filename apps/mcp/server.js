@@ -16,7 +16,7 @@ import { projectTools } from './tools/projects.js';
 import { graphTools } from './tools/graph.js';
 import { gitSyncTools } from './tools/git_sync.js';
 import { MCP_SERVER_INSTRUCTIONS } from './instructions.js';
-import { buildProtectedResourceMetadata } from '../../modules/oauth.js';
+import { buildProtectedResourceMetadata, getRequestExternalBaseUrl } from '../../modules/oauth.js';
 import { captureException, flush, setupExpressErrorHandler } from './sentry.js';
 import { recordException, setupExpressErrorHandler as setupOtelExpressErrorHandler } from './tracing.js';
 
@@ -190,16 +190,18 @@ if (transportArg === '--stdio' || !transportArg) {
     res.json({ status: 'ok', transport: 'http' });
   });
 
-  app.get('/.well-known/oauth-protected-resource', (_req, res) => {
-	res.json(buildProtectedResourceMetadata(mcpConfig.mcpBaseUrl));
+  app.get('/.well-known/oauth-protected-resource', (req, res) => {
+	res.json(buildProtectedResourceMetadata(getRequestExternalBaseUrl(req)));
   });
 
-  app.get('/.well-known/oauth-protected-resource/mcp', (_req, res) => {
-	res.json(buildProtectedResourceMetadata(`${mcpConfig.mcpBaseUrl}/mcp`));
+  app.get('/.well-known/oauth-protected-resource/mcp', (req, res) => {
+	const baseUrl = getRequestExternalBaseUrl(req);
+	res.json(buildProtectedResourceMetadata(`${baseUrl}/mcp`));
   });
 
-  app.get('/.well-known/oauth-protected-resource/sse', (_req, res) => {
-	res.json(buildProtectedResourceMetadata(`${mcpConfig.mcpBaseUrl}/sse`));
+  app.get('/.well-known/oauth-protected-resource/sse', (req, res) => {
+	const baseUrl = getRequestExternalBaseUrl(req);
+	res.json(buildProtectedResourceMetadata(`${baseUrl}/sse`));
   });
 
   // MCP rate limiter — 120 req/min per token (in-memory store)
