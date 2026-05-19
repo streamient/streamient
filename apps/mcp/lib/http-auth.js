@@ -1,5 +1,7 @@
 import {
 	buildBearerChallenge,
+	getRequestMcpResourceUrls,
+	getRequestProtectedResourceMetadataUrl,
 	getProtectedResourceMetadataUrl,
 	getRequiredScopesForTool,
 	hasRequiredScopes,
@@ -46,12 +48,12 @@ export function getRequiredScopesForRequestBody(body) {
 	return getRequiredScopesForTool(toolName);
 }
 
-export function buildUnauthorizedResponse() {
+export function buildUnauthorizedResponse(resourceMetadataUrl = getProtectedResourceMetadataUrl()) {
 	return {
 		status: 401,
 		headers: {
 			'WWW-Authenticate': buildBearerChallenge({
-				resourceMetadataUrl: getProtectedResourceMetadataUrl(),
+				resourceMetadataUrl,
 				scopes: MCP_BASELINE_SCOPES,
 			}),
 		},
@@ -59,12 +61,12 @@ export function buildUnauthorizedResponse() {
 	};
 }
 
-export function buildInvalidTokenResponse() {
+export function buildInvalidTokenResponse(resourceMetadataUrl = getProtectedResourceMetadataUrl()) {
 	return {
 		status: 401,
 		headers: {
 			'WWW-Authenticate': buildBearerChallenge({
-				resourceMetadataUrl: getProtectedResourceMetadataUrl(),
+				resourceMetadataUrl,
 				scopes: MCP_BASELINE_SCOPES,
 				error: 'invalid_token',
 				errorDescription: 'Access token is missing, invalid, or expired',
@@ -74,12 +76,12 @@ export function buildInvalidTokenResponse() {
 	};
 }
 
-export function buildInsufficientScopeResponse(requiredScopes) {
+export function buildInsufficientScopeResponse(requiredScopes, resourceMetadataUrl = getProtectedResourceMetadataUrl()) {
 	return {
 		status: 403,
 		headers: {
 			'WWW-Authenticate': buildBearerChallenge({
-				resourceMetadataUrl: getProtectedResourceMetadataUrl(),
+				resourceMetadataUrl,
 				scopes: requiredScopes,
 				error: 'insufficient_scope',
 				errorDescription: 'Additional MCP scopes are required for this operation',
@@ -93,9 +95,10 @@ export function buildInsufficientScopeResponse(requiredScopes) {
 }
 
 export function authenticateHttpRequest(req) {
+	const resourceMetadataUrl = getRequestProtectedResourceMetadataUrl(req);
 	const auth = extractRequestAuth(req.headers);
 	if (!auth?.token) {
-		return { ok: false, response: buildUnauthorizedResponse() };
+		return { ok: false, response: buildUnauthorizedResponse(resourceMetadataUrl) };
 	}
 
 	if (auth.scheme === 'Token') {
@@ -103,7 +106,7 @@ export function authenticateHttpRequest(req) {
 	}
 
 	try {
-		const tokenClaims = verifyMcpAccessToken(auth.token);
+		const tokenClaims = verifyMcpAccessToken(auth.token, { extraAudiences: getRequestMcpResourceUrls(req) });
 		return {
 			ok: true,
 			mode: 'oauth',
@@ -123,7 +126,7 @@ export function authenticateHttpRequest(req) {
 		if (!isLikelyJwt(auth.token)) {
 			return buildLegacyAuthContext(auth.token);
 		}
-		return { ok: false, response: buildInvalidTokenResponse() };
+		return { ok: false, response: buildInvalidTokenResponse(resourceMetadataUrl) };
 	}
 }
 
