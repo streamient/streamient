@@ -105,6 +105,8 @@ The extra OAuth values are only needed when the client asks for them explicitly.
 - **Dynamic Client Registration** — the client registers itself against Kumbukum using the registration endpoint
 - **Client ID Metadata Documents** — only for clients that identify themselves with a client metadata document URL as the `client_id`; Kumbukum accepts public PKCE clients and `private_key_jwt` clients that publish `jwks` or `jwks_uri`
 
+Dynamic registration accepts HTTPS redirect URIs, localhost HTTP redirect URIs, and reverse-domain private-use schemes for native clients, such as `com.example.app:/oauth/callback`.
+
 These are capabilities, not clickable actions in Kumbukum.
 
 ### Recommended ChatGPT flow
