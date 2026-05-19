@@ -4,7 +4,7 @@ import config from '../config.js';
 
 export const OAUTH_GRANT_TYPES = ['authorization_code', 'refresh_token'];
 export const OAUTH_RESPONSE_TYPES = ['code'];
-export const OAUTH_TOKEN_ENDPOINT_AUTH_METHODS = ['none', 'client_secret_post'];
+export const OAUTH_TOKEN_ENDPOINT_AUTH_METHODS = ['none', 'client_secret_post', 'private_key_jwt'];
 export const OAUTH_CODE_CHALLENGE_METHODS = ['S256'];
 
 export const MCP_SCOPE_DETAILS = {

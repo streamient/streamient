@@ -103,7 +103,7 @@ The extra OAuth values are only needed when the client asks for them explicitly.
 
 - **Pre-registration** — create the OAuth client in Kumbukum first, then paste its client ID and optional secret into the external tool
 - **Dynamic Client Registration** — the client registers itself against Kumbukum using the registration endpoint
-- **Client ID Metadata Documents** — only for clients that identify themselves with a client metadata document URL as the `client_id`
+- **Client ID Metadata Documents** — only for clients that identify themselves with a client metadata document URL as the `client_id`; Kumbukum accepts public PKCE clients and `private_key_jwt` clients that publish `jwks` or `jwks_uri`
 
 These are capabilities, not clickable actions in Kumbukum.
 
@@ -157,6 +157,7 @@ Use these values if ChatGPT asks for manual OAuth fields:
 - The **OAuth Client ID** comes from the Kumbukum client you created
 - The **OAuth Client Secret** is only used when you create a confidential client
 - If ChatGPT offers Dynamic Client Registration and asks for a **Registration URL**, use the Kumbukum `/oauth/register` endpoint above
+- If ChatGPT/OpenAI uses automatic Client ID Metadata Documents with `private_key_jwt`, no manual secret is needed; Kumbukum verifies the signed token request against the client's published JWKS
 
 ## Environment Variables
 
