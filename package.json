@@ -92,6 +92,7 @@
     "huebee": "^2.1.1",
     "ioredis": "^5.10.1",
     "iovalkey": "^0.3.3",
+    "jose": "^6.2.3",
     "jsonwebtoken": "^9.0.3",
     "jsurl2": "^2.2.0",
     "keyv": "^5.6.0",
