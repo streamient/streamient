@@ -117,7 +117,7 @@ OrderedMap.from = function(value) {
 };
 var dist_default = OrderedMap;
 
-// node_modules/.pnpm/prosemirror-model@1.25.6/node_modules/prosemirror-model/dist/index.js
+// node_modules/.pnpm/prosemirror-model@1.25.7/node_modules/prosemirror-model/dist/index.js
 function findDiffStart(a, b, pos) {
   for (let i = 0; ; i++) {
     if (i == a.childCount || i == b.childCount)
@@ -3268,9 +3268,9 @@ function suspiciousAttributesInner(attrs) {
   return result;
 }
 function renderSpec(doc3, structure, xmlNS, blockArraysIn) {
-  if (structure.nodeType == 3)
+  if (structure.nodeType == 1)
     return { dom: structure };
-  if (structure.dom && structure.dom.nodeType == 3)
+  if (structure.dom && structure.dom.nodeType == 1)
     return structure;
   let tagName = structure[0], suspicious;
   if (typeof tagName != "string")

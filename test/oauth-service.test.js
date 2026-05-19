@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import pug from 'pug';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 
-import { authenticateClientForToken, parseAuthorizationRequest, validateAuthorizationRequest } from '../services/oauth_service.js';
+import { authenticateClientForToken, mapDynamicRegistrationClientResponse, parseAuthorizationRequest, validateAuthorizationRequest } from '../services/oauth_service.js';
 import { getOauthIssuer, signMcpAccessToken, verifyMcpAccessToken } from '../modules/oauth.js';
 
 const oauthAuthorizeViewPath = fileURLToPath(new URL('../views/auth/oauth_authorize.pug', import.meta.url));
@@ -97,6 +97,33 @@ describe('oauth helpers', () => {
 		);
 	});
 
+	it('accepts reverse-domain private-use redirect URIs for native clients', () => {
+		const parsed = parseAuthorizationRequest({
+			client_id: 'https://example.com/oauth/client.json',
+			redirect_uri: 'com.raycast-x:/oauth/callback',
+			response_type: 'code',
+			code_challenge: 'challenge',
+			code_challenge_method: 'S256',
+			resource: 'http://localhost:3002/mcp',
+		});
+
+		assert.equal(parsed.redirect_uri, 'com.raycast-x:/oauth/callback');
+	});
+
+	it('rejects non-reverse-domain private-use redirect URI schemes', () => {
+		assert.throws(
+			() => parseAuthorizationRequest({
+				client_id: 'https://example.com/oauth/client.json',
+				redirect_uri: 'raycast:/oauth/callback',
+				response_type: 'code',
+				code_challenge: 'challenge',
+				code_challenge_method: 'S256',
+				resource: 'http://localhost:3002/mcp',
+			}),
+			(err) => err.oauthError === 'invalid_redirect_uri',
+		);
+	});
+
 	it('signs and verifies MCP access tokens for allowed audiences', () => {
 		const token = signMcpAccessToken({
 			userId: 'user-1',
@@ -163,6 +190,27 @@ describe('oauth helpers', () => {
 		}
 	});
 
+	it('omits null optional fields from dynamic registration responses', () => {
+		const response = mapDynamicRegistrationClientResponse({
+			client_id: 'client-1',
+			client_name: 'Raycast',
+			client_uri: null,
+			logo_uri: null,
+			redirect_uris: ['com.raycast-x:'],
+			jwks: null,
+			jwks_uri: null,
+			grant_types: ['authorization_code', 'refresh_token'],
+			response_types: ['code'],
+			token_endpoint_auth_method: 'none',
+		});
+
+		assert.equal(Object.hasOwn(response, 'client_uri'), false);
+		assert.equal(Object.hasOwn(response, 'logo_uri'), false);
+		assert.equal(Object.hasOwn(response, 'jwks'), false);
+		assert.equal(Object.hasOwn(response, 'jwks_uri'), false);
+		assert.deepEqual(response.redirect_uris, ['com.raycast-x:']);
+	});
+
 	it('authenticates private_key_jwt metadata clients with a valid client assertion', async () => {
 		const { privateKey, metadata } = await buildPrivateKeyJwtClient();
 		const restoreFetch = mockMetadataFetch(metadata);
@@ -172,6 +220,40 @@ describe('oauth helpers', () => {
 			const client = await authenticateClientForToken({
 				clientId: metadata.client_id,
 				clientAssertionType,
+				clientAssertion,
+			});
+
+			assert.equal(client.client_id, metadata.client_id);
+			assert.equal(client.token_endpoint_auth_method, 'private_key_jwt');
+		} finally {
+			restoreFetch();
+		}
+	});
+
+	it('lets private_key_jwt metadata clients continue without an assertion for PKCE token exchange', async () => {
+		const { metadata } = await buildPrivateKeyJwtClient();
+		const restoreFetch = mockMetadataFetch(metadata);
+
+		try {
+			const client = await authenticateClientForToken({
+				clientId: metadata.client_id,
+			});
+
+			assert.equal(client.client_id, metadata.client_id);
+			assert.equal(client.token_endpoint_auth_method, 'private_key_jwt');
+		} finally {
+			restoreFetch();
+		}
+	});
+
+	it('authenticates private_key_jwt metadata clients when assertion type is omitted', async () => {
+		const { privateKey, metadata } = await buildPrivateKeyJwtClient();
+		const restoreFetch = mockMetadataFetch(metadata);
+		const clientAssertion = await signClientAssertion(privateKey, metadata.client_id);
+
+		try {
+			const client = await authenticateClientForToken({
+				clientId: metadata.client_id,
 				clientAssertion,
 			});
 
@@ -237,13 +319,6 @@ describe('oauth helpers', () => {
 		const badSignatureAssertion = await signClientAssertion(otherPrivateKey, metadata.client_id);
 
 		try {
-			await assert.rejects(
-				() => authenticateClientForToken({
-					clientId: metadata.client_id,
-					clientAssertion: '',
-				}),
-				(err) => err.oauthError === 'invalid_client',
-			);
 			await assert.rejects(
 				() => authenticateClientForToken({
 					clientId: metadata.client_id,

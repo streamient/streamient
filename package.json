@@ -43,7 +43,7 @@
     "exec": "node build.js && node --import ./tracing.js --import ./instrument.js app.js"
   },
   "dependencies": {
-    "@fontsource-variable/material-symbols-outlined": "^5.2.44",
+    "@fontsource-variable/material-symbols-outlined": "^5.2.45",
     "@fontsource-variable/noto-sans": "^5.2.10",
     "@fontsource-variable/noto-sans-mono": "^5.2.10",
     "@iframe-resizer/child": "^5.5.9",
@@ -55,6 +55,8 @@
     "@opentelemetry/resources": "2.7.1",
     "@opentelemetry/sdk-node": "0.218.0",
     "@opentelemetry/semantic-conventions": "1.41.1",
+    "@sentry/node": "^10.53.1",
+    "@sentry/profiling-node": "^10.53.1",
     "@simplewebauthn/server": "^13.3.0",
     "@socket.io/redis-streams-adapter": "^0.3.1",
     "@tiptap/core": "^3.23.4",

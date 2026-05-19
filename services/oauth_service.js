@@ -32,6 +32,7 @@ const PRIVATE_KEY_JWT_ASSERTION_TYPE = 'urn:ietf:params:oauth:client-assertion-t
 const PRIVATE_KEY_JWT_MAX_LIFETIME_SECONDS = 5 * 60;
 const PRIVATE_KEY_JWT_SIGNING_ALGS = ['RS256', 'RS384', 'RS512', 'PS256', 'PS384', 'PS512', 'ES256', 'ES384', 'ES512', 'EdDSA'];
 const ASYMMETRIC_JWK_TYPES = new Set(['RSA', 'EC', 'OKP']);
+const PRIVATE_USE_REDIRECT_SCHEME_PATTERN = /^(?:com|org|net|io|dev|app|ai|co|me|fm|sh|is)\.[a-z0-9][a-z0-9.-]*:$/i;
 
 export class OAuthError extends Error {
 	constructor(error, description, status = 400) {
@@ -75,6 +76,10 @@ function isPrivateIpAddress(hostname) {
 	}
 	const normalized = hostname.toLowerCase();
 	return normalized === '::1' || normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('fe80');
+}
+
+function isPrivateUseRedirectScheme(protocol) {
+	return PRIVATE_USE_REDIRECT_SCHEME_PATTERN.test(String(protocol || ''));
 }
 
 function validateClientMetadataDocumentUrl(clientId) {
@@ -136,13 +141,13 @@ function validateRedirectUri(uri) {
 		throw new OAuthError('invalid_redirect_uri', 'redirect_uri must be a valid URL', 400);
 	}
 
-	if (!['http:', 'https:'].includes(parsed.protocol)) {
-		throw new OAuthError('invalid_redirect_uri', 'redirect_uri must use http or https', 400);
+	if (!['http:', 'https:'].includes(parsed.protocol) && !isPrivateUseRedirectScheme(parsed.protocol)) {
+		throw new OAuthError('invalid_redirect_uri', 'redirect_uri must use http, https, or a reverse-domain private-use scheme', 400);
 	}
 
 	const loopback = isLoopbackHost(parsed.hostname);
-	if (!loopback && parsed.protocol !== 'https:') {
-		throw new OAuthError('invalid_redirect_uri', 'redirect_uri must use HTTPS unless it targets localhost', 400);
+	if (!loopback && parsed.protocol !== 'https:' && !isPrivateUseRedirectScheme(parsed.protocol)) {
+		throw new OAuthError('invalid_redirect_uri', 'redirect_uri must use HTTPS unless it targets localhost or uses a reverse-domain private-use scheme', 400);
 	}
 	if (parsed.hash) {
 		throw new OAuthError('invalid_redirect_uri', 'redirect_uri must not contain a fragment', 400);
@@ -279,6 +284,23 @@ function mapClientRecord(client, { includeSecret = false, secret = null } = {}) 
 	return data;
 }
 
+export function mapDynamicRegistrationClientResponse(client, { clientSecret = null } = {}) {
+	const data = {
+		client_id: client.client_id,
+		client_name: client.client_name,
+		redirect_uris: client.redirect_uris || [],
+		grant_types: client.grant_types || ['authorization_code', 'refresh_token'],
+		response_types: client.response_types || ['code'],
+		token_endpoint_auth_method: client.token_endpoint_auth_method || 'none',
+	};
+
+	for (const field of ['client_uri', 'logo_uri', 'jwks', 'jwks_uri']) {
+		if (client[field]) data[field] = client[field];
+	}
+	if (clientSecret) data.client_secret = clientSecret;
+	return data;
+}
+
 async function fetchClientMetadataDocument(clientId) {
 	const url = validateClientMetadataDocumentUrl(clientId);
 	const cached = CLIENT_METADATA_CACHE.get(url);
@@ -359,11 +381,12 @@ function getClientJwksResolver(client) {
 }
 
 async function verifyPrivateKeyJwtClientAssertion({ client, clientAssertionType, clientAssertion }) {
-	if (clientAssertionType !== PRIVATE_KEY_JWT_ASSERTION_TYPE) {
-		throw new OAuthError('invalid_client', 'client_assertion_type must be jwt-bearer for private_key_jwt clients', 401);
-	}
 	if (!clientAssertion) {
 		throw new OAuthError('invalid_client', 'client_assertion is required for private_key_jwt clients', 401);
+	}
+	const normalizedAssertionType = String(clientAssertionType || PRIVATE_KEY_JWT_ASSERTION_TYPE).trim();
+	if (normalizedAssertionType !== PRIVATE_KEY_JWT_ASSERTION_TYPE) {
+		throw new OAuthError('invalid_client', 'client_assertion_type must be jwt-bearer for private_key_jwt clients', 401);
 	}
 
 	let result;
@@ -461,7 +484,11 @@ export async function authenticateClientForToken({ clientId, clientSecret, clien
 	}
 
 	if (client.token_endpoint_auth_method === 'private_key_jwt') {
-		await verifyPrivateKeyJwtClientAssertion({ client, clientAssertionType, clientAssertion });
+		if (clientAssertion) {
+			await verifyPrivateKeyJwtClientAssertion({ client, clientAssertionType, clientAssertion });
+		} else if (clientAssertionType) {
+			throw new OAuthError('invalid_client', 'client_assertion is required for private_key_jwt clients', 401);
+		}
 		return client;
 	}
 	if (client.token_endpoint_auth_method !== 'none') {

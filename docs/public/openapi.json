@@ -180,6 +180,7 @@
           },
           "redirect_uris": {
             "type": "array",
+            "description": "HTTPS redirect URIs, localhost HTTP redirect URIs, or reverse-domain private-use schemes for native clients.",
             "items": {
               "type": "string"
             }
@@ -257,6 +258,7 @@
           },
           "redirect_uris": {
             "type": "array",
+            "description": "HTTPS redirect URIs, localhost HTTP redirect URIs, or reverse-domain private-use schemes for native clients.",
             "items": {
               "type": "string"
             }
@@ -2404,6 +2406,7 @@
                   },
                   "redirect_uris": {
                     "type": "array",
+                    "description": "HTTPS redirect URIs, localhost HTTP redirect URIs, or reverse-domain private-use schemes for native clients.",
                     "items": {
                       "type": "string"
                     }
