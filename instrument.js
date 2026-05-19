@@ -1,4 +1,5 @@
 import { getSentryDsn, isSentryEnabled, loadSentry } from './modules/sentry_runtime.js';
+import { installOpenObserveConsoleForwarder } from './modules/openobserve_runtime.js';
 
 if (isSentryEnabled()) {
 	const [Sentry, { nodeProfilingIntegration }] = await Promise.all([
@@ -20,3 +21,7 @@ if (isSentryEnabled()) {
 		sendDefaultPii: true,
 	});
 }
+
+installOpenObserveConsoleForwarder({
+	serviceApp: process.env.KUMBUKUM_APP || process.env.SERVER_MODE || 'web',
+});

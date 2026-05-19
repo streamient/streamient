@@ -3,6 +3,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 import { createRequire } from 'node:module';
+import { configureOpenObserveEnvironment, getOpenObserveOtelHeaders } from './openobserve_runtime.js';
 
 const require = createRequire(import.meta.url);
 const noop = () => {};
@@ -81,12 +82,30 @@ const _getInstrumentations = function(getNodeAutoInstrumentations) {
 	})];
 };
 
+const _buildTraceExporter = function() {
+	const protocol = process.env.OTEL_EXPORTER_OTLP_PROTOCOL || '';
+	const endpoint = process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT || process.env.OTEL_EXPORTER_OTLP_ENDPOINT || '';
+
+	if (protocol === 'http/protobuf' || protocol === 'http/json') {
+		const { OTLPTraceExporter } = _requirePackage('@opentelemetry/exporter-trace-otlp-http');
+		const options = {};
+		if (endpoint) options.url = endpoint;
+		const headers = getOpenObserveOtelHeaders();
+		if (Object.keys(headers).length > 0) options.headers = headers;
+		return new OTLPTraceExporter(options);
+	}
+
+	const { OTLPTraceExporter } = _requirePackage('@opentelemetry/exporter-trace-otlp-grpc');
+	return new OTLPTraceExporter();
+};
+
 export const initializeOpenTelemetry = function(options = {}) {
 	if (_initAttempted) {
 		return { enabled: _initialized, reason: _disabledReason, service: _serviceName };
 	}
 
 	_initAttempted = true;
+	configureOpenObserveEnvironment(options);
 
 	if (!_isTrue(process.env.ENABLE_OTEL)) {
 		_disabledReason = 'ENABLE_OTEL is not true';
@@ -99,7 +118,6 @@ export const initializeOpenTelemetry = function(options = {}) {
 	try {
 		const { NodeSDK } = _requirePackage('@opentelemetry/sdk-node');
 		const { getNodeAutoInstrumentations } = _requirePackage('@opentelemetry/auto-instrumentations-node');
-		const { OTLPTraceExporter } = _requirePackage('@opentelemetry/exporter-trace-otlp-grpc');
 		const resources = _requirePackage('@opentelemetry/resources');
 		const otelApi = _requirePackage('@opentelemetry/api');
 		const resourceAttributes = {
@@ -110,7 +128,7 @@ export const initializeOpenTelemetry = function(options = {}) {
 
 		_sdk = new NodeSDK({
 			resource,
-			traceExporter: new OTLPTraceExporter(),
+			traceExporter: _buildTraceExporter(),
 			instrumentations: _getInstrumentations(getNodeAutoInstrumentations),
 		});
 

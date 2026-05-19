@@ -27,6 +27,12 @@ importers:
       '@keyv/valkey':
         specifier: ^1.0.11
         version: 1.0.11
+      '@openobserve/browser-logs':
+        specifier: ^0.3.1
+        version: 0.3.1(@openobserve/browser-rum@0.3.1)
+      '@openobserve/browser-rum':
+        specifier: ^0.3.1
+        version: 0.3.1(@openobserve/browser-logs@0.3.1)
       '@opentelemetry/api':
         specifier: 1.9.1
         version: 1.9.1
@@ -34,6 +40,9 @@ importers:
         specifier: 0.76.0
         version: 0.76.0(@opentelemetry/api@1.9.1)(@opentelemetry/core@2.7.1(@opentelemetry/api@1.9.1))
       '@opentelemetry/exporter-trace-otlp-grpc':
+        specifier: 0.218.0
+        version: 0.218.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/exporter-trace-otlp-http':
         specifier: 0.218.0
         version: 0.218.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/resources':
@@ -1137,6 +1146,28 @@ packages:
   '@noble/hashes@2.2.0':
     resolution: {integrity: sha512-IYqDGiTXab6FniAgnSdZwgWbomxpy9FtYvLKs7wCUs2a8RkITG+DFGO1DM9cr+E3/RgADRpFjrKVaJ1z6sjtEg==}
     engines: {node: '>= 20.19.0'}
+
+  '@openobserve/browser-core@0.3.1':
+    resolution: {integrity: sha512-Q5BazD4GsL/+fQGPVfSfKveGwYhor0KnMF1exSfce07ngVTf3ZBttKVHjZSVdrpiR/0Jm1DCbeyZt8xqgXA9Xw==}
+
+  '@openobserve/browser-logs@0.3.1':
+    resolution: {integrity: sha512-TootKFGsfaXA1KLuheU6XC7Sv9CQWILY5zRAVdOLJKdfPGQ3d5wBPyZIqUe91WeE3lGLCI8YF/7X9iqRcfj90g==}
+    peerDependencies:
+      '@openobserve/browser-rum': 0.3.1
+    peerDependenciesMeta:
+      '@openobserve/browser-rum':
+        optional: true
+
+  '@openobserve/browser-rum-core@0.3.1':
+    resolution: {integrity: sha512-cv2WEtntLVabMFbzP4XvlpuYOx6ToFYheJyGUs4jagv/nlW6U+a4DnajSK0Mtgmizz4H3IDVI4LmxHNuRxAHbA==}
+
+  '@openobserve/browser-rum@0.3.1':
+    resolution: {integrity: sha512-g6Np152uE7NoJsq4niQyzgg1LsFm6iuIQ45mcYxQaPBEacBNIoWRP4GU3IcF7WmJMnqCg3YSau4HtetCexu6fQ==}
+    peerDependencies:
+      '@openobserve/browser-logs': 0.3.1
+    peerDependenciesMeta:
+      '@openobserve/browser-logs':
+        optional: true
 
   '@opentelemetry/api-logs@0.207.0':
     resolution: {integrity: sha512-lAb0jQRVyleQQGiuuvCOTDVspc14nx6XJjP4FspJ1sNARo3Regq4ZZbrc3rN4b1TYSuUCvgH+UXUPug4SLOqEQ==}
@@ -5968,6 +5999,25 @@ snapshots:
   '@noble/hashes@1.8.0': {}
 
   '@noble/hashes@2.2.0': {}
+
+  '@openobserve/browser-core@0.3.1': {}
+
+  '@openobserve/browser-logs@0.3.1(@openobserve/browser-rum@0.3.1)':
+    dependencies:
+      '@openobserve/browser-core': 0.3.1
+    optionalDependencies:
+      '@openobserve/browser-rum': 0.3.1(@openobserve/browser-logs@0.3.1)
+
+  '@openobserve/browser-rum-core@0.3.1':
+    dependencies:
+      '@openobserve/browser-core': 0.3.1
+
+  '@openobserve/browser-rum@0.3.1(@openobserve/browser-logs@0.3.1)':
+    dependencies:
+      '@openobserve/browser-core': 0.3.1
+      '@openobserve/browser-rum-core': 0.3.1
+    optionalDependencies:
+      '@openobserve/browser-logs': 0.3.1(@openobserve/browser-rum@0.3.1)
 
   '@opentelemetry/api-logs@0.207.0':
     dependencies:

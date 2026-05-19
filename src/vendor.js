@@ -7,6 +7,9 @@ import * as FilePond from 'filepond';
 export { FilePond };
 import Swal from 'sweetalert2';
 export { Swal };
+import { openobserveRum } from '@openobserve/browser-rum';
+import { openobserveLogs } from '@openobserve/browser-logs';
+export { openobserveRum, openobserveLogs };
 
 // Marked (markdown parser)
 import { marked } from 'marked';
@@ -64,3 +67,5 @@ window.JSURL = JSURL;
 window.FilePond = FilePond;
 window.marked = marked;
 window.BsModal = BsModal;
+window.openobserveRum = openobserveRum;
+window.openobserveLogs = openobserveLogs;
