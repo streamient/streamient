@@ -52,6 +52,8 @@
     "@opentelemetry/resources": "2.7.1",
     "@opentelemetry/sdk-node": "0.217.0",
     "@opentelemetry/semantic-conventions": "1.40.0",
+    "@sentry/node": "^10.53.1",
+    "@sentry/profiling-node": "^10.53.1",
     "@simplewebauthn/server": "^13.3.0",
     "@socket.io/redis-streams-adapter": "^0.3.1",
     "@tiptap/core": "^3.23.4",
