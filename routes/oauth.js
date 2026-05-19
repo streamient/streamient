@@ -162,6 +162,8 @@ router.post('/oauth/token', async (req, res) => {
 		const client = await oauthService.authenticateClientForToken({
 			clientId: String(req.body.client_id || '').trim(),
 			clientSecret: req.body.client_secret,
+			clientAssertionType: req.body.client_assertion_type,
+			clientAssertion: req.body.client_assertion,
 		});
 
 		if (grantType === 'authorization_code') {

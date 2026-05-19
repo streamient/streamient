@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { isIP } from 'node:net';
 import bcrypt from 'bcryptjs';
+import { createLocalJWKSet, createRemoteJWKSet, jwtVerify } from 'jose';
 
 import { OAuthAuthorizationCode } from '../model/oauth_authorization_code.js';
 import { OAuthClient } from '../model/oauth_client.js';
@@ -27,6 +28,10 @@ import * as audit from './audit_service.js';
 const CLIENT_METADATA_CACHE = new Map();
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
+const PRIVATE_KEY_JWT_ASSERTION_TYPE = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer';
+const PRIVATE_KEY_JWT_MAX_LIFETIME_SECONDS = 5 * 60;
+const PRIVATE_KEY_JWT_SIGNING_ALGS = ['RS256', 'RS384', 'RS512', 'PS256', 'PS384', 'PS512', 'ES256', 'ES384', 'ES512', 'EdDSA'];
+const ASYMMETRIC_JWK_TYPES = new Set(['RSA', 'EC', 'OKP']);
 
 export class OAuthError extends Error {
 	constructor(error, description, status = 400) {
@@ -110,6 +115,19 @@ function validateOptionalHttpsUrl(value, fieldName) {
 	return parsed.toString();
 }
 
+function validatePublicHttpsUrl(value, fieldName) {
+	const url = validateOptionalHttpsUrl(value, fieldName);
+	if (!url) return null;
+	const parsed = new URL(url);
+	if (isLoopbackHost(parsed.hostname) || isPrivateIpAddress(parsed.hostname)) {
+		throw new OAuthError('invalid_client_metadata', `${fieldName} host is not allowed`, 400);
+	}
+	if (parsed.hash) {
+		throw new OAuthError('invalid_client_metadata', `${fieldName} must not include a fragment`, 400);
+	}
+	return parsed.toString();
+}
+
 function validateRedirectUri(uri) {
 	let parsed;
 	try {
@@ -172,6 +190,28 @@ function normalizeAuthMethod(value) {
 	return authMethod;
 }
 
+function normalizeJwks(value) {
+	if (!value) return null;
+	if (!value || typeof value !== 'object' || Array.isArray(value) || !Array.isArray(value.keys)) {
+		throw new OAuthError('invalid_client_metadata', 'jwks must be a JSON Web Key Set', 400);
+	}
+	if (!value.keys.length) {
+		throw new OAuthError('invalid_client_metadata', 'jwks must contain at least one public key', 400);
+	}
+	for (const key of value.keys) {
+		if (!key || typeof key !== 'object' || Array.isArray(key)) {
+			throw new OAuthError('invalid_client_metadata', 'jwks keys must be objects', 400);
+		}
+		if (!ASYMMETRIC_JWK_TYPES.has(key.kty)) {
+			throw new OAuthError('invalid_client_metadata', 'jwks keys must use asymmetric key types', 400);
+		}
+		if (key.d || key.k) {
+			throw new OAuthError('invalid_client_metadata', 'jwks must not contain private or symmetric key material', 400);
+		}
+	}
+	return { keys: value.keys };
+}
+
 function normalizeRegistrationPayload(payload, { strictGrantTypes = true } = {}) {
 	const redirectUris = Array.isArray(payload.redirect_uris)
 		? payload.redirect_uris
@@ -185,15 +225,23 @@ function normalizeRegistrationPayload(payload, { strictGrantTypes = true } = {})
 	if (!clientName) {
 		throw new OAuthError('invalid_client_metadata', 'client_name is required', 400);
 	}
+	const tokenEndpointAuthMethod = normalizeAuthMethod(payload.token_endpoint_auth_method);
+	const jwks = normalizeJwks(payload.jwks);
+	const jwksUri = validatePublicHttpsUrl(payload.jwks_uri, 'jwks_uri');
+	if (tokenEndpointAuthMethod === 'private_key_jwt' && !jwks && !jwksUri) {
+		throw new OAuthError('invalid_client_metadata', 'private_key_jwt clients must provide jwks or jwks_uri', 400);
+	}
 
 	return {
 		client_name: clientName,
 		client_uri: validateOptionalHttpsUrl(payload.client_uri, 'client_uri'),
 		logo_uri: validateOptionalHttpsUrl(payload.logo_uri, 'logo_uri'),
 		redirect_uris: normalizedRedirectUris,
+		jwks,
+		jwks_uri: jwksUri,
 		grant_types: normalizeGrantTypes(payload.grant_types, { strict: strictGrantTypes }),
 		response_types: normalizeResponseTypes(payload.response_types),
-		token_endpoint_auth_method: normalizeAuthMethod(payload.token_endpoint_auth_method),
+		token_endpoint_auth_method: tokenEndpointAuthMethod,
 	};
 }
 
@@ -212,6 +260,8 @@ function mapClientRecord(client, { includeSecret = false, secret = null } = {}) 
 		client_uri: client.client_uri || null,
 		logo_uri: client.logo_uri || null,
 		redirect_uris: client.redirect_uris || [],
+		jwks: client.jwks || null,
+		jwks_uri: client.jwks_uri || null,
 		grant_types: client.grant_types || ['authorization_code', 'refresh_token'],
 		response_types: client.response_types || ['code'],
 		token_endpoint_auth_method: client.token_endpoint_auth_method || 'none',
@@ -274,6 +324,70 @@ async function fetchClientMetadataDocument(clientId) {
 	return metadata;
 }
 
+function clientRecordFromStoredClient(client) {
+	return {
+		client_id: client.client_id,
+		client_name: client.client_name,
+		client_uri: client.client_uri || null,
+		logo_uri: client.logo_uri || null,
+		redirect_uris: client.redirect_uris || [],
+		jwks: client.jwks || null,
+		jwks_uri: client.jwks_uri || null,
+		grant_types: client.grant_types || ['authorization_code', 'refresh_token'],
+		response_types: client.response_types || ['code'],
+		token_endpoint_auth_method: client.token_endpoint_auth_method || 'none',
+		registration_source: client.registration_source || 'manual',
+		host_id: client.host_id || null,
+		doc: client,
+	};
+}
+
+function getTokenEndpointUrl() {
+	return `${getAuthorizationServerMetadataUrls().issuer}/token`;
+}
+
+function getClientJwksResolver(client) {
+	if (client.jwks) {
+		return createLocalJWKSet(client.jwks);
+	}
+	if (client.jwks_uri) {
+		return createRemoteJWKSet(new URL(client.jwks_uri), {
+			timeoutDuration: 5000,
+		});
+	}
+	throw new OAuthError('invalid_client', 'private_key_jwt clients must provide jwks or jwks_uri', 401);
+}
+
+async function verifyPrivateKeyJwtClientAssertion({ client, clientAssertionType, clientAssertion }) {
+	if (clientAssertionType !== PRIVATE_KEY_JWT_ASSERTION_TYPE) {
+		throw new OAuthError('invalid_client', 'client_assertion_type must be jwt-bearer for private_key_jwt clients', 401);
+	}
+	if (!clientAssertion) {
+		throw new OAuthError('invalid_client', 'client_assertion is required for private_key_jwt clients', 401);
+	}
+
+	let result;
+	try {
+		result = await jwtVerify(clientAssertion, getClientJwksResolver(client), {
+			issuer: client.client_id,
+			subject: client.client_id,
+			audience: [getTokenEndpointUrl(), getOauthIssuer()],
+			algorithms: PRIVATE_KEY_JWT_SIGNING_ALGS,
+		});
+	} catch {
+		throw new OAuthError('invalid_client', 'client assertion verification failed', 401);
+	}
+
+	const exp = result.payload.exp;
+	if (!Number.isSafeInteger(exp)) {
+		throw new OAuthError('invalid_client', 'client assertion exp is required', 401);
+	}
+	if (exp > Math.floor(Date.now() / 1000) + PRIVATE_KEY_JWT_MAX_LIFETIME_SECONDS) {
+		throw new OAuthError('invalid_client', 'client assertion lifetime is too long', 401);
+	}
+	return result.payload;
+}
+
 async function findStoredClient(clientId, { host_id = null, includeSecret = false } = {}) {
 	const query = host_id
 		? { client_id: clientId, $or: [{ host_id }, { host_id: null }] }
@@ -326,7 +440,7 @@ export async function registerClient({ tenantId = null, host_id = null, createdB
 	};
 }
 
-export async function authenticateClientForToken({ clientId, clientSecret, host_id = null }) {
+export async function authenticateClientForToken({ clientId, clientSecret, clientAssertionType, clientAssertion, host_id = null }) {
 	const client = await resolveClient(clientId, { host_id, includeSecret: true });
 
 	if (client instanceof OAuthClient) {
@@ -339,23 +453,19 @@ export async function authenticateClientForToken({ clientId, clientSecret, host_
 				throw new OAuthError('invalid_client', 'client authentication failed', 401);
 			}
 		}
-		return {
-			client_id: client.client_id,
-			client_name: client.client_name,
-			client_uri: client.client_uri || null,
-			logo_uri: client.logo_uri || null,
-			redirect_uris: client.redirect_uris || [],
-			grant_types: client.grant_types || ['authorization_code', 'refresh_token'],
-			response_types: client.response_types || ['code'],
-			token_endpoint_auth_method: client.token_endpoint_auth_method || 'none',
-			registration_source: client.registration_source || 'manual',
-			host_id: client.host_id || null,
-			doc: client,
-		};
+		const clientRecord = clientRecordFromStoredClient(client);
+		if (clientRecord.token_endpoint_auth_method === 'private_key_jwt') {
+			await verifyPrivateKeyJwtClientAssertion({ client: clientRecord, clientAssertionType, clientAssertion });
+		}
+		return clientRecord;
 	}
 
+	if (client.token_endpoint_auth_method === 'private_key_jwt') {
+		await verifyPrivateKeyJwtClientAssertion({ client, clientAssertionType, clientAssertion });
+		return client;
+	}
 	if (client.token_endpoint_auth_method !== 'none') {
-		throw new OAuthError('invalid_client', 'Client metadata document clients must use token_endpoint_auth_method=none', 401);
+		throw new OAuthError('invalid_client', 'Unsupported client metadata token endpoint authentication method', 401);
 	}
 	return client;
 }
@@ -642,7 +752,8 @@ export function buildAuthorizationServerMetadata() {
 		registration_endpoint: `${urls.issuer}/register`,
 		response_types_supported: ['code'],
 		grant_types_supported: ['authorization_code', 'refresh_token'],
-		token_endpoint_auth_methods_supported: ['none', 'client_secret_post'],
+		token_endpoint_auth_methods_supported: OAUTH_TOKEN_ENDPOINT_AUTH_METHODS,
+		token_endpoint_auth_signing_alg_values_supported: PRIVATE_KEY_JWT_SIGNING_ALGS,
 		code_challenge_methods_supported: ['S256'],
 		client_id_metadata_document_supported: true,
 		scopes_supported: ['mcp:read'],
