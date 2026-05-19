@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import pug from 'pug';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 
-import { authenticateClientForToken, parseAuthorizationRequest, validateAuthorizationRequest } from '../services/oauth_service.js';
+import { authenticateClientForToken, mapDynamicRegistrationClientResponse, parseAuthorizationRequest, validateAuthorizationRequest } from '../services/oauth_service.js';
 import { getOauthIssuer, signMcpAccessToken, verifyMcpAccessToken } from '../modules/oauth.js';
 
 const oauthAuthorizeViewPath = fileURLToPath(new URL('../views/auth/oauth_authorize.pug', import.meta.url));
@@ -190,6 +190,27 @@ describe('oauth helpers', () => {
 		}
 	});
 
+	it('omits null optional fields from dynamic registration responses', () => {
+		const response = mapDynamicRegistrationClientResponse({
+			client_id: 'client-1',
+			client_name: 'Raycast',
+			client_uri: null,
+			logo_uri: null,
+			redirect_uris: ['com.raycast-x:'],
+			jwks: null,
+			jwks_uri: null,
+			grant_types: ['authorization_code', 'refresh_token'],
+			response_types: ['code'],
+			token_endpoint_auth_method: 'none',
+		});
+
+		assert.equal(Object.hasOwn(response, 'client_uri'), false);
+		assert.equal(Object.hasOwn(response, 'logo_uri'), false);
+		assert.equal(Object.hasOwn(response, 'jwks'), false);
+		assert.equal(Object.hasOwn(response, 'jwks_uri'), false);
+		assert.deepEqual(response.redirect_uris, ['com.raycast-x:']);
+	});
+
 	it('authenticates private_key_jwt metadata clients with a valid client assertion', async () => {
 		const { privateKey, metadata } = await buildPrivateKeyJwtClient();
 		const restoreFetch = mockMetadataFetch(metadata);
@@ -200,6 +221,22 @@ describe('oauth helpers', () => {
 				clientId: metadata.client_id,
 				clientAssertionType,
 				clientAssertion,
+			});
+
+			assert.equal(client.client_id, metadata.client_id);
+			assert.equal(client.token_endpoint_auth_method, 'private_key_jwt');
+		} finally {
+			restoreFetch();
+		}
+	});
+
+	it('lets private_key_jwt metadata clients continue without an assertion for PKCE token exchange', async () => {
+		const { metadata } = await buildPrivateKeyJwtClient();
+		const restoreFetch = mockMetadataFetch(metadata);
+
+		try {
+			const client = await authenticateClientForToken({
+				clientId: metadata.client_id,
 			});
 
 			assert.equal(client.client_id, metadata.client_id);
@@ -282,13 +319,6 @@ describe('oauth helpers', () => {
 		const badSignatureAssertion = await signClientAssertion(otherPrivateKey, metadata.client_id);
 
 		try {
-			await assert.rejects(
-				() => authenticateClientForToken({
-					clientId: metadata.client_id,
-					clientAssertion: '',
-				}),
-				(err) => err.oauthError === 'invalid_client',
-			);
 			await assert.rejects(
 				() => authenticateClientForToken({
 					clientId: metadata.client_id,
