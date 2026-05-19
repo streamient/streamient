@@ -63,7 +63,47 @@ export function getOauthIssuer() {
 }
 
 export function getMcpBaseUrl() {
-	return normalizeBaseUrl(config.mcpBaseUrl, 'http://localhost:3002');
+	const configuredMcpBaseUrl = process.env.MCP_BASE_URL ? config.mcpBaseUrl : null;
+	return normalizeBaseUrl(configuredMcpBaseUrl || inferMcpBaseUrlFromAppUrl(), 'http://localhost:3002');
+}
+
+function inferMcpBaseUrlFromAppUrl() {
+	let parsed;
+	try {
+		parsed = new URL(config.appUrl);
+	} catch {
+		return null;
+	}
+
+	if (!parsed.hostname.startsWith('app.')) return null;
+	parsed.hostname = parsed.hostname.replace(/^app\./, 'mcp.');
+	parsed.pathname = '';
+	parsed.search = '';
+	parsed.hash = '';
+	return parsed.toString();
+}
+
+export function getRequestExternalBaseUrl(req) {
+	const forwardedHost = req?.headers?.['x-forwarded-host'];
+	const forwardedProto = req?.headers?.['x-forwarded-proto'];
+	const host = String(Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost || req?.headers?.host || '').split(',')[0].trim();
+	const proto = String(Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto || req?.protocol || '').split(',')[0].trim();
+
+	if (host) {
+		return normalizeBaseUrl(`${proto || 'https'}://${host}`);
+	}
+
+	return getMcpBaseUrl();
+}
+
+export function getRequestMcpResourceUrls(req) {
+	const base = getRequestExternalBaseUrl(req);
+	return [base, `${base}/mcp`, `${base}/sse`];
+}
+
+export function getRequestProtectedResourceMetadataUrl(req) {
+	const path = req?.path === '/mcp' || req?.path === '/sse' ? req.path : '';
+	return `${getRequestExternalBaseUrl(req)}/.well-known/oauth-protected-resource${path}`;
 }
 
 export function getMcpEndpointUrl() {
@@ -79,9 +119,9 @@ export function getProtectedResourceMetadataUrl(path = '') {
 	return `${getMcpBaseUrl()}/.well-known/oauth-protected-resource${suffix}`;
 }
 
-export function getAllowedMcpResourceUrls() {
+export function getAllowedMcpResourceUrls(extraResources = []) {
 	const base = getMcpBaseUrl();
-	return [base, getMcpEndpointUrl(), getMcpSseUrl()];
+	return [...new Set([base, getMcpEndpointUrl(), getMcpSseUrl(), ...extraResources].map((url) => normalizeBaseUrl(url)).filter(Boolean))];
 }
 
 export function getAuthorizationServerMetadataUrls() {
@@ -164,11 +204,11 @@ export function signMcpBridgeToken({ userId, tenantId, host_id, clientId, scopes
 	}, '60s');
 }
 
-export function verifyMcpAccessToken(token) {
+export function verifyMcpAccessToken(token, options = {}) {
 	return jwt.verify(token, config.jwtSecret, {
 		algorithms: ['HS256'],
 		issuer: getOauthIssuer(),
-		audience: getAllowedMcpResourceUrls(),
+		audience: getAllowedMcpResourceUrls(options.extraAudiences || []),
 	});
 }
 
