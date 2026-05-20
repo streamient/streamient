@@ -711,6 +711,7 @@ export async function issueTokenPair({ userId, tenantId, host_id, client, scopes
 		tenantId,
 		host_id,
 		clientId: client.client_id,
+		clientName: client.client_name,
 		scopes: normalizedScopes,
 		audience: resource,
 	});
