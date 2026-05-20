@@ -19,6 +19,7 @@ import {
 	OAUTH_GRANT_TYPES,
 	OAUTH_RESPONSE_TYPES,
 	OAUTH_TOKEN_ENDPOINT_AUTH_METHODS,
+	MCP_ALL_SCOPES,
 	scopeString,
 	sha256Base64Url,
 	signMcpAccessToken,
@@ -783,7 +784,7 @@ export function buildAuthorizationServerMetadata() {
 		token_endpoint_auth_signing_alg_values_supported: PRIVATE_KEY_JWT_SIGNING_ALGS,
 		code_challenge_methods_supported: ['S256'],
 		client_id_metadata_document_supported: true,
-		scopes_supported: ['mcp:read'],
+		scopes_supported: MCP_ALL_SCOPES,
 	};
 }
 

@@ -67,6 +67,7 @@ app.set('views', path.join(__dirname, 'views'));
 
 // Make OpenPanel config available to all templates
 app.locals.openpanel = config.openpanel;
+app.locals.openobserve = config.openobserve;
 app.locals.sentry = config.sentry;
 installIconLocals(app);
 

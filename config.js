@@ -1,4 +1,5 @@
 import { getSentryDsn, isSentryEnabled } from './modules/sentry_runtime.js';
+import { readOpenObserveConfig } from './modules/openobserve_runtime.js';
 
 function parseTypesenseConfig() {
 	let nodesEnv = (process.env.TYPESENSE_NODES || '').trim();
@@ -126,6 +127,7 @@ export function parseSmtpServersFromEnv(env = process.env) {
 const smtpServers = parseSmtpServersFromEnv();
 const primarySmtp = smtpServers[0] || {};
 const appUrl = process.env.APP_URL || 'http://localhost:3000';
+const openobserveConfig = readOpenObserveConfig();
 
 const config = {
 	env: process.env.NODE_ENV || 'development',
@@ -188,6 +190,23 @@ const config = {
 		clientId: process.env.OPENPANEL_CLIENT_ID || '',
 		clientSecret: process.env.OPENPANEL_CLIENT_SECRET || '',
 		apiUrl: process.env.OPENPANEL_API_URL || '',
+	},
+
+	openobserve: {
+		enabled: openobserveConfig.enabled,
+		rumEnabled: openobserveConfig.rumEnabled,
+		browserLogsEnabled: openobserveConfig.browserLogsEnabled,
+		applicationId: openobserveConfig.applicationId,
+		clientToken: openobserveConfig.clientToken,
+		site: openobserveConfig.rumSite,
+		organizationIdentifier: openobserveConfig.organization,
+		service: openobserveConfig.service,
+		env: openobserveConfig.env,
+		version: openobserveConfig.version,
+		apiVersion: openobserveConfig.apiVersion,
+		insecureHTTP: openobserveConfig.insecureHttp,
+		sessionReplayEnabled: openobserveConfig.sessionReplayEnabled,
+		defaultPrivacyLevel: process.env.OPENOBSERVE_RUM_PRIVACY_LEVEL || 'mask-user-input',
 	},
 
 	sysadmin: {
