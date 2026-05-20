@@ -118,6 +118,8 @@ const _stringifyArg = function(arg) {
 };
 
 export const installOpenObserveConsoleForwarder = function(options = {}) {
+	if (process.env.HYPERDX_API_KEY) return { enabled: false, reason: 'HyperDX console capture active' };
+
 	const config = readOpenObserveConfig();
 	if (!config.serverLogsEnabled) return { enabled: false, reason: 'OpenObserve server logs disabled or missing auth' };
 

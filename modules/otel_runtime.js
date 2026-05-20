@@ -4,6 +4,7 @@
 
 import { createRequire } from 'node:module';
 import { configureOpenObserveEnvironment, getOpenObserveOtelHeaders } from './openobserve_runtime.js';
+import * as HyperDXRuntime from './hyperdx_runtime.js';
 
 const require = createRequire(import.meta.url);
 const noop = () => {};
@@ -16,6 +17,7 @@ let _sdk = null;
 let _trace = null;
 let _context = null;
 let _serviceName = '';
+let _useHyperDX = false;
 
 const _isTrue = function(value) {
 	return value === true || value === 'true' || value === '1';
@@ -107,6 +109,10 @@ export const initializeOpenTelemetry = function(options = {}) {
 	_initAttempted = true;
 	configureOpenObserveEnvironment(options);
 
+	if (HyperDXRuntime.isHyperDXEnabled()) {
+		process.env.ENABLE_OTEL = 'true';
+	}
+
 	if (!_isTrue(process.env.ENABLE_OTEL)) {
 		_disabledReason = 'ENABLE_OTEL is not true';
 		return { enabled: false, reason: _disabledReason };
@@ -116,27 +122,35 @@ export const initializeOpenTelemetry = function(options = {}) {
 	process.env.OTEL_SERVICE_NAME = _serviceName;
 
 	try {
-		const { NodeSDK } = _requirePackage('@opentelemetry/sdk-node');
-		const { getNodeAutoInstrumentations } = _requirePackage('@opentelemetry/auto-instrumentations-node');
-		const resources = _requirePackage('@opentelemetry/resources');
+		if (HyperDXRuntime.isHyperDXEnabled()) {
+			HyperDXRuntime.initializeHyperDX({ serviceName: _serviceName });
+			_useHyperDX = !!HyperDXRuntime.getHyperDX();
+		}
+
+		if (!_useHyperDX) {
+			const { NodeSDK } = _requirePackage('@opentelemetry/sdk-node');
+			const { getNodeAutoInstrumentations } = _requirePackage('@opentelemetry/auto-instrumentations-node');
+			const resources = _requirePackage('@opentelemetry/resources');
+			const resourceAttributes = {
+				..._buildResourceAttributes(options),
+				..._parseResourceAttributes(process.env.OTEL_RESOURCE_ATTRIBUTES),
+			};
+			const resource = typeof resources.resourceFromAttributes === 'function' ? resources.resourceFromAttributes(resourceAttributes) : new resources.Resource(resourceAttributes);
+
+			_sdk = new NodeSDK({
+				resource,
+				traceExporter: _buildTraceExporter(),
+				instrumentations: _getInstrumentations(getNodeAutoInstrumentations),
+			});
+
+			_sdk.start();
+			console.log(`[OTEL] Initialized service=${_serviceName}`);
+		}
+
 		const otelApi = _requirePackage('@opentelemetry/api');
-		const resourceAttributes = {
-			..._buildResourceAttributes(options),
-			..._parseResourceAttributes(process.env.OTEL_RESOURCE_ATTRIBUTES),
-		};
-		const resource = typeof resources.resourceFromAttributes === 'function' ? resources.resourceFromAttributes(resourceAttributes) : new resources.Resource(resourceAttributes);
-
-		_sdk = new NodeSDK({
-			resource,
-			traceExporter: _buildTraceExporter(),
-			instrumentations: _getInstrumentations(getNodeAutoInstrumentations),
-		});
-
-		_sdk.start();
 		_trace = otelApi.trace;
 		_context = otelApi.context;
 		_initialized = true;
-		console.log(`[OTEL] Initialized service=${_serviceName}`);
 	} catch (error) {
 		_disabledReason = error.message || String(error);
 		console.warn('[OTEL] Failed to initialize:', _disabledReason);
@@ -150,6 +164,8 @@ export const isEnabled = function() {
 };
 
 export const recordException = function(error) {
+	if (_useHyperDX && HyperDXRuntime.recordException(error)) return true;
+
 	if (!_trace || !_context) return false;
 
 	const currentSpan = _trace.getSpan(_context.active());
@@ -162,6 +178,8 @@ export const recordException = function(error) {
 
 export const setupExpressErrorHandler = function(app) {
 	if (!app || typeof app.use !== 'function') return false;
+
+	if (_useHyperDX && HyperDXRuntime.setupExpressErrorHandler(app)) return true;
 
 	app.use(function(error, request, response, next) {
 		recordException(error);
@@ -216,6 +234,16 @@ export const getCurrentTraceInfo = function() {
 	return { traceId: spanContext.traceId, spanId: spanContext.spanId };
 };
 
+export const setTraceAttributes = function(attributes) {
+	if (_useHyperDX) return HyperDXRuntime.setTraceAttributes(attributes);
+
+	if (!_trace || !_context) return false;
+	const currentSpan = _trace.getSpan(_context.active());
+	if (!currentSpan || typeof currentSpan.setAttributes !== 'function') return false;
+	currentSpan.setAttributes(attributes);
+	return true;
+};
+
 export const shutdown = function() {
 	if (!_sdk || typeof _sdk.shutdown !== 'function') return Promise.resolve();
 	return _sdk.shutdown().catch((error) => {
@@ -234,5 +262,6 @@ export default {
 	createCustomSpan,
 	createChildSpan,
 	getCurrentTraceInfo,
+	setTraceAttributes,
 	shutdown,
 };
