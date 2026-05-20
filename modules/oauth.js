@@ -175,7 +175,7 @@ function signToken(payload, expiresIn) {
 	});
 }
 
-export function signMcpAccessToken({ userId, tenantId, host_id, clientId, scopes, audience }) {
+export function signMcpAccessToken({ userId, tenantId, host_id, clientId, clientName, scopes, audience }) {
 	const scope = scopeString(scopes);
 	return signToken({
 		iss: getOauthIssuer(),
@@ -184,6 +184,7 @@ export function signMcpAccessToken({ userId, tenantId, host_id, clientId, scopes
 		host_id,
 		tenantId,
 		client_id: clientId,
+		client_name: clientName || undefined,
 		scope,
 		jti: crypto.randomUUID(),
 		token_use: 'access',

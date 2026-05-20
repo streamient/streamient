@@ -89,9 +89,17 @@ Adapt the template to your workflow. Common additions:
 | GitHub Copilot | `AGENTS.md` in repo root (or any directory) |
 | Cursor | `AGENTS.md` **and/or** `.cursor/rules/*.mdc` (versioned project rules) **and/or** **User Rules** in Cursor Settings (global, all repos) |
 | Windsurf | `.windsurfrules` file |
-| Claude Code | `CLAUDE.md` in repo root |
+| Claude Code | `CLAUDE.md` in repo root **and** hooks in `~/.claude/settings.json` (recommended) |
 
 The markdown template above is the same across clients; only where you paste it changes.
+
+### Claude Code
+
+See **[Claude Code](./claude-code)** for:
+
+- **Hooks** that automatically remind Claude to search Kumbukum before work and store after work
+- Why hooks are more reliable than `CLAUDE.md` alone
+- MCP server configuration in `~/.claude/settings.json`
 
 ### Cursor-specific
 

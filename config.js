@@ -214,6 +214,10 @@ const config = {
 		password: process.env.SYSADMIN_PASSWORD || '',
 	},
 
+	hyperdx: {
+		enabled: !!process.env.HYPERDX_API_KEY,
+	},
+
 	sentry: {
 		dsn: getSentryDsn(),
 		clientEnabled: isSentryEnabled(),

@@ -198,3 +198,7 @@ Set `PROJECT-ID` (passed via `env` for stdio) or the `X-Project-Id` header (HTTP
 ## Cursor (IDE)
 
 After the MCP server appears under **Cursor Settings → MCP**, configure **global User Rules** and optional **project rules** so Agent chats search and store memories consistently. See **[Cursor (IDE)](./cursor-ide)**.
+
+## Claude Code
+
+For Claude Code, add the MCP server to `~/.claude/settings.json` (same JSON block as Claude Desktop above), then configure **hooks** for automatic search-before-work and store-after-work behavior. See **[Claude Code](./claude-code)**.

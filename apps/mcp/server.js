@@ -75,7 +75,7 @@ async function resolveDefaultProjectId(api, projectIdOverride) {
   return def._id;
 }
 
-async function createServer(apiAuth, { projectId } = {}) {
+async function createServer(apiAuth, { projectId, oauthClientId } = {}) {
   const api = new ApiClient(API_BASE_URL, apiAuth);
   const defaultProjectId = await resolveDefaultProjectId(api, projectId);
   let emailFeatureEnabled = true;
@@ -112,10 +112,8 @@ async function createServer(apiAuth, { projectId } = {}) {
     const wrappedHandler = async (params, extra) => {
       const started = Date.now();
       const cv = server.server.getClientVersion();
-      const client = cv ? `${cv.name || 'unknown'}/${cv.version || '?'}` : 'unknown';
-      if (cv) {
-        api.setMcpClient(client);
-      }
+      const client = cv ? `${cv.name || 'unknown'}/${cv.version || '?'}` : (oauthClientId || 'unknown');
+      api.setMcpClient(client);
       try {
         const result = await originalHandler(params, extra);
         logToolTelemetry({
@@ -224,7 +222,8 @@ if (transportArg === '--stdio' || !transportArg) {
       if (!authContext.ok) return sendAuthResponse(res, authContext.response);
 
       const projectId = req.headers['x-project-id'] || null;
-      const server = await createServer(authContext.apiAuth, { projectId });
+      const oauthClientId = authContext.tokenClaims?.client_name || authContext.tokenClaims?.client_id || null;
+      const server = await createServer(authContext.apiAuth, { projectId, oauthClientId });
       const transport = new SSEServerTransport('/messages', res);
       sseTransports.set(transport.sessionId, {
 		server,
@@ -281,7 +280,8 @@ if (transportArg === '--stdio' || !transportArg) {
 	if (scopeResponse) return sendAuthResponse(res, scopeResponse);
 
       const projectId = req.headers['x-project-id'] || null;
-      const server = await createServer(authContext.apiAuth, { projectId });
+      const oauthClientId = authContext.tokenClaims?.client_name || authContext.tokenClaims?.client_id || null;
+      const server = await createServer(authContext.apiAuth, { projectId, oauthClientId });
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
