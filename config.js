@@ -216,6 +216,9 @@ const config = {
 
 	hyperdx: {
 		enabled: !!process.env.HYPERDX_API_KEY,
+		apiKey: process.env.HYPERDX_API_KEY || '',
+		browserUrl: process.env.HYPERDX_BROWSER_URL || '',
+		service: 'kumbukum',
 	},
 
 	sentry: {
