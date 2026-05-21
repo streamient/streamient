@@ -34,12 +34,6 @@ export default defineConfig({
                 ],
             },
             { text: 'MCP', link: '/mcp/' },
-            {
-                text: process.env.VITEPRESS_VERSION || 'dev',
-                items: [
-                    { text: 'Changelog', link: 'https://github.com/kumbukum/kumbukum/releases' },
-                ],
-            },
         ],
 
         sidebar: {
