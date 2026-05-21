@@ -3,6 +3,7 @@ import config from '../config.js';
 import { User } from '../model/user.js';
 import { verifyMcpBridgeToken } from '../modules/oauth.js';
 import { ensureOwnerMembershipForUser, initializeSessionTenant, resolveActiveTenantContext } from '../modules/tenancy.js';
+import * as OtelRuntime from '../modules/otel_runtime.js';
 
 async function applyTenantContext(req, userId, preferredTenantId = null, preferredHostId = null, updateSession = false) {
 	const context = updateSession
@@ -15,6 +16,7 @@ async function applyTenantContext(req, userId, preferredTenantId = null, preferr
 	req.host_id = context.activeTenant.host_id;
 	req.memberRole = context.activeTenant.role;
 	req.accessibleTenants = context.accessibleTenants;
+	OtelRuntime.setTraceAttributes({ 'enduser.id': userId, 'enduser.host_id': context.activeTenant.host_id, 'enduser.role': context.activeTenant.role });
 	return true;
 }
 

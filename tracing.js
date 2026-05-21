@@ -2,6 +2,7 @@
 // OPENTELEMETRY TRACING
 ////////////////////////////////////////////////////////////////////////////////
 
+import './modules/process_env.js';
 import * as OtelRuntime from './modules/otel_runtime.js';
 
 OtelRuntime.initializeOpenTelemetry({

@@ -9,6 +9,9 @@ import Tagify from '@yaireo/tagify';
 export { Tagify };
 import Swal from 'sweetalert2';
 export { Swal };
+import { openobserveRum } from '@openobserve/browser-rum';
+import { openobserveLogs } from '@openobserve/browser-logs';
+export { openobserveRum, openobserveLogs };
 
 // Marked (markdown parser)
 import { marked } from 'marked';
@@ -67,3 +70,5 @@ window.FilePond = FilePond;
 window.Tagify = Tagify;
 window.marked = marked;
 window.BsModal = BsModal;
+window.openobserveRum = openobserveRum;
+window.openobserveLogs = openobserveLogs;

@@ -27,6 +27,7 @@ export const MCP_SCOPE_DETAILS = {
 };
 
 export const MCP_BASELINE_SCOPES = ['mcp:read'];
+export const MCP_ALL_SCOPES = Object.keys(MCP_SCOPE_DETAILS);
 
 export const MCP_TOOL_SCOPES = {
 	create_note: ['mcp:read', 'mcp:write'],
@@ -174,7 +175,7 @@ function signToken(payload, expiresIn) {
 	});
 }
 
-export function signMcpAccessToken({ userId, tenantId, host_id, clientId, scopes, audience }) {
+export function signMcpAccessToken({ userId, tenantId, host_id, clientId, clientName, scopes, audience }) {
 	const scope = scopeString(scopes);
 	return signToken({
 		iss: getOauthIssuer(),
@@ -183,6 +184,7 @@ export function signMcpAccessToken({ userId, tenantId, host_id, clientId, scopes
 		host_id,
 		tenantId,
 		client_id: clientId,
+		client_name: clientName || undefined,
 		scope,
 		jti: crypto.randomUUID(),
 		token_use: 'access',
@@ -242,7 +244,7 @@ export function buildProtectedResourceMetadata(resource) {
 	return {
 		resource,
 		authorization_servers: [getOauthIssuer()],
-		scopes_supported: MCP_BASELINE_SCOPES,
+		scopes_supported: MCP_ALL_SCOPES,
 		bearer_methods_supported: ['header'],
 	};
 }

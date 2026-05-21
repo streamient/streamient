@@ -1,6 +1,17 @@
 ignoreWorkspaceRootCheck: true
 dangerouslyAllowAllBuilds: true
 linkWorkspacePackages: deep
+minimumReleaseAge: 0
+peerDependencyRules:
+  ignoreMissing:
+    - bufferutil
+    - utf-8-validate
+overrides:
+  bufferutil: ^4.1.0
+  utf-8-validate: ^5.0.10
+  "@tiptap/core": ^3.22.3
+  "@tiptap/pm": ^3.22.3
+  "@tiptap/extension-code-block": ^3.22.3
 packages:
   - "apps/*"
   - "docs"

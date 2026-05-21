@@ -1,5 +1,6 @@
 import config from '../config.js';
 import { resolveLlmApiKey } from '../services/byo_ai_service.js';
+import * as OtelRuntime from './otel_runtime.js';
 
 const PROVIDERS = {
 	openai: {
@@ -69,34 +70,61 @@ export async function chatCompletion({ messages, stream = false, provider: provi
 	const { name, provider, apiKey } = await resolveProvider(providerOverride, { hostId, scope });
 	const model = modelOverride || provider.defaultModel;
 
-	if (name === 'google') {
-		return googleChat({ messages, model, stream, apiKey, maxTokens });
-	}
+	return OtelRuntime.createCustomSpan('gen_ai.chat.completion', async (span) => {
+		span.setAttribute('gen_ai.system', name);
+		span.setAttribute('gen_ai.request.model', model);
+		span.setAttribute('gen_ai.request.max_tokens', maxTokens);
+		span.setAttribute('gen_ai.request.stream', stream);
+		span.setAttribute('gen_ai.input.messages', messages.length);
+		span.setAttribute('gen_ai.input.estimated_tokens', estimateMessageTokens(messages));
 
-	// OpenAI-compatible API (OpenAI, Groq, Cerebras)
-	const body = applyTokenLimit({
-		model,
-		messages,
-		stream,
-	}, name, model, maxTokens);
-	const response = await fetch(`${provider.baseUrl}/chat/completions`, {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-			Authorization: `Bearer ${apiKey}`,
-		},
-		body: JSON.stringify(body),
+		if (name === 'google') {
+			const result = await googleChat({ messages, model, stream, apiKey, maxTokens });
+			if (!stream) span.setAttribute('gen_ai.output.estimated_tokens', estimateTextTokens(result));
+			return result;
+		}
+
+		// OpenAI-compatible API (OpenAI, Groq, Cerebras)
+		const body = applyTokenLimit({
+			model,
+			messages,
+			stream,
+		}, name, model, maxTokens);
+		const response = await fetch(`${provider.baseUrl}/chat/completions`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				Authorization: `Bearer ${apiKey}`,
+			},
+			body: JSON.stringify(body),
+		});
+
+		span.setAttribute('http.response.status_code', response.status);
+
+		if (!response.ok) {
+			const err = await response.text();
+			throw new Error(`LLM API error (${response.status}): ${err}`);
+		}
+
+		if (stream) return response.body;
+
+		const data = await response.json();
+		const content = data.choices[0].message.content;
+		span.setAttribute('gen_ai.output.estimated_tokens', estimateTextTokens(content));
+		if (data.usage) {
+			span.setAttribute('gen_ai.usage.input_tokens', data.usage.prompt_tokens || 0);
+			span.setAttribute('gen_ai.usage.output_tokens', data.usage.completion_tokens || 0);
+		}
+		return content;
 	});
+}
 
-	if (!response.ok) {
-		const err = await response.text();
-		throw new Error(`LLM API error (${response.status}): ${err}`);
-	}
+function estimateTextTokens(value) {
+	return Math.ceil(String(value || '').length / 4);
+}
 
-	if (stream) return response.body;
-
-	const data = await response.json();
-	return data.choices[0].message.content;
+function estimateMessageTokens(messages = []) {
+	return messages.reduce((sum, message) => sum + estimateTextTokens(message.content), 0);
 }
 
 async function googleChat({ messages, model, stream, apiKey, maxTokens = 4096 }) {

@@ -329,6 +329,8 @@ html(lang="en")
 		script(src=`/static/v-${v}/js/trash.js`)
 		script(src=`/static/v-${v}/js/batch.js`)
 		include includes/openpanel
+		include includes/openobserve
+		include includes/hyperdx
 		if impersonating
 			script.
 				document.getElementById('exit-impersonation')?.addEventListener('click', async () => {

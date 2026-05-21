@@ -25,6 +25,8 @@ node apps/mcp/server.js --transport http --port 3002
 
 See [Setup](./setup) for Claude Desktop configuration and [Tools](./tools) for the full tool reference.
 
+For **Claude Code** (hooks for automatic search-before-work and store-after-work), see [Claude Code](./claude-code).
+
 For **Cursor** (global User Rules, project `.cursor/rules`, and MCP server naming), see [Cursor (IDE)](./cursor-ide).
 
 ## Tool Categories
