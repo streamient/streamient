@@ -1,0 +1,23 @@
+//- HyperDX Browser SDK — session replay, console capture, network capture
+if hyperdx && hyperdx.enabled && hyperdx.apiKey && hyperdx.browserUrl
+	- const hdxUser = typeof user !== 'undefined' ? user : null;
+	- const hdxHostId = typeof host_id !== 'undefined' ? host_id : '';
+	- const hdxUserJson = hdxUser ? JSON.stringify({ userId: String(hdxUser._id), userEmail: hdxUser.email || '', userName: hdxUser.name || '', hostId: hdxHostId }) : 'null';
+	script(src="https://www.unpkg.com/@hyperdx/browser@latest/build/index.js" crossorigin="anonymous")
+	script.
+		try {
+			window.HyperDX.init({
+				url: '#{hyperdx.browserUrl}',
+				apiKey: '#{hyperdx.apiKey}',
+				service: '#{hyperdx.service}-browser',
+				tracePropagationTargets: [new RegExp(window.location.hostname.replace(/\./g, '\\\\.'), 'i')],
+				consoleCapture: true,
+				advancedNetworkCapture: true,
+			});
+			var _hdxUser = !{hdxUserJson};
+			if (_hdxUser) {
+				window.HyperDX.setGlobalAttributes(_hdxUser);
+			}
+		} catch (error) {
+			console.error('HyperDX browser init error:', error);
+		}

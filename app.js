@@ -69,6 +69,7 @@ app.set('views', path.join(__dirname, 'views'));
 app.locals.openpanel = config.openpanel;
 app.locals.openobserve = config.openobserve;
 app.locals.sentry = config.sentry;
+app.locals.hyperdx = config.hyperdx;
 installIconLocals(app);
 
 // Cache-busting build ID — embedded in static asset paths: /static/v-{hash}/...
