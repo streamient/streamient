@@ -3,6 +3,13 @@ import { readOpenObserveConfig } from './modules/openobserve_runtime.js';
 
 function parseTypesenseConfig() {
 	const connectionTimeoutSeconds = Number(process.env.TYPESENSE_CONNECTION_TIMEOUT_SECONDS) || 8;
+	const healthcheckIntervalSeconds = Number(process.env.TYPESENSE_HEALTHCHECK_INTERVAL_SECONDS) || 30;
+	// NOTE: the Typesense client reads `numRetries`, not `maxRetries`.
+	const numRetries = Number(process.env.TYPESENSE_NUM_RETRIES) || 2;
+	// Sleep between failover retries. Kept short so a request that lands on a
+	// lagging/unhealthy node fails over to a healthy one quickly instead of
+	// blocking for tens of seconds.
+	const retryIntervalSeconds = Number(process.env.TYPESENSE_RETRY_INTERVAL_SECONDS) || 2;
 	let nodesEnv = (process.env.TYPESENSE_NODES || '').trim();
 	// Strip wrapping single or double quotes (some orchestrators add them)
 	if ((nodesEnv.startsWith("'") && nodesEnv.endsWith("'")) || (nodesEnv.startsWith('"') && nodesEnv.endsWith('"') && nodesEnv[1] !== '{')) {
@@ -16,9 +23,9 @@ function parseTypesenseConfig() {
 			}
 			return {
 				connectionTimeoutSeconds,
-				healthcheckIntervalSeconds: 30,
-				maxRetries: 2,
-				retryIntervalSeconds: 10,
+				healthcheckIntervalSeconds,
+				numRetries,
+				retryIntervalSeconds,
 				...parsed,
 			};
 		} catch (err) {
@@ -37,9 +44,9 @@ function parseTypesenseConfig() {
 		],
 		apiKey: process.env.TYPESENSE_API_KEY || 'kumbukum-dev-key',
 		connectionTimeoutSeconds,
-		healthcheckIntervalSeconds: 30,
-		maxRetries: 2,
-		retryIntervalSeconds: 10,
+		healthcheckIntervalSeconds,
+		numRetries,
+		retryIntervalSeconds,
 	};
 }
 
