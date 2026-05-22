@@ -93,7 +93,7 @@ export async function deleteMemory(host_id, memoryId, ctx = {}) {
 
 export async function recallMemory(host_id, query, options = {}) {
 	return searchCollection(host_id, 'memory', query, {
-		queryBy: 'title,content,embedding',
+		queryBy: 'embedding',
 		...options,
 	});
 }

@@ -251,7 +251,7 @@ export async function deleteEmail(host_id, emailId, ctx = {}) {
 
 export async function searchEmails(host_id, query, options = {}) {
 	return searchCollection(host_id, 'emails', query, {
-		queryBy: 'subject,text_content,attachment_text_content,from,to,cc,bcc,embedding',
+		queryBy: 'embedding',
 		...options,
 	});
 }

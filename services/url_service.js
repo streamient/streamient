@@ -176,7 +176,7 @@ export async function deleteUrl(host_id, urlId, ctx = {}) {
 
 export async function searchUrls(host_id, query, options = {}) {
 	return searchCollection(host_id, 'urls', query, {
-		queryBy: 'title,description,text_content,embedding',
+		queryBy: 'embedding',
 		...options,
 	});
 }
