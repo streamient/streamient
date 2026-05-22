@@ -1,3 +1,5 @@
+import { sanitizeDeep } from '../../../modules/text_sanitize.js';
+
 const EXCERPT_MAX_CHARS = 1200;
 
 const READ_TOOLS = {
@@ -13,6 +15,7 @@ const CONTENT_FIELDS = [
 	'text_content',
 	'attachment_text_content',
 ];
+
 
 /**
  * Convert raw Typesense responses into lean MCP search payloads.
@@ -55,14 +58,14 @@ function slimSearchHit(hit, type) {
 		applySearchMetadata(document, type);
 		if (hit.text_match_info?.score !== undefined) document.score = hit.text_match_info.score;
 		if (hit.vector_distance !== undefined) document.vector_distance = hit.vector_distance;
-		return document;
+		return sanitizeDeep(document);
 	}
 	if (hit && typeof hit === 'object') {
 		const document = { ...hit };
 		applySearchMetadata(document, type);
-		return document;
+		return sanitizeDeep(document);
 	}
-	return hit;
+	return sanitizeDeep(hit);
 }
 
 function applySearchMetadata(document, type) {

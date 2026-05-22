@@ -4,6 +4,7 @@ import config from '../config.js';
 import { emitToTenant } from './socket.js';
 import { getRedisClient } from './redis.js';
 import { normalizeLlmScope, resolveLlmApiKey } from '../services/byo_ai_service.js';
+import { sanitizeDeep } from './text_sanitize.js';
 
 let client;
 
@@ -170,7 +171,9 @@ function chunkString(value) {
 
 function chunkTypesenseDoc(type, doc) {
 	const fields = _chunk_fields[type];
-	if (!fields?.length) return [doc];
+	// Strip control/separator chars so they never reach the Typesense index
+	// (and thus never reach search results / MCP clients).
+	if (!fields?.length) return [sanitizeDeep(doc)];
 
 	const sourceId = doc.source_id || doc.id;
 	const chunkSpecs = [];
@@ -198,7 +201,7 @@ function chunkTypesenseDoc(type, doc) {
 			chunkDoc[field] = field === spec.field ? spec.chunk : '';
 		}
 
-		return chunkDoc;
+		return sanitizeDeep(chunkDoc);
 	});
 }
 
@@ -223,6 +226,28 @@ export function normalizeGroupedSearchResult(result) {
 			.filter(Boolean)
 			.map(applySourceIdToHit),
 	};
+}
+
+/**
+ * Collapse chunked documents (same source_id) to one hit per source, preserving
+ * rank order. Replaces Typesense group_by — content is indexed in 3000-char
+ * chunks sharing a source_id, and we only need unique results per source.
+ * Returns the document id mapped to source_id (matching the old grouped path).
+ */
+function dedupeHitsBySourceId(result, limit) {
+	if (!result?.hits) return result;
+	const seen = new Set();
+	const hits = [];
+	for (const hit of result.hits) {
+		const key = hit?.document?.source_id || hit?.document?.id;
+		if (key) {
+			if (seen.has(key)) continue;
+			seen.add(key);
+		}
+		hits.push(applySourceIdToHit(hit));
+		if (limit && hits.length >= limit) break;
+	}
+	return { ...result, hits };
 }
 
 function isMissingSourceIdError(err) {
@@ -601,33 +626,28 @@ export async function removeDocumentsByFilter(host_id, type, filterBy) {
 export async function searchCollection(host_id, type, query, options = {}) {
 	const ts = getTypesenseClient();
 	const collectionName = `${type}_${host_id}`;
+	const isChunked = !!_chunk_fields[type] && options.group !== false;
+	const requested = options.perPage || 10;
+	// Over-fetch so source_id dedup (chunk collapse) can still fill the page.
+	const fetchSize = isChunked ? Math.min(requested * 3, 250) : requested;
 	const params = {
 		q: query,
 		query_by: options.queryBy || 'title',
 		prefix: false,
-		per_page: options.perPage ?? 10,
+		per_page: fetchSize,
 		page: options.page || 1,
 		exclude_fields: resolveExcludeFields(options.exclude_fields, type),
 		...options.extra,
 	};
-	if (options.include_fields) params.include_fields = options.include_fields;
-	if (options.filter_by) params.filter_by = options.filter_by;
-	if (_chunk_fields[type] && options.group !== false && !params.group_by) {
-		params.group_by = 'source_id';
-		params.group_limit = params.group_limit || 1;
-		params.include_fields = includeSourceIdField(params.include_fields);
+	if (options.include_fields) {
+		params.include_fields = isChunked ? includeSourceIdField(options.include_fields) : options.include_fields;
 	}
+	if (options.filter_by) params.filter_by = options.filter_by;
 	return withTypesenseResilience(
 		`search ${collectionName}`,
 		async () => {
-			try {
-				return normalizeGroupedSearchResult(await ts.collections(collectionName).documents().search(params));
-			} catch (err) {
-				if (params.group_by && isMissingSourceIdError(err)) {
-					return normalizeGroupedSearchResult(await ts.collections(collectionName).documents().search(withoutGrouping(params)));
-				}
-				throw err;
-			}
+			const result = await ts.collections(collectionName).documents().search(params);
+			return isChunked ? dedupeHitsBySourceId(result, requested) : result;
 		},
 		{ fallback: { hits: [], found: 0, out_of: 0, page: params.page || 1 } },
 	);
@@ -711,45 +731,36 @@ export async function searchAll(host_id, query, options = {}) {
 	const ts = getTypesenseClient();
 	const includeEmails = options.includeEmails !== false;
 	const types = includeEmails ? ['notes', 'memory', 'urls', 'emails', 'pages'] : ['notes', 'memory', 'urls', 'pages'];
-	const searches = types.map((type) => {
-		const search = {
-			collection: `${type}_${host_id}`,
-			q: query,
-			query_by: 'embedding',
-			prefix: false,
-			per_page: options.perPage || 5,
-			exclude_fields: resolveExcludeFields(options.exclude_fields, type),
-		};
-		if (options.projectId) search.filter_by = `project_id:=${options.projectId}`;
-		if (_chunk_fields[type] && options.group !== false) {
-			search.group_by = 'source_id';
-			search.group_limit = 1;
-		}
-		return search;
-	});
+	const requested = options.perPage || 5;
+	// Over-fetch so source_id dedup (chunk collapse) can still fill the page.
+	const fetchSize = Math.min(requested * 3, 250);
+
+	// Embedding-only search makes every per-collection param identical, so only
+	// the collection name varies — the rest goes in commonSearchParams.
+	const searchRequests = {
+		searches: types.map((type) => ({ collection: `${type}_${host_id}` })),
+	};
+	const commonSearchParams = {
+		q: query,
+		query_by: 'embedding',
+		prefix: false,
+		per_page: fetchSize,
+		exclude_fields: _ts_exlude_default,
+	};
+	if (options.projectId) commonSearchParams.filter_by = `project_id:=${options.projectId}`;
 
 	const results = await withTypesenseResilience(
 		`multiSearch host ${host_id}`,
-		async () => {
-			try {
-				return await ts.multiSearch.perform({ searches });
-			} catch (err) {
-				if (isMissingSourceIdError(err)) {
-					const ungrouped = searches.map(withoutGrouping);
-					return ts.multiSearch.perform({ searches: ungrouped });
-				}
-				throw err;
-			}
-		},
+		() => ts.multiSearch.perform(searchRequests, commonSearchParams),
 		{
 			fallback: {
-				results: searches.map(() => ({ hits: [], found: 0, out_of: 0, page: 1 })),
+				results: types.map(() => ({ hits: [], found: 0, out_of: 0, page: 1 })),
 			},
 		},
 	);
 	const merged = {};
 	types.forEach((type, i) => {
-		merged[type] = normalizeGroupedSearchResult(results.results[i]);
+		merged[type] = dedupeHitsBySourceId(results.results[i], requested);
 	});
 	return merged;
 }
@@ -760,8 +771,9 @@ export async function searchAll(host_id, query, options = {}) {
  */
 export async function getCollectionCounts(host_id) {
 	const ts = getTypesenseClient();
+	const types = ['notes', 'memory', 'urls', 'emails'];
 	const counts = {};
-	for (const type of ['notes', 'memory', 'urls', 'emails']) {
+	await Promise.all(types.map(async (type) => {
 		try {
 			const col = await withTypesenseResilience(
 				`collection stats ${type}_${host_id}`,
@@ -773,7 +785,7 @@ export async function getCollectionCounts(host_id) {
 			console.error(`getCollectionCounts: ${type}_${host_id} failed:`, err.message);
 			counts[type] = 0;
 		}
-	}
+	}));
 	return counts;
 }
 
@@ -1329,32 +1341,26 @@ export async function conversationSearch(hostId, userId, query, options = {}) {
 
 	await ensureConversationModel(hostId, userId, { llmScope });
 
-	// Build per-collection search requests
+	// Build per-collection search requests — embedding-only makes every param
+	// identical across collections, so only the collection name varies here.
 	const types = includeEmails ? ['notes', 'memory', 'urls', 'emails', 'pages'] : ['notes', 'memory', 'urls', 'pages'];
-	const searches = types.map((type) => {
-		const search = {
-			collection: `${type}_${hostId}`,
-			query_by: 'embedding',
-			prefix: false,
-			per_page: perPage,
-			exclude_fields: _ts_exlude_default,
-		};
-		if (projectId) {
-			search.filter_by = `project_id:=${projectId}`;
-		}
-		if (_chunk_fields[type]) {
-			search.group_by = 'source_id';
-			search.group_limit = 1;
-		}
-		return search;
-	});
+	const searches = types.map((type) => ({ collection: `${type}_${hostId}` }));
 
-	// Common search params — q must be top-level when conversation is enabled
+	// Common search params — q must be top-level when conversation is enabled.
+	// No group_by: chunks (shared source_id) are deduped app-side after the
+	// search so the conversation model still sees full context.
 	const searchParams = {
 		q: query,
+		query_by: 'embedding',
+		prefix: false,
+		per_page: perPage,
+		exclude_fields: _ts_exlude_default,
 		conversation: true,
 		conversation_model_id: convoModelId,
 	};
+	if (projectId) {
+		searchParams.filter_by = `project_id:=${projectId}`;
+	}
 	if (conversationId) {
 		searchParams.conversation_id = conversationId;
 	}
@@ -1368,15 +1374,7 @@ export async function conversationSearch(hostId, userId, query, options = {}) {
 	}
 
 	async function performConversationMultiSearch() {
-		try {
-			return await ts.multiSearch.perform({ searches }, searchParams);
-		} catch (err) {
-			if (isMissingSourceIdError(err)) {
-				const ungrouped = searches.map(withoutGrouping);
-				return ts.multiSearch.perform({ searches: ungrouped }, searchParams);
-			}
-			throw err;
-		}
+		return ts.multiSearch.perform({ searches }, searchParams);
 	}
 
 	async function retryWithoutConversationId(reason) {
@@ -1421,10 +1419,10 @@ export async function conversationSearch(hostId, userId, query, options = {}) {
 		}
 	}
 
-	// Merge results by type
+	// Merge results by type, deduping chunked docs by source_id
 	const merged = {};
 	types.forEach((type, i) => {
-		merged[type] = normalizeGroupedSearchResult(data.results?.[i]) || { found: 0, hits: [] };
+		merged[type] = dedupeHitsBySourceId(data.results?.[i], perPage) || { found: 0, hits: [] };
 	});
 
 	// Parse conversation answer

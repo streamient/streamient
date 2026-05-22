@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { textSanitizerPlugin } from '../modules/text_sanitize.js';
 
 const memorySchema = new mongoose.Schema(
 	{
@@ -45,5 +46,7 @@ memorySchema.index({ is_indexed: 1, in_trash: 1 });
 memorySchema.index({ 'git_source.repo_id': 1, 'git_source.file_path': 1 }, { sparse: true });
 memorySchema.index({ 'git_commit.repo_id': 1, 'git_commit.sha': 1 }, { sparse: true });
 memorySchema.index({ trashed_at: 1 }, { expireAfterSeconds: 2592000, partialFilterExpression: { trashed_at: { $type: 'date' }, in_trash: true } });
+
+memorySchema.plugin(textSanitizerPlugin);
 
 export const Memory = mongoose.model('Memory', memorySchema);

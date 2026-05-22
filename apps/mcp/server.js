@@ -23,6 +23,12 @@ import { recordException, setupExpressErrorHandler as setupOtelExpressErrorHandl
 const PORT = mcpConfig.port;
 const API_BASE_URL = mcpConfig.apiBaseUrl;
 const MCP_TOOL_TELEMETRY = process.env.MCP_TOOL_TELEMETRY === 'true';
+// Default project id + feature flags change rarely, so cache them long enough
+// to stay warm across a user's session and normal gaps between calls. 60s was
+// short enough that spaced-out calls always missed and re-paid the two upstream
+// API lookups every time.
+const BOOTSTRAP_TTL_MS = Number(process.env.MCP_BOOTSTRAP_TTL_MS) || 600_000;
+const bootstrapCache = new Map();
 
 function estimateTokens(value) {
   return Math.ceil(String(value || '').length / 4);
@@ -75,8 +81,12 @@ async function resolveDefaultProjectId(api, projectIdOverride) {
   return def._id;
 }
 
-async function createServer(apiAuth, { projectId, oauthClientId } = {}) {
-  const api = new ApiClient(API_BASE_URL, apiAuth);
+async function resolveBootstrap(api, { projectId, cacheKey }) {
+  const now = Date.now();
+  if (cacheKey) {
+    const cached = bootstrapCache.get(cacheKey);
+    if (cached && cached.expires > now) return { ...cached.value, cacheHit: true };
+  }
   const defaultProjectId = await resolveDefaultProjectId(api, projectId);
   let emailFeatureEnabled = true;
   let gitSyncFeatureEnabled = true;
@@ -85,10 +95,27 @@ async function createServer(apiAuth, { projectId, oauthClientId } = {}) {
     emailFeatureEnabled = features?.email_ingest !== false;
     gitSyncFeatureEnabled = features?.git_sync !== false;
   } catch {
-    // Fallback for older API versions: keep enabled by default.
     emailFeatureEnabled = true;
     gitSyncFeatureEnabled = true;
   }
+  const value = { defaultProjectId, emailFeatureEnabled, gitSyncFeatureEnabled };
+  if (cacheKey) {
+    bootstrapCache.set(cacheKey, { value, expires: now + BOOTSTRAP_TTL_MS });
+  }
+  return { ...value, cacheHit: false };
+}
+
+function logMcpRequest(event) {
+  if (!MCP_TOOL_TELEMETRY) return;
+  console.log(JSON.stringify({ event: 'mcp_request', ...event }));
+}
+
+async function createServer(apiAuth, { projectId, oauthClientId, cacheKey } = {}) {
+  const api = new ApiClient(API_BASE_URL, apiAuth);
+  const bootstrapStart = Date.now();
+  const { defaultProjectId, emailFeatureEnabled, gitSyncFeatureEnabled, cacheHit } =
+    await resolveBootstrap(api, { projectId, cacheKey });
+  const bootstrapMs = Date.now() - bootstrapStart;
 
   const server = new McpServer({
     name: 'kumbukum',
@@ -152,7 +179,7 @@ async function createServer(apiAuth, { projectId, oauthClientId } = {}) {
     server.tool(name, tool.description, tool.inputSchema, wrappedHandler);
   }
 
-  return server;
+  return { server, bootstrapMs, bootstrapCacheHit: cacheHit };
 }
 
 // Determine transport mode
@@ -168,7 +195,7 @@ if (transportArg === '--stdio' || !transportArg) {
 
   const projectId = process.env['PROJECT-ID'] || null;
   try {
-    const server = await createServer(token, { projectId });
+    const { server } = await createServer(token, { projectId });
     const transport = new StdioServerTransport();
     await server.connect(transport);
   } catch (err) {
@@ -223,12 +250,14 @@ if (transportArg === '--stdio' || !transportArg) {
 
       const projectId = req.headers['x-project-id'] || null;
       const oauthClientId = authContext.tokenClaims?.client_name || authContext.tokenClaims?.client_id || null;
-      const server = await createServer(authContext.apiAuth, { projectId, oauthClientId });
+      const authKey = authKeyForContext(authContext);
+      const cacheKey = `${authKey}:${projectId || ''}`;
+      const { server } = await createServer(authContext.apiAuth, { projectId, oauthClientId, cacheKey });
       const transport = new SSEServerTransport('/messages', res);
       sseTransports.set(transport.sessionId, {
 		server,
 		transport,
-		authKey: authKeyForContext(authContext),
+		authKey,
 		mode: authContext.mode,
 	});
 
@@ -273,6 +302,8 @@ if (transportArg === '--stdio' || !transportArg) {
   // Streamable HTTP endpoint — stateless (no sessions)
   // Shared handler for all methods on /mcp
   const handleMcp = async (req, res) => {
+    const requestStart = Date.now();
+    const mcpMethod = req.body?.method || req.method;
     try {
       const authContext = authenticateHttpRequest(req);
       if (!authContext.ok) return sendAuthResponse(res, authContext.response);
@@ -281,14 +312,30 @@ if (transportArg === '--stdio' || !transportArg) {
 
       const projectId = req.headers['x-project-id'] || null;
       const oauthClientId = authContext.tokenClaims?.client_name || authContext.tokenClaims?.client_id || null;
-      const server = await createServer(authContext.apiAuth, { projectId, oauthClientId });
+      const cacheKey = `${authKeyForContext(authContext)}:${projectId || ''}`;
+      const { server, bootstrapMs, bootstrapCacheHit } = await createServer(authContext.apiAuth, { projectId, oauthClientId, cacheKey });
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
+      logMcpRequest({
+        method: mcpMethod,
+        transport: 'streamable-http',
+        duration_ms: Date.now() - requestStart,
+        bootstrap_ms: bootstrapMs,
+        bootstrap_cache_hit: bootstrapCacheHit,
+        success: true,
+      });
     } catch (err) {
       recordException(err);
       captureException(err, { tags: { phase: 'streamable_http' } });
       console.error('Error handling Kumbukum MCP HTTP request:', err);
+      logMcpRequest({
+        method: mcpMethod,
+        transport: 'streamable-http',
+        duration_ms: Date.now() - requestStart,
+        success: false,
+        error: err?.message || 'unknown',
+      });
       if (!res.headersSent) {
         res.status(500).json({ error: 'Internal server error' });
       }

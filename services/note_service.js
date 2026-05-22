@@ -84,7 +84,7 @@ export async function deleteNote(host_id, noteId, ctx = {}) {
 
 export async function searchNotes(host_id, query, options = {}) {
 	return searchCollection(host_id, 'notes', query, {
-		queryBy: 'title,text_content,embedding',
+		queryBy: 'embedding',
 		...options,
 	});
 }

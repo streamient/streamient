@@ -918,22 +918,14 @@ router.post('/search/all', async (req, res) => {
 		if (!query) return res.status(400).json({ error: 'query required' });
 		const emailEnabled = await getEmailFeatureAccess(req.host_id, req.billingUser);
 
-		const types = [
-			{ type: 'notes', queryBy: 'embedding' },
-			{ type: 'memory', queryBy: 'embedding' },
-			{ type: 'urls', queryBy: 'embedding' },
-		];
-		if (emailEnabled) types.push({ type: 'emails', queryBy: 'embedding' });
+		// One batched multiSearch across collections instead of N serial calls.
+		const merged = await searchKnowledge(req.host_id, query, { perPage: 5, includeEmails: emailEnabled });
+		const linkTypes = emailEnabled ? ['notes', 'memory', 'urls', 'emails'] : ['notes', 'memory', 'urls'];
 
 		const results = [];
-		for (const { type, queryBy } of types) {
-			try {
-				const r = await searchCollection(req.host_id, type, query, { queryBy, perPage: 5 });
-				for (const hit of (r.hits || [])) {
-					results.push({ ...hit.document, _type: type });
-				}
-			} catch (e) {
-				// collection may not exist yet
+		for (const type of linkTypes) {
+			for (const hit of (merged[type]?.hits || [])) {
+				results.push({ ...hit.document, _type: type });
 			}
 		}
 
