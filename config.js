@@ -2,7 +2,9 @@ import { getSentryDsn, isSentryEnabled } from './modules/sentry_runtime.js';
 import { readOpenObserveConfig } from './modules/openobserve_runtime.js';
 
 function parseTypesenseConfig() {
-	const connectionTimeoutSeconds = Number(process.env.TYPESENSE_CONNECTION_TIMEOUT_SECONDS) || 8;
+	// Only override the connection timeout; let the client use its own sensible
+	// defaults for numRetries / retryIntervalSeconds / healthcheckIntervalSeconds.
+	const connectionTimeoutSeconds = Number(process.env.TYPESENSE_CONNECTION_TIMEOUT_SECONDS) || 30;
 	let nodesEnv = (process.env.TYPESENSE_NODES || '').trim();
 	// Strip wrapping single or double quotes (some orchestrators add them)
 	if ((nodesEnv.startsWith("'") && nodesEnv.endsWith("'")) || (nodesEnv.startsWith('"') && nodesEnv.endsWith('"') && nodesEnv[1] !== '{')) {
@@ -16,9 +18,6 @@ function parseTypesenseConfig() {
 			}
 			return {
 				connectionTimeoutSeconds,
-				healthcheckIntervalSeconds: 30,
-				maxRetries: 2,
-				retryIntervalSeconds: 10,
 				...parsed,
 			};
 		} catch (err) {
@@ -37,9 +36,6 @@ function parseTypesenseConfig() {
 		],
 		apiKey: process.env.TYPESENSE_API_KEY || 'kumbukum-dev-key',
 		connectionTimeoutSeconds,
-		healthcheckIntervalSeconds: 30,
-		maxRetries: 2,
-		retryIntervalSeconds: 10,
 	};
 }
 
