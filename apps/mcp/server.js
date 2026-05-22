@@ -23,7 +23,11 @@ import { recordException, setupExpressErrorHandler as setupOtelExpressErrorHandl
 const PORT = mcpConfig.port;
 const API_BASE_URL = mcpConfig.apiBaseUrl;
 const MCP_TOOL_TELEMETRY = process.env.MCP_TOOL_TELEMETRY === 'true';
-const BOOTSTRAP_TTL_MS = Number(process.env.MCP_BOOTSTRAP_TTL_MS) || 60_000;
+// Default project id + feature flags change rarely, so cache them long enough
+// to stay warm across a user's session and normal gaps between calls. 60s was
+// short enough that spaced-out calls always missed and re-paid the two upstream
+// API lookups every time.
+const BOOTSTRAP_TTL_MS = Number(process.env.MCP_BOOTSTRAP_TTL_MS) || 600_000;
 const bootstrapCache = new Map();
 
 function estimateTokens(value) {

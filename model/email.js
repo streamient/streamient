@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { textSanitizerPlugin } from '../modules/text_sanitize.js';
 
 const emailSchema = new mongoose.Schema(
 	{
@@ -33,5 +34,7 @@ emailSchema.index({ is_indexed: 1, in_trash: 1 });
 emailSchema.index({ host_id: 1, message_id: 1 }, { unique: true, partialFilterExpression: { message_id: { $type: 'string', $ne: '' } } });
 emailSchema.index({ host_id: 1, references: 1 });
 emailSchema.index({ trashed_at: 1 }, { expireAfterSeconds: 2592000, partialFilterExpression: { trashed_at: { $type: 'date' }, in_trash: true } });
+
+emailSchema.plugin(textSanitizerPlugin);
 
 export const Email = mongoose.model('Email', emailSchema);

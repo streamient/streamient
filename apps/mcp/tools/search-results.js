@@ -1,3 +1,5 @@
+import { sanitizeDeep } from '../../../modules/text_sanitize.js';
+
 const EXCERPT_MAX_CHARS = 1200;
 
 const READ_TOOLS = {
@@ -14,26 +16,6 @@ const CONTENT_FIELDS = [
 	'attachment_text_content',
 ];
 
-// Characters JSON.stringify does NOT escape but that break strict SSE/JSON
-// parsing in MCP clients: C0 controls (except tab/LF/CR), DEL, C1 controls
-// (e.g. U+0085 NEL / U+009C from mojibake'd imports), and the Unicode
-// line/paragraph separators. Imported note/URL/email content can carry these.
-const UNSAFE_CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u2028\u2029]/g;
-
-export function sanitizeText(value) {
-	return typeof value === 'string' ? value.replace(UNSAFE_CONTROL_CHARS, '') : value;
-}
-
-function sanitizeDeep(value) {
-	if (typeof value === 'string') return sanitizeText(value);
-	if (Array.isArray(value)) return value.map(sanitizeDeep);
-	if (value && typeof value === 'object') {
-		const out = {};
-		for (const [key, val] of Object.entries(value)) out[key] = sanitizeDeep(val);
-		return out;
-	}
-	return value;
-}
 
 /**
  * Convert raw Typesense responses into lean MCP search payloads.
