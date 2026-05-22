@@ -127,20 +127,5 @@
     "nodemon": "^3.1.14",
     "vue-demi": "^0.14.10"
   },
-  "pnpm": {
-    "peerDependencyRules": {
-      "ignoreMissing": [
-        "bufferutil",
-        "utf-8-validate"
-      ]
-    },
-    "overrides": {
-      "bufferutil": "^4.1.0",
-      "utf-8-validate": "^5.0.10",
-      "@tiptap/core": "^3.22.3",
-      "@tiptap/pm": "^3.22.3",
-      "@tiptap/extension-code-block": "^3.22.3"
-    }
-  },
-  "packageManager": "pnpm@10.33.0"
+  "packageManager": "pnpm@11.1.3"
 }

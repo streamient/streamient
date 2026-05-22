@@ -2,6 +2,7 @@ import { getSentryDsn, isSentryEnabled } from './modules/sentry_runtime.js';
 import { readOpenObserveConfig } from './modules/openobserve_runtime.js';
 
 function parseTypesenseConfig() {
+	const connectionTimeoutSeconds = Number(process.env.TYPESENSE_CONNECTION_TIMEOUT_SECONDS) || 8;
 	let nodesEnv = (process.env.TYPESENSE_NODES || '').trim();
 	// Strip wrapping single or double quotes (some orchestrators add them)
 	if ((nodesEnv.startsWith("'") && nodesEnv.endsWith("'")) || (nodesEnv.startsWith('"') && nodesEnv.endsWith('"') && nodesEnv[1] !== '{')) {
@@ -14,7 +15,7 @@ function parseTypesenseConfig() {
 				throw new Error('TYPESENSE_NODES must include a "nodes" array');
 			}
 			return {
-				connectionTimeoutSeconds: 900,
+				connectionTimeoutSeconds,
 				healthcheckIntervalSeconds: 30,
 				maxRetries: 2,
 				retryIntervalSeconds: 10,
@@ -35,7 +36,7 @@ function parseTypesenseConfig() {
 			},
 		],
 		apiKey: process.env.TYPESENSE_API_KEY || 'kumbukum-dev-key',
-		connectionTimeoutSeconds: 900,
+		connectionTimeoutSeconds,
 		healthcheckIntervalSeconds: 30,
 		maxRetries: 2,
 		retryIntervalSeconds: 10,
