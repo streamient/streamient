@@ -257,19 +257,14 @@ async function computeSemanticEdges(hostId, nodes, threshold) {
 	// Sample up to 50 nodes for semantic search to avoid excessive queries
 	const sample = nodes.length > 50 ? nodes.slice(0, 50) : nodes;
 
-	const typeQueryBy = {
-		notes: 'title,text_content,embedding',
-		memory: 'title,content,embedding',
-		urls: 'title,description,text_content,embedding',
-	};
+	const supportedTypes = new Set(['notes', 'memory', 'urls']);
 
 	for (const node of sample) {
-		const queryBy = typeQueryBy[node.type];
-		if (!queryBy) continue;
+		if (!supportedTypes.has(node.type)) continue;
 
 		try {
 			const results = await searchCollection(hostId, node.type, node.name, {
-				queryBy,
+				queryBy: 'embedding',
 				perPage: 4,
 				include_fields: 'id',
 			});
@@ -279,7 +274,11 @@ async function computeSemanticEdges(hostId, nodes, threshold) {
 				if (targetId === node.id) continue;
 				if (!nodeIds.has(targetId)) continue;
 
-				const score = hit.text_match_info?.score || hit.hybrid_search_info?.rank_fusion_score || 0;
+				// Embedding-only search returns vector_distance (0 = identical,
+				// up to 2 for cosine). Convert to a 0..1 similarity score.
+				const score = hit.vector_distance != null
+					? 1 - hit.vector_distance
+					: (hit.text_match_info?.score || hit.hybrid_search_info?.rank_fusion_score || 0);
 				if (score < threshold) continue;
 
 				const key = [node.id, targetId].sort().join('-');
