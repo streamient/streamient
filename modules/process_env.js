@@ -7,7 +7,7 @@
 
 
 console.log('--- Loading environment variables ---')
-	
+
 process.env.CRAWLEE_PERSIST_STORAGE = 'false';
 
 // General warning when run in desktop mode
@@ -18,3 +18,4 @@ process.env.AWS_NODEJS_CONNECTION_REUSE_ENABLED = '1';
 // OpenTelemetry
 process.env.ENABLE_OTEL = process.env.ENABLE_OTEL === 'true' || process.env.ENABLE_OTEL === '1' ? 'true' : 'false';
 process.env.ENABLE_OPENOBSERVE = process.env.ENABLE_OPENOBSERVE === 'true' || process.env.ENABLE_OPENOBSERVE === '1' ? 'true' : 'false';
+process.env.HDX_STARTUP_LOGS = 'false';
