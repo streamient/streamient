@@ -3,6 +3,7 @@ import Typesense from 'typesense';
 import config from '../config.js';
 import { emitToTenant } from './socket.js';
 import { getRedisClient } from './redis.js';
+import { sanitizeDeep } from './text_sanitize.js';
 
 let client;
 
@@ -165,7 +166,9 @@ function chunkString(value) {
 
 function chunkTypesenseDoc(type, doc) {
 	const fields = _chunk_fields[type];
-	if (!fields?.length) return [doc];
+	// Strip control/separator chars so they never reach the Typesense index
+	// (and thus never reach search results / MCP clients).
+	if (!fields?.length) return [sanitizeDeep(doc)];
 
 	const sourceId = doc.source_id || doc.id;
 	const chunkSpecs = [];
@@ -193,7 +196,7 @@ function chunkTypesenseDoc(type, doc) {
 			chunkDoc[field] = field === spec.field ? spec.chunk : '';
 		}
 
-		return chunkDoc;
+		return sanitizeDeep(chunkDoc);
 	});
 }
 

@@ -12169,7 +12169,7 @@ function keydownHandler(bindings) {
   };
 }
 
-// node_modules/.pnpm/@tiptap+core@3.23.5_@tiptap+pm@3.23.5/node_modules/@tiptap/core/dist/index.js
+// node_modules/.pnpm/@tiptap+core@3.23.6_@tiptap+pm@3.23.6/node_modules/@tiptap/core/dist/index.js
 var __defProp = Object.defineProperty;
 var __export = (target, all) => {
   for (var name in all)
@@ -12483,8 +12483,42 @@ var deleteRange2 = (range) => ({ tr: tr2, dispatch }) => {
   }
   return true;
 };
+var hasTextContent = (nodeSpec) => {
+  if (!nodeSpec.content) {
+    return false;
+  }
+  const textRegex = /^text(\*|\+)/;
+  return textRegex.test(nodeSpec.content);
+};
+var expandSelectionForSide = ($pos, schema, side) => {
+  if (!$pos.parent.isInline) {
+    return $pos.pos;
+  }
+  if (side === "left" && $pos.pos > $pos.start() || side === "right" && $pos.pos < $pos.end()) {
+    return $pos.pos;
+  }
+  const parentContent = schema.nodes[$pos.parent.type.name].spec;
+  if (!hasTextContent(parentContent)) {
+    return $pos.pos;
+  }
+  return side === "left" ? $pos.start() - 1 : $pos.end() + 1;
+};
+var expandSelectionForInlineText = ($from, $to, schema) => {
+  const from2 = expandSelectionForSide($from, schema, "left");
+  const to = expandSelectionForSide($to, schema, "right");
+  return { from: from2, to };
+};
 var deleteSelection2 = () => ({ state, dispatch }) => {
-  return deleteSelection(state, dispatch);
+  const { $from, $to } = state.selection;
+  if (state.selection.empty) {
+    return false;
+  }
+  const { from: from2, to } = expandSelectionForInlineText($from, $to, state.schema);
+  if (dispatch) {
+    state.tr.deleteRange(from2, to).scrollIntoView();
+    dispatch(state.tr);
+  }
+  return true;
 };
 var enter = () => ({ commands }) => {
   return commands.keyboardShortcut("Enter");
@@ -18102,7 +18136,7 @@ function markPasteRule(config) {
   });
 }
 
-// node_modules/.pnpm/@tiptap+core@3.23.5_@tiptap+pm@3.23.5/node_modules/@tiptap/core/dist/jsx-runtime/jsx-runtime.js
+// node_modules/.pnpm/@tiptap+core@3.23.6_@tiptap+pm@3.23.6/node_modules/@tiptap/core/dist/jsx-runtime/jsx-runtime.js
 var h = (tag, attributes) => {
   if (tag === "slot") {
     return 0;
@@ -18117,7 +18151,7 @@ var h = (tag, attributes) => {
   return [tag, rest, children];
 };
 
-// node_modules/.pnpm/@tiptap+extension-blockquote@3.23.5_@tiptap+core@3.23.5_@tiptap+pm@3.23.5_/node_modules/@tiptap/extension-blockquote/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-blockquote@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6_/node_modules/@tiptap/extension-blockquote/dist/index.js
 var inputRegex = /^\s*>\s$/;
 var Blockquote = Node3.create({
   name: "blockquote",
@@ -18190,7 +18224,7 @@ ${prefix}
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-bold@3.23.5_@tiptap+core@3.23.5_@tiptap+pm@3.23.5_/node_modules/@tiptap/extension-bold/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-bold@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6_/node_modules/@tiptap/extension-bold/dist/index.js
 var starInputRegex = /(?:^|\s)(\*\*(?!\s+\*\*)((?:[^*]+))\*\*(?!\s+\*\*))$/;
 var starPasteRegex = /(?:^|\s)(\*\*(?!\s+\*\*)((?:[^*]+))\*\*(?!\s+\*\*))/g;
 var underscoreInputRegex = /(?:^|\s)(__(?!\s+__)((?:[^_]+))__(?!\s+__))$/;
@@ -18282,7 +18316,7 @@ var Bold = Mark2.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-code@3.23.5_@tiptap+core@3.23.5_@tiptap+pm@3.23.5_/node_modules/@tiptap/extension-code/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-code@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6_/node_modules/@tiptap/extension-code/dist/index.js
 var inputRegex2 = /(^|[^`])`([^`]+)`(?!`)$/;
 var pasteRegex = /(^|[^`])`([^`]+)`(?!`)/g;
 var Code = Mark2.create({
@@ -18347,7 +18381,7 @@ var Code = Mark2.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-code-block@3.23.5_@tiptap+core@3.23.5_@tiptap+pm@3.23.5__@tiptap+pm@3.23.5/node_modules/@tiptap/extension-code-block/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-code-block@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6__@tiptap+pm@3.23.6/node_modules/@tiptap/extension-code-block/dist/index.js
 var DEFAULT_TAB_SIZE = 4;
 var backtickInputRegex = /^```([a-z]+)?[\s\n]$/;
 var tildeInputRegex = /^~~~([a-z]+)?[\s\n]$/;
@@ -18659,7 +18693,7 @@ var CodeBlock = Node3.create({
 });
 var index_default = CodeBlock;
 
-// node_modules/.pnpm/@tiptap+extension-document@3.23.5_@tiptap+core@3.23.5_@tiptap+pm@3.23.5_/node_modules/@tiptap/extension-document/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-document@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6_/node_modules/@tiptap/extension-document/dist/index.js
 var Document = Node3.create({
   name: "doc",
   topNode: true,
@@ -18672,7 +18706,7 @@ var Document = Node3.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-hard-break@3.23.5_@tiptap+core@3.23.5_@tiptap+pm@3.23.5_/node_modules/@tiptap/extension-hard-break/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-hard-break@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6_/node_modules/@tiptap/extension-hard-break/dist/index.js
 var HardBreak = Node3.create({
   name: "hardBreak",
   markdownTokenName: "br",
@@ -18735,7 +18769,7 @@ var HardBreak = Node3.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-heading@3.23.5_@tiptap+core@3.23.5_@tiptap+pm@3.23.5_/node_modules/@tiptap/extension-heading/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-heading@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6_/node_modules/@tiptap/extension-heading/dist/index.js
 var Heading = Node3.create({
   name: "heading",
   addOptions() {
@@ -18818,7 +18852,7 @@ var Heading = Node3.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-horizontal-rule@3.23.5_@tiptap+core@3.23.5_@tiptap+pm@3.23.5__@tiptap+pm@3.23.5/node_modules/@tiptap/extension-horizontal-rule/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-horizontal-rule@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6__@tiptap+pm@3.23.6/node_modules/@tiptap/extension-horizontal-rule/dist/index.js
 var HorizontalRule = Node3.create({
   name: "horizontalRule",
   addOptions() {
@@ -18895,7 +18929,7 @@ var HorizontalRule = Node3.create({
 });
 var index_default2 = HorizontalRule;
 
-// node_modules/.pnpm/@tiptap+extension-italic@3.23.5_@tiptap+core@3.23.5_@tiptap+pm@3.23.5_/node_modules/@tiptap/extension-italic/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-italic@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6_/node_modules/@tiptap/extension-italic/dist/index.js
 var starInputRegex2 = /(?:^|\s)(\*(?!\s+\*)((?:[^*]+))\*(?!\s+\*))$/;
 var starPasteRegex2 = /(?:^|\s)(\*(?!\s+\*)((?:[^*]+))\*(?!\s+\*))/g;
 var underscoreInputRegex2 = /(?:^|\s)(_(?!\s+_)((?:[^_]+))_(?!\s+_))$/;
@@ -20133,7 +20167,7 @@ function find(str, type = null, opts = null) {
   return filtered;
 }
 
-// node_modules/.pnpm/@tiptap+extension-link@3.23.5_@tiptap+core@3.23.5_@tiptap+pm@3.23.5__@tiptap+pm@3.23.5/node_modules/@tiptap/extension-link/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-link@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6__@tiptap+pm@3.23.6/node_modules/@tiptap/extension-link/dist/index.js
 var UNICODE_WHITESPACE_PATTERN = "[\0- \xA0\u1680\u180E\u2000-\u2029\u205F\u3000]";
 var UNICODE_WHITESPACE_REGEX = new RegExp(UNICODE_WHITESPACE_PATTERN);
 var UNICODE_WHITESPACE_REGEX_END = new RegExp(`${UNICODE_WHITESPACE_PATTERN}$`);
@@ -20548,7 +20582,7 @@ var Link = Mark2.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-list@3.23.5_@tiptap+core@3.23.5_@tiptap+pm@3.23.5__@tiptap+pm@3.23.5/node_modules/@tiptap/extension-list/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-list@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6__@tiptap+pm@3.23.6/node_modules/@tiptap/extension-list/dist/index.js
 var __defProp2 = Object.defineProperty;
 var __export2 = (target, all) => {
   for (var name in all)
@@ -21641,7 +21675,7 @@ var ListKit = Extension.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-paragraph@3.23.5_@tiptap+core@3.23.5_@tiptap+pm@3.23.5_/node_modules/@tiptap/extension-paragraph/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-paragraph@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6_/node_modules/@tiptap/extension-paragraph/dist/index.js
 var EMPTY_PARAGRAPH_MARKDOWN = "&nbsp;";
 var NBSP_CHAR = "\xA0";
 var Paragraph = Node3.create({
@@ -21699,7 +21733,7 @@ var Paragraph = Node3.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-strike@3.23.5_@tiptap+core@3.23.5_@tiptap+pm@3.23.5_/node_modules/@tiptap/extension-strike/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-strike@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6_/node_modules/@tiptap/extension-strike/dist/index.js
 var inputRegex4 = /(?:^|\s)(~~(?!\s+~~)((?:[^~]+))~~(?!\s+~~))$/;
 var pasteRegex2 = /(?:^|\s)(~~(?!\s+~~)((?:[^~]+))~~(?!\s+~~))/g;
 var Strike = Mark2.create({
@@ -21773,7 +21807,7 @@ var Strike = Mark2.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-text@3.23.5_@tiptap+core@3.23.5_@tiptap+pm@3.23.5_/node_modules/@tiptap/extension-text/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-text@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6_/node_modules/@tiptap/extension-text/dist/index.js
 var Text2 = Node3.create({
   name: "text",
   group: "inline",
@@ -21786,7 +21820,7 @@ var Text2 = Node3.create({
   renderMarkdown: (node) => node.text || ""
 });
 
-// node_modules/.pnpm/@tiptap+extension-underline@3.23.5_@tiptap+core@3.23.5_@tiptap+pm@3.23.5_/node_modules/@tiptap/extension-underline/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-underline@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6_/node_modules/@tiptap/extension-underline/dist/index.js
 var Underline = Mark2.create({
   name: "underline",
   addOptions() {
@@ -22740,7 +22774,7 @@ var redo = buildCommand(true, true);
 var undoNoScroll = buildCommand(false, false);
 var redoNoScroll = buildCommand(true, false);
 
-// node_modules/.pnpm/@tiptap+extensions@3.23.5_@tiptap+core@3.23.5_@tiptap+pm@3.23.5__@tiptap+pm@3.23.5/node_modules/@tiptap/extensions/dist/index.js
+// node_modules/.pnpm/@tiptap+extensions@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6__@tiptap+pm@3.23.6/node_modules/@tiptap/extensions/dist/index.js
 var CharacterCount = Extension.create({
   name: "characterCount",
   addOptions() {
@@ -22928,10 +22962,106 @@ var Gapcursor = Extension.create({
     };
   }
 });
+function createPlaceholderDecoration(options) {
+  const {
+    editor,
+    placeholder,
+    dataAttribute,
+    pos,
+    node,
+    isEmptyDoc,
+    hasAnchor,
+    classes: { emptyNode, emptyEditor }
+  } = options;
+  const classes = [emptyNode];
+  if (isEmptyDoc) {
+    classes.push(emptyEditor);
+  }
+  return Decoration.node(pos, pos + node.nodeSize, {
+    class: classes.join(" "),
+    [dataAttribute]: typeof placeholder === "function" ? placeholder({
+      editor,
+      node,
+      pos,
+      hasAnchor
+    }) : placeholder
+  });
+}
+function isScrollable(el) {
+  const style2 = getComputedStyle(el);
+  const overflow = `${style2.overflow} ${style2.overflowY} ${style2.overflowX}`;
+  return /auto|scroll|overlay/.test(overflow);
+}
+function findScrollParent(element) {
+  let el = element;
+  while (el) {
+    if (isScrollable(el)) {
+      return el;
+    }
+    const parent = el.parentElement;
+    if (!parent) {
+      const root = el.getRootNode();
+      if (root instanceof ShadowRoot) {
+        el = root.host;
+        continue;
+      }
+      return window;
+    }
+    el = parent;
+  }
+  return window;
+}
+function getContainerRect(container) {
+  if (container === window) {
+    return { top: 0, bottom: window.innerHeight };
+  }
+  return container.getBoundingClientRect();
+}
+function getViewportBoundaryPositions({
+  doc: doc3,
+  view,
+  scrollContainer
+}) {
+  const editorRect = view.dom.getBoundingClientRect();
+  const containerRect = scrollContainer ? getContainerRect(scrollContainer) : { top: 0, bottom: window.innerHeight };
+  const visibleTop = Math.max(editorRect.top, containerRect.top);
+  const visibleBottom = Math.min(editorRect.bottom, containerRect.bottom);
+  if (visibleTop >= visibleBottom) {
+    return { top: 0, bottom: doc3.content.size };
+  }
+  const isRTL = getComputedStyle(view.dom).direction === "rtl";
+  const x = isRTL ? Math.max(editorRect.right - 2, editorRect.left + 2) : editorRect.left + 2;
+  const topPos = view.posAtCoords({ left: x, top: visibleTop + 2 });
+  const bottomPos = view.posAtCoords({ left: x, top: visibleBottom - 2 });
+  return {
+    top: topPos ? topPos.pos : 0,
+    bottom: bottomPos ? bottomPos.pos : doc3.content.size
+  };
+}
+function throttle(fn, delay) {
+  let timer = null;
+  const call = ((...args) => {
+    if (timer) {
+      return;
+    }
+    fn(...args);
+    timer = setTimeout(() => {
+      timer = null;
+    }, delay);
+  });
+  const cancel = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  };
+  return { call, cancel };
+}
 var DEFAULT_DATA_ATTRIBUTE = "placeholder";
 function preparePlaceholderAttribute(attr) {
   return attr.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9-]/g, "").replace(/^[0-9-]+/, "").replace(/^-+/, "").toLowerCase();
 }
+var PLUGIN_KEY = new PluginKey("tiptap__placeholder");
 var Placeholder = Extension.create({
   name: "placeholder",
   addOptions() {
@@ -22949,40 +23079,124 @@ var Placeholder = Extension.create({
     const dataAttribute = this.options.dataAttribute ? `data-${preparePlaceholderAttribute(this.options.dataAttribute)}` : `data-${DEFAULT_DATA_ATTRIBUTE}`;
     return [
       new Plugin({
-        key: new PluginKey("placeholder"),
+        state: {
+          init() {
+            return {
+              // null means "no viewport info yet" — decoration callback falls
+              // back to full document scan until the scroll handler fires.
+              topPos: null,
+              bottomPos: null
+            };
+          },
+          apply(tr2, prev) {
+            const meta = tr2.getMeta(PLUGIN_KEY);
+            if (meta == null ? void 0 : meta.positions) {
+              return {
+                topPos: meta.positions.top,
+                bottomPos: meta.positions.bottom
+              };
+            }
+            if (!tr2.docChanged) {
+              return prev;
+            }
+            return {
+              topPos: prev.topPos !== null ? tr2.mapping.map(prev.topPos) : null,
+              bottomPos: prev.bottomPos !== null ? tr2.mapping.map(prev.bottomPos) : null
+            };
+          }
+        },
+        key: PLUGIN_KEY,
+        view(view) {
+          const scrollContainer = findScrollParent(view.dom);
+          const computeAndDispatch = () => {
+            const positions = getViewportBoundaryPositions({
+              view,
+              doc: view.state.doc,
+              scrollContainer
+            });
+            const prev = PLUGIN_KEY.getState(view.state);
+            if (prev.topPos === positions.top && prev.bottomPos === positions.bottom) {
+              return;
+            }
+            const tr2 = view.state.tr.setMeta(PLUGIN_KEY, { positions }).setMeta("tiptap__viewportUpdate", true);
+            view.dispatch(tr2);
+          };
+          const { call: throttledUpdate, cancel: cancelThrottle } = throttle(computeAndDispatch, 250);
+          const scrollParent = scrollContainer;
+          scrollParent.addEventListener("scroll", throttledUpdate, { passive: true });
+          computeAndDispatch();
+          return {
+            update(_, prevState) {
+              if (view.state.doc.content.size !== prevState.doc.content.size) {
+                computeAndDispatch();
+              }
+            },
+            destroy: () => {
+              cancelThrottle();
+              scrollParent.removeEventListener("scroll", throttledUpdate);
+            }
+          };
+        },
         props: {
           decorations: ({ doc: doc3, selection }) => {
+            var _a, _b;
             const active = this.editor.isEditable || !this.options.showOnlyWhenEditable;
-            const { anchor } = selection;
-            const decorations = [];
             if (!active) {
               return null;
             }
+            const { anchor } = selection;
+            const decorations = [];
             const isEmptyDoc = this.editor.isEmpty;
-            doc3.descendants((node, pos) => {
-              const hasAnchor = anchor >= pos && anchor <= pos + node.nodeSize;
-              const isEmpty = !node.isLeaf && isNodeEmpty(node);
-              if (!node.type.isTextblock) {
-                return this.options.includeChildren;
-              }
-              if ((hasAnchor || !this.options.showOnlyCurrent) && isEmpty) {
-                const classes = [this.options.emptyNodeClass];
-                if (isEmptyDoc) {
-                  classes.push(this.options.emptyEditorClass);
-                }
-                const decoration = Decoration.node(pos, pos + node.nodeSize, {
-                  class: classes.join(" "),
-                  [dataAttribute]: typeof this.options.placeholder === "function" ? this.options.placeholder({
-                    editor: this.editor,
+            const useResolvedPath = this.options.showOnlyCurrent && !this.options.includeChildren;
+            if (useResolvedPath) {
+              const resolved = doc3.resolve(anchor);
+              if (resolved.depth > 0) {
+                const node = resolved.node(1);
+                const nodeStart = resolved.before(1);
+                if (node.type.isTextblock && isNodeEmpty(node)) {
+                  const hasAnchor = anchor >= nodeStart && anchor <= nodeStart + node.nodeSize;
+                  const decoration = createPlaceholderDecoration({
                     node,
-                    pos,
-                    hasAnchor
-                  }) : this.options.placeholder
-                });
-                decorations.push(decoration);
+                    dataAttribute,
+                    hasAnchor,
+                    placeholder: this.options.placeholder,
+                    classes: {
+                      emptyEditor: this.options.emptyEditorClass,
+                      emptyNode: this.options.emptyNodeClass
+                    },
+                    editor: this.editor,
+                    isEmptyDoc,
+                    pos: resolved.before(1)
+                  });
+                  decorations.push(decoration);
+                }
               }
-              return this.options.includeChildren;
-            });
+            } else {
+              const pluginState = PLUGIN_KEY.getState(this.editor.state);
+              const from2 = (_a = pluginState.topPos) != null ? _a : 0;
+              const to = (_b = pluginState.bottomPos) != null ? _b : doc3.content.size;
+              doc3.nodesBetween(from2, to, (node, pos) => {
+                const hasAnchor = anchor >= pos && anchor <= pos + node.nodeSize;
+                const isEmpty = !node.isLeaf && isNodeEmpty(node);
+                if (!node.type.isTextblock) {
+                  return this.options.includeChildren;
+                }
+                if ((hasAnchor || !this.options.showOnlyCurrent) && isEmpty) {
+                  const decoration = createPlaceholderDecoration({
+                    classes: { emptyEditor: this.options.emptyEditorClass, emptyNode: this.options.emptyNodeClass },
+                    editor: this.editor,
+                    isEmptyDoc,
+                    dataAttribute,
+                    hasAnchor,
+                    placeholder: this.options.placeholder,
+                    node,
+                    pos
+                  });
+                  decorations.push(decoration);
+                }
+                return this.options.includeChildren;
+              });
+            }
             return DecorationSet.create(doc3, decorations);
           }
         }
@@ -23104,7 +23318,7 @@ var UndoRedo = Extension.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+starter-kit@3.23.5/node_modules/@tiptap/starter-kit/dist/index.js
+// node_modules/.pnpm/@tiptap+starter-kit@3.23.6/node_modules/@tiptap/starter-kit/dist/index.js
 var StarterKit = Extension.create({
   name: "starterKit",
   addExtensions() {
@@ -23181,16 +23395,16 @@ var StarterKit = Extension.create({
 });
 var index_default3 = StarterKit;
 
-// node_modules/.pnpm/@tiptap+extension-placeholder@3.23.5_@tiptap+extensions@3.23.5_@tiptap+core@3.23.5_@tiptap+pm@3.23.5__@tiptap+pm@3.23.5_/node_modules/@tiptap/extension-placeholder/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-placeholder@3.23.6_@tiptap+extensions@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6__@tiptap+pm@3.23.6_/node_modules/@tiptap/extension-placeholder/dist/index.js
 var index_default4 = Placeholder;
 
-// node_modules/.pnpm/@tiptap+extension-task-list@3.23.5_@tiptap+extension-list@3.23.5_@tiptap+core@3.23.5_@t_6a2fcfe6f73f78e4c8dc2c2759e6bc96/node_modules/@tiptap/extension-task-list/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-task-list@3.23.6_@tiptap+extension-list@3.23.6_@tiptap+core@3.23.6_@t_d7d5651a1d82dc8b9392c573f25a0927/node_modules/@tiptap/extension-task-list/dist/index.js
 var index_default5 = TaskList;
 
-// node_modules/.pnpm/@tiptap+extension-task-item@3.23.5_@tiptap+extension-list@3.23.5_@tiptap+core@3.23.5_@t_28c9a1fecbc55bf8ed3bb8c0b0c91ec5/node_modules/@tiptap/extension-task-item/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-task-item@3.23.6_@tiptap+extension-list@3.23.6_@tiptap+core@3.23.6_@t_46ae0f20fb8cae494b41892f2ccf5e01/node_modules/@tiptap/extension-task-item/dist/index.js
 var index_default6 = TaskItem;
 
-// node_modules/.pnpm/@tiptap+extension-image@3.23.5_@tiptap+core@3.23.5_@tiptap+pm@3.23.5_/node_modules/@tiptap/extension-image/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-image@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6_/node_modules/@tiptap/extension-image/dist/index.js
 var inputRegex5 = /(?:^|\s)(!\[(.+|:?)]\((\S+)(?:(?:\s+)["'](\S+)["'])?\))$/;
 var Image = Node3.create({
   name: "image",
