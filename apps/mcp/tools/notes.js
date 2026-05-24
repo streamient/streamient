@@ -80,14 +80,16 @@ export function noteTools(api, defaultProjectId) {
     },
 
     search_notes: {
-      description: 'Search notes using semantic/text search. Use only for specs, docs, ADRs, structured write-ups, or when search_knowledge results point to notes. Use per_page: 3 for first focused retrieval.',
+      description: 'Search notes using semantic/text search. Use only for specs, docs, ADRs, structured write-ups, or when search_knowledge results point to notes. Use per_page: 3 for first focused retrieval. Omit project_id to search across all projects.',
       inputSchema: {
         query: z.string().describe('Search query'),
+        project_id: z.string().optional().describe('Filter results to a specific project (optional; omit to search all projects)'),
         per_page: z.number().optional().describe('Results to return (recommended 3 for first retrieval)'),
       },
       handler: async (args) => {
         const { results } = await api.post('/notes/search', {
           query: args.query,
+          project_id: args.project_id,
           options: {
             perPage: args.per_page,
             exclude_fields: MCP_NOTES_SEARCH_EXCLUDE_FIELDS,

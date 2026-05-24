@@ -211,8 +211,8 @@ importers:
         specifier: ^3.4.1
         version: 3.4.1
       nodemailer:
-        specifier: ^8.0.7
-        version: 8.0.7
+        specifier: ^8.0.8
+        version: 8.0.8
       otplib:
         specifier: ^13.4.0
         version: 13.4.0
@@ -250,14 +250,17 @@ importers:
         specifier: ^5.0.1
         version: 5.0.1(express@5.2.1)
       sweetalert2:
-        specifier: ^11.26.24
-        version: 11.26.24
+        specifier: ^11.26.25
+        version: 11.26.25
       turndown:
         specifier: ^7.2.4
         version: 7.2.4
       typesense:
         specifier: ^3.0.6
         version: 3.0.6(@babel/runtime@7.29.2)
+      vitepress-openapi:
+        specifier: ^0.2.0
+        version: 0.2.0(vitepress@1.6.4(@algolia/client-search@5.52.1)(@types/node@25.9.1)(axios@1.16.1)(postcss@8.5.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(search-insights@2.17.3))(vue@3.5.34)
     devDependencies:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
@@ -4470,6 +4473,12 @@ packages:
     peerDependencies:
       vue: '>=3.0.1'
 
+  lucide-vue-next@1.0.0:
+    resolution: {integrity: sha512-V6SPvx1IHTj/UY+FrIYWV5faISsPSb8BnWSFDxAtezWKvWc9ZZ40PDrdu1/Qb5vg4lHWr1hs1BAMGVGm6V1Xdg==}
+    deprecated: Package deprecated. Please use @lucide/vue instead.
+    peerDependencies:
+      vue: '>=3.0.1'
+
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
 
@@ -4693,8 +4702,8 @@ packages:
     resolution: {integrity: sha512-0PF8Yb1yZuQfQbq+5/pZJrtF6WQcjTd5/S4JOHs9PGFxuTqoB/icwuB44pOdURHJbRKX1PPoJZtY7R4VUoCC8w==}
     engines: {node: '>=6.0.0'}
 
-  nodemailer@8.0.7:
-    resolution: {integrity: sha512-pkjE4mkBzQjdJT4/UmlKl3pX0rC9fZmjh7c6C9o7lv66Ac6w9WCnzPzhbPNxwZAzlF4mdq4CSWB5+FbK6FWCow==}
+  nodemailer@8.0.8:
+    resolution: {integrity: sha512-p+XsnzXGdtIHXUu2ugxdfG+eX2nehsGhMjW9h0CWj1BhE30hrFz0kh0yIM0/VjUgVsRrDj+80ZO+I1nSkGE4tA==}
     engines: {node: '>=6.0.0'}
 
   nodemon@3.1.14:
@@ -5440,8 +5449,8 @@ packages:
     peerDependencies:
       express: '>=4.0.0 || >=5.0.0-beta'
 
-  sweetalert2@11.26.24:
-    resolution: {integrity: sha512-SLgukW4wicewpW5VOukSXY5Z6DL/z7HCOK2ODSjmQPiSphCN8gJAmh9npoceXOtBRNoDN0xIz+zHYthtfiHmjg==}
+  sweetalert2@11.26.25:
+    resolution: {integrity: sha512-+hunCOJdJ6FLj04T9YSLvvZXRjsvIkTeTKP2e4VF8CaBias961BTnWiSFAy7F/CM5eq3QK2Rraoc5Gzftslvkg==}
 
   symbol-tree@3.2.4:
     resolution: {integrity: sha512-9QNk5KwDF+Bvz+PyObkmSYjI5ksVUYtjW7AU22r2NKcfLJcXp96hkDWU3+XndOsUb+AQ9QhfzfCT2O+CNWT5Tw==}
@@ -5673,6 +5682,13 @@ packages:
 
   vitepress-openapi@0.1.20:
     resolution: {integrity: sha512-0BRwfMdsXmQx/mI0akoJgfhPhxzJ+T5jriIC/oavaPR6+Jg0TsriZZb3VGQYq3sryOYbWzqI4gfun+Tq2jP33w==}
+    engines: {node: ^20.19.0 || ^22.13.0 || >=24.0.0}
+    peerDependencies:
+      vitepress: '>=1.0.0'
+      vue: ^3.0.0
+
+  vitepress-openapi@0.2.0:
+    resolution: {integrity: sha512-suCYD59HG0P+XKauEm2GayqeXiVqBnDfaltmwcqNS3zOUDgI/nDCN75z4zZqLGHLLw/YhryNko8LOykTaUGmtQ==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=24.0.0}
     peerDependencies:
       vitepress: '>=1.0.0'
@@ -10812,6 +10828,10 @@ snapshots:
     dependencies:
       vue: 3.5.34
 
+  lucide-vue-next@1.0.0(vue@3.5.34):
+    dependencies:
+      vue: 3.5.34
+
   magic-string@0.30.21:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
@@ -11014,7 +11034,7 @@ snapshots:
 
   nodemailer@8.0.5: {}
 
-  nodemailer@8.0.7: {}
+  nodemailer@8.0.8: {}
 
   nodemon@3.1.14:
     dependencies:
@@ -11948,7 +11968,7 @@ snapshots:
       express: 5.2.1
       swagger-ui-dist: 5.32.6
 
-  sweetalert2@11.26.24: {}
+  sweetalert2@11.26.25: {}
 
   symbol-tree@3.2.4: {}
 
@@ -12152,6 +12172,19 @@ snapshots:
       class-variance-authority: 0.7.1
       clsx: 2.1.1
       lucide-vue-next: 0.577.0(vue@3.5.34)
+      markdown-it-link-attributes: 4.0.1
+      reka-ui: 2.9.7(vue@3.5.34)
+      vitepress: 1.6.4(@algolia/client-search@5.52.1)(@types/node@25.9.1)(axios@1.16.1)(postcss@8.5.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(search-insights@2.17.3)
+      vue: 3.5.34
+    transitivePeerDependencies:
+      - '@vue/composition-api'
+
+  vitepress-openapi@0.2.0(vitepress@1.6.4(@algolia/client-search@5.52.1)(@types/node@25.9.1)(axios@1.16.1)(postcss@8.5.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(search-insights@2.17.3))(vue@3.5.34):
+    dependencies:
+      '@vueuse/core': 14.3.0(vue@3.5.34)
+      class-variance-authority: 0.7.1
+      clsx: 2.1.1
+      lucide-vue-next: 1.0.0(vue@3.5.34)
       markdown-it-link-attributes: 4.0.1
       reka-ui: 2.9.7(vue@3.5.34)
       vitepress: 1.6.4(@algolia/client-search@5.52.1)(@types/node@25.9.1)(axios@1.16.1)(postcss@8.5.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(search-insights@2.17.3)
