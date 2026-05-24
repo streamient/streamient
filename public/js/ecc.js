@@ -358,7 +358,7 @@
 			return frame;
 		}
 
-		function renderEmailBody(email) {
+		function renderEmailBody(email, options) {
 			var wrapper = document.createElement('div');
 			var header = document.createElement('div');
 			header.className = 'd-flex justify-content-between align-items-center gap-3 mb-2';
@@ -372,6 +372,10 @@
 				var showDraftBtn = textNode('button', 'btn btn-primary btn-sm ecc-show-draft-btn', 'Show draft');
 				showDraftBtn.type = 'button';
 				replyActions.appendChild(showDraftBtn);
+			}
+			if (options?.showMove) {
+				var moveDropdown = buildBodyMoveDropdown(email);
+				if (moveDropdown) replyActions.appendChild(moveDropdown);
 			}
 
 			var controls = document.createElement('div');
@@ -655,6 +659,61 @@
 				moveSelected(button.dataset.mailbox || 'inbox');
 			});
 		});
+	}
+
+	function buildBodyMoveDropdown(email) {
+		if (!email?._id) return null;
+		var currentMailbox = String(email.mailbox || 'inbox');
+		var inTrash = email.in_trash === true;
+		var targets = MAILBOX_ACTIONS.filter(function (mailbox) {
+			return inTrash || mailbox.slug !== currentMailbox;
+		});
+		if (!targets.length) return null;
+		var wrap = document.createElement('div');
+		wrap.className = 'dropdown';
+		var btn = document.createElement('button');
+		btn.type = 'button';
+		btn.className = 'btn btn-outline-secondary btn-sm dropdown-toggle';
+		btn.setAttribute('data-bs-toggle', 'dropdown');
+		btn.setAttribute('aria-expanded', 'false');
+		btn.innerHTML = kkIcon('drive_file_move', 'me-1') + '<span>Move</span>';
+		var menu = document.createElement('ul');
+		menu.className = 'dropdown-menu dropdown-menu-end';
+		menu.innerHTML = targets.map(function (mailbox) {
+			return '<li><button class="dropdown-item ecc-body-move-target" type="button" data-mailbox="' + escapeHtml(mailbox.slug) + '">'
+				+ kkIcon(mailbox.icon, 'me-2')
+				+ escapeHtml(mailbox.name)
+				+ '</button></li>';
+		}).join('');
+		menu.querySelectorAll('.ecc-body-move-target').forEach(function (item) {
+			item.addEventListener('click', function () {
+				moveCurrentEmail(item.dataset.mailbox || 'inbox');
+			});
+		});
+		wrap.appendChild(btn);
+		wrap.appendChild(menu);
+		return wrap;
+	}
+
+	async function moveCurrentEmail(mailbox) {
+		var email = selectedEmail;
+		if (!email?._id) return;
+		var target = MAILBOX_ACTIONS.find(function (item) { return item.slug === mailbox; });
+		if (!target) return;
+		try {
+			if (email.in_trash) {
+				await api('POST', '/trash/batch/restore', {
+					items: [{ type: 'emails', id: email._id }],
+				});
+			}
+			await api('PUT', '/emails/' + email._id, { mailbox: mailbox });
+			showSuccess('Email moved to ' + target.name);
+			var id = emailId(email);
+			await loadLabels();
+			await selectEmail(id);
+		} catch (err) {
+			showError(err.message || 'Failed to move email');
+		}
 	}
 
 	function renderVisibleLabels(email) {
@@ -1834,7 +1893,8 @@
 			var item = document.createElement('div');
 			item.className = 'list-group-item ecc-detail-message';
 			var dateText = formatDateTime(email.createdAt || email.updatedAt);
-			if (!options?.hideRepeatedHeader) {
+			var isSelected = Boolean(options?.hideRepeatedHeader);
+			if (!isSelected) {
 				var header = document.createElement('div');
 				header.className = 'd-flex align-items-start gap-3 mb-3';
 				header.classList.add('justify-content-between');
@@ -1847,7 +1907,7 @@
 				item.appendChild(header);
 			}
 
-			item.appendChild(renderEmailBody(email));
+			item.appendChild(renderEmailBody(email, { showMove: isSelected }));
 			return item;
 		}
 

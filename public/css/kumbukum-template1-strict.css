@@ -578,9 +578,17 @@ body.kk-template1 #chat-sidebar .btn.btn-outline-secondary:hover {
   color: #fff !important;
   border-color: #5a6ca8 !important;
 }
-body.kk-template1 .kk-email-body-controls .btn.btn-outline-secondary.active {
+body.kk-template1 .kk-email-body-controls .btn.btn-outline-secondary.active,
+body.kk-template1 #main-content .kk-email-body-controls .btn.btn-outline-secondary.active,
+body.kk-template1 #chat-sidebar .kk-email-body-controls .btn.btn-outline-secondary.active {
   background: #6c757d !important;
   border-color: #6c757d !important;
+  color: #fff !important;
+}
+body.kk-template1 #main-content .kk-email-body-controls .btn.btn-outline-secondary.active:hover,
+body.kk-template1 #chat-sidebar .kk-email-body-controls .btn.btn-outline-secondary.active:hover {
+  background: #5a6268 !important;
+  border-color: #545b62 !important;
   color: #fff !important;
 }
 body.kk-template1 .btn.btn-outline-danger {
