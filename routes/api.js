@@ -251,7 +251,9 @@ router.delete('/notes/:id', async (req, res) => {
 });
 
 router.post('/notes/search', async (req, res) => {
-	const results = await noteService.searchNotes(req.host_id, req.body.query, req.body.options);
+	const options = { ...(req.body.options || {}) };
+	if (req.body.project_id) options.filter_by = `project_id:=${req.body.project_id}`;
+	const results = await noteService.searchNotes(req.host_id, req.body.query, options);
 	res.json({ results });
 });
 
@@ -289,7 +291,9 @@ router.delete('/memories/:id', async (req, res) => {
 });
 
 router.post('/memories/search', async (req, res) => {
-	const results = await memoryService.recallMemory(req.host_id, req.body.query, req.body.options);
+	const options = { ...(req.body.options || {}) };
+	if (req.body.project_id) options.filter_by = `project_id:=${req.body.project_id}`;
+	const results = await memoryService.recallMemory(req.host_id, req.body.query, options);
 	res.json({ results });
 });
 
