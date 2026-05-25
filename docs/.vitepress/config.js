@@ -59,9 +59,25 @@ export default defineConfig({
                     ],
                 },
                 {
-                    text: 'Tools & Extensions',
+                    text: 'Email',
                     items: [
-                        { text: 'Browser Extension', link: '/guide/browser-extension' },
+                        { text: 'Overview', link: '/guide/email/' },
+                        { text: 'Settings', link: '/guide/email/settings' },
+                        { text: 'Parsing', link: '/guide/email/parsing' },
+                        { text: 'Forwarding', link: '/guide/email/forwarding' },
+                        { text: 'Viewing', link: '/guide/email/viewing' },
+                        { text: 'Triage', link: '/guide/email/triage' },
+                    ],
+                },
+                {
+                    text: 'Browser Extension',
+                    items: [
+                        { text: 'Overview', link: '/guide/browser-extension/' },
+                        { text: 'Setup', link: '/guide/browser-extension/setup' },
+                        { text: 'URL Capture', link: '/guide/browser-extension/url-capture' },
+                        { text: 'Email Capture', link: '/guide/browser-extension/email-capture' },
+                        { text: 'Email Accounts', link: '/guide/browser-extension/email-accounts' },
+                        { text: 'Multiple Accounts', link: '/guide/browser-extension/multiple-accounts' },
                     ],
                 },
             ],
