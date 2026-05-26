@@ -41,7 +41,10 @@ async function githubApi(path, options = {}) {
 	return response.json();
 }
 
-function getPreviousTag() {
+async function getPreviousReleaseTag() {
+	const releases = await githubApi(`/repos/${GITHUB_REPOSITORY}/releases?per_page=100`);
+	const releaseTagNames = new Set(releases.map((release) => release.tag_name));
+
 	const tags = execFileSync('git', ['tag', '--sort=-creatordate'], {
 		encoding: 'utf8'
 	})
@@ -49,7 +52,19 @@ function getPreviousTag() {
 		.map((tag) => tag.trim())
 		.filter(Boolean);
 
-	return tags.find((tag) => tag !== TAG) || '';
+	const startIndex = tags.indexOf(TAG);
+
+	if (startIndex === -1) {
+		return tags.find((tag) => tag !== TAG && releaseTagNames.has(tag)) || '';
+	}
+
+	for (let index = startIndex + 1; index < tags.length; index += 1) {
+		if (releaseTagNames.has(tags[index])) {
+			return tags[index];
+		}
+	}
+
+	return '';
 }
 
 function getTagDate(tag) {
@@ -66,18 +81,26 @@ function getTagDate(tag) {
 	}).trim();
 }
 
-async function searchClosedIssues(previousTag, releaseDate) {
+function toUtcIso(value) {
+	return new Date(value).toISOString();
+}
+
+async function searchClosedIssues(previousTag, currentTagDate) {
 	const parts = [
 		`repo:${GITHUB_REPOSITORY}`,
 		'is:issue',
 		'is:closed'
 	];
 
-	if (previousTag) {
-		parts.push(`closed:>${getTagDate(previousTag)}`);
-	}
+	const upperBound = toUtcIso(currentTagDate);
 
-	parts.push(`closed:<=${releaseDate}`);
+	if (previousTag) {
+		const previousDate = new Date(getTagDate(previousTag));
+		previousDate.setMilliseconds(previousDate.getMilliseconds() + 1);
+		parts.push(`closed:${previousDate.toISOString()}..${upperBound}`);
+	} else {
+		parts.push(`closed:<=${upperBound}`);
+	}
 
 	const query = parts.join(' ');
 	const issues = [];
@@ -138,9 +161,9 @@ function fullChangelogUrl(previousTag) {
 }
 
 async function main() {
-	const previousTag = getPreviousTag();
-	const releaseDate = new Date().toISOString();
-	const closedIssues = await searchClosedIssues(previousTag, releaseDate);
+	const previousTag = await getPreviousReleaseTag();
+	const currentTagDate = getTagDate(TAG);
+	const closedIssues = await searchClosedIssues(previousTag, currentTagDate);
 	const issues = [];
 
 	for (const closedIssue of closedIssues) {
