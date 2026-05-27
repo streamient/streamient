@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { normalizeIntentForConversationFollowup } from '../services/ai_chat_service.js';
+import { getLlmScopeForIntent, normalizeIntentForConversationFollowup } from '../services/ai_chat_service.js';
 
 describe('AI Chat follow-up intent normalization', () => {
 	it('downgrades non-explicit action intents to conversation for existing threads', () => {
@@ -69,5 +69,11 @@ describe('AI Chat follow-up intent normalization', () => {
 
 		assert.equal(normalized.intent, 'action');
 		assert.equal(normalized.action_type, 'create_note');
+	});
+
+	it('uses the email LLM scope only for email-only intents', () => {
+		assert.equal(getLlmScopeForIntent({ types: ['emails'] }), 'email');
+		assert.equal(getLlmScopeForIntent({ types: ['emails', 'notes'] }), 'global');
+		assert.equal(getLlmScopeForIntent({ types: null }), 'global');
 	});
 });

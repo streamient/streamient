@@ -116,6 +116,20 @@ body.kk-template1 #chat-sidebar {
   background:linear-gradient(180deg,rgba(18,26,49,.92),rgba(13,20,39,.95));
   padding:12px!important;
 }
+body.kk-template1.kk-ecc-page #main-content {
+  border:0!important;
+  border-radius:0;
+  background:transparent;
+  padding:0!important;
+}
+body.kk-template1.kk-ecc-page .ecc-left,
+body.kk-template1.kk-ecc-page .ecc-main,
+body.kk-template1.kk-ecc-page .ecc-ai {
+  border:1px solid var(--line)!important;
+  border-radius:12px;
+  background:linear-gradient(180deg,rgba(18,26,49,.92),rgba(13,20,39,.95));
+  padding:12px!important;
+}
 body.kk-template1 .input-group {
   flex-wrap: nowrap;
 }
@@ -200,6 +214,9 @@ body.kk-template1 #main-content .preview-container{
 body.kk-template1 #main-content .list-group-item + .list-group-item {
   margin-top: 6px;
 }
+body.kk-template1 #main-content .ecc-detail-message {
+  border: 0 !important;
+}
 body.kk-template1 #main-content .list-group-item strong {
   color: #c8d2f0;
   font-weight: 600;
@@ -212,6 +229,63 @@ body.kk-template1 #main-content .list-group-item .text-muted {
 }
 body.kk-template1 #main-content .list-group-item .text-muted.small:last-child {
   margin-top: 6px;
+}
+
+body.kk-template1 #main-content .email-item .email-item-sender,
+body.kk-template1 #main-content .email-item .email-item-date {
+  font-size: 0.7rem;
+}
+
+body.kk-template1 #main-content .email-item .email-item-excerpt {
+  font-size: 0.85rem;
+}
+
+body.kk-template1 .ecc-left .list-group-item,
+body.kk-template1 .ecc-ai .list-group-item,
+body.kk-template1 .ecc-email-item {
+  color: var(--text) !important;
+}
+
+body.kk-template1 #main-content .ecc-email-item .ecc-email-sender,
+body.kk-template1 #main-content .ecc-email-item .ecc-email-date {
+  font-size: 0.7rem;
+}
+
+body.kk-template1 #main-content .ecc-email-item .ecc-email-excerpt {
+  font-size: 0.85rem;
+}
+
+body.kk-template1 .ecc-left .list-group-item.active,
+body.kk-template1 .ecc-email-item.is-active {
+  color: #fff !important;
+  border-color: #6f61ff !important;
+  box-shadow: inset 0 0 0 1px #6f61ff;
+}
+
+body.kk-template1 .ecc-email-item.is-selected {
+  border-color: #6f61ff !important;
+  box-shadow: inset 3px 0 0 #6f61ff;
+}
+
+body.kk-template1 .ecc-email-item.is-selected.is-active {
+  box-shadow: inset 3px 0 0 #6f61ff, inset 0 0 0 1px #6f61ff;
+}
+
+body.kk-template1 .ecc-ai-section,
+body.kk-template1 .ecc-ai-empty {
+  border-color: #1e2d56 !important;
+  background: #0f1731;
+  color: var(--text);
+}
+
+body.kk-template1 .ecc-email-ai-message.assistant {
+  background: #121a34;
+  color: var(--text);
+}
+
+body.kk-template1 .ecc-email-ai-message.user {
+  background: #675cf6;
+  color: #fff;
 }
 
 /* ── Settings cards & misc overrides ── */
@@ -264,6 +338,20 @@ body.kk-template1 #chat-sidebar .btn.btn-outline-secondary{
   background:#121a34!important;
 }
 
+body.kk-template1 #main-content .ecc-ai-action-btn {
+  --bs-btn-padding-y: 0.12rem;
+  --bs-btn-padding-x: 0.38rem;
+  --bs-btn-font-size: 0.7rem;
+  border-radius:7px;
+  line-height:1.15;
+}
+
+body.kk-template1 .kk-email-body-controls .btn.btn-outline-secondary {
+  padding:4px 9px;
+  font-size:.82rem;
+  line-height:1.35;
+}
+
 /* Forms + text contrast */
 body.kk-template1 .form-control,
 body.kk-template1 .form-select{
@@ -285,6 +373,46 @@ body.kk-template1 .text-muted,
 body.kk-template1 .small,
 body.kk-template1 .form-text,
 body.kk-template1 .muted{color:#b8c4eb!important}
+
+body.kk-template1 .kk-email-editor-toolbar {
+  background:#0f1730!important;
+  border-color:#2a386d!important;
+  color:#e9ecff!important;
+}
+
+body.kk-template1 .kk-email-editor-button {
+  border-color:#354478!important;
+  background:#121a34!important;
+  color:#dce4ff!important;
+}
+
+body.kk-template1 .kk-email-editor-button:hover,
+body.kk-template1 .kk-email-editor-button:focus {
+  background:#182348!important;
+  border-color:#46548b!important;
+  color:#fff!important;
+}
+
+body.kk-template1 .kk-email-editor-button.active {
+  background:#1b2b64!important;
+  border-color:#6f61ff!important;
+  color:#fff!important;
+}
+
+body.kk-template1 .kk-email-editor-body .ProseMirror {
+  background:#0f1730!important;
+  border-color:#2a386d!important;
+  color:#e9ecff!important;
+}
+
+body.kk-template1 .kk-email-editor-body .ProseMirror:focus {
+  border-color:#6f61ff!important;
+  box-shadow:0 0 0 1px #6f61ff inset,0 0 0 .2rem rgba(111,97,255,.14)!important;
+}
+
+body.kk-template1 .kk-email-editor-body .ProseMirror p.is-editor-empty:first-child::before {
+  color:#9fb0dd!important;
+}
 
 /* Modal preview readability */
 body.kk-template1 #rm-note-preview,
@@ -450,6 +578,19 @@ body.kk-template1 #chat-sidebar .btn.btn-outline-secondary:hover {
   color: #fff !important;
   border-color: #5a6ca8 !important;
 }
+body.kk-template1 .kk-email-body-controls .btn.btn-outline-secondary.active,
+body.kk-template1 #main-content .kk-email-body-controls .btn.btn-outline-secondary.active,
+body.kk-template1 #chat-sidebar .kk-email-body-controls .btn.btn-outline-secondary.active {
+  background: #6c757d !important;
+  border-color: #6c757d !important;
+  color: #fff !important;
+}
+body.kk-template1 #main-content .kk-email-body-controls .btn.btn-outline-secondary.active:hover,
+body.kk-template1 #chat-sidebar .kk-email-body-controls .btn.btn-outline-secondary.active:hover {
+  background: #5a6268 !important;
+  border-color: #545b62 !important;
+  color: #fff !important;
+}
 body.kk-template1 .btn.btn-outline-danger {
   border: none !important;
 }
@@ -486,6 +627,15 @@ body.kk-template1 .row.h-100 > #main-content {
   overflow-y: auto;
   overflow-x: hidden;
 }
+body.kk-template1.kk-ecc-page .row.h-100 > #main-content {
+  flex: 1 1 100%;
+  width: 100%;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
 body.kk-template1 .row.h-100 > #chat-sidebar {
   flex: 0 0 auto;
   width: calc(25% - 8px);
@@ -501,6 +651,12 @@ body.kk-template1.kk-no-chat-sidebar .row.h-100 > #main-content {
 }
 body.kk-template1.kk-no-chat-sidebar .row.h-100 > #chat-sidebar {
   display: none !important;
+}
+@media (max-width: 991.98px) {
+  body.kk-template1.kk-ecc-page .row.h-100 > #main-content {
+    display: block;
+    overflow-y: auto;
+  }
 }
 
 /* ── Chat sidebar scrolling fix ── */
@@ -743,6 +899,29 @@ body.kk-template1 #rm-email-thread {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+body.kk-template1 #rm-email-html-frame {
+  width: 100%;
+  min-height: 220px;
+  border: 0;
+  background: #0f141b;
+  display: block;
+}
+body.kk-template1 .ecc-detail-html-frame {
+  width: 100%;
+  min-height: 220px;
+  border: 0 !important;
+  border-radius: 0;
+  background: #0f141b;
+  display: block;
+}
+body.kk-template1 #rm-email-text-content {
+  min-height: 220px;
+  background: transparent;
+  color: inherit !important;
+  font: inherit;
+  border: 0;
+  overflow-wrap: anywhere;
 }
 body.kk-template1 .rm-email-thread-item {
   width: 100%;

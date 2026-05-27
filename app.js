@@ -29,6 +29,8 @@ import adminRoutes from './routes/admin.js';
 import billingRoutes from './routes/billing.js';
 import healthRoutes from './routes/health.js';
 import sentryTunnelRoutes from './routes/sentry_tunnel.js';
+import importRoutes from './routes/import.js';
+import { backfillEmailTriageState } from './services/email_ingest_service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -78,6 +80,9 @@ try {
 } catch {
     app.locals.v = Date.now().toString(36);
 }
+
+// Public import routes parse their own raw payloads before the global JSON middleware.
+app.use('/import', importRoutes);
 
 // Stripe webhook and Sentry tunnel need raw body — skip express.json() for these paths
 app.use((req, res, next) => {
@@ -205,6 +210,7 @@ setupSentryExpressErrorHandler(app);
 
 async function start() {
 	await connectDB();
+	await backfillEmailTriageState();
 	await initRedis();
 	await initTypesense();
 
@@ -212,6 +218,13 @@ async function start() {
 		const { startScheduler } = await import('./modules/scheduler.js');
 		startScheduler();
 		console.log(`Kumbukum scheduler running [${config.env}]`);
+		return;
+	}
+
+	if (SERVER_MODE === 'email-worker') {
+		const { startOutgoingEmailWorker } = await import('./services/outgoing_email_service.js');
+		await startOutgoingEmailWorker();
+		console.log(`Kumbukum email worker running [${config.env}]`);
 		return;
 	}
 

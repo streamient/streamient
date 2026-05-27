@@ -5,7 +5,7 @@ import config from '../config.js';
 import { buildHostedTrialFields } from '../routes/auth.js';
 import { BILLING_SUBSCRIPTION_URL, buildCheckoutSessionParams, buildPortalSessionParams, buildSubscriptionUserUpdate, resolveCheckoutPlan, resolveCheckoutPriceId } from '../services/billing_service.js';
 import { formatSignupNotificationDate } from '../services/email_service.js';
-import { runTrialLifecycle } from '../modules/scheduler.js';
+import { runEmailRetentionCleanup, runTrialLifecycle } from '../modules/scheduler.js';
 import { deleteTenantData, getTenantTypesenseCollectionNames } from '../services/account_cleanup_service.js';
 import { formatTrialEndsIn, hasProductAccess, hasProFeatureAccess } from '../services/subscription_access_service.js';
 
@@ -161,6 +161,67 @@ describe('no-card trial scheduler lifecycle', () => {
 	});
 });
 
+describe('email retention scheduler cleanup', () => {
+	it('permanently deletes spam and trash emails older than 30 days', async () => {
+		const now = new Date('2026-01-31T02:30:00.000Z');
+		const trashEmail = { _id: 'trash-email', host_id: 'host-1' };
+		const spamEmail = { _id: 'spam-email', host_id: 'host-2' };
+		const findQueries = [];
+		const findLimits = [];
+		const deleteQueries = [];
+		const removedSearchDocs = [];
+		const removedGraphLinks = [];
+		const findBatches = [[trashEmail, spamEmail], []];
+		const emailModel = {
+			find: (query) => ({
+				select: (fields) => {
+					assert.equal(fields, '_id host_id');
+					return {
+						limit: (limit) => {
+							findQueries.push(query);
+							findLimits.push(limit);
+							return {
+								lean: async () => findBatches.shift(),
+							};
+						},
+					};
+				},
+			}),
+			deleteMany: async (query) => {
+				deleteQueries.push(query);
+				return { deletedCount: query._id.$in.length };
+			},
+		};
+
+		const summary = await runEmailRetentionCleanup({
+			now,
+			emailModel,
+			batchSize: 25,
+			removeSearchDocument: async (hostId, type, id) => removedSearchDocs.push({ hostId, type, id }),
+			removeGraphLinks: async (hostId, id) => removedGraphLinks.push({ hostId, id }),
+		});
+
+		assert.equal(summary.deleted, 2);
+		assert.equal(summary.cutoff.toISOString(), '2026-01-01T02:30:00.000Z');
+		assert.equal(findLimits[0], 25);
+		assert.deepEqual(findQueries[0], {
+			$or: [
+				{ in_trash: true, trashed_at: { $lte: summary.cutoff } },
+				{ in_trash: { $ne: true }, mailbox: 'spam', updatedAt: { $lte: summary.cutoff } },
+			],
+		});
+		assert.deepEqual(deleteQueries, [{ _id: { $in: ['trash-email', 'spam-email'] } }]);
+		assert.deepEqual(removedSearchDocs, [
+			{ hostId: 'host-1', type: 'emails', id: 'trash-email' },
+			{ hostId: 'host-2', type: 'emails', id: 'spam-email' },
+		]);
+		assert.deepEqual(removedGraphLinks, [
+			{ hostId: 'host-1', id: 'trash-email' },
+			{ hostId: 'host-2', id: 'spam-email' },
+		]);
+	});
+});
+
 describe('subscription product access', () => {
 	it('locks no-card trials immediately after trial_ends_at', () => {
 		const now = new Date('2026-01-08T00:00:00.000Z');
@@ -229,9 +290,13 @@ describe('no-card trial tenant cleanup', () => {
 		for (const name of [
 			'Note',
 			'Memory',
-			'Url',
-			'Email',
-			'Project',
+				'Url',
+					'Email',
+					'EmailDraft',
+					'EmailInternalNote',
+					'EmailIdentity',
+					'OutgoingEmail',
+					'Project',
 			'GraphLink',
 			'GitRepo',
 			'OAuthAuthorizationCode',
@@ -291,6 +356,8 @@ describe('no-card trial tenant cleanup', () => {
 		});
 
 		assert.equal(calls.Email.host_id, 'host-1');
+		assert.equal(calls.EmailInternalNote.host_id, 'host-1');
+		assert.equal(calls.OutgoingEmail.host_id, 'host-1');
 		assert.equal(calls.GraphLink.host_id, 'host-1');
 		assert.equal(calls.OAuthRefreshToken.host_id, 'host-1');
 		assert.deepEqual(calls.UserPasskey.user.$in, ['user-1']);

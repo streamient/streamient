@@ -5,6 +5,7 @@ import { Email } from '../model/email.js';
 import { indexDocument, removeDocument } from '../modules/typesense.js';
 import { emitToTenant } from '../modules/socket.js';
 import { removeLinksForItem } from './graph_service.js';
+import { indexEmailNow, removeEmailFromIndexNow } from './email_index_service.js';
 
 const MODEL_MAP = {
 	notes: { model: Note, tsType: 'notes' },
@@ -47,12 +48,16 @@ export async function restoreItem(host_id, type, id) {
 
 	const doc = await model.findOneAndUpdate(
 		{ _id: id, host_id, in_trash: true },
-		{ $set: { in_trash: false }, $unset: { trashed_at: '' } },
+		{ $set: type === 'emails' ? { in_trash: false, is_indexed: false } : { in_trash: false }, $unset: { trashed_at: '' } },
 		{ returnDocument: 'after' },
 	);
 
 	if (doc) {
-		indexDocument(host_id, tsType, doc).catch((err) => console.error('Typesense index error:', err.message));
+		if (type === 'emails') {
+			await indexEmailNow(host_id, doc);
+		} else {
+			indexDocument(host_id, tsType, doc).catch((err) => console.error('Typesense index error:', err.message));
+		}
 		const eventType = type === 'memories' ? 'memory' : type.slice(0, -1);
 		emitToTenant(host_id, `${eventType}:created`, doc);
 	}
@@ -65,7 +70,11 @@ export async function permanentDelete(host_id, type, id) {
 
 	const doc = await model.findOneAndDelete({ _id: id, host_id, in_trash: true });
 	if (doc) {
-		removeDocument(host_id, tsType, id).catch((err) => console.error('Typesense remove error:', err.message));
+		if (type === 'emails') {
+			await removeEmailFromIndexNow(host_id, id);
+		} else {
+			removeDocument(host_id, tsType, id).catch((err) => console.error('Typesense remove error:', err.message));
+		}
 		removeLinksForItem(host_id, id).catch((err) => console.error('Graph link cleanup error:', err.message));
 	}
 	return doc;

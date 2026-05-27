@@ -28,7 +28,7 @@ function initChat() {
 	function showWelcome() {
 		if (chatWelcome) chatWelcome.classList.remove('d-none');
 	}
-	document.querySelectorAll('.chat-example-btn').forEach((btn) => {
+	chatWelcome?.querySelectorAll('.chat-example-btn').forEach((btn) => {
 		btn.addEventListener('click', () => {
 			input.value = btn.textContent;
 			hideWelcome();
@@ -338,6 +338,13 @@ let rmUrlPagesLoaded = 0;
 let rmUrlCrawlEnabled = false;
 let rmUrlCrawlDisableConfirmed = false;
 let rmEmailBodyText = '';
+let rmEmailHtml = '';
+let rmEmailHtmlHasRemoteImages = false;
+let rmEmailBodyMode = 'text';
+let rmEmailThemeMode = 'dark';
+let rmEmailSubject = '';
+let rmEmailFrom = '';
+let rmEmailRemoteImagesLoaded = false;
 let rmEmailBodyLoaded = false;
 
 function rmShowModal(modalEl) {
@@ -473,10 +480,74 @@ function rmShowEmailBody() {
 	document.getElementById('rm-email-tab-body')?.classList.add('active');
 	document.getElementById('rm-email-pane-details')?.classList.add('d-none');
 	document.getElementById('rm-email-pane-body')?.classList.remove('d-none');
-	const bodyEl = document.getElementById('rm-email-content');
-	if (!bodyEl || rmEmailBodyLoaded) return;
-	bodyEl.textContent = rmEmailBodyText || 'No content available.';
+	if (rmEmailBodyLoaded) return;
+	rmRenderEmailBody();
 	rmEmailBodyLoaded = true;
+}
+
+function rmEmailHtmlWithRemoteImages() {
+	if (!window.kkEmailIframeRenderer) return rmEmailHtml;
+	return window.kkEmailIframeRenderer.htmlWithRemoteImages(rmEmailHtml, rmEmailRemoteImagesLoaded);
+}
+
+function rmInitEmailFrameResize(frame) {
+	window.kkEmailIframeRenderer?.initResize(frame);
+}
+
+function rmSetEmailBodyMode(mode) {
+	rmEmailBodyMode = mode === 'html' && rmEmailHtml ? 'html' : 'text';
+	document.getElementById('rm-email-html-btn')?.classList.toggle('active', rmEmailBodyMode === 'html');
+	document.getElementById('rm-email-text-btn')?.classList.toggle('active', rmEmailBodyMode === 'text');
+	rmRenderEmailBody();
+}
+
+function rmSetEmailThemeMode(mode) {
+	rmEmailThemeMode = mode === 'original' ? 'original' : 'dark';
+	document.getElementById('rm-email-dark-btn')?.classList.toggle('active', rmEmailThemeMode === 'dark');
+	document.getElementById('rm-email-original-btn')?.classList.toggle('active', rmEmailThemeMode === 'original');
+	rmRenderEmailBody();
+}
+
+function rmRenderEmailBody() {
+	const frame = document.getElementById('rm-email-html-frame');
+	const textEl = document.getElementById('rm-email-text-content');
+	const htmlBtn = document.getElementById('rm-email-html-btn');
+	const textBtn = document.getElementById('rm-email-text-btn');
+	const themeGroup = document.getElementById('rm-email-theme-mode');
+	const loadImagesBtn = document.getElementById('rm-email-load-images-btn');
+	if (!frame || !textEl) return;
+
+	const hasHtml = Boolean(rmEmailHtml);
+	const hasRemoteImages = hasHtml && rmEmailHtmlHasRemoteImages && !rmEmailRemoteImagesLoaded;
+	if (htmlBtn) htmlBtn.disabled = !hasHtml;
+	if (textBtn) textBtn.disabled = !rmEmailBodyText;
+	if (!hasHtml && rmEmailBodyMode === 'html') rmEmailBodyMode = 'text';
+	if (themeGroup) themeGroup.classList.toggle('d-none', !hasHtml || rmEmailBodyMode !== 'html');
+	if (loadImagesBtn) loadImagesBtn.classList.toggle('d-none', !hasRemoteImages || rmEmailBodyMode !== 'html');
+
+	frame.classList.toggle('d-none', rmEmailBodyMode !== 'html');
+	textEl.classList.toggle('d-none', rmEmailBodyMode !== 'text');
+
+	if (rmEmailBodyMode === 'html') {
+		rmInitEmailFrameResize(frame);
+		if (window.kkEmailIframeRenderer) {
+			frame.srcdoc = window.kkEmailIframeRenderer.buildSrcdoc({
+				html: rmEmailHtmlWithRemoteImages(),
+				loadRemoteImages: rmEmailRemoteImagesLoaded,
+				theme: rmEmailThemeMode,
+				subject: rmEmailSubject,
+				from: rmEmailFrom,
+			});
+		}
+	} else {
+		frame.removeAttribute('srcdoc');
+		textEl.textContent = rmEmailBodyText || 'No content available.';
+	}
+
+	document.getElementById('rm-email-html-btn')?.classList.toggle('active', rmEmailBodyMode === 'html');
+	document.getElementById('rm-email-text-btn')?.classList.toggle('active', rmEmailBodyMode === 'text');
+	document.getElementById('rm-email-dark-btn')?.classList.toggle('active', rmEmailThemeMode === 'dark');
+	document.getElementById('rm-email-original-btn')?.classList.toggle('active', rmEmailThemeMode === 'original');
 }
 
 function rmSetEmailThreadVisibility(visible) {
@@ -490,9 +561,33 @@ function rmSetEmailThreadVisibility(visible) {
 
 function rmResetEmailView() {
 	rmEmailBodyText = '';
+	rmEmailHtml = '';
+	rmEmailHtmlHasRemoteImages = false;
+	rmEmailBodyMode = 'text';
+	rmEmailThemeMode = window.kkEmailIframeRenderer?.defaultTheme() || 'dark';
+	rmEmailSubject = '';
+	rmEmailFrom = '';
+	rmEmailRemoteImagesLoaded = false;
 	rmEmailBodyLoaded = false;
-	const bodyEl = document.getElementById('rm-email-content');
-	if (bodyEl) bodyEl.textContent = 'Open the Body tab to load content.';
+	const frame = document.getElementById('rm-email-html-frame');
+	const textEl = document.getElementById('rm-email-text-content');
+	const loadImagesBtn = document.getElementById('rm-email-load-images-btn');
+	const themeGroup = document.getElementById('rm-email-theme-mode');
+	if (frame) {
+		frame.classList.add('d-none');
+		frame.removeAttribute('srcdoc');
+		frame.style.height = '';
+	}
+	if (textEl) {
+		textEl.classList.remove('d-none');
+		textEl.textContent = 'Open the Body tab to load content.';
+	}
+	if (loadImagesBtn) loadImagesBtn.classList.add('d-none');
+	if (themeGroup) themeGroup.classList.add('d-none');
+	document.getElementById('rm-email-html-btn')?.classList.remove('active');
+	document.getElementById('rm-email-text-btn')?.classList.add('active');
+	document.getElementById('rm-email-dark-btn')?.classList.toggle('active', rmEmailThemeMode === 'dark');
+	document.getElementById('rm-email-original-btn')?.classList.toggle('active', rmEmailThemeMode === 'original');
 	if (document.getElementById('rm-email-thread')) {
 		document.getElementById('rm-email-thread').innerHTML = '';
 	}
@@ -536,11 +631,25 @@ function renderEmailDetails(email, thread = []) {
 	document.getElementById('rm-email-bcc').value = formatList(email.bcc);
 	document.getElementById('rm-email-message-id').value = email.message_id || '—';
 	document.getElementById('rm-email-references').value = formatList(email.references);
+	rmEmailSubject = email.subject || '';
+	rmEmailFrom = formatList(email.from);
 	rmEmailBodyText = [email.text_content, email.attachment_text_content]
 		.filter(Boolean)
 		.join('\n\n');
+	rmEmailHtml = email.html_content || '';
+	rmEmailHtmlHasRemoteImages = Boolean(email.html_content_has_remote_images);
+	rmEmailBodyMode = rmEmailHtml ? 'html' : 'text';
+	rmEmailThemeMode = window.kkEmailIframeRenderer?.defaultTheme() || 'dark';
+	rmEmailRemoteImagesLoaded = false;
 	rmEmailBodyLoaded = false;
-	document.getElementById('rm-email-content').textContent = 'Open the Body tab to load content.';
+	document.getElementById('rm-email-text-content').textContent = 'Open the Body tab to load content.';
+	document.getElementById('rm-email-html-btn')?.classList.toggle('active', Boolean(rmEmailHtml));
+	if (document.getElementById('rm-email-html-btn')) document.getElementById('rm-email-html-btn').disabled = !rmEmailHtml;
+	document.getElementById('rm-email-text-btn')?.classList.toggle('active', !rmEmailHtml);
+	document.getElementById('rm-email-theme-mode')?.classList.toggle('d-none', !rmEmailHtml);
+	document.getElementById('rm-email-dark-btn')?.classList.toggle('active', rmEmailThemeMode === 'dark');
+	document.getElementById('rm-email-original-btn')?.classList.toggle('active', rmEmailThemeMode === 'original');
+	document.getElementById('rm-email-load-images-btn')?.classList.toggle('d-none', !rmEmailHtmlHasRemoteImages);
 	renderEmailThread(thread, email._id);
 }
 
@@ -1145,6 +1254,14 @@ function initResultModalHandlers() {
 	document.getElementById('rm-url-input')?.addEventListener('input', (e) => rmSetUrlVisitLink(e.target.value));
 	document.getElementById('rm-email-tab-details')?.addEventListener('click', rmShowEmailDetails);
 	document.getElementById('rm-email-tab-body')?.addEventListener('click', rmShowEmailBody);
+	document.getElementById('rm-email-html-btn')?.addEventListener('click', () => rmSetEmailBodyMode('html'));
+	document.getElementById('rm-email-text-btn')?.addEventListener('click', () => rmSetEmailBodyMode('text'));
+	document.getElementById('rm-email-dark-btn')?.addEventListener('click', () => rmSetEmailThemeMode('dark'));
+	document.getElementById('rm-email-original-btn')?.addEventListener('click', () => rmSetEmailThemeMode('original'));
+	document.getElementById('rm-email-load-images-btn')?.addEventListener('click', () => {
+		rmEmailRemoteImagesLoaded = true;
+		rmRenderEmailBody();
+	});
 	document.getElementById('rm-url-crawl-load-more-btn')?.addEventListener('click', () => {
 		if (rmCurrentType !== 'urls' || !rmCurrentId) return;
 		rmLoadUrlPages(rmCurrentId, { append: true });

@@ -1,7 +1,8 @@
 import { AuditLog } from '../model/audit_log.js';
 
 const SENSITIVE_KEYS = new Set([
-    'password', 'token', 'secret', 'totp_secret', 'access_tokens',
+    'password', 'token', 'secret', 'totp_secret', 'access_tokens', 'api_key',
+    'openai_api_key', 'gemini_api_key', 'byo_ai',
     'stripe_customer_id', 'stripe_subscription_id', 'verification_token',
 ]);
 

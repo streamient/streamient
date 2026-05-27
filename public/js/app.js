@@ -174,6 +174,20 @@ async function loadProjectOverview(projectId) {
 				navigateTo(link.getAttribute('href'));
 			});
 		});
+
+		const copyForwardingEmailBtn = container.querySelector('#copy-forwarding-email-btn');
+		copyForwardingEmailBtn?.addEventListener('click', async () => {
+			const value = copyForwardingEmailBtn.dataset.copyValue || container.querySelector('#project-forwarding-email')?.value || '';
+			if (!value) return;
+			try {
+				await navigator.clipboard.writeText(value);
+			} catch {
+				const input = container.querySelector('#project-forwarding-email');
+				input?.select();
+				document.execCommand('copy');
+			}
+			showSuccess('Forwarding email copied');
+		});
 	} catch (err) {
 		container.innerHTML = '<div class="text-danger">Failed to load project</div>';
 		console.error('Failed to load project overview:', err);
@@ -182,36 +196,7 @@ async function loadProjectOverview(projectId) {
 
 // Edit project
 async function editProject(projectId) {
-	const { Swal, Huebee } = await import('/static/js/vendor.js');
-	const { project } = await api('GET', `/projects/${projectId}`);
-
-	let selectedColor = project.color;
-	const { value: formValues } = await Swal.fire({
-		title: 'Edit Project',
-		html: `
-			<input id="swal-name" class="swal2-input" placeholder="Project name" value="${project.name}">
-			<div class="mt-3"><label class="form-label">Color</label><div id="swal-color-container"><input id="swal-color" value="${project.color}"></div></div>
-		`,
-		showCancelButton: true,
-		focusConfirm: false,
-		didOpen: () => {
-			const colorInput = document.getElementById('swal-color');
-			const hueb = new Huebee(colorInput, huebeeOptions);
-			hueb.on('change', (color) => { selectedColor = color; });
-		},
-		preConfirm: () => {
-			const name = document.getElementById('swal-name').value.trim();
-			if (!name) { Swal.showValidationMessage('Name is required'); return false; }
-			return { name, color: selectedColor };
-		},
-	});
-
-	if (formValues) {
-		await api('PUT', `/projects/${projectId}`, formValues);
-		await loadProjects();
-		loadProjectOverview(projectId);
-		showSuccess('Project updated');
-	}
+	await openProjectSettingsModal(projectId, 'details');
 }
 
 // Delete project
@@ -237,6 +222,12 @@ const huebeeOptions = {
 	shades: 5,
 	staticOpen: true,
 	customColors: ['#C25', '#E62', '#EA0', '#19F', '#2D2', '#6c757d', '#333', '#F8F'],
+};
+
+const projectSettingsHuebeeOptions = {
+	...huebeeOptions,
+	staticOpen: false,
+	setBGColor: '#project-settings-color-preview',
 };
 
 // New project — inline
@@ -284,14 +275,19 @@ var ROUTES = {
 	'/memories': { section: 'memories', title: 'Memories', partial: '/ajax/section/memories', batch: true },
 	'/urls': { section: 'urls', title: 'URLs', partial: '/ajax/section/urls', batch: true },
 	'/emails': { section: 'emails', title: 'Emails', partial: '/ajax/section/emails', batch: true },
+	'/ecc': { section: 'ecc', title: 'Email Command Center', partial: '/ajax/section/ecc' },
 	'/trash': { section: 'trash', title: 'Trash', partial: '/ajax/section/trash' },
+	'/settings': { title: 'Profile', partial: '/ajax/section/settings/profile' },
 	'/settings/profile': { title: 'Profile', partial: '/ajax/section/settings/profile' },
 	'/settings/security': { title: 'Security', partial: '/ajax/section/settings/security' },
 	'/settings/team': { title: 'My Team', partial: '/ajax/section/settings/team' },
 	'/settings/tokens': { title: 'API Tokens', partial: '/ajax/section/settings/tokens' },
+	'/settings/byo-ai': { title: 'AI', partial: '/ajax/section/settings/byo-ai' },
+	'/settings/email': { title: 'Email settings', partial: '/ajax/section/settings/email' },
 	'/settings/typesense': { title: 'Search', partial: '/ajax/section/settings/typesense' },
 	'/settings/usage': { title: 'Usage', partial: '/ajax/section/settings/usage' },
 	'/settings/export': { title: 'Export', partial: '/ajax/section/settings/export' },
+	'/settings/activity-logs': { title: 'Activity Logs', partial: '/ajax/section/settings/activity-logs' },
 	'/settings/subscription': { title: 'Subscription', partial: '/ajax/section/settings/subscription' },
 };
 
@@ -301,6 +297,7 @@ function shouldHideChatSidebar(path) {
 
 function syncLayoutForPath(path) {
 	document.body.classList.toggle('kk-no-chat-sidebar', shouldHideChatSidebar(path));
+	document.body.classList.toggle('kk-ecc-page', path === '/ecc');
 }
 
 // Dashboard section — managed here since it depends on app.js functions
@@ -368,8 +365,367 @@ function mountCurrent(path) {
 	if (route.batch && window.__sections?.batch) window.__sections.batch.mount();
 }
 
+function isSettingsPath(path) {
+	return path === '/settings' || path.indexOf('/settings/') === 0;
+}
+
+async function ensureBootstrapModal() {
+	if (window.BsModal) return window.BsModal;
+	var vendor = await import('/static/js/vendor.js');
+	window.BsModal = vendor.Modal;
+	return window.BsModal;
+}
+
+function renderSettingsLoading() {
+	return '<div class="text-center py-5 text-muted"><span class="spinner-border spinner-border-sm me-2"></span><span>Loading settings...</span></div>';
+}
+
+function renderProjectSettingsLoading() {
+	return '<div class="text-center py-5 text-muted"><span class="spinner-border spinner-border-sm me-2"></span><span>Loading project settings...</span></div>';
+}
+
+var __currentProjectSettingsId = null;
+var __currentProjectSettingsTab = 'details';
+
+function setProjectSettingsTab(bodyEl, tab) {
+	var selected = tab || 'details';
+	__currentProjectSettingsTab = selected;
+	bodyEl.querySelectorAll('[data-project-settings-tab]').forEach(function (button) {
+		button.classList.toggle('active', button.dataset.projectSettingsTab === selected);
+	});
+	bodyEl.querySelectorAll('[data-project-settings-pane]').forEach(function (pane) {
+		pane.classList.toggle('d-none', pane.dataset.projectSettingsPane !== selected);
+	});
+}
+
+async function loadProjectSettingsBody(projectId, tab) {
+	var bodyEl = document.getElementById('project-settings-modal-body');
+	if (!bodyEl) return;
+	bodyEl.innerHTML = renderProjectSettingsLoading();
+	try {
+		var res = await fetch(`/ajax/project-settings/${projectId}`);
+		if (isLoginRedirect(res)) return redirectToLogin();
+		var html = await res.text();
+		if (!res.ok) throw new Error(html || 'Failed to load project settings');
+		bodyEl.innerHTML = html;
+		executeScripts(bodyEl);
+		bindProjectSettingsModal(projectId, tab || __currentProjectSettingsTab || 'details');
+	} catch (err) {
+		console.error('Project settings modal error:', err);
+		bodyEl.innerHTML = '<div class="alert alert-danger mb-0">Failed to load project settings.</div>';
+	}
+}
+
+async function openProjectSettingsModal(projectId, tab) {
+	var modalEl = document.getElementById('projectSettingsModal');
+	var titleEl = document.getElementById('projectSettingsModalLabel');
+	if (!modalEl) return;
+	__currentProjectSettingsId = projectId;
+	__currentProjectSettingsTab = tab || 'details';
+	if (titleEl) titleEl.textContent = 'Project settings';
+	var Modal = await ensureBootstrapModal();
+	Modal.getOrCreateInstance(modalEl, { backdrop: 'static', keyboard: false }).show();
+	await loadProjectSettingsBody(projectId, __currentProjectSettingsTab);
+}
+
+function refreshProjectSettingsIfOpen(tab) {
+	var modalEl = document.getElementById('projectSettingsModal');
+	if (!modalEl || !modalEl.classList.contains('show') || !__currentProjectSettingsId) return;
+	loadProjectSettingsBody(__currentProjectSettingsId, tab || __currentProjectSettingsTab);
+}
+
+function projectSelector(projectId) {
+	return String(projectId || '').replace(/["\\]/g, '\\$&');
+}
+
+function updateProjectDetailsInDom(projectId, name, color) {
+	var selector = projectSelector(projectId);
+	document.querySelectorAll(`.project-item[data-id="${selector}"]`).forEach(function (item) {
+		var nameEl = item.querySelector('.project-item-name');
+		var colorEl = item.querySelector('.project-color');
+		if (nameEl) nameEl.textContent = name;
+		if (colorEl) colorEl.style.background = color;
+	});
+
+	var overview = document.getElementById('project-overview');
+	if (overview) {
+		var overviewName = overview.querySelector('.project-overview-name');
+		var overviewColor = overview.querySelector('.project-overview-color');
+		if (overviewName) overviewName.textContent = name;
+		if (overviewColor) overviewColor.style.background = color;
+	}
+}
+
+function bindProjectSettingsModal(projectId, activeTab) {
+	var bodyEl = document.getElementById('project-settings-modal-body');
+	if (!bodyEl) return;
+
+	var colorInput = bodyEl.querySelector('#project-settings-color');
+	var colorPreview = bodyEl.querySelector('#project-settings-color-preview');
+	var projectColorHuebee = null;
+	var projectColorHuebeeInit = null;
+
+	function isHexColor(value) {
+		return /^#[0-9a-f]{6}$/i.test(value || '');
+	}
+
+	function setProjectColorControls(color) {
+		if (!color) return;
+		if (colorPreview) colorPreview.style.background = color;
+		if (colorInput) colorInput.value = color;
+		if (projectColorHuebee && isHexColor(color)) projectColorHuebee.setColor(color);
+	}
+
+	async function openProjectColorPicker() {
+		if (!colorInput) return;
+		if (!projectColorHuebeeInit) {
+			projectColorHuebeeInit = import('/static/js/vendor.js').then(function ({ Huebee }) {
+				projectColorHuebee = new Huebee(colorInput, projectSettingsHuebeeOptions);
+				colorInput.__projectSettingsHuebee = projectColorHuebee;
+				projectColorHuebee.on('change', function (color) {
+					setProjectColorControls(color);
+				});
+				return projectColorHuebee;
+			});
+		}
+		var hueb = await projectColorHuebeeInit;
+		if (isHexColor(colorInput.value.trim())) hueb.setColor(colorInput.value.trim());
+		hueb.open();
+	}
+
+	bodyEl.querySelectorAll('[data-project-settings-tab]').forEach(function (button) {
+		button.addEventListener('click', function () {
+			setProjectSettingsTab(bodyEl, button.dataset.projectSettingsTab);
+		});
+	});
+	setProjectSettingsTab(bodyEl, activeTab || 'details');
+
+	if (colorInput) {
+		colorInput.addEventListener('input', function () {
+			setProjectColorControls(colorInput.value.trim());
+		});
+		colorInput.addEventListener('click', openProjectColorPicker);
+		colorInput.addEventListener('focus', openProjectColorPicker);
+	}
+
+	var detailsForm = bodyEl.querySelector('#project-details-form');
+	detailsForm?.addEventListener('submit', async function (e) {
+		e.preventDefault();
+		var name = bodyEl.querySelector('#project-settings-name')?.value.trim();
+		var color = bodyEl.querySelector('#project-settings-color')?.value.trim();
+		if (!name) return showError('Name is required');
+		if (!isHexColor(color)) return showError('Color must be a valid hex value.');
+		try {
+			var result = await api('PUT', `/projects/${projectId}`, { name, color });
+			var project = result.project || { _id: projectId, name, color };
+			updateProjectDetailsInDom(project._id || projectId, project.name, project.color);
+			setProjectColorControls(project.color);
+			showSuccess('Project updated');
+		} catch (err) {
+			showError(err.message);
+		}
+	});
+
+	var copyForwardingEmailBtn = bodyEl.querySelector('#project-settings-copy-forwarding-email');
+	copyForwardingEmailBtn?.addEventListener('click', async function () {
+		var value = copyForwardingEmailBtn.dataset.copyValue || bodyEl.querySelector('#project-settings-forwarding-email')?.value || '';
+		if (!value) return;
+		try {
+			await navigator.clipboard.writeText(value);
+		} catch {
+			var input = bodyEl.querySelector('#project-settings-forwarding-email');
+			input?.select();
+			document.execCommand('copy');
+		}
+		showSuccess('Forwarding email copied');
+	});
+
+	bindProjectEmailIdentityForm(bodyEl, projectId);
+}
+
+function bindProjectEmailIdentityForm(bodyEl, projectId) {
+	var addBtn = bodyEl.querySelector('#project-email-identity-add');
+	var formWrap = bodyEl.querySelector('#project-email-identity-form-wrap');
+	var form = bodyEl.querySelector('#project-email-identity-form');
+	var cancelBtn = bodyEl.querySelector('#project-email-identity-cancel');
+	if (!formWrap || !form) return;
+	var formHomeParent = formWrap.parentNode;
+	var formHomeNextSibling = formWrap.nextSibling;
+
+	function field(id) {
+		return bodyEl.querySelector(id);
+	}
+
+	function dataBool(value) {
+		return value === true || value === 'true' || value === '1' || value === 'on';
+	}
+
+	function placeIdentityForm(row) {
+		var divider = field('#project-email-identity-form-wrap .project-email-identity-form-divider');
+		if (row) {
+			row.insertAdjacentElement('afterend', formWrap);
+			formWrap.classList.add('list-group-item');
+			divider?.classList.add('d-none');
+			return;
+		}
+		formWrap.classList.remove('list-group-item');
+		divider?.classList.remove('d-none');
+		if (formHomeParent && formWrap.parentNode !== formHomeParent) {
+			formHomeParent.insertBefore(formWrap, formHomeNextSibling);
+		}
+	}
+
+	function showIdentityForm(identity, row) {
+		placeIdentityForm(row);
+		var isEdit = Boolean(identity?.id);
+		field('#project-email-identity-id').value = identity?.id || '';
+		field('#project-email-identity-name').value = identity?.name || '';
+		field('#project-email-identity-email').value = identity?.email || '';
+		field('#project-email-identity-signature').value = identity?.signature || '';
+		field('#project-email-identity-smtp-host').value = identity?.smtpHost || '';
+		field('#project-email-identity-smtp-port').value = identity?.smtpPort || '587';
+		field('#project-email-identity-smtp-user').value = identity?.smtpAuthUser || '';
+		field('#project-email-identity-smtp-password').value = '';
+		field('#project-email-identity-smtp-tls').checked = dataBool(identity?.smtpTls);
+		field('#project-email-identity-smtp-ssl').checked = dataBool(identity?.smtpSsl);
+		field('#project-email-identity-clear-password').checked = false;
+		field('#project-email-identity-form-title').textContent = isEdit ? 'Edit outbound email address' : 'Add outbound email address';
+		var passwordConfigured = dataBool(identity?.smtpPasswordConfigured);
+		field('#project-email-identity-password-help').textContent = isEdit && passwordConfigured ? 'Leave empty to keep the stored password.' : '';
+		field('#project-email-identity-clear-password-wrap').classList.toggle('d-none', !isEdit || !passwordConfigured);
+		formWrap.classList.remove('d-none');
+		field('#project-email-identity-name')?.focus();
+	}
+
+	function toggleIdentityForm(identity, row) {
+		if (!formWrap.classList.contains('d-none') && field('#project-email-identity-id').value === identity?.id) {
+			hideIdentityForm();
+			return;
+		}
+		showIdentityForm(identity, row);
+	}
+
+	function hideIdentityForm() {
+		form.reset();
+		field('#project-email-identity-id').value = '';
+		formWrap.classList.add('d-none');
+		placeIdentityForm(null);
+	}
+
+	addBtn?.addEventListener('click', function () {
+		showIdentityForm(null);
+	});
+
+	cancelBtn?.addEventListener('click', hideIdentityForm);
+
+	bodyEl.querySelectorAll('.project-email-identity-row').forEach(function (row) {
+		row.addEventListener('click', function () {
+			toggleIdentityForm(row.dataset, row);
+		});
+		row.addEventListener('keydown', function (e) {
+			if (e.key !== 'Enter' && e.key !== ' ') return;
+			e.preventDefault();
+			toggleIdentityForm(row.dataset, row);
+		});
+	});
+
+	bodyEl.querySelectorAll('.project-email-identity-edit').forEach(function (button) {
+		button.addEventListener('click', function (e) {
+			e.stopPropagation();
+			var row = button.closest('.project-email-identity-row');
+			toggleIdentityForm(row?.dataset || button.dataset, row);
+		});
+	});
+
+	bodyEl.querySelectorAll('.project-email-identity-delete').forEach(function (button) {
+		button.addEventListener('click', async function (e) {
+			e.stopPropagation();
+			var confirmed = await confirmAction('Delete email address', 'This removes the outbound SMTP configuration.');
+			if (!confirmed) return;
+			try {
+				await api('DELETE', `/email-identities/${button.dataset.id}`);
+				await loadProjectSettingsBody(projectId, 'email');
+				showSuccess('Email address deleted');
+			} catch (err) {
+				showError(err.message);
+			}
+		});
+	});
+
+	form.addEventListener('submit', async function (e) {
+		e.preventDefault();
+		var identityId = field('#project-email-identity-id').value;
+		var payload = {
+			name: field('#project-email-identity-name').value.trim(),
+			email: field('#project-email-identity-email').value.trim(),
+			signature: field('#project-email-identity-signature').value.trim(),
+			smtp: {
+				host: field('#project-email-identity-smtp-host').value.trim(),
+				port: parseInt(field('#project-email-identity-smtp-port').value, 10) || 587,
+				auth_user: field('#project-email-identity-smtp-user').value.trim(),
+				auth_password: field('#project-email-identity-smtp-password').value.trim(),
+				tls: field('#project-email-identity-smtp-tls').checked,
+				ssl: field('#project-email-identity-smtp-ssl').checked,
+			},
+			clear_auth_password: field('#project-email-identity-clear-password').checked,
+		};
+		try {
+			if (identityId) {
+				await api('PUT', `/email-identities/${identityId}`, payload);
+				showSuccess('Email address updated');
+			} else {
+				await api('POST', `/projects/${projectId}/email-identities`, payload);
+				showSuccess('Email address added');
+			}
+			await loadProjectSettingsBody(projectId, 'email');
+		} catch (err) {
+			showError(err.message);
+		}
+	});
+}
+
+async function openSettingsModal(path) {
+	var route = ROUTES[path] || ROUTES['/settings/profile'];
+	if (!route || !isSettingsPath(path)) {
+		window.location.href = path;
+		return;
+	}
+
+	var modalEl = document.getElementById('settingsModal');
+	var bodyEl = document.getElementById('settings-modal-body');
+	var titleEl = document.getElementById('settingsModalLabel');
+	if (!modalEl || !bodyEl || !titleEl) {
+		window.location.href = path;
+		return;
+	}
+
+	var Modal = await ensureBootstrapModal();
+	titleEl.textContent = 'Settings';
+	bodyEl.innerHTML = renderSettingsLoading();
+	Modal.getOrCreateInstance(modalEl, { backdrop: 'static', keyboard: false }).show();
+
+	try {
+		var res = await fetch(route.partial);
+		if (isLoginRedirect(res)) return redirectToLogin();
+		if (!res.ok) throw new Error('Failed to load settings');
+
+		var html = await res.text();
+		bodyEl.innerHTML = html;
+		executeScripts(bodyEl);
+	} catch (err) {
+		console.error('Settings modal error:', err);
+		bodyEl.innerHTML = '<div class="alert alert-danger mb-0">Failed to load settings.</div>';
+	}
+}
+
+window.openSettingsModal = openSettingsModal;
+
 async function navigateTo(path, opts) {
 	opts = opts || {};
+	if (isSettingsPath(path) && !opts.allowSettingsPage) {
+		await openSettingsModal(path);
+		return;
+	}
 	var route = ROUTES[path];
 	if (!route) {
 		window.location.href = path;
@@ -461,6 +817,10 @@ document.addEventListener('click', function (e) {
 	var pathname = href.split('?')[0];
 	if (ROUTES[pathname]) {
 		e.preventDefault();
+		if (isSettingsPath(pathname)) {
+			openSettingsModal(pathname);
+			return;
+		}
 		// Extract g param if present
 		var qIdx = href.indexOf('?');
 		if (qIdx !== -1) {
@@ -520,10 +880,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 			'memory:created', 'memory:updated', 'memory:deleted',
 			'url:created', 'url:updated', 'url:deleted',
 			'email:created', 'email:updated', 'email:deleted',
+			'email-draft:created', 'email-draft:updated', 'email-draft:deleted',
+			'email-internal-note:created', 'email-internal-note:updated', 'email-internal-note:deleted',
+			'outgoing-email:queued', 'outgoing-email:canceled', 'outgoing-email:sent', 'outgoing-email:error',
 			'counts:refresh',
 		];
 		for (const evt of crudEvents) {
-			socket.on(evt, () => {
+			socket.on(evt, (data) => {
+				window.dispatchEvent(new CustomEvent(evt, { detail: data || {} }));
 				refreshCounts();
 				loadTrashCount();
 			});
@@ -649,6 +1013,7 @@ async function addGitRepo(projectId) {
 	try {
 		await api('POST', `/projects/${projectId}/git-repos`, formValues);
 		loadProjectOverview(projectId);
+		refreshProjectSettingsIfOpen('git');
 		Swal.fire({ icon: 'success', title: 'Git repo added', timer: 1500, showConfirmButton: false });
 	} catch (err) {
 		Swal.fire('Error', err.message, 'error');
@@ -714,6 +1079,7 @@ async function editGitRepo(repoId) {
 		await api('PUT', `/git-repos/${repoId}`, formValues);
 		const activeProject = document.querySelector('.project-item.active')?.dataset?.id;
 		if (activeProject) loadProjectOverview(activeProject);
+		refreshProjectSettingsIfOpen('git');
 		Swal.fire({ icon: 'success', title: 'Updated', timer: 1500, showConfirmButton: false });
 	} catch (err) {
 		Swal.fire('Error', err.message, 'error');
@@ -734,6 +1100,7 @@ async function deleteGitRepo(repoId) {
 		await api('DELETE', `/git-repos/${repoId}`);
 		const activeProject = document.querySelector('.project-item.active')?.dataset?.id;
 		if (activeProject) loadProjectOverview(activeProject);
+		refreshProjectSettingsIfOpen('git');
 	} catch (err) {
 		Swal.fire('Error', err.message, 'error');
 	}
@@ -774,6 +1141,7 @@ async function triggerGitSync(repoId) {
 		const result = await waitForGitSync(repoId);
 		const activeProject = document.querySelector('.project-item.active')?.dataset?.id;
 		if (activeProject) loadProjectOverview(activeProject);
+		refreshProjectSettingsIfOpen('git');
 		const summary = result.summary || {};
 		if (result.status === 'failed') {
 			Swal.fire('Sync failed', result.error || summary.message || 'Sync failed', 'error');

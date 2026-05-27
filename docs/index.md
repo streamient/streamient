@@ -30,6 +30,6 @@ features:
     - title: MCP Server
       details: 28 tools for Claude Desktop and other LLM clients via Model Context Protocol.
     - title: Browser Extension
-      details: Save notes and URLs from anywhere. Available for Chrome and Firefox.
+      details: Save notes and URLs from anywhere, plus an email side panel for Gmail, Outlook, and Fastmail. Chrome only.
     - title: Bidirectional Git Sync
       details: Sync your data to and from your Git repos per project.

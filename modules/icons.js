@@ -1,6 +1,7 @@
 const ICON_GLYPHS = {
 	add: 'add',
 	apartment: 'apartment',
+	arrowBack: 'arrow_back',
 	arrowCircleRight: 'arrow_circle_right',
 	barChart: 'bar_chart',
 	cancel: 'cancel',

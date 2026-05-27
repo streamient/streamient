@@ -3,6 +3,7 @@ import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
 import { Url } from '../model/url.js';
 import { Email } from '../model/email.js';
+import { EmailIdentity } from '../model/email_identity.js';
 import { GitRepo } from '../model/git_repo.js';
 import { emitToTenant } from '../modules/socket.js';
 import * as audit from './audit_service.js';
@@ -60,12 +61,13 @@ export async function deleteProject(host_id, projectId, ctx = {}) {
 	if (project.is_default) throw new Error('Cannot delete the default project');
 
 	const filter = { project: projectId, host_id, in_trash: { $ne: true } };
-	const [notes, memory, urls, emails, gitRepos] = await Promise.all([
+	const [notes, memory, urls, emails, gitRepos, emailIdentities] = await Promise.all([
 		Note.countDocuments(filter),
 		Memory.countDocuments(filter),
 		Url.countDocuments(filter),
 		Email.countDocuments(filter),
 		GitRepo.countDocuments({ project: projectId, host_id }),
+		EmailIdentity.countDocuments({ project: projectId, host_id }),
 	]);
 
 	const parts = [];
@@ -74,6 +76,7 @@ export async function deleteProject(host_id, projectId, ctx = {}) {
 	if (urls) parts.push(`${urls} URL${urls > 1 ? 's' : ''}`);
 	if (emails) parts.push(`${emails} email${emails > 1 ? 's' : ''}`);
 	if (gitRepos) parts.push(`${gitRepos} git repo${gitRepos > 1 ? 's' : ''}`);
+	if (emailIdentities) parts.push(`${emailIdentities} email identit${emailIdentities > 1 ? 'ies' : 'y'}`);
 	if (parts.length) throw new Error(`Cannot delete project: has ${parts.join(', ')}`);
 
 	project.is_active = false;

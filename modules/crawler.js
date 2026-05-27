@@ -4,6 +4,8 @@ import { Url } from '../model/url.js';
 
 const SKIP_URL_TOKEN_RE = /(^|[\/_.\-?=&])(login|log-in|signin|sign-in|signon|sso|oauth|auth|authenticate)([\/_.\-?=&]|$)/i;
 
+const STEP_LIMIT = 500;
+
 function shouldSkipCrawledUrl(rawUrl) {
 	if (!rawUrl) return true;
 	try {
@@ -15,11 +17,27 @@ function shouldSkipCrawledUrl(rawUrl) {
 	}
 }
 
+function normalizeCrawlUrl(rawUrl) {
+	if (!rawUrl) return '';
+	try {
+		const parsed = new URL(rawUrl);
+		parsed.hash = '';
+		parsed.hostname = parsed.hostname.toLowerCase();
+		if (parsed.pathname.length > 1 && parsed.pathname.endsWith('/')) {
+			parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+		}
+		return parsed.toString();
+	} catch {
+		return String(rawUrl);
+	}
+}
+
 /**
-* Crawl all internal pages for a given URL and index them into Typesense.
+* Crawl one step (up to STEP_LIMIT pages) of a site and index results into Typesense.
+* State (frontier / visited) is persisted on the Url doc so multi-step crawls
+* resume on subsequent scheduler ticks until the whole site is covered.
 */
 export async function crawlSite(urlDoc) {
-	const baseUrl = new URL(urlDoc.url);
 	const urlId = urlDoc._id?.toString?.() || String(urlDoc._id);
 	const hostId = urlDoc.host_id;
 	const projectId = urlDoc.project.toString();
@@ -30,8 +48,18 @@ export async function crawlSite(urlDoc) {
 	// Ensure all collections (including pages) exist before indexing crawl output.
 	await ensureCollections(hostId);
 
+	const existingFrontier = Array.isArray(urlDoc.crawl_frontier) ? urlDoc.crawl_frontier : [];
+	const existingVisited = Array.isArray(urlDoc.crawl_visited) ? urlDoc.crawl_visited : [];
+	const frontier = existingFrontier.length ? existingFrontier : [normalizeCrawlUrl(urlDoc.url)];
+	const visited = new Set(existingVisited);
+	const batch = frontier.slice(0, STEP_LIMIT);
+	const carryOver = frontier.slice(STEP_LIMIT);
+
+	const visitedInRun = new Map();
+	const discoveredInRun = new Set();
+
 	const crawler = new PlaywrightCrawler({
-		maxRequestsPerCrawl: 200,
+		maxRequestsPerCrawl: STEP_LIMIT,
 		maxConcurrency: 3,
 		requestHandlerTimeoutSecs: 30,
 
@@ -47,17 +75,28 @@ export async function crawlSite(urlDoc) {
 				return el ? el.innerText.replace(/\s+/g, ' ').trim().slice(0, 50000) : '';
 			});
 
+			const normalizedCurrent = normalizeCrawlUrl(currentUrl);
+			visitedInRun.set(normalizedCurrent, {
+				url: currentUrl,
+				title,
+				text_content: textContent,
+			});
 			pages.push({
 				url: currentUrl,
 				title,
 				text_content: textContent,
 			});
 
-			// Only follow links on the same host
+			// Only follow links on the same host; skip URLs we've already crawled
+			// (prior steps) or already queued (this run or persisted frontier).
 			await enqueueLinks({
 				strategy: 'same-hostname',
 				transformRequestFunction: (req) => {
 					if (shouldSkipCrawledUrl(req.url)) return false;
+					const normalized = normalizeCrawlUrl(req.url);
+					if (visited.has(normalized)) return false;
+					if (discoveredInRun.has(normalized)) return false;
+					discoveredInRun.add(normalized);
 					return req;
 				},
 			});
@@ -68,7 +107,7 @@ export async function crawlSite(urlDoc) {
 		},
 	});
 
-	await crawler.run([urlDoc.url]);
+	await crawler.run(batch);
 
 	// Deduplicate by URL before indexing. Crawler request count can be higher than unique URLs.
 	const uniquePages = new Map();
@@ -97,13 +136,33 @@ export async function crawlSite(urlDoc) {
 		}
 	}
 
-	// Update last_crawled regardless of whether caller passed a mongoose document or plain object.
-	await Url.updateOne(
-		{ _id: urlId, host_id: hostId },
-		{ $set: { last_crawled: new Date() } },
-	);
+	// Merge step results into persistent state.
+	for (const normalized of visitedInRun.keys()) visited.add(normalized);
+	const newFrontier = [
+		...carryOver.filter((u) => !visited.has(u)),
+		...[...discoveredInRun].filter((u) => !visited.has(u)),
+	];
+	const partial = newFrontier.length > 0;
 
-	console.log(`Crawled ${pages.length} requests for ${urlDoc.url}; indexed ${indexedCount} unique pages`);
+	const update = partial
+		? {
+			crawl_frontier: newFrontier,
+			crawl_visited: [...visited],
+			crawl_partial: true,
+		}
+		: {
+			crawl_frontier: [],
+			crawl_visited: [],
+			crawl_partial: false,
+			last_crawled: new Date(),
+		};
+
+	await Url.updateOne({ _id: urlId, host_id: hostId }, { $set: update });
+
+	console.log(
+		`Crawled ${pages.length} requests for ${urlDoc.url}; indexed ${indexedCount} unique pages; ` +
+		`${partial ? `frontier remaining: ${newFrontier.length}` : 'crawl complete'}`,
+	);
 	return indexedCount;
 }
 
@@ -132,11 +191,12 @@ export async function reindexDue({ intervalHours = 24 } = {}) {
 	const urls = await Url.find({
 		crawl_enabled: true,
 		$or: [
+			{ crawl_partial: true },
 			{ last_crawled: { $exists: false } },
 			{ last_crawled: null },
 			{ last_crawled: { $lte: cutoff } },
 		],
-	});
+	}).sort({ crawl_partial: -1, last_crawled: 1 });
 
 	if (!urls.length) return 0;
 	console.log(`Reindexing ${urls.length} due crawl-enabled URLs`);

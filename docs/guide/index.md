@@ -34,7 +34,7 @@ There are a few ways to get things into Kumbukum:
 
 - **The web app** — Write notes, store memories, and save URLs directly
 - **Import** — Drag & drop PDFs, Word documents, or text files into the Notes page
-- **Browser extension** — Save any URL or jot down a note without leaving your browser (available for Chrome and Firefox)
+- **Browser extension** — Save any URL or jot down a note without leaving your browser, and work with email straight from Gmail, Outlook, or Fastmail (Chrome)
 - **AI Chat** — Ask the built-in chat to create notes, save URLs, or store memories for you
 - **MCP Server** — Connect Claude Desktop, Cursor, or any MCP-compatible AI tool and let it read and write directly
 

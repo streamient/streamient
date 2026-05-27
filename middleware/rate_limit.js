@@ -27,6 +27,11 @@ function makeRedisStore(prefix) {
     });
 }
 
+function makeRateLimitStore(prefix) {
+    if (!config.socketRedis) return undefined;
+    return makeRedisStore(prefix);
+}
+
 /**
  * General API rate limiter — 1-minute sliding window.
  * Starter: 60 req/min. Pro & free (self-hosted): unlimited (skipped).
@@ -43,7 +48,7 @@ export function createApiLimiter() {
             return isUnlimited(plan);
         },
         keyGenerator: (req) => req.host_id,
-        store: makeRedisStore('api'),
+        store: makeRateLimitStore('api'),
         standardHeaders: 'draft-7',
         legacyHeaders: false,
         message: { error: 'Rate limit exceeded. Upgrade to Pro for unlimited access.' },
@@ -66,7 +71,7 @@ export function createChatLimiter() {
             return isUnlimited(plan);
         },
         keyGenerator: (req) => req.host_id,
-        store: makeRedisStore('chat'),
+        store: makeRateLimitStore('chat'),
         standardHeaders: 'draft-7',
         legacyHeaders: false,
         message: { error: 'Daily AI chat limit reached. Upgrade to Pro for unlimited access.' },
@@ -89,7 +94,7 @@ export function createMcpLimiter() {
             return isUnlimited(plan);
         },
         keyGenerator: (req) => req.host_id,
-        store: makeRedisStore('mcp'),
+        store: makeRateLimitStore('mcp'),
         standardHeaders: 'draft-7',
         legacyHeaders: false,
         message: { error: 'MCP rate limit exceeded. Upgrade to Pro for unlimited access.' },

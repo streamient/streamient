@@ -151,6 +151,7 @@ const config = {
 		from: primarySmtp.from || process.env.SMTP_FROM || 'noreply@localhost',
 		servers: smtpServers,
 	},
+	emailForwardDomain: process.env.EMAIL_FORWARD_DOMAIN || '',
 
 	llm: {
 		// Main conversational model (richer, for analysis & actions)
@@ -162,6 +163,11 @@ const config = {
 		// Typesense conversation model
 		tsConversationModel: process.env.TS_CONVERSATION_MODEL || '',
 		tsConversationProvider: process.env.TS_CONVERSATION_MODEL_PROVIDER || 'google',
+		// Email models
+		emailAiModel: process.env.EMAIL_AI_MODEL || process.env.CHAT_AI_MODEL || '',
+		emailAiProvider: process.env.EMAIL_AI_MODEL_PROVIDER || process.env.CHAT_AI_MODEL_PROVIDER || 'google',
+		emailTriageModel: process.env.EMAIL_TRIAGE_MODEL || process.env.EMAIL_AI_MODEL || process.env.CHAT_AI_MODEL || '',
+		emailTriageProvider: process.env.EMAIL_TRIAGE_MODEL_PROVIDER || process.env.EMAIL_AI_MODEL_PROVIDER || process.env.CHAT_AI_MODEL_PROVIDER || 'google',
 		// API keys per provider
 		googleApiKey: process.env.GOOGLE_API_KEY || '',
 		openaiApiKey: process.env.OPENAI_API_KEY || '',

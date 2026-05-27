@@ -32,6 +32,7 @@ See [Authentication](./authentication) for details.
 | Notes       | `GET POST /notes`, `GET PUT DELETE /notes/:id` |
 | Memories    | `GET POST /memories`, `GET PUT DELETE /memories/:id` |
 | URLs        | `GET POST /urls`, `GET PUT DELETE /urls/:id` |
+| Emails      | `GET /emails`, `GET /emails/triage-status`, `GET /emails/:id/triage-status` |
 | Search      | `POST /search/knowledge`                     |
 | Graph Links | `GET POST /graph-links`, `DELETE /graph-links/:id` |
 

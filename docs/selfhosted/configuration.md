@@ -101,6 +101,12 @@ At least one API key is required for AI chat to function.
 ]
 ```
 
+### Email Forwarding
+
+| Variable | Description | Required | Default |
+| --- | --- | --- | --- |
+| `EMAIL_FORWARD_DOMAIN` | Domain accepted by `POST /import/email` for project email forwarding, for example `email.kumbukum.com` | Yes, for forwarding | — |
+
 ### Admin
 
 | Variable | Description | Required | Default |
