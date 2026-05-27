@@ -60,6 +60,8 @@
 		users: 'group',
 		warning: 'warning',
 		close: 'close',
+		darkMode: 'dark_mode',
+		lightMode: 'light_mode',
 	};
 
 	function escapeHtml(value) {

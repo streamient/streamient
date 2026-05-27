@@ -1,4 +1,3 @@
-import { getSentryDsn, isSentryEnabled } from './modules/sentry_runtime.js';
 import { readOpenObserveConfig } from './modules/openobserve_runtime.js';
 
 function parseTypesenseConfig() {
@@ -222,11 +221,6 @@ const config = {
 		apiKey: process.env.HYPERDX_API_KEY || '',
 		browserUrl: process.env.HYPERDX_BROWSER_URL || '',
 		service: 'kumbukum',
-	},
-
-	sentry: {
-		dsn: getSentryDsn(),
-		clientEnabled: isSentryEnabled(),
 	},
 
 	gitEncryptionKey: process.env.GIT_ENCRYPTION_KEY || '',

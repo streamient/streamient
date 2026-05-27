@@ -11,6 +11,9 @@
       return window.location.origin + staticBase + "/js/" + fileName;
     }
     function defaultTheme() {
+      var dt = document.documentElement?.getAttribute?.("data-theme");
+      if (dt === "dark") return "dark";
+      if (dt === "light") return "original";
       if (document.body?.classList.contains("kk-template1")) return "dark";
       return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "original";
     }

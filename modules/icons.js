@@ -57,6 +57,8 @@ const ICON_GLYPHS = {
 	users: 'group',
 	warning: 'warning',
 	close: 'close',
+	darkMode: 'dark_mode',
+	lightMode: 'light_mode',
 };
 
 const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (ch) => ({

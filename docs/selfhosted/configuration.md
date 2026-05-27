@@ -135,13 +135,6 @@ These are only needed if you enable subscription billing (Cloud deployments).
 | `OPENPANEL_CLIENT_SECRET` | OpenPanel client secret | No | — |
 | `OPENPANEL_API_URL` | OpenPanel API URL | No | — |
 
-### Observability (Sentry)
-
-| Variable | Description | Required | Default |
-| --- | --- | --- | --- |
-| `SENTRY_DSN` | Sentry DSN for server errors and client tunnel config | No | — |
-| `SENTRY_TUNNEL_PROJECT_IDS` | Comma-separated Sentry project IDs allowed through `/sentun` | No | Derived from `SENTRY_DSN` |
-
 ### Observability (OpenObserve)
 
 Start the bundled OpenObserve service with `docker compose --profile observability up -d openobserve`, then set `ENABLE_OPENOBSERVE=true` on app services.

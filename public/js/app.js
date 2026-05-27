@@ -841,7 +841,28 @@ document.addEventListener('click', function (e) {
 });
 
 // Init
+function getCurrentTheme() {
+	return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+}
+
+function setTheme(theme) {
+	const next = theme === 'light' ? 'light' : 'dark';
+	document.documentElement.setAttribute('data-theme', next);
+	try { localStorage.setItem('kk-theme', next); } catch (e) {}
+	window.dispatchEvent(new CustomEvent('kk-theme-change', { detail: { theme: next } }));
+}
+
+function initThemeToggle() {
+	const btn = document.getElementById('theme-toggle');
+	if (!btn) return;
+	btn.addEventListener('click', (e) => {
+		e.preventDefault();
+		setTheme(getCurrentTheme() === 'light' ? 'dark' : 'light');
+	});
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
+	initThemeToggle();
 	const params = new URLSearchParams(window.location.search);
 	const g = params.get('g');
 	const hasExplicitProject = !!(g && JSURL.tryParse(g, {}).project_id);
