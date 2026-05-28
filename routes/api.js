@@ -13,6 +13,8 @@ import { detectFileType } from '../modules/file_detect.js';
 import * as memoryService from '../services/memory_service.js';
 import * as urlService from '../services/url_service.js';
 import * as emailIngestService from '../services/email_ingest_service.js';
+import * as emailInternalNoteService from '../services/email_internal_note_service.js';
+import * as outgoingEmailService from '../services/outgoing_email_service.js';
 import { searchKnowledge, aiChatSearch, processChat, processChatStream } from '../services/ai_chat_service.js';
 import { listConversations, deleteConversation } from '../modules/typesense.js';
 import * as trashService from '../services/trash_service.js';
@@ -30,10 +32,13 @@ import * as graphService from '../services/graph_service.js';
 import * as exportService from '../services/export_service.js';
 import * as auditService from '../services/audit_service.js';
 import * as gitSyncService from '../services/git_sync_service.js';
+import * as emailIdentityService from '../services/email_identity_service.js';
 import * as oauthService from '../services/oauth_service.js';
 import * as teamService from '../services/team_service.js';
+import * as byoAiService from '../services/byo_ai_service.js';
 import { createChatLimiter } from '../middleware/rate_limit.js';
 import { hasProductAccess, hasProFeatureAccess } from '../services/subscription_access_service.js';
+import { decorateEmailForClient } from '../modules/email_display.js';
 import config from '../config.js';
 import crypto from 'node:crypto';
 
@@ -82,6 +87,26 @@ function requireRestrictedSettingsAccess(req, res, next) {
 	return res.status(403).json({ error: 'Account admin access is required' });
 }
 
+function requireProjectSettingsAccess(req, res, next) {
+	if (teamService.canManageTeam(req.memberRole)) return next();
+	return res.status(403).json({ error: 'Project settings admin access is required' });
+}
+
+function isByoAiSettingsAccessEnabled(plan) {
+	return (is_hosted && plan === 'pro') || (!is_hosted && config.env !== 'production');
+}
+
+async function requireByoAiAccess(req, res, next) {
+	const tenant = await Tenant.findOne({ host_id: req.host_id }).select('plan').lean();
+	const plan = tenant?.plan || 'free';
+	if (isByoAiSettingsAccessEnabled(plan)) return next();
+
+	if (!is_hosted && config.env === 'production') {
+		return res.status(403).json({ error: 'BYO AI keys are configured through environment variables in self-hosted installs' });
+	}
+	return res.status(403).json({ error: 'BYO AI is available on the Pro plan' });
+}
+
 // ---- Projects ----
 
 router.get('/projects', async (req, res) => {
@@ -100,6 +125,30 @@ router.get('/projects/:id', async (req, res) => {
 	res.json({ project });
 });
 
+router.get('/projects/:id/settings', requireProjectSettingsAccess, async (req, res) => {
+	const project = await projectService.getProject(req.host_id, req.params.id);
+	if (!project) return res.status(404).json({ error: 'Project not found' });
+
+	const tenant = await Tenant.findOne({ host_id: req.host_id }).select('plan').lean();
+	const plan = tenant?.plan || 'free';
+	const proOnlyFeatureEnabled = hasProFeatureAccess(req.billingUser, plan, is_hosted);
+	const [gitRepos, emailIdentities] = await Promise.all([
+		proOnlyFeatureEnabled ? gitSyncService.listGitRepos(req.host_id, req.params.id).catch(() => []) : [],
+		proOnlyFeatureEnabled ? emailIdentityService.listEmailIdentities(req.host_id, req.params.id).catch(() => []) : [],
+	]);
+
+	res.json({
+		project,
+		features: {
+			git_sync: proOnlyFeatureEnabled,
+			email_ingest: proOnlyFeatureEnabled,
+		},
+		email_forward_domain: String(config.emailForwardDomain || '').trim().replace(/^@+/, ''),
+		git_repos: gitRepos,
+		email_identities: emailIdentities,
+	});
+});
+
 router.get('/features', async (req, res) => {
 	const tenant = await Tenant.findOne({ host_id: req.host_id }).select('plan').lean();
 	const plan = tenant?.plan || 'free';
@@ -107,13 +156,13 @@ router.get('/features', async (req, res) => {
 	res.json({ features: { email_ingest: proOnlyFeatureEnabled, git_sync: proOnlyFeatureEnabled } });
 });
 
-router.put('/projects/:id', async (req, res) => {
+router.put('/projects/:id', requireProjectSettingsAccess, async (req, res) => {
 	const project = await projectService.updateProject(req.host_id, req.params.id, req.body, auditCtx(req));
 	if (!project) return res.status(404).json({ error: 'Project not found' });
 	res.json({ project });
 });
 
-router.delete('/projects/:id', async (req, res) => {
+router.delete('/projects/:id', requireProjectSettingsAccess, async (req, res) => {
 	try {
 		const project = await projectService.deleteProject(req.host_id, req.params.id, auditCtx(req));
 		if (!project) return res.status(404).json({ error: 'Project not found' });
@@ -149,12 +198,12 @@ async function requireEmailFeatureAccess(req, res, next) {
 	next();
 }
 
-router.get('/projects/:id/git-repos', requireGitSyncAccess, async (req, res) => {
+router.get('/projects/:id/git-repos', requireProjectSettingsAccess, requireGitSyncAccess, async (req, res) => {
 	const repos = await gitSyncService.listGitRepos(req.host_id, req.params.id);
 	res.json({ repos });
 });
 
-router.post('/projects/:id/git-repos', requireGitSyncAccess, async (req, res) => {
+router.post('/projects/:id/git-repos', requireProjectSettingsAccess, requireGitSyncAccess, async (req, res) => {
 	try {
 		const repo = await gitSyncService.createGitRepo(req.userId, req.host_id, {
 			...req.body,
@@ -166,25 +215,25 @@ router.post('/projects/:id/git-repos', requireGitSyncAccess, async (req, res) =>
 	}
 });
 
-router.get('/git-repos/:id', requireGitSyncAccess, async (req, res) => {
+router.get('/git-repos/:id', requireProjectSettingsAccess, requireGitSyncAccess, async (req, res) => {
 	const repo = await gitSyncService.getGitRepo(req.host_id, req.params.id);
 	if (!repo) return res.status(404).json({ error: 'Git repo not found' });
 	res.json({ repo });
 });
 
-router.put('/git-repos/:id', requireGitSyncAccess, async (req, res) => {
+router.put('/git-repos/:id', requireProjectSettingsAccess, requireGitSyncAccess, async (req, res) => {
 	const repo = await gitSyncService.updateGitRepo(req.host_id, req.params.id, req.body, auditCtx(req));
 	if (!repo) return res.status(404).json({ error: 'Git repo not found' });
 	res.json({ repo });
 });
 
-router.delete('/git-repos/:id', requireGitSyncAccess, async (req, res) => {
+router.delete('/git-repos/:id', requireProjectSettingsAccess, requireGitSyncAccess, async (req, res) => {
 	const repo = await gitSyncService.deleteGitRepo(req.host_id, req.params.id, auditCtx(req));
 	if (!repo) return res.status(404).json({ error: 'Git repo not found' });
 	res.json({ message: 'Git repo deleted' });
 });
 
-router.post('/git-repos/:id/sync', requireGitSyncAccess, async (req, res) => {
+router.post('/git-repos/:id/sync', requireProjectSettingsAccess, requireGitSyncAccess, async (req, res) => {
 	try {
 		if (req.body?.background === true) {
 			const summary = await gitSyncService.startSyncRepo(req.params.id, req.userId, req.host_id, auditCtx(req));
@@ -197,13 +246,13 @@ router.post('/git-repos/:id/sync', requireGitSyncAccess, async (req, res) => {
 	}
 });
 
-router.get('/git-repos/:id/logs', requireGitSyncAccess, async (req, res) => {
+router.get('/git-repos/:id/logs', requireProjectSettingsAccess, requireGitSyncAccess, async (req, res) => {
 	const logs = await gitSyncService.listSyncLogs(req.host_id, req.params.id, req.query.limit);
 	if (!logs) return res.status(404).json({ error: 'Git repo not found' });
 	res.json({ logs });
 });
 
-router.get('/git-repos/:id/status', requireGitSyncAccess, async (req, res) => {
+router.get('/git-repos/:id/status', requireProjectSettingsAccess, requireGitSyncAccess, async (req, res) => {
 	const repo = await gitSyncService.getGitRepo(req.host_id, req.params.id);
 	if (!repo) return res.status(404).json({ error: 'Git repo not found' });
 	res.json({
@@ -215,6 +264,55 @@ router.get('/git-repos/:id/status', requireGitSyncAccess, async (req, res) => {
 		runs: repo.sync_runs || [],
 		error: repo.last_sync_error || undefined,
 	});
+});
+
+router.get('/projects/:id/email-identities', requireProjectSettingsAccess, requireEmailFeatureAccess, async (req, res) => {
+	const identities = await emailIdentityService.listEmailIdentities(req.host_id, req.params.id);
+	res.json({ identities });
+});
+
+router.get('/projects/:id/email-identities/compose', requireEmailFeatureAccess, async (req, res) => {
+	const identities = await emailIdentityService.listEmailIdentities(req.host_id, req.params.id);
+	res.json({
+		identities: identities.map((identity) => ({
+			_id: identity._id,
+			name: identity.name || '',
+			email: identity.email,
+			signature: identity.signature || '',
+		})),
+	});
+});
+
+router.post('/projects/:id/email-identities', requireProjectSettingsAccess, requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const identity = await emailIdentityService.createEmailIdentity(req.userId, req.host_id, req.params.id, req.body || {}, auditCtx(req));
+		res.status(201).json({ identity });
+	} catch (err) {
+		const status = err.message === 'Project not found' ? 404 : 400;
+		res.status(status).json({ error: err.message });
+	}
+});
+
+router.get('/email-identities/:id', requireProjectSettingsAccess, requireEmailFeatureAccess, async (req, res) => {
+	const identity = await emailIdentityService.getEmailIdentity(req.host_id, req.params.id);
+	if (!identity) return res.status(404).json({ error: 'Email identity not found' });
+	res.json({ identity });
+});
+
+router.put('/email-identities/:id', requireProjectSettingsAccess, requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const identity = await emailIdentityService.updateEmailIdentity(req.host_id, req.params.id, req.body || {}, auditCtx(req));
+		if (!identity) return res.status(404).json({ error: 'Email identity not found' });
+		res.json({ identity });
+	} catch (err) {
+		res.status(400).json({ error: err.message });
+	}
+});
+
+router.delete('/email-identities/:id', requireProjectSettingsAccess, requireEmailFeatureAccess, async (req, res) => {
+	const identity = await emailIdentityService.deleteEmailIdentity(req.host_id, req.params.id, auditCtx(req));
+	if (!identity) return res.status(404).json({ error: 'Email identity not found' });
+	res.json({ message: 'Email identity deleted' });
 });
 
 // ---- Notes ----
@@ -308,8 +406,19 @@ router.get('/emails', requireEmailFeatureAccess, async (req, res) => {
 	const emails = await emailIngestService.listEmails(req.host_id, req.query.project, {
 		page: parseInt(req.query.page, 10) || 1,
 		limit: parseInt(req.query.limit, 10) || 50,
+		mailbox: req.query.mailbox,
+		label: req.query.label,
+		triaged: req.query.triaged,
 	});
-	res.json({ emails });
+	res.json({ emails: emails.map(decorateEmailForClient) });
+});
+
+router.get('/email-labels', requireEmailFeatureAccess, async (req, res) => {
+	const data = await emailIngestService.listEmailLabels(req.host_id, {
+		project: req.query.project,
+		mailbox: req.query.mailbox,
+	});
+	res.json(data);
 });
 
 router.post('/emails', requireEmailFeatureAccess, async (req, res) => {
@@ -321,19 +430,164 @@ router.post('/emails', requireEmailFeatureAccess, async (req, res) => {
 	}
 });
 
+router.get('/emails/triage-status', requireEmailFeatureAccess, async (req, res) => {
+	const statuses = await emailIngestService.listEmailTriageStatuses(req.host_id, {
+		page: parseInt(req.query.page, 10) || 1,
+		limit: parseInt(req.query.limit, 10) || 50,
+		project: req.query.project,
+		mailbox: req.query.mailbox,
+		label: req.query.label,
+		triaged: req.query.triaged,
+		ids: req.query.ids,
+		message_id: req.query.message_id,
+		status: req.query.status,
+		triage_status: req.query.triage_status,
+		primary_action: req.query.primary_action,
+		triage_primary_action: req.query.triage_primary_action,
+		run_id: req.query.run_id,
+		triage_run_id: req.query.triage_run_id,
+		include: req.query.include,
+	});
+	res.json({ statuses });
+});
+
+router.get('/emails/from-addresses', requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const result = await emailIngestService.suggestFromEmailAddresses(req.host_id, {
+			query: req.query.q,
+			project: req.query.project,
+			limit: req.query.limit,
+		});
+		res.json(result);
+	} catch (err) {
+		res.status(400).json({ error: err.message || 'Email address search failed' });
+	}
+});
+
+router.get('/emails/:id/triage-status', requireEmailFeatureAccess, async (req, res) => {
+	const status = await emailIngestService.getEmailTriageStatus(req.host_id, req.params.id, {
+		include: req.query.include,
+	});
+	if (!status) return res.status(404).json({ error: 'Email not found' });
+	res.json({ status });
+});
+
 router.get('/emails/:id', requireEmailFeatureAccess, async (req, res) => {
 	const email = await emailIngestService.getEmail(req.host_id, req.params.id);
 	if (!email) return res.status(404).json({ error: 'Email not found' });
-	res.json({ email });
+	res.json({ email: decorateEmailForClient(email) });
 });
 
 router.get('/emails/:id/thread', requireEmailFeatureAccess, async (req, res) => {
-	const thread = await emailIngestService.getEmailThread(req.host_id, req.params.id);
-	res.json({ thread });
+	const order = req.query.order === 'desc' ? 'desc' : 'asc';
+	const include = String(req.query.include || '').split(',').map((item) => item.trim()).filter(Boolean);
+	const thread = await emailIngestService.getEmailThread(req.host_id, req.params.id, { order });
+	const payload = { thread: thread.map(decorateEmailForClient) };
+	if (include.includes('draft')) payload.draft = await emailIngestService.getEmailThreadDraft(req.host_id, thread);
+	res.json(payload);
+});
+
+router.get('/emails/:id/internal-notes', requireEmailFeatureAccess, async (req, res) => {
+	const notes = await emailInternalNoteService.listEmailInternalNotes(req.host_id, req.params.id);
+	if (!notes) return res.status(404).json({ error: 'Email not found' });
+	res.json({ notes });
+});
+
+router.post('/emails/:id/internal-notes', requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const note = await emailInternalNoteService.createEmailInternalNote(req.userId, req.host_id, req.params.id, req.body || {}, auditCtx(req));
+		if (!note) return res.status(404).json({ error: 'Email not found' });
+		res.status(201).json({ note });
+	} catch (err) {
+		res.status(400).json({ error: err.message || 'Internal note failed' });
+	}
+});
+
+router.put('/emails/:id/internal-notes/:noteId', requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const note = await emailInternalNoteService.updateEmailInternalNote(req.host_id, req.params.id, req.params.noteId, req.body || {}, auditCtx(req));
+		if (!note) return res.status(404).json({ error: 'Internal note not found' });
+		res.json({ note });
+	} catch (err) {
+		res.status(400).json({ error: err.message || 'Internal note update failed' });
+	}
+});
+
+router.delete('/emails/:id/internal-notes/:noteId', requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const note = await emailInternalNoteService.deleteEmailInternalNote(req.host_id, req.params.id, req.params.noteId, auditCtx(req), req.query.client_request_id);
+		if (!note) return res.status(404).json({ error: 'Internal note not found' });
+		res.json({ message: 'Internal note deleted' });
+	} catch (err) {
+		res.status(400).json({ error: err.message || 'Internal note delete failed' });
+	}
+});
+
+router.post('/emails/:id/ai', requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const result = await emailIngestService.askEmailAi(req.host_id, req.params.id, req.body?.query);
+		if (!result) return res.status(404).json({ error: 'Email not found' });
+		res.json(result);
+	} catch (err) {
+		res.status(400).json({ error: err.message || 'Email AI failed' });
+	}
+});
+
+router.post('/emails/:id/summarize', requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const result = await emailIngestService.summarizeEmail(req.host_id, req.params.id, auditCtx(req));
+		if (!result) return res.status(404).json({ error: 'Email not found' });
+		res.json({ summary: result.summary, email: decorateEmailForClient(result.email) });
+	} catch (err) {
+		res.status(400).json({ error: err.message || 'Email summary failed' });
+	}
+});
+
+router.post('/emails/:id/suggest-replies', requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const options = {
+			context_scope: req.body?.context_scope,
+			contextScope: req.body?.contextScope,
+			all_projects: req.body?.all_projects,
+		};
+		const result = await emailIngestService.suggestEmailReplies(req.host_id, req.params.id, options);
+		if (!result) return res.status(404).json({ error: 'Email not found' });
+		res.json(result);
+	} catch (err) {
+		res.status(400).json({ error: err.message || 'Reply suggestions failed' });
+	}
+});
+
+router.post('/emails/:id/draft-reply', requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const draft = await emailIngestService.useEmailReplySuggestion(req.host_id, req.params.id, req.body || {}, auditCtx(req));
+		if (!draft) return res.status(404).json({ error: 'Email not found' });
+		res.json({ draft });
+	} catch (err) {
+		res.status(400).json({ error: err.message || 'Draft reply failed' });
+	}
+});
+
+router.post('/emails/ai', requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const result = await emailIngestService.askEmailListAi(req.host_id, req.body?.query, req.body?.scope || {});
+		res.json({
+			...result,
+			emails: (result.emails || []).map(decorateEmailForClient),
+		});
+	} catch (err) {
+		res.status(400).json({ error: err.message || 'Email AI failed' });
+	}
 });
 
 router.put('/emails/:id', requireEmailFeatureAccess, async (req, res) => {
 	const email = await emailIngestService.updateEmail(req.host_id, req.params.id, req.body, auditCtx(req));
+	if (!email) return res.status(404).json({ error: 'Email not found' });
+	res.json({ email });
+});
+
+router.post('/emails/:id/reset-triage', requireEmailFeatureAccess, async (req, res) => {
+	const email = await emailIngestService.resetEmailTriage(req.host_id, req.params.id, auditCtx(req));
 	if (!email) return res.status(404).json({ error: 'Email not found' });
 	res.json({ email });
 });
@@ -347,6 +601,77 @@ router.delete('/emails/:id', requireEmailFeatureAccess, async (req, res) => {
 router.post('/emails/search', requireEmailFeatureAccess, async (req, res) => {
 	const results = await emailIngestService.searchEmails(req.host_id, req.body.query, req.body.options);
 	res.json({ results });
+});
+
+router.post('/emails/triage-inbox', requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const result = await emailIngestService.triageInboxEmails(req.host_id, req.userId, {
+			project: req.body?.project,
+			limit: req.body?.limit,
+			run_id: req.body?.run_id,
+			ctx: auditCtx(req),
+		});
+		res.json(result);
+	} catch (err) {
+		console.error('Email inbox triage error:', err);
+		res.status(400).json({ error: err.message || 'Inbox triage failed' });
+	}
+});
+
+router.get('/email-drafts', requireEmailFeatureAccess, async (req, res) => {
+	const drafts = await emailIngestService.listEmailDrafts(req.host_id, {
+		project: req.query.project,
+		status: req.query.status,
+		page: parseInt(req.query.page, 10) || 1,
+		limit: parseInt(req.query.limit, 10) || 50,
+	});
+	res.json({ drafts });
+});
+
+router.get('/email-drafts/:id', requireEmailFeatureAccess, async (req, res) => {
+	const draft = await emailIngestService.getEmailDraft(req.host_id, req.params.id);
+	if (!draft) return res.status(404).json({ error: 'Email draft not found' });
+	res.json({ draft });
+});
+
+router.put('/email-drafts/:id', requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const draft = await emailIngestService.updateEmailDraft(req.host_id, req.params.id, req.body || {}, auditCtx(req));
+		if (!draft) return res.status(404).json({ error: 'Email draft not found' });
+		res.json({ draft });
+	} catch (err) {
+		res.status(400).json({ error: err.message || 'Email draft update failed' });
+	}
+});
+
+router.delete('/email-drafts/:id', requireEmailFeatureAccess, async (req, res) => {
+	const draft = await emailIngestService.discardEmailDraft(req.host_id, req.params.id, auditCtx(req));
+	if (!draft) return res.status(404).json({ error: 'Email draft not found' });
+	res.json({ draft, message: 'Email draft deleted' });
+});
+
+router.post('/email-drafts/:id/send', requireEmailFeatureAccess, async (req, res) => {
+	try {
+		if (Object.keys(req.body || {}).length) {
+			const draft = await emailIngestService.updateEmailDraft(req.host_id, req.params.id, req.body || {}, auditCtx(req));
+			if (!draft) return res.status(404).json({ error: 'Email draft not found' });
+		}
+		const result = await outgoingEmailService.queueDraftSend(req.host_id, req.params.id, auditCtx(req));
+		if (!result) return res.status(404).json({ error: 'Email draft not found' });
+		res.status(202).json(result);
+	} catch (err) {
+		res.status(400).json({ error: err.message || 'Email send queue failed' });
+	}
+});
+
+router.post('/outgoing-emails/:id/cancel', requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const result = await outgoingEmailService.cancelOutgoingEmail(req.host_id, req.params.id, auditCtx(req));
+		if (!result) return res.status(404).json({ error: 'Outgoing email not found' });
+		res.json(result);
+	} catch (err) {
+		res.status(err.status || 400).json({ error: err.message || 'Outgoing email cancel failed' });
+	}
 });
 
 // ---- URLs ----
@@ -720,6 +1045,28 @@ router.post('/reindex', requireRestrictedSettingsAccess, async (req, res) => {
 	} catch (err) {
 		console.error('Reindex error:', err);
 		res.status(500).json({ error: 'Reindex failed: ' + err.message });
+	}
+});
+
+// ---- BYO AI Settings ----
+
+router.get('/settings/byo-ai', requireRestrictedSettingsAccess, requireByoAiAccess, async (req, res) => {
+	try {
+		const settings = await byoAiService.getByoAiSettings(req.host_id);
+		res.json({ settings });
+	} catch (err) {
+		console.error('BYO AI settings read error:', err);
+		res.status(500).json({ error: 'Failed to load BYO AI settings' });
+	}
+});
+
+router.put('/settings/byo-ai', requireRestrictedSettingsAccess, requireByoAiAccess, async (req, res) => {
+	try {
+		const settings = await byoAiService.updateByoAiSettings(req.host_id, req.body || {});
+		res.json({ settings });
+	} catch (err) {
+		console.error('BYO AI settings update error:', err);
+		res.status(400).json({ error: err.message || 'Failed to update BYO AI settings' });
 	}
 });
 

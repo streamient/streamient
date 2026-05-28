@@ -9,13 +9,13 @@
     "node": ">=24"
   },
   "scripts": {
-    "start": "node --import ./tracing.js --import ./sentry.js --optimize_for_size --max-old-space-size=4096 server.js --http"
+    "start": "node --import ./tracing.js --optimize_for_size --max-old-space-size=4096 server.js --http"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@sentry/node": "^10.53.1",
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.2",
+    "vitepress-openapi": "^0.2.0",
     "vitepress-plugin-tabs": "^0.9.0",
     "zod": "^4.4.3"
   },

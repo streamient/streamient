@@ -1,0 +1,101 @@
+script.
+	(function() {
+		var form = document.getElementById('byo-ai-form');
+		var resultEl = document.getElementById('byo-ai-result');
+		if (!form || form.__byoAiBound) return;
+		form.__byoAiBound = true;
+
+		function payloadFor(scope, field, value) {
+			var payload = {};
+			payload[scope] = {};
+			payload[scope][field] = value;
+			return payload;
+		}
+
+		function renderStatus(settings) {
+			form.querySelectorAll('[data-status]').forEach(function(el) {
+				var parts = el.dataset.status.split(':');
+				var scope = parts[0];
+				var field = parts[1];
+				var configured = !!settings?.[scope]?.[field]?.configured;
+				el.textContent = configured ? 'Custom key configured' : 'Using environment default';
+				el.classList.toggle('text-success', configured);
+				el.classList.toggle('text-muted', !configured);
+			});
+			form.querySelectorAll('[data-instruction-scope]').forEach(function(el) {
+				el.value = settings?.instructions?.[el.dataset.instructionScope] || '';
+			});
+			form.querySelectorAll('[data-email-setting]').forEach(function(el) {
+				el.checked = !!settings?.email_settings?.[el.dataset.emailSetting];
+			});
+		}
+
+		async function loadSettings() {
+			try {
+				var data = await api('GET', '/settings/byo-ai');
+				renderStatus(data.settings || {});
+			} catch (err) {
+				if (resultEl) {
+					resultEl.innerHTML = '<div class="alert alert-danger">' + err.message + '</div>';
+					resultEl.classList.remove('d-none');
+				}
+			}
+		}
+
+		form.addEventListener('submit', async function(e) {
+			e.preventDefault();
+			var payload = {};
+			form.querySelectorAll('input[data-scope][data-field]').forEach(function(input) {
+				var value = input.value.trim();
+				if (!value) return;
+				payload[input.dataset.scope] = payload[input.dataset.scope] || {};
+				payload[input.dataset.scope][input.dataset.field] = value;
+			});
+			var instructionPayload = {};
+			form.querySelectorAll('[data-instruction-scope]').forEach(function(input) {
+				instructionPayload[input.dataset.instructionScope] = input.value.trim();
+			});
+			if (Object.keys(instructionPayload).length > 0) payload.instructions = instructionPayload;
+			var emailSettingsPayload = {};
+			form.querySelectorAll('[data-email-setting]').forEach(function(input) {
+				emailSettingsPayload[input.dataset.emailSetting] = input.checked;
+			});
+			if (Object.keys(emailSettingsPayload).length > 0) payload.email_settings = emailSettingsPayload;
+
+			if (Object.keys(payload).length === 0) {
+				showSuccess('No BYO AI changes');
+				return;
+			}
+
+			try {
+				var data = await api('PUT', '/settings/byo-ai', payload);
+				form.querySelectorAll('input[data-scope][data-field]').forEach(function(input) {
+					input.value = '';
+				});
+				renderStatus(data.settings || {});
+				showSuccess('Settings saved');
+			} catch (err) {
+				showError(err.message);
+			}
+		});
+
+		form.querySelectorAll('[data-clear-byo]').forEach(function(button) {
+			button.addEventListener('click', async function() {
+				var parts = button.dataset.clearByo.split(':');
+				var scope = parts[0];
+				var field = parts[1];
+				var confirmed = await confirmAction('Clear API key', 'This will remove the custom key and use the fallback key.');
+				if (!confirmed) return;
+
+				try {
+					var data = await api('PUT', '/settings/byo-ai', payloadFor(scope, field, null));
+					renderStatus(data.settings || {});
+					showSuccess('API key cleared');
+				} catch (err) {
+					showError(err.message);
+				}
+			});
+		});
+
+		loadSettings();
+	})();

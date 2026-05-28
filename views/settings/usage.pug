@@ -1,34 +1,4 @@
 extends layout
 
 block settings
-	h4.mb-4 Usage
-
-	.card.mb-4
-		.card-body
-			h5.card-title Storage Usage
-			#usage-stats
-				p.text-muted Loading usage data...
-
-block scripts
-	script.
-		document.addEventListener('DOMContentLoaded', async function() {
-			try {
-				var data = await api('GET', '/counts');
-				var totals = { notes: 0, memories: 0, urls: 0, projects: 0 };
-				for (var pid in data) {
-					totals.projects++;
-					totals.notes += data[pid].notes || 0;
-					totals.memories += data[pid].memory || 0;
-					totals.urls += data[pid].urls || 0;
-				}
-				var el = document.getElementById('usage-stats');
-				el.innerHTML = '<table class="table"><tbody>'
-					+ '<tr><td><span class="kk-icon material-symbols-outlined me-2" aria-hidden="true">description</span>Notes</td><td>' + totals.notes + '</td></tr>'
-					+ '<tr><td><span class="kk-icon material-symbols-outlined me-2" aria-hidden="true">lightbulb</span>Memories</td><td>' + totals.memories + '</td></tr>'
-					+ '<tr><td><span class="kk-icon material-symbols-outlined me-2" aria-hidden="true">link</span>URLs</td><td>' + totals.urls + '</td></tr>'
-					+ '<tr><td><span class="kk-icon material-symbols-outlined me-2" aria-hidden="true">folder</span>Projects</td><td>' + totals.projects + '</td></tr>'
-					+ '</tbody></table>';
-			} catch (err) {
-				document.getElementById('usage-stats').innerHTML = '<p class="text-danger">Failed to load usage data</p>';
-			}
-		});
+	include _usage_content

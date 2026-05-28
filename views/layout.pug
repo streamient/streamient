@@ -5,14 +5,23 @@ html(lang="en")
 		meta(name="viewport" content="width=device-width, initial-scale=1")
 		title #{title || 'Kumbukum'}
 		link(href='/static/images/favicon.ico' rel="shortcut icon")
+		script.
+			(function () {
+				try {
+					var t = localStorage.getItem('kk-theme');
+					if (t !== 'light' && t !== 'dark') t = 'dark';
+					document.documentElement.setAttribute('data-theme', t);
+				} catch (e) {
+					document.documentElement.setAttribute('data-theme', 'dark');
+				}
+			})();
 		script(type="importmap").
 			{ "imports": { "/static/js/vendor.js": "/static/v-#{v}/js/vendor.js" } }
 		link(href=`/static/v-${v}/css/vendor.css` rel="stylesheet")
 		link(href=`/static/v-${v}/css/app.css` rel="stylesheet")
 		link(href=`/static/v-${v}/css/kumbukum-template1-strict.css` rel="stylesheet")
-		include includes/sentry
 		block head
-	body.kk-template1(class=(hide_chat_sidebar ? 'kk-no-chat-sidebar' : ''))
+	body.kk-template1(class=((hide_chat_sidebar ? 'kk-no-chat-sidebar ' : '') + (page === 'ecc' ? 'kk-ecc-page' : '')))
 		block body
 			include includes/avatar
 			if impersonating
@@ -25,10 +34,14 @@ html(lang="en")
 			nav.navbar.navbar-expand-lg.navbar-dark.bg-dark.sticky-top
 				.container-fluid
 					a.navbar-brand(href="/dashboard")
-						include includes/logo_white
+						span.kk-logo-dark
+							include includes/logo_white
+						span.kk-logo-light
+							include includes/logo_black
 					nav.kk-topnav
-						a.kk-navbtn(href="/dashboard" class={active: page !== 'graph'}) Projects
+						a.kk-navbtn(href="/dashboard" class={active: page !== 'graph' && page !== 'ecc'}) Projects
 						a.kk-navbtn(href="/graph" class={active: page === 'graph'}) Graph
+						a.kk-navbtn(href="/ecc" class={active: page === 'ecc'}) Email
 					.ms-auto.d-flex.align-items-center
 						if user
 							if is_trialing
@@ -62,6 +75,11 @@ html(lang="en")
 									if is_hosted
 										li: hr.dropdown-divider
 										li: a.dropdown-item(href="/settings/subscription") My Subscription
+									li: hr.dropdown-divider
+									li
+										a.dropdown-item#theme-toggle(href="#" role="button")
+											span.kk-theme-label-dark Light theme
+											span.kk-theme-label-light Dark theme
 									li: hr.dropdown-divider
 									li: a.dropdown-item(href="#" onclick="logout()") Logout
 
@@ -239,8 +257,24 @@ html(lang="en")
 										.form-text Thread
 											#rm-email-thread.small
 							#rm-email-pane-body.d-none.px-3.pb-2
-								.form-text Body / Attachment Text
-								#rm-email-content.preview-container.border.rounded.p-3(style="min-height:220px; white-space:pre-wrap")
+								.d-flex.justify-content-between.align-items-center.mb-2
+									.form-text Body
+									.d-flex.align-items-center.gap-2.kk-email-body-controls
+										.btn-group.btn-group-sm#rm-email-body-mode(role="group" aria-label="Email body mode")
+											button.btn.btn-outline-secondary.active#rm-email-html-btn(type="button")
+												span HTML
+											button.btn.btn-outline-secondary#rm-email-text-btn(type="button")
+												span Text
+										.btn-group.btn-group-sm.mx-2#rm-email-theme-mode(role="group" aria-label="Email HTML theme")
+											button.btn.btn-outline-secondary.active#rm-email-dark-btn(type="button")
+												span Dark
+											button.btn.btn-outline-secondary#rm-email-original-btn(type="button")
+												span Original
+										button.btn.btn-outline-secondary.btn-sm.d-none#rm-email-load-images-btn(type="button")
+											span Load images
+								#rm-email-content.preview-container.border.rounded.p-0(style="min-height:220px")
+									iframe#rm-email-html-frame.d-none(title="Email HTML body" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer")
+									pre#rm-email-text-content.mb-0.p-3(style="white-space:pre-wrap")
 
 						//- Loading placeholder
 						#result-modal-loading.text-center.py-4.d-none
@@ -256,12 +290,38 @@ html(lang="en")
 							!= icon('check', 'me-1')
 							| Save
 
+		//- Settings modal keeps users anchored in the current app context
+		.modal.fade#settingsModal(tabindex="-1" aria-labelledby="settingsModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false")
+			.modal-dialog.modal-xl.modal-dialog-scrollable.kk-settings-modal-dialog
+				.modal-content
+					.modal-header
+						h5.modal-title#settingsModalLabel Settings
+						button.btn-close(type="button" data-bs-dismiss="modal" aria-label="Close")
+					.modal-body#settings-modal-body
+						.text-center.py-5.text-muted
+							.spinner-border.spinner-border-sm.me-2
+							span Loading settings...
+
+		//- Project settings modal keeps project configuration anchored in dashboard context
+		.modal.fade#projectSettingsModal(tabindex="-1" aria-labelledby="projectSettingsModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false")
+			.modal-dialog.modal-xl.modal-dialog-scrollable.kk-settings-modal-dialog
+				.modal-content
+					.modal-header
+						h5.modal-title#projectSettingsModalLabel Project settings
+						button.btn-close(type="button" data-bs-dismiss="modal" aria-label="Close")
+					.modal-body#project-settings-modal-body
+						.text-center.py-5.text-muted
+							.spinner-border.spinner-border-sm.me-2
+							span Loading project settings...
+
 		script(src="/socket.io/socket.io.js")
 		script(src=`/static/v-${v}/js/icons.js`)
+		script(src=`/static/v-${v}/js/autofill_guard.js`)
 		script.
 			var __ws_url = "#{ws_url}";
 			var __host_id = "#{host_id}";
 			var __user_name = "#{user ? user.name : ''}";
+			var __static_base = "/static/v-#{v}";
 			var __avatar_colors = ['#6366f1','#8b5cf6','#ec4899','#f43f5e','#f97316','#eab308','#22c55e','#14b8a6','#06b6d4','#3b82f6'];
 			function makeAvatar(name, size) {
 				size = size || 'xs';
@@ -274,12 +334,15 @@ html(lang="en")
 			}
 		script(src=`/static/v-${v}/js/vendor.js` type="module")
 		script(src=`/static/v-${v}/js/editor.js` type="module")
+		script(src=`/static/v-${v}/js/iframe_resizer_parent.js`)
+		script(src=`/static/v-${v}/js/email_iframe_renderer.js`)
 		script(src=`/static/v-${v}/js/chat.js`)
 		script(src=`/static/v-${v}/js/app.js`)
 		script(src=`/static/v-${v}/js/notes.js`)
 		script(src=`/static/v-${v}/js/memories.js`)
 		script(src=`/static/v-${v}/js/urls.js`)
 		script(src=`/static/v-${v}/js/emails.js`)
+		script(src=`/static/v-${v}/js/ecc.js`)
 		script(src=`/static/v-${v}/js/trash.js`)
 		script(src=`/static/v-${v}/js/batch.js`)
 		include includes/openpanel

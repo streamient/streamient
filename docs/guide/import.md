@@ -2,6 +2,8 @@
 
 Import existing documents into Kumbukum by dragging and dropping files onto the Notes page. Each file is converted into a new note with the extracted text content.
 
+You can also import emails by forwarding JSON email payloads to Kumbukum. This is an alternative to using the email API directly.
+
 ## Supported File Types
 
 | Format | Extensions |
@@ -33,3 +35,40 @@ The extracted content is stored as both plain text (for search indexing) and HTM
 - Large PDF files with scanned images (no selectable text) will result in empty notes — only text-based PDFs are supported
 - Code files (`.js`, `.py`, `.sh`, etc.) are treated as plain text and imported as-is
 - Imported notes are created in your currently selected project
+
+## Email Forwarding
+
+Configure your mail forwarder to post parsed email JSON to:
+
+```text
+POST /import/email
+```
+
+Forward emails to a project-specific address:
+
+```text
+PROJECT_ID@EMAIL_FORWARD_DOMAIN
+```
+
+For example, if `EMAIL_FORWARD_DOMAIN=email.kumbukum.com`, forward to:
+
+```text
+507f1f77bcf86cd799439011@email.kumbukum.com
+```
+
+The route accepts parsed email JSON with normal email fields:
+
+```json
+{
+	"to": "507f1f77bcf86cd799439011@email.kumbukum.com",
+	"from": "sender@example.com",
+	"subject": "Project update",
+	"text": "Email body text",
+	"html": "<table><tr><td>Email body HTML</td></tr></table>",
+	"message_id": "<message-id@example.com>",
+	"references": "<previous-message@example.com>",
+	"in_reply_to": "<previous-message@example.com>"
+}
+```
+
+Kumbukum stores plain text for search and AI, and stores sanitized HTML separately for display. If a forwarded email has no plain text body, Kumbukum strips the HTML body and stores the resulting text fallback. Remote image URLs in stored HTML are blocked by default and can be loaded explicitly in the email viewer. Existing stored emails cannot be backfilled unless they are re-ingested because raw HTML was not stored before this feature. Attachments are ignored. Kumbukum rejects forwarded email unless the recipient domain exactly matches `EMAIL_FORWARD_DOMAIN`.

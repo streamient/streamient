@@ -208,5 +208,159 @@ export function createEditor(element, { content = '', onUpdate = null } = {}) {
 	return editor;
 }
 
+const EMAIL_TOOLBAR_BUTTONS = [
+	{
+		name: 'bold',
+		label: 'Bold',
+		icon: 'format_bold',
+		isActive: (editor) => editor.isActive('bold'),
+		run: (editor) => editor.chain().focus().toggleBold().run(),
+	},
+	{
+		name: 'italic',
+		label: 'Italic',
+		icon: 'format_italic',
+		isActive: (editor) => editor.isActive('italic'),
+		run: (editor) => editor.chain().focus().toggleItalic().run(),
+	},
+	{
+		name: 'underline',
+		label: 'Underline',
+		icon: 'format_underlined',
+		isActive: (editor) => editor.isActive('underline'),
+		run: (editor) => editor.chain().focus().toggleUnderline().run(),
+	},
+	{
+		name: 'link',
+		label: 'Link',
+		icon: 'link',
+		isActive: (editor) => editor.isActive('link'),
+		run: (editor) => {
+			const previous = editor.getAttributes('link').href || '';
+			const href = window.prompt('Link URL', previous);
+			if (href === null) return;
+			const trimmed = href.trim();
+			if (!trimmed) {
+				editor.chain().focus().extendMarkRange('link').unsetLink().run();
+				return;
+			}
+			editor.chain().focus().extendMarkRange('link').setLink({ href: trimmed }).run();
+		},
+	},
+	{
+		name: 'bulletList',
+		label: 'Bullet list',
+		icon: 'format_list_bulleted',
+		isActive: (editor) => editor.isActive('bulletList'),
+		run: (editor) => editor.chain().focus().toggleBulletList().run(),
+	},
+	{
+		name: 'orderedList',
+		label: 'Numbered list',
+		icon: 'format_list_numbered',
+		isActive: (editor) => editor.isActive('orderedList'),
+		run: (editor) => editor.chain().focus().toggleOrderedList().run(),
+	},
+	{
+		name: 'blockquote',
+		label: 'Quote',
+		icon: 'format_quote',
+		isActive: (editor) => editor.isActive('blockquote'),
+		run: (editor) => editor.chain().focus().toggleBlockquote().run(),
+	},
+	{
+		name: 'undo',
+		label: 'Undo',
+		icon: 'undo',
+		isActive: () => false,
+		run: (editor) => editor.chain().focus().undo().run(),
+	},
+	{
+		name: 'redo',
+		label: 'Redo',
+		icon: 'redo',
+		isActive: () => false,
+		run: (editor) => editor.chain().focus().redo().run(),
+	},
+	{
+		name: 'clear',
+		label: 'Clear formatting',
+		icon: 'format_clear',
+		isActive: () => false,
+		run: (editor) => editor.chain().focus().unsetAllMarks().clearNodes().run(),
+	},
+];
+
+function createEmailToolbar(editor) {
+	const toolbar = document.createElement('div');
+	toolbar.className = 'kk-email-editor-toolbar';
+	toolbar.setAttribute('role', 'toolbar');
+	toolbar.setAttribute('aria-label', 'Email formatting');
+
+	function refresh() {
+		toolbar.querySelectorAll('button[data-command]').forEach((button) => {
+			const command = EMAIL_TOOLBAR_BUTTONS.find((item) => item.name === button.dataset.command);
+			if (!command) return;
+			button.classList.toggle('active', Boolean(command.isActive(editor)));
+		});
+	}
+
+	EMAIL_TOOLBAR_BUTTONS.forEach((command) => {
+		const button = document.createElement('button');
+		button.type = 'button';
+		button.className = 'btn btn-sm btn-outline-secondary kk-email-editor-button';
+		button.dataset.command = command.name;
+		button.title = command.label;
+		button.setAttribute('aria-label', command.label);
+		button.innerHTML = editorIcon(command.icon);
+		button.addEventListener('click', (event) => {
+			event.preventDefault();
+			command.run(editor);
+			refresh();
+		});
+		toolbar.appendChild(button);
+	});
+
+	editor.on('selectionUpdate', refresh);
+	editor.on('transaction', refresh);
+	setTimeout(refresh, 0);
+	return toolbar;
+}
+
+export function createEmailEditor(element, { content = '', onUpdate = null, placeholder = 'Write a reply...' } = {}) {
+	element.innerHTML = '';
+	const toolbarMount = document.createElement('div');
+	const editorMount = document.createElement('div');
+	editorMount.className = 'kk-email-editor-body';
+	element.appendChild(toolbarMount);
+	element.appendChild(editorMount);
+
+	const editorOptions = {
+		element: editorMount,
+		extensions: [
+			StarterKit.configure({
+				codeBlock: false,
+				heading: false,
+				horizontalRule: false,
+			}),
+			Placeholder.configure({ placeholder }),
+		],
+		content,
+		editorProps: {
+			attributes: {
+				class: 'kk-email-editor-prosemirror',
+			},
+		},
+	};
+
+	if (onUpdate) {
+		editorOptions.onUpdate = ({ editor: ed }) => onUpdate(ed);
+	}
+
+	const editor = new Editor(editorOptions);
+	toolbarMount.replaceWith(createEmailToolbar(editor));
+	return editor;
+}
+
 // Export for global use
-window.KumbukumEditor = { createEditor };
+window.KumbukumEditor = { createEditor, createEmailEditor };

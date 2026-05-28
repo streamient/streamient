@@ -2,7 +2,6 @@ services:
   base:
     user: root
     restart: unless-stopped
-    init: true
     image: kumbukum-dev:local
     volumes:
       - ./:/opt/kumbukum

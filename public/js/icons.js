@@ -2,9 +2,10 @@
 	'use strict';
 
 	var glyphs = {
-		add: 'add',
-		apartment: 'apartment',
-		arrowCircleRight: 'arrow_circle_right',
+	add: 'add',
+	apartment: 'apartment',
+	arrowBack: 'arrow_back',
+	arrowCircleRight: 'arrow_circle_right',
 		barChart: 'bar_chart',
 		cancel: 'cancel',
 		check: 'check',
@@ -59,6 +60,8 @@
 		users: 'group',
 		warning: 'warning',
 		close: 'close',
+		darkMode: 'dark_mode',
+		lightMode: 'light_mode',
 	};
 
 	function escapeHtml(value) {

@@ -17,7 +17,6 @@ import { graphTools } from './tools/graph.js';
 import { gitSyncTools } from './tools/git_sync.js';
 import { MCP_SERVER_INSTRUCTIONS } from './instructions.js';
 import { buildProtectedResourceMetadata, getRequestExternalBaseUrl } from '../../modules/oauth.js';
-import { captureException, flush, setupExpressErrorHandler } from './sentry.js';
 import { recordException, setupExpressErrorHandler as setupOtelExpressErrorHandler } from './tracing.js';
 
 const PORT = mcpConfig.port;
@@ -156,13 +155,6 @@ async function createServer(apiAuth, { projectId, oauthClientId, cacheKey } = {}
         return result;
       } catch (err) {
         recordException(err);
-        captureException(err, {
-          tags: {
-            phase: 'tool_call',
-            tool: name,
-            client,
-          },
-        });
         logToolTelemetry({
           tool: name,
           client,
@@ -200,9 +192,7 @@ if (transportArg === '--stdio' || !transportArg) {
     await server.connect(transport);
   } catch (err) {
     recordException(err);
-    captureException(err, { tags: { phase: 'stdio_startup' } });
     console.error('Fatal error starting Kumbukum MCP stdio server:', err);
-    await flush();
     process.exit(1);
   }
 } else {
@@ -268,7 +258,6 @@ if (transportArg === '--stdio' || !transportArg) {
       await server.connect(transport);
     } catch (err) {
       recordException(err);
-      captureException(err, { tags: { phase: 'sse_connect' } });
       console.error('Error starting Kumbukum MCP SSE connection:', err);
       if (!res.headersSent) {
         res.status(500).json({ error: 'Internal server error' });
@@ -291,7 +280,6 @@ if (transportArg === '--stdio' || !transportArg) {
       await session.transport.handlePostMessage(req, res);
     } catch (err) {
       recordException(err);
-      captureException(err, { tags: { phase: 'sse_message' } });
       console.error('Error handling Kumbukum MCP SSE message:', err);
       if (!res.headersSent) {
         res.status(500).json({ error: 'Internal server error' });
@@ -327,7 +315,6 @@ if (transportArg === '--stdio' || !transportArg) {
       });
     } catch (err) {
       recordException(err);
-      captureException(err, { tags: { phase: 'streamable_http' } });
       console.error('Error handling Kumbukum MCP HTTP request:', err);
       logMcpRequest({
         method: mcpMethod,
@@ -347,7 +334,6 @@ if (transportArg === '--stdio' || !transportArg) {
   app.delete('/mcp', handleMcp);
 
   setupOtelExpressErrorHandler(app);
-  setupExpressErrorHandler(app);
 
   app.listen(PORT, () => {
     console.log(`Kumbukum MCP server running on port ${PORT}`);

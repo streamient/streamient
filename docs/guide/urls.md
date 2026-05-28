@@ -38,7 +38,7 @@ Select multiple URLs with checkboxes to move them between projects or trash them
 
 ### Browser Extension
 
-Use the [Browser Extension](/guide/browser-extension) to save the current page to Kumbukum without leaving your browser. Available for Chrome and Firefox.
+Use the [Browser Extension](/guide/browser-extension/) to save the current page to Kumbukum without leaving your browser, or turn on [automatic capture](/guide/browser-extension/url-capture#automatic-capture) so pages you spend time on get saved on their own.
 
 ## How It Works
 

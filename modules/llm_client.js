@@ -1,4 +1,5 @@
 import config from '../config.js';
+import { resolveLlmApiKey } from '../services/byo_ai_service.js';
 import * as OtelRuntime from './otel_runtime.js';
 
 const PROVIDERS = {
@@ -20,21 +21,34 @@ const PROVIDERS = {
 	},
 };
 
+function usesMaxCompletionTokens(providerName, model = '') {
+	if (providerName !== 'openai') return false;
+	return /^(gpt-5|gpt-4\.1|o[134]|o\d)/i.test(String(model || ''));
+}
+
+function applyTokenLimit(body, providerName, model, maxTokens) {
+	if (usesMaxCompletionTokens(providerName, model)) {
+		body.max_completion_tokens = maxTokens;
+		return body;
+	}
+	body.max_tokens = maxTokens;
+	return body;
+}
+
 /**
  * Resolve provider name and API key.
  * Accepts an explicit provider string or falls back to config.llm.chatProvider.
  */
-function resolveProvider(providerName) {
+async function resolveProvider(providerName, options = {}) {
 	const name = providerName || config.llm.chatProvider || 'google';
 	const provider = PROVIDERS[name];
 	if (!provider) throw new Error(`Unknown LLM provider: ${name}`);
 
-	let apiKey;
-	if (name === 'google') {
-		apiKey = config.llm.googleApiKey;
-	} else if (name === 'openai') {
-		apiKey = config.llm.openaiApiKey;
-	}
+	const apiKey = await resolveLlmApiKey({
+		hostId: options.hostId,
+		provider: name,
+		scope: options.scope,
+	});
 	if (!apiKey) throw new Error(`API key not configured for provider: ${name}`);
 
 	return { name, provider, apiKey };
@@ -49,9 +63,11 @@ function resolveProvider(providerName) {
  *   provider  - Explicit provider name (overrides config)
  *   model     - Explicit model name (overrides config)
  *   maxTokens - Max tokens (default 4096)
+ *   hostId    - Tenant host ID for account-scoped API key resolution
+ *   scope     - LLM key scope: global or email
  */
-export async function chatCompletion({ messages, stream = false, provider: providerOverride, model: modelOverride, maxTokens = 4096 }) {
-	const { name, provider, apiKey } = resolveProvider(providerOverride);
+export async function chatCompletion({ messages, stream = false, provider: providerOverride, model: modelOverride, maxTokens = 4096, hostId = null, scope = 'global' }) {
+	const { name, provider, apiKey } = await resolveProvider(providerOverride, { hostId, scope });
 	const model = modelOverride || provider.defaultModel;
 
 	return OtelRuntime.createCustomSpan('gen_ai.chat.completion', async (span) => {
@@ -69,18 +85,18 @@ export async function chatCompletion({ messages, stream = false, provider: provi
 		}
 
 		// OpenAI-compatible API (OpenAI, Groq, Cerebras)
+		const body = applyTokenLimit({
+			model,
+			messages,
+			stream,
+		}, name, model, maxTokens);
 		const response = await fetch(`${provider.baseUrl}/chat/completions`, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
 				Authorization: `Bearer ${apiKey}`,
 			},
-			body: JSON.stringify({
-				model,
-				messages,
-				stream,
-				max_tokens: maxTokens,
-			}),
+			body: JSON.stringify(body),
 		});
 
 		span.setAttribute('http.response.status_code', response.status);
@@ -150,25 +166,58 @@ async function googleChat({ messages, model, stream, apiKey, maxTokens = 4096 })
 /**
  * Convenience: chat completion using the NL search model (lightweight, fast).
  */
-export async function nlSearchCompletion({ messages, maxTokens = 1024 }) {
+export async function nlSearchCompletion({ messages, maxTokens = 1024, hostId = null, scope = 'global' }) {
 	return chatCompletion({
 		messages,
 		provider: config.llm.nlSearchProvider,
 		model: config.llm.nlSearchModel,
 		maxTokens,
+		hostId,
+		scope,
 	});
 }
 
 /**
  * Convenience: chat completion using the main chat model (richer).
  */
-export async function chatModelCompletion({ messages, stream = false, maxTokens = 4096 }) {
+export async function chatModelCompletion({ messages, stream = false, maxTokens = 4096, hostId = null, scope = 'global' }) {
 	return chatCompletion({
 		messages,
 		stream,
 		provider: config.llm.chatProvider,
 		model: config.llm.chatModel,
 		maxTokens,
+		hostId,
+		scope,
+	});
+}
+
+/**
+ * Convenience: email chat completion using the Email AI model.
+ */
+export async function emailAiCompletion({ messages, stream = false, maxTokens = 4096, hostId = null }) {
+	return chatCompletion({
+		messages,
+		stream,
+		provider: config.llm.emailAiProvider,
+		model: config.llm.emailAiModel,
+		maxTokens,
+		hostId,
+		scope: 'email',
+	});
+}
+
+/**
+ * Convenience: email triage completion using the Email triage model.
+ */
+export async function emailTriageCompletion({ messages, maxTokens = 4096, hostId = null }) {
+	return chatCompletion({
+		messages,
+		provider: config.llm.emailTriageProvider,
+		model: config.llm.emailTriageModel,
+		maxTokens,
+		hostId,
+		scope: 'email',
 	});
 }
 

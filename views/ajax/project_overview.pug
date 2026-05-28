@@ -1,19 +1,21 @@
 - const createdAt = new Date(project.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 - const pc = counts[project._id.toString()] || { notes: 0, memory: 0, urls: 0, emails: 0 }
+- const forwardingEmail = emailForwardDomain ? `${project._id}@${emailForwardDomain}` : ''
 
 .d-flex.justify-content-between.align-items-center.mb-2
 	.d-flex.align-items-center.gap-2
-		span.project-color(style=`background:${project.color}; width:16px; height:16px`)
-		h4.mb-0= project.name
+		span.project-color.project-overview-color(style=`background:${project.color}; width:16px; height:16px`)
+		h4.mb-0.project-overview-name= project.name
 	.ms-auto
-		if !project.is_default
-			if canDelete
+		if canManageProjectSettings
+			if !project.is_default && canDelete
 				button.btn.btn-sm.btn-link.me-3.fs-7(onclick=`deleteProject('${project._id}')`) Delete
 			button.btn.btn-sm.btn-outline-secondary(onclick=`editProject('${project._id}')`) Edit Project
-		else
-			button.btn.btn-sm.btn-outline-secondary(onclick=`editProject('${project._id}')`) Edit Project
 
-p.text-muted.small.mb-4.fs-7 Project ID: #{project._id} &middot; Created #{createdAt}
+.d-flex.w-100.align-items-center.mb-4
+	.text-muted.small.fs-7.user-select-all #{project._id}
+	.ms-auto
+		span.text-muted.small.fs-7 Created #{createdAt}
 
 .row.g-3.mb-5
 	.col-md-3
@@ -51,63 +53,6 @@ p.text-muted.small.mb-4.fs-7 Project ID: #{project._id} &middot; Created #{creat
 						a.btn.btn-sm.btn-outline-warning(href="/settings/subscription") Upgrade
 
 
-if gitSyncEnabled
-	.my-4
-	.d-flex.justify-content-between.align-items-center.mb-3
-		h5.mb-0
-			!= icon('gitBranch')
-			span.ms-2 Git Sync
-		button.btn.btn-sm.btn-outline-primary(onclick=`addGitRepo('${project._id}')`) Add Repo
-
-	if gitRepos && gitRepos.length
-		.list-group
-			each repo in gitRepos
-				.list-group-item
-					.d-flex.justify-content-between.align-items-start
-						div
-							.fw-bold= repo.name || repo.repo_url
-							.text-muted.small= repo.repo_url
-							.d-flex.gap-2.mt-1
-								if repo.enabled
-									span.badge.bg-success Enabled
-								else
-									span.badge.bg-secondary Disabled
-								if repo.last_sync_status === 'success'
-									span.badge.bg-info Last sync: success
-								else if repo.last_sync_status === 'failed'
-									span.badge.bg-danger.cursor-pointer(title=repo.last_sync_error) Last sync: failed
-								else if repo.last_sync_status === 'in_progress'
-									span.badge.bg-warning Syncing…
-								if repo.last_synced_at
-									span.text-muted.small= 'Synced ' + new Date(repo.last_synced_at).toLocaleString()
-							if repo.last_sync_summary
-								- const gs = repo.last_sync_summary
-								.text-muted.small.mt-1
-									span= `${gs.imported_files || 0} imported · ${gs.exported_files || 0} exported · ${gs.imported_commits || 0} commits · ${gs.trashed_items || 0} trashed · ${gs.conflicts || 0} conflicts`
-							if repo.commit_sync_enabled !== false && repo.last_commit_synced_at
-								.text-muted.small= 'Commits synced ' + new Date(repo.last_commit_synced_at).toLocaleString()
-						.d-flex.gap-1
-							button.btn.btn-sm.btn-outline-primary(onclick=`triggerGitSync('${repo._id}')` title="Sync now")
-								!= icon('sync')
-							button.btn.btn-sm.btn-outline-secondary(onclick=`showGitSyncLogs('${repo._id}')` title="Sync log")
-								!= icon('history')
-							button.btn.btn-sm.btn-outline-secondary(onclick=`editGitRepo('${repo._id}')` title="Settings")
-								!= icon('gear')
-							button.btn.btn-sm.btn-outline-secondary(onclick=`deleteGitRepo('${repo._id}')` title="Remove")
-								!= icon('delete')
-	else
-		p.text-muted.small No git repos configured. Add one to sync markdown files.
-else
-	.my-4
-		.card.border-warning-subtle
-			.card-body
-				h5.mb-2
-					!= icon('lock', 'me-2')
-					| Git Sync (Pro)
-				p.text-muted.mb-2 Sync commit messages, markdown files, and more from your repository into your project.
-				if is_hosted
-					a.btn.btn-sm.btn-outline-warning(href="/settings/subscription") Upgrade to Pro
-
 //- Delete hint (always at bottom, outside gitSyncEnabled block)
 if !project.is_default && !canDelete
-	p.text-muted.fs-7.mt-auto.pt-4 Projects can only be deleted when all notes, memories, URLs, emails, and git repos have been removed.
+	p.text-muted.fs-7.mt-auto.pt-4 Projects can only be deleted when all notes, memories, URLs, emails, git repos, and outbound email addresses have been removed.

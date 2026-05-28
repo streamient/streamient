@@ -101,6 +101,12 @@ At least one API key is required for AI chat to function.
 ]
 ```
 
+### Email Forwarding
+
+| Variable | Description | Required | Default |
+| --- | --- | --- | --- |
+| `EMAIL_FORWARD_DOMAIN` | Domain accepted by `POST /import/email` for project email forwarding, for example `email.kumbukum.com` | Yes, for forwarding | — |
+
 ### Admin
 
 | Variable | Description | Required | Default |
@@ -128,13 +134,6 @@ These are only needed if you enable subscription billing (Cloud deployments).
 | `OPENPANEL_CLIENT_ID` | OpenPanel client ID | No | — |
 | `OPENPANEL_CLIENT_SECRET` | OpenPanel client secret | No | — |
 | `OPENPANEL_API_URL` | OpenPanel API URL | No | — |
-
-### Observability (Sentry)
-
-| Variable | Description | Required | Default |
-| --- | --- | --- | --- |
-| `SENTRY_DSN` | Sentry DSN for server errors and client tunnel config | No | — |
-| `SENTRY_TUNNEL_PROJECT_IDS` | Comma-separated Sentry project IDs allowed through `/sentun` | No | Derived from `SENTRY_DSN` |
 
 ### Observability (OpenObserve)
 

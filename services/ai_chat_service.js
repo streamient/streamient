@@ -36,7 +36,7 @@ For action intents, extract params from the user message:
 /**
  * Classify user intent using the lightweight NL search model.
  */
-async function classifyIntent(query) {
+async function classifyIntent(hostId, query) {
 	try {
 		const raw = await nlSearchCompletion({
 			messages: [
@@ -44,6 +44,7 @@ async function classifyIntent(query) {
 				{ role: 'user', content: query },
 			],
 			maxTokens: 256,
+			hostId,
 		});
 
 		// Parse JSON from response
@@ -62,6 +63,16 @@ async function classifyIntent(query) {
 
 	// Fallback: treat as search
 	return { intent: 'search', query, action_type: null, params: {} };
+}
+
+export function isEmailOnlyIntent(intent = {}) {
+	return Array.isArray(intent.types)
+		&& intent.types.length === 1
+		&& intent.types[0] === 'emails';
+}
+
+export function getLlmScopeForIntent(intent = {}) {
+	return isEmailOnlyIntent(intent) ? 'email' : 'global';
 }
 
 const EXPLICIT_ACTION_PATTERNS = [
@@ -127,25 +138,26 @@ export function normalizeIntentForConversationFollowup(intent, query, conversati
  */
 export async function processChat({ hostId, userId, query, conversationId, projectId, includeEmails = true, ctx = {} }) {
 	// Classify intent
-	const classifiedIntent = await classifyIntent(query);
+	const classifiedIntent = await classifyIntent(hostId, query);
 	const intent = normalizeIntentForConversationFollowup(classifiedIntent, query, conversationId);
+	const llmScope = getLlmScopeForIntent(intent);
 
 	switch (intent.intent) {
 		case 'action':
 			return handleAction({ hostId, userId, query, conversationId, projectId, intent, includeEmails, ctx });
 
 		case 'stats':
-			return handleStats({ hostId, userId, query, conversationId, projectId, intent, includeEmails });
+			return handleStats({ hostId, userId, query, conversationId, projectId, intent, includeEmails, llmScope });
 
 		case 'analysis':
-			return handleAnalysis({ hostId, userId, query, conversationId, projectId, intent, includeEmails });
+			return handleAnalysis({ hostId, userId, query, conversationId, projectId, intent, includeEmails, llmScope });
 
 		case 'conversation':
-			return handleConversation({ hostId, userId, query, conversationId, projectId, includeEmails });
+			return handleConversation({ hostId, userId, query, conversationId, projectId, includeEmails, llmScope });
 
 		case 'search':
 		default:
-			return handleSearch({ hostId, userId, query, conversationId, projectId, intent, includeEmails });
+			return handleSearch({ hostId, userId, query, conversationId, projectId, intent, includeEmails, llmScope });
 	}
 }
 
@@ -156,8 +168,9 @@ export async function processChat({ hostId, userId, query, conversationId, proje
  * If answer is set, the response is already complete (no streaming needed).
  */
 export async function processChatStream({ hostId, userId, query, conversationId, projectId, includeEmails = true, ctx = {} }) {
-	const classifiedIntent = await classifyIntent(query);
+	const classifiedIntent = await classifyIntent(hostId, query);
 	const intent = normalizeIntentForConversationFollowup(classifiedIntent, query, conversationId);
+	const llmScope = getLlmScopeForIntent(intent);
 
 	switch (intent.intent) {
 		case 'action': {
@@ -166,23 +179,23 @@ export async function processChatStream({ hostId, userId, query, conversationId,
 		}
 
 		case 'stats': {
-			const result = await handleStatsStream({ hostId, query, conversationId, includeEmails });
+			const result = await handleStatsStream({ hostId, query, conversationId, includeEmails, llmScope });
 			return { stream: result.stream, answer: null, metadata: { results: [], action: null, conversationId: result.conversationId, displayIn: 'chat' } };
 		}
 
 		case 'analysis': {
-			const result = await handleAnalysisStream({ hostId, userId, query, conversationId, projectId, intent, includeEmails });
+			const result = await handleAnalysisStream({ hostId, userId, query, conversationId, projectId, intent, includeEmails, llmScope });
 			return { stream: result.stream, answer: null, metadata: { results: result.results, action: null, conversationId: result.conversationId, displayIn: 'panel' } };
 		}
 
 		case 'conversation': {
-			const result = await handleConversation({ hostId, userId, query, conversationId, projectId, includeEmails });
+			const result = await handleConversation({ hostId, userId, query, conversationId, projectId, includeEmails, llmScope });
 			return { stream: null, answer: result.answer, metadata: { results: result.results, action: result.action, conversationId: result.conversationId, displayIn: result.displayIn } };
 		}
 
 		case 'search':
 		default: {
-			const result = await handleSearch({ hostId, userId, query, conversationId, projectId, intent, includeEmails });
+			const result = await handleSearch({ hostId, userId, query, conversationId, projectId, intent, includeEmails, llmScope });
 			return { stream: null, answer: result.answer, metadata: { results: result.results, action: result.action, conversationId: result.conversationId, displayIn: result.displayIn } };
 		}
 	}
@@ -192,7 +205,7 @@ export async function processChatStream({ hostId, userId, query, conversationId,
 // Search Handler
 // ────────────────────────────────────────────────────────────────────
 
-async function handleSearch({ hostId, userId, query, conversationId, projectId, intent, includeEmails = true }) {
+async function handleSearch({ hostId, userId, query, conversationId, projectId, intent, includeEmails = true, llmScope = 'global' }) {
 	const searchQuery = intent.query || query;
 	const limit = intent.limit || null;
 	const types = intent.types || null;
@@ -202,6 +215,7 @@ async function handleSearch({ hostId, userId, query, conversationId, projectId, 
 		projectId,
 		perPage: limit || 10,
 		includeEmails,
+		llmScope,
 	});
 
 	let flat = flattenResults(results, types);
@@ -220,7 +234,7 @@ async function handleSearch({ hostId, userId, query, conversationId, projectId, 
 // Stats Handler
 // ────────────────────────────────────────────────────────────────────
 
-async function handleStats({ hostId, query, conversationId, includeEmails = true }) {
+async function handleStats({ hostId, query, conversationId, includeEmails = true, llmScope = 'global' }) {
 	const counts = await getCollectionCounts(hostId);
 	if (!includeEmails) counts.emails = 0;
 	const total = Object.values(counts).reduce((sum, n) => sum + n, 0);
@@ -236,6 +250,8 @@ async function handleStats({ hostId, query, conversationId, includeEmails = true
 			{ role: 'user', content: query },
 		],
 		maxTokens: 256,
+		hostId,
+		scope: llmScope,
 	});
 
 	return {
@@ -251,7 +267,7 @@ async function handleStats({ hostId, query, conversationId, includeEmails = true
 // Analysis Handler
 // ────────────────────────────────────────────────────────────────────
 
-async function handleAnalysis({ hostId, userId, query, conversationId, projectId, intent, includeEmails = true }) {
+async function handleAnalysis({ hostId, userId, query, conversationId, projectId, intent, includeEmails = true, llmScope = 'global' }) {
 	const searchQuery = intent.query || query;
 
 	// First, search for relevant items
@@ -260,6 +276,7 @@ async function handleAnalysis({ hostId, userId, query, conversationId, projectId
 		projectId,
 		perPage: 10,
 		includeEmails,
+		llmScope,
 	});
 
 	const flatResults = flattenResults(results);
@@ -279,6 +296,8 @@ async function handleAnalysis({ hostId, userId, query, conversationId, projectId
 			{ role: 'user', content: query },
 		],
 		maxTokens: 2048,
+		hostId,
+		scope: llmScope,
 	});
 
 	return {
@@ -294,7 +313,7 @@ async function handleAnalysis({ hostId, userId, query, conversationId, projectId
 // Streaming Stats Handler
 // ────────────────────────────────────────────────────────────────────
 
-async function handleStatsStream({ hostId, query, conversationId, includeEmails = true }) {
+async function handleStatsStream({ hostId, query, conversationId, includeEmails = true, llmScope = 'global' }) {
 	const counts = await getCollectionCounts(hostId);
 	if (!includeEmails) counts.emails = 0;
 	const total = Object.values(counts).reduce((sum, n) => sum + n, 0);
@@ -310,6 +329,8 @@ async function handleStatsStream({ hostId, query, conversationId, includeEmails 
 		],
 		stream: true,
 		maxTokens: 256,
+		hostId,
+		scope: llmScope,
 	});
 
 	return {
@@ -322,7 +343,7 @@ async function handleStatsStream({ hostId, query, conversationId, includeEmails 
 // Streaming Analysis Handler
 // ────────────────────────────────────────────────────────────────────
 
-async function handleAnalysisStream({ hostId, userId, query, conversationId, projectId, intent, includeEmails = true }) {
+async function handleAnalysisStream({ hostId, userId, query, conversationId, projectId, intent, includeEmails = true, llmScope = 'global' }) {
 	const searchQuery = intent.query || query;
 
 	const { results, conversation } = await conversationSearch(hostId, userId, searchQuery, {
@@ -330,6 +351,7 @@ async function handleAnalysisStream({ hostId, userId, query, conversationId, pro
 		projectId,
 		perPage: 10,
 		includeEmails,
+		llmScope,
 	});
 
 	const flatResults = flattenResults(results);
@@ -349,6 +371,8 @@ async function handleAnalysisStream({ hostId, userId, query, conversationId, pro
 		],
 		stream: true,
 		maxTokens: 2048,
+		hostId,
+		scope: llmScope,
 	});
 
 	return {
@@ -517,13 +541,14 @@ async function handleAction({ hostId, userId, query, conversationId, projectId, 
 // Conversation Handler (follow-ups)
 // ────────────────────────────────────────────────────────────────────
 
-async function handleConversation({ hostId, userId, query, conversationId, projectId, includeEmails = true }) {
+async function handleConversation({ hostId, userId, query, conversationId, projectId, includeEmails = true, llmScope = 'global' }) {
 	// Use the conversation model for context-aware follow-up
 	const { results, conversation, action } = await conversationSearch(hostId, userId, query, {
 		conversationId,
 		projectId,
 		perPage: 5,
 		includeEmails,
+		llmScope,
 	});
 
 	const flatResults = flattenResults(results);

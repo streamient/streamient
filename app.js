@@ -20,7 +20,6 @@ import { verifyScreenshotSignature, resolveScreenshotPath } from './modules/scre
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './swagger.js';
 import * as OtelRuntime from './modules/otel_runtime.js';
-import { loadSentry, setupExpressErrorHandler as setupSentryExpressErrorHandler } from './modules/sentry_runtime.js';
 import authRoutes from './routes/auth.js';
 import oauthRoutes from './routes/oauth.js';
 import apiRoutes from './routes/api.js';
@@ -28,12 +27,12 @@ import webRoutes from './routes/web.js';
 import adminRoutes from './routes/admin.js';
 import billingRoutes from './routes/billing.js';
 import healthRoutes from './routes/health.js';
-import sentryTunnelRoutes from './routes/sentry_tunnel.js';
+import importRoutes from './routes/import.js';
+import { backfillEmailTriageState } from './services/email_ingest_service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const SERVER_MODE = process.env.SERVER_MODE || 'app';
-await loadSentry();
 
 const app = express();
 
@@ -68,7 +67,6 @@ app.set('views', path.join(__dirname, 'views'));
 // Make OpenPanel config available to all templates
 app.locals.openpanel = config.openpanel;
 app.locals.openobserve = config.openobserve;
-app.locals.sentry = config.sentry;
 app.locals.hyperdx = config.hyperdx;
 installIconLocals(app);
 
@@ -79,18 +77,19 @@ try {
     app.locals.v = Date.now().toString(36);
 }
 
-// Stripe webhook and Sentry tunnel need raw body — skip express.json() for these paths
+// Public import routes parse their own raw payloads before the global JSON middleware.
+app.use('/import', importRoutes);
+
+// Stripe webhook needs raw body — skip express.json() for that path
 app.use((req, res, next) => {
-    if (req.originalUrl === '/billing/webhook' || req.originalUrl === '/sentun') return next();
+    if (req.originalUrl === '/billing/webhook') return next();
     express.json({ limit: '25mb' })(req, res, next);
 });
 app.use((req, res, next) => {
-    if (req.originalUrl === '/billing/webhook' || req.originalUrl === '/sentun') return next();
+    if (req.originalUrl === '/billing/webhook') return next();
     express.urlencoded({ extended: true, limit: '25mb' })(req, res, next);
 });
 
-// Sentry envelope tunnel — mounted before session (no auth needed)
-app.use('/sentun', sentryTunnelRoutes);
 app.use(cookieParser());
 
 // --- Static file cache control ---
@@ -197,14 +196,14 @@ app.get('/', (req, res) => {
 
 app.use('/', webRoutes);
 
-// Sentry error handler — after all controllers, before other error middleware
+// OpenTelemetry error handler — after all controllers, before other error middleware
 OtelRuntime.setupExpressErrorHandler(app);
-setupSentryExpressErrorHandler(app);
 
 } // end SERVER_MODE === 'app'
 
 async function start() {
 	await connectDB();
+	await backfillEmailTriageState();
 	await initRedis();
 	await initTypesense();
 
@@ -212,6 +211,13 @@ async function start() {
 		const { startScheduler } = await import('./modules/scheduler.js');
 		startScheduler();
 		console.log(`Kumbukum scheduler running [${config.env}]`);
+		return;
+	}
+
+	if (SERVER_MODE === 'email-worker') {
+		const { startOutgoingEmailWorker } = await import('./services/outgoing_email_service.js');
+		await startOutgoingEmailWorker();
+		console.log(`Kumbukum email worker running [${config.env}]`);
 		return;
 	}
 

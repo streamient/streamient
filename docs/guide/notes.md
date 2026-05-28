@@ -34,6 +34,10 @@ These manual links show up in the [Knowledge Graph](/guide/graph) alongside tag-
 
 Select multiple notes using the checkboxes to move them between projects or send them to trash in bulk.
 
+### Browser Extension
+
+Use the [Browser Extension](/guide/browser-extension/) to write a note from any webpage — or to save the current page as both a URL and a note in one click.
+
 ## How It Works
 
 Notes store both HTML content (for the editor) and extracted plain text (for search indexing). When you create or update a note, it's indexed in Typesense with a vector embedding, making it searchable by meaning across the AI Chat, MCP tools, and the search bar.

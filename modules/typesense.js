@@ -3,6 +3,7 @@ import Typesense from 'typesense';
 import config from '../config.js';
 import { emitToTenant } from './socket.js';
 import { getRedisClient } from './redis.js';
+import { normalizeLlmScope, resolveLlmApiKey } from '../services/byo_ai_service.js';
 import { sanitizeDeep } from './text_sanitize.js';
 
 let client;
@@ -34,10 +35,14 @@ function resolveExcludeFields(excludeFields, type) {
 	return excludeFields || _ts_exlude_default;
 }
 
+export function getConversationModelId(userId, llmScope = 'global') {
+	return normalizeLlmScope(llmScope) === 'email' ? `convo-${userId}-email` : `convo-${userId}`;
+}
+
 const _token_separators = ['+', '-', '@', '.', '_', ' ', '=', '\\', ';', ',', ':', "'", '|', '&', '(', ')', '[', ']', '{', '}', '<', '>', '/', '?', '!', '#', '$', '%', '^', '*', '~', '`', '"', '\n', '\t', '\r', '\f', '\v'];
 
-// Track conversation models whose api_key has been synced this process lifetime
-const syncedConvoModels = new Set();
+// Track conversation model signatures synced in this process lifetime.
+const syncedConvoModels = new Map();
 const TRANSIENT_TYPESENSE_HTTP_CODES = new Set([408, 425, 429, 500, 502, 503, 504]);
 const TYPESENSE_CIRCUIT_OPEN_MS = 30_000;
 
@@ -267,6 +272,19 @@ function exactFilterValue(value) {
 	return '`' + String(value).replace(/`/g, '\\`') + '`';
 }
 
+function normalizeEmailAddressValue(value) {
+	const text = String(value || '').trim();
+	if (!text) return '';
+	const bracketMatch = text.match(/<([^<>]+)>/);
+	const address = bracketMatch ? bracketMatch[1] : text;
+	const emailMatch = address.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+	return String(emailMatch ? emailMatch[0] : address).trim().toLowerCase();
+}
+
+function normalizeEmailAddressList(value) {
+	return [...new Set((Array.isArray(value) ? value : [value]).map(normalizeEmailAddressValue).filter(Boolean))];
+}
+
 /**
  * Collection schemas by type. Host ID is appended at runtime.
  */
@@ -289,19 +307,36 @@ export function toTypesenseDoc(type, doc) {
 			return { ...base, title: doc.title || '', content: doc.content || '', tags: doc.tags || [], source: doc.source || '' };
 		case 'urls':
 			return { ...base, url: doc.url || '', title: doc.title || '', description: doc.description || '', text_content: doc.text_content || '' };
-		case 'emails':
-			return {
-				...base,
-				subject: doc.subject || '',
-				text_content: doc.text_content || '',
-				attachment_text_content: doc.attachment_text_content || '',
-				from: doc.from || [],
-				to: doc.to || [],
-				cc: doc.cc || [],
-				bcc: doc.bcc || [],
-				message_id: doc.message_id || '',
-				references: doc.references || [],
-			};
+			case 'emails':
+				const fromEmails = normalizeEmailAddressList(doc.from);
+				const toEmails = normalizeEmailAddressList(doc.to);
+				const ccEmails = normalizeEmailAddressList(doc.cc);
+				const bccEmails = normalizeEmailAddressList(doc.bcc);
+				return {
+					...base,
+					subject: doc.subject || '',
+					text_content: doc.text_content || '',
+					attachment_text_content: doc.attachment_text_content || '',
+					from: doc.from || [],
+					to: doc.to || [],
+					cc: doc.cc || [],
+					bcc: doc.bcc || [],
+					from_emails: fromEmails,
+					to_emails: toEmails,
+					cc_emails: ccEmails,
+					bcc_emails: bccEmails,
+					participant_emails: [...new Set([...fromEmails, ...toEmails, ...ccEmails, ...bccEmails])],
+					mailbox: doc.mailbox || 'inbox',
+					labels: doc.labels || [],
+					triaged: Boolean(doc.triaged),
+					triage_status: doc.triage_status || '',
+					triage_summary: doc.triage_summary || '',
+					triage_primary_action: doc.triage_primary_action || '',
+					triage_action_points: (doc.triage_action_points || []).map((item) => item.text || '').filter(Boolean),
+					message_id: doc.message_id || '',
+					references: doc.references || [],
+					in_trash: Boolean(doc.in_trash),
+				};
 		default:
 			return base;
 	}
@@ -401,15 +436,28 @@ const schemas = {
 			{ name: 'subject', type: 'string', optional: true },
 			{ name: 'text_content', type: 'string', optional: true },
 			{ name: 'attachment_text_content', type: 'string', optional: true },
-			{ name: 'from', type: 'string[]', optional: true },
-			{ name: 'to', type: 'string[]', optional: true },
-			{ name: 'cc', type: 'string[]', optional: true },
-			{ name: 'bcc', type: 'string[]', optional: true },
-			{ name: 'message_id', type: 'string', optional: true },
-			{ name: 'references', type: 'string[]', optional: true },
-			{ name: 'project_id', type: 'string', facet: true },
-			{ name: 'created_at', type: 'int64' },
-			{ name: 'updated_at', type: 'int64' },
+				{ name: 'from', type: 'string[]', optional: true },
+				{ name: 'to', type: 'string[]', optional: true },
+				{ name: 'cc', type: 'string[]', optional: true },
+				{ name: 'bcc', type: 'string[]', optional: true },
+				{ name: 'from_emails', type: 'string[]', facet: true, optional: true },
+				{ name: 'to_emails', type: 'string[]', facet: true, optional: true },
+				{ name: 'cc_emails', type: 'string[]', facet: true, optional: true },
+				{ name: 'bcc_emails', type: 'string[]', facet: true, optional: true },
+				{ name: 'participant_emails', type: 'string[]', facet: true, optional: true },
+				{ name: 'mailbox', type: 'string', facet: true, optional: true },
+				{ name: 'labels', type: 'string[]', facet: true, optional: true },
+				{ name: 'triaged', type: 'bool', facet: true, optional: true },
+				{ name: 'triage_status', type: 'string', facet: true, optional: true },
+				{ name: 'triage_summary', type: 'string', optional: true },
+				{ name: 'triage_primary_action', type: 'string', facet: true, optional: true },
+				{ name: 'triage_action_points', type: 'string[]', optional: true },
+				{ name: 'message_id', type: 'string', optional: true },
+				{ name: 'references', type: 'string[]', optional: true },
+				{ name: 'in_trash', type: 'bool', facet: true, optional: true },
+				{ name: 'project_id', type: 'string', facet: true },
+				{ name: 'created_at', type: 'int64' },
+				{ name: 'updated_at', type: 'int64' },
 			...chunkMetadataFields(),
 			{
 				name: 'embedding',
@@ -465,9 +513,9 @@ export async function ensureCollections(host_id) {
 		try {
 			const existing = await ts.collections(schema.name).retrieve();
 			const existingFields = new Set((existing.fields || []).map((field) => field.name));
-			const missingChunkFields = chunkMetadataFields().filter((field) => !existingFields.has(field.name));
-			if (missingChunkFields.length) {
-				await ts.collections(schema.name).update({ fields: missingChunkFields });
+			const missingFields = schema.fields.filter((field) => !existingFields.has(field.name));
+			if (missingFields.length) {
+				await ts.collections(schema.name).update({ fields: missingFields });
 				console.log(`Updated Typesense collection fields: ${schema.name}`);
 			}
 		} catch (err) {
@@ -1114,15 +1162,29 @@ Always include project_id in action params. If the user doesn't specify a projec
 
 /**
  * Ensure the conversation store collection and conversation model exist for a user.
- * Model ID: convo-{userId}, one per user.
+ * Model ID: convo-{userId}, one per user and scope.
  * Collection: conversation_store_{hostId}, shared per tenant.
  */
-export async function ensureConversationModel(hostId, userId) {
+export async function ensureConversationModel(hostId, userId, options = {}) {
 	const ts = getTypesenseClient();
 	const collectionName = `conversation_store_${hostId}`;
-	const modelId = `convo-${userId}`;
+	const llmScope = normalizeLlmScope(options.llmScope);
+	const modelId = getConversationModelId(userId, llmScope);
 
-	// 1. Ensure conversation store collection exists
+	// 1. Resolve model configuration
+	let tsModelName = config.llm.tsConversationModel || 'gemini-2.0-flash';
+	const tsProvider = config.llm.tsConversationProvider || 'google';
+	if (!tsModelName.includes('/')) {
+		tsModelName = `${tsProvider}/${tsModelName}`;
+	}
+	const apiKey = await resolveLlmApiKey({ hostId, provider: tsProvider, scope: llmScope });
+	const desiredSignature = buildConversationModelSignature(tsModelName, apiKey);
+
+	if (syncedConvoModels.get(modelId) === desiredSignature) {
+		return;
+	}
+
+	// 2. Ensure conversation store collection exists
 	try {
 		await ts.collections(collectionName).retrieve({ 'exclude_fields': 'fields' });
 	} catch (err) {
@@ -1148,15 +1210,6 @@ export async function ensureConversationModel(hostId, userId) {
 		}
 	}
 
-	// 2. Resolve model configuration
-	let tsModelName = config.llm.tsConversationModel || 'gemini-2.0-flash';
-	const tsProvider = config.llm.tsConversationProvider || 'google';
-	if (!tsModelName.includes('/')) {
-		tsModelName = `${tsProvider}/${tsModelName}`;
-	}
-	const apiKey = tsProvider === 'google' ? config.llm.googleApiKey : config.llm.openaiApiKey;
-	const desiredSignature = buildConversationModelSignature(tsModelName, apiKey);
-
 	// 3. Check if conversation model exists and sync if needed
 	let existing = null;
 	try {
@@ -1171,11 +1224,11 @@ export async function ensureConversationModel(hostId, userId) {
 			updateFields.history_collection = collectionName;
 		}
 
-		// Model exists — sync provider config at most once per process unless the history collection drifted.
-		if (!syncedConvoModels.has(modelId)) {
+		// Model exists — sync when the desired model/key signature has changed.
+		if (syncedConvoModels.get(modelId) !== desiredSignature) {
 			const storedSignature = await getStoredConversationModelSignature(modelId);
 			if (storedSignature === desiredSignature && !updateFields.history_collection) {
-				syncedConvoModels.add(modelId);
+				syncedConvoModels.set(modelId, desiredSignature);
 				return;
 			}
 
@@ -1198,7 +1251,7 @@ export async function ensureConversationModel(hostId, userId) {
 			}
 		}
 
-		syncedConvoModels.add(modelId);
+		syncedConvoModels.set(modelId, desiredSignature);
 		return;
 	}
 
@@ -1226,7 +1279,7 @@ export async function ensureConversationModel(hostId, userId) {
 			if (createResp.status === 409) {
 				console.log(`Conversation model ${modelId} already exists`);
 				await setStoredConversationModelSignature(modelId, desiredSignature);
-				syncedConvoModels.add(modelId);
+				syncedConvoModels.set(modelId, desiredSignature);
 				return;
 			}
 			throw new Error(`Create conversation model failed (${createResp.status}): ${body}`);
@@ -1239,7 +1292,7 @@ export async function ensureConversationModel(hostId, userId) {
 		}
 
 		await setStoredConversationModelSignature(modelId, desiredSignature);
-		syncedConvoModels.add(modelId);
+		syncedConvoModels.set(modelId, desiredSignature);
 		console.log(`Created conversation model: ${modelId}`);
 	} catch (err) {
 		console.error(`Error creating conversation model ${modelId}:`, err.message);
@@ -1277,12 +1330,16 @@ async function _updateConversationModel(modelId, fields) {
  * @param {string} options.conversationId - Continue existing conversation (optional)
  * @param {string} options.projectId - Filter by project (optional)
  * @param {number} options.perPage - Results per collection (default 10)
+ * @param {string} options.llmScope - LLM key scope: global or email
  * @returns {{ results: object, conversation: { answer: string, conversationId: string, itemIds: string[] }, action: object|null }}
  */
 export async function conversationSearch(hostId, userId, query, options = {}) {
 	const ts = getTypesenseClient();
-	const convoModelId = `convo-${userId}`;
+	const llmScope = normalizeLlmScope(options.llmScope);
+	const convoModelId = getConversationModelId(userId, llmScope);
 	const { conversationId, projectId, perPage = 10, includeEmails = true } = options;
+
+	await ensureConversationModel(hostId, userId, { llmScope });
 
 	// Build per-collection search requests — embedding-only makes every param
 	// identical across collections, so only the collection name varies here.
@@ -1345,7 +1402,7 @@ export async function conversationSearch(hostId, userId, query, options = {}) {
 
 		if (needsConversationRepair) {
 			console.warn(`Conversation model ${convoModelId} needs repair, recreating metadata...`);
-			await ensureConversationModel(hostId, userId);
+			await ensureConversationModel(hostId, userId, { llmScope });
 			try {
 				data = await performConversationMultiSearch();
 			} catch (retryErr) {

@@ -14,6 +14,13 @@ include ../../../includes/avatar
 	a.list-group-item.list-group-item-action(href="/settings/tokens" class=(title === 'Access Tokens' ? 'active' : ''))
 		!= icon('key', 'me-2')
 		| Apps Access
+	if can_manage_restricted_settings && byo_ai_enabled
+		a.list-group-item.list-group-item-action(href="/settings/byo-ai" class=(title === 'AI' ? 'active' : ''))
+			!= icon('sparkle', 'me-2')
+			span AI
+		a.list-group-item.list-group-item-action(href="/settings/email" class=(title === 'Email settings' ? 'active' : ''))
+			!= icon('email', 'me-2')
+			span Email settings
 	if can_manage_restricted_settings
 		a.list-group-item.list-group-item-action(href="/settings/typesense" class=(title === 'Typesense' ? 'active' : ''))
 			!= icon('search', 'me-2')
@@ -25,7 +32,7 @@ include ../../../includes/avatar
 		a.list-group-item.list-group-item-action(href="/settings/export" class=(title === 'Export' ? 'active' : ''))
 			!= icon('upload', 'me-2')
 			| Export
-		a.list-group-item.list-group-item-action(href="#modal" data-bs-toggle="modal" data-bs-target="#logsModal")
+		a.list-group-item.list-group-item-action(href="/settings/activity-logs" class=(title === 'Activity Logs' ? 'active' : ''))
 			!= icon('notebook', 'me-2')
 			| Activity Logs
 	if is_hosted

@@ -391,7 +391,6 @@ describe('oauth helpers', () => {
 	it('renders the OAuth authorize template with an active tenant name', () => {
 		const html = pug.renderFile(oauthAuthorizeViewPath, {
 			v: 'test',
-			sentry: {},
 			openpanel: {},
 			user: null,
 			host_id: '',

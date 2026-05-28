@@ -1,0 +1,44 @@
+h4.mb-4 Usage
+
+.card.mb-4
+	.card-body
+		h5.card-title Storage Usage
+		if usageLoadError
+			p.text-danger Failed to load usage data
+		else
+			table.table
+				tbody
+					tr
+						td
+							span.kk-icon.material-symbols-outlined.me-2(aria-hidden="true") description
+							span Notes
+						td= usageTotals.notes
+					tr
+						td
+							span.kk-icon.material-symbols-outlined.me-2(aria-hidden="true") lightbulb
+							span Memories
+						td= usageTotals.memory
+					tr
+						td
+							span.kk-icon.material-symbols-outlined.me-2(aria-hidden="true") link
+							span URLs
+						td= usageTotals.urls
+					if email_feature_enabled
+						tr
+							td
+								span.kk-icon.material-symbols-outlined.me-2(aria-hidden="true") email
+								span Emails
+							td= usageTotals.emails
+					else
+						tr
+							td.text-muted
+								!= icon('lock', 'me-2')
+								span Emails (Pro)
+							td
+								if is_hosted
+									a.btn.btn-sm.btn-outline-warning(href="/settings/subscription") Upgrade
+					tr
+						td
+							span.kk-icon.material-symbols-outlined.me-2(aria-hidden="true") folder
+							span Projects
+						td= usageTotals.projects
