@@ -49,6 +49,6 @@ The MCP integration is where Kumbukum really shines. Instead of losing context b
 - [URLs](/guide/urls) — Bookmarks with auto-extracted content and scheduled crawling
 - [Knowledge Graph](/guide/graph) — Visualize how your knowledge connects
 - [AI Chat](/guide/ai-chat) — Search and manage your knowledge with natural language
-- [Browser Extension](/guide/browser-extension) — Save from any webpage
+- [Browser Extension](/guide/browser-extension/) — Save from any webpage
 - [MCP Server](/mcp/) — Connect your AI tools
 - [API Reference](/api/) — Build your own integrations
