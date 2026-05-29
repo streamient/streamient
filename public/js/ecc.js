@@ -1131,6 +1131,9 @@
 				showListView();
 				renderEmailAi(null);
 				writeUrlState('');
+				// Drafts list items are only refreshed on reload, so re-fetch to drop any
+				// draft that was queued for sending (now hidden) while the detail was open.
+				if (activeMailbox === 'drafts') loadEmails().catch(() => {});
 			}
 
 		function showDetailView() {
@@ -1657,6 +1660,9 @@
 		function renderOutgoingQueuedNotice(outgoing, abortUntil, email) {
 			if (!detailDraftEl) return;
 			destroyDraftEditor();
+			// destroyDraftEditor hides the editor host; when the draft was opened inline
+			// (drafts mailbox), that host IS detailDraftEl, so re-show it for the banner.
+			detailDraftEl.classList.remove('d-none');
 			replaceChildren(detailDraftEl);
 			var card = document.createElement('div');
 			card.className = 'alert alert-info d-flex justify-content-between align-items-center gap-3 mb-3 ecc-outgoing-queued';
@@ -2470,7 +2476,9 @@
 
 		function handleDraftSocketEvent(event) {
 			if (shouldIgnoreLocalDraftDeleteEvent(event)) return;
-			if (activeMailbox === 'drafts') loadEmails().catch(() => {});
+			// Don't tear down an open draft detail (e.g. the abort-send banner) by switching
+			// back to the list view; the list is refreshed when the user returns to it.
+			if (activeMailbox === 'drafts' && !detailActive) loadEmails().catch(() => {});
 			loadLabels().catch(() => {});
 		}
 

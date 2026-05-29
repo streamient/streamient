@@ -767,7 +767,7 @@ export async function listEmailLabels(host_id, filters = {}) {
 			Email.countDocuments(buildEmailListQuery(host_id, projectId, { mailbox: 'archived' })),
 			countSentEmailThreads(host_id, projectId),
 			Email.countDocuments(buildEmailListQuery(host_id, projectId, { mailbox: 'spam' })),
-			EmailDraft.countDocuments({ host_id, status: { $ne: 'discarded' }, ...(projectId ? { project: projectId } : {}) }),
+			EmailDraft.countDocuments({ host_id, status: { $nin: ['discarded', 'ready'] }, ...(projectId ? { project: projectId } : {}) }),
 			Email.countDocuments({ host_id, in_trash: true, ...(projectId ? { project: projectId } : {}) }),
 		]),
 		Promise.all(visibleLabels.map(async (label) => ({
@@ -2079,7 +2079,7 @@ export async function listEmailDrafts(host_id, { project, status, page = 1, limi
 	const query = { host_id };
 	if (project) query.project = project;
 	if (status) query.status = status;
-	else query.status = { $ne: 'discarded' };
+	else query.status = { $nin: ['discarded', 'ready'] };
 	return EmailDraft.find(query)
 		.sort({ updatedAt: -1 })
 		.skip((page - 1) * limit)
