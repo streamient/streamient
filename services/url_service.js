@@ -28,6 +28,7 @@ export async function saveUrl(userId, host_id, data, ctx = {}) {
 	const normalizedUrl = normalizeUrl(rawUrl);
 	const duplicateQuery = {
 		host_id,
+		project: data.project,
 		in_trash: { $ne: true },
 		$or: [
 			{ normalized_url: normalizedUrl },

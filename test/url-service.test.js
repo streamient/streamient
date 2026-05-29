@@ -5,7 +5,7 @@ import { Url } from '../model/url.js';
 import { saveUrl } from '../services/url_service.js';
 
 describe('URL service duplicate handling', () => {
-	it('returns an existing active URL for the tenant instead of creating a duplicate', async () => {
+	it('returns an existing active URL in the same project instead of creating a duplicate', async () => {
 		const originalFindOne = Url.findOne;
 		const originalCreate = Url.create;
 
@@ -38,6 +38,7 @@ describe('URL service duplicate handling', () => {
 			assert.equal(result.$locals.wasDuplicate, true);
 			assert.equal(createCalled, false);
 			assert.equal(capturedQuery.host_id, 'host-1');
+			assert.equal(capturedQuery.project, 'project-1');
 			assert.deepEqual(capturedQuery.in_trash, { $ne: true });
 			assert.ok(capturedQuery.$or.some((condition) => condition.normalized_url === 'https://example.com/path'));
 		} finally {
