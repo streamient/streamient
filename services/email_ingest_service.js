@@ -670,6 +670,18 @@ export async function listEmails(host_id, projectId, { page = 1, limit = 50, mai
 		.limit(safeLimit);
 }
 
+export async function listEmailIds(host_id, projectId, { mailbox, label, triaged } = {}) {
+	const query = buildEmailListQuery(host_id, projectId, { mailbox, label, triaged });
+	if (mailbox === 'sent' && !label) {
+		const emails = await Email.find(query)
+			.select('_id message_id references in_reply_to updatedAt createdAt')
+			.lean();
+		return collapseEmailsByThread(emails).map((email) => email._id.toString());
+	}
+	const docs = await Email.find(query).select('_id').sort({ updatedAt: -1 }).lean();
+	return docs.map((doc) => doc._id.toString());
+}
+
 function applyTriageStatusFilters(query, filters = {}) {
 	const ids = parseCsvFilter(filters.ids);
 	if (ids.length === 1) query._id = ids[0];
@@ -2123,6 +2135,15 @@ export async function listEmailDrafts(host_id, { project, status, page = 1, limi
 		.skip((page - 1) * limit)
 		.limit(limit)
 		.lean();
+}
+
+export async function listEmailDraftIds(host_id, { project, status } = {}) {
+	const query = { host_id };
+	if (project) query.project = project;
+	if (status) query.status = status;
+	else query.status = { $nin: ['discarded', 'ready'] };
+	const docs = await EmailDraft.find(query).select('_id').sort({ updatedAt: -1 }).lean();
+	return docs.map((doc) => doc._id.toString());
 }
 
 export async function getEmailDraft(host_id, draftId) {

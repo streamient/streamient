@@ -10,6 +10,8 @@
 	var selectAllText;
 	var actionBar;
 	var actionCount;
+	var selectAllAcrossEl;
+	var selectAllAcrossLink;
 	var moveMenu;
 	var trashBtn;
 	var resetTriageBtn;
@@ -47,6 +49,10 @@
 	var detailActive = false;
 	var pendingEmailId = '';
 	var selectedIds = new Set();
+	var eccLastChecked = null;
+	var pendingShiftRange = null;
+	var selectAllAcrossView = false;
+	var viewTotalCount = 0;
 	var emailAiMessages = [];
 	var emailReplySuggestions = [];
 	var replySuggestionsAutoCloseTimer = null;
@@ -554,6 +560,16 @@
 			return Number.isFinite(value) ? value : 0;
 		}
 
+		function getLabelCount(label) {
+			var button = labelsEl?.querySelector('[data-label="' + label + '"]');
+			var value = parseInt(button?.querySelector('.badge')?.textContent || '0', 10);
+			return Number.isFinite(value) ? value : 0;
+		}
+
+		function getViewTotal() {
+			return activeLabel ? getLabelCount(activeLabel) : getMailboxCount(activeMailbox);
+		}
+
 	function projectQuery() {
 		return selectedProject ? '&project=' + encodeURIComponent(selectedProject) : '';
 	}
@@ -582,12 +598,40 @@
 		return '/email-labels' + (params.length ? '?' + params.join('&') : '');
 	}
 
+	function viewIdsPath() {
+		var params = [];
+		if (selectedProject) params.push('project=' + encodeURIComponent(selectedProject));
+		if (activeMailbox === 'drafts') {
+			return '/email-drafts/ids' + (params.length ? '?' + params.join('&') : '');
+		}
+		if (activeLabel) {
+			params.push('label=' + encodeURIComponent(activeLabel));
+		} else if (activeMailbox) {
+			params.push('mailbox=' + encodeURIComponent(activeMailbox));
+			if (activeMailbox === 'inbox') params.push('triaged=false');
+		}
+		return '/emails/ids' + (params.length ? '?' + params.join('&') : '');
+	}
+
+	async function loadViewIds() {
+		var data = await api('GET', viewIdsPath());
+		return data.ids || [];
+	}
+
 	function getSelectedIds() {
 		return Array.from(selectedIds);
 	}
 
-	function clearSelection() {
+	function resetSelectionState() {
 		selectedIds.clear();
+		selectAllAcrossView = false;
+		viewTotalCount = 0;
+		eccLastChecked = null;
+		pendingShiftRange = null;
+	}
+
+	function clearSelection() {
+		resetSelectionState();
 		listEl?.querySelectorAll('.ecc-email-select').forEach(function (checkbox) {
 			checkbox.checked = false;
 		});
@@ -599,6 +643,17 @@
 
 	function getEmailCheckboxes() {
 		return Array.from(listEl?.querySelectorAll('.ecc-email-select') || []);
+	}
+
+	function applyRangeSelection(fromCb, toCb, selected) {
+		var all = getEmailCheckboxes();
+		var start = all.indexOf(fromCb);
+		var end = all.indexOf(toCb);
+		if (start === -1 || end === -1) return false;
+		var low = Math.min(start, end);
+		var high = Math.max(start, end);
+		for (var i = low; i <= high; i++) setEmailSelected(all[i], selected);
+		return true;
 	}
 
 	function updateSelectAllButton() {
@@ -622,13 +677,35 @@
 		triageBtn.classList.toggle('d-none', detailActive || activeLabel || activeMailbox !== 'inbox');
 	}
 
+	function updateSelectAllAcross() {
+		if (!selectAllAcrossEl || !selectAllAcrossLink) return;
+		var checkboxes = getEmailCheckboxes();
+		var visible = checkboxes.length;
+		var total = selectAllAcrossView ? viewTotalCount : getViewTotal();
+		var allVisibleSelected = visible > 0 && checkboxes.every(function (checkbox) {
+			return selectedIds.has(checkbox.value);
+		});
+		var show = false;
+		if (detailActive || selectedIds.size === 0) {
+			show = false;
+		} else if (selectAllAcrossView) {
+			selectAllAcrossLink.textContent = 'Clear selection';
+			show = true;
+		} else if (allVisibleSelected && total > visible) {
+			selectAllAcrossLink.textContent = 'Select all ' + total;
+			show = true;
+		}
+		selectAllAcrossEl.classList.toggle('d-none', !show);
+	}
+
 	function updateActionBar() {
 		if (!actionBar || !actionCount) return;
-		var count = selectedIds.size;
 		var isDraftMailbox = activeMailbox === 'drafts';
-		actionCount.textContent = count + ' selected';
-		actionBar.classList.toggle('d-none', detailActive || count === 0);
-		actionBar.classList.toggle('d-flex', !detailActive && count > 0);
+		actionCount.textContent = selectAllAcrossView
+			? ('All ' + viewTotalCount + ' selected')
+			: (selectedIds.size + ' selected');
+		actionBar.classList.toggle('d-none', detailActive || selectedIds.size === 0);
+		actionBar.classList.toggle('d-flex', !detailActive && selectedIds.size > 0);
 		moveMenu?.closest('.dropdown')?.classList.toggle('d-none', isDraftMailbox);
 		resetTriageBtn?.classList.toggle('d-none', isDraftMailbox);
 		if (trashBtn) {
@@ -637,6 +714,7 @@
 			if (trashText) trashText.textContent = isDraftMailbox ? 'Delete' : 'Trash';
 			trashBtn.title = isDraftMailbox ? 'Delete selected drafts' : 'Move selected emails to trash';
 		}
+		updateSelectAllAcross();
 		updateSelectAllButton();
 		updateTriageButton();
 	}
@@ -742,6 +820,10 @@
 	}
 
 	function toggleSelectAll() {
+		if (selectAllAcrossView) {
+			clearSelection();
+			return;
+		}
 		var checkboxes = getEmailCheckboxes();
 		if (!checkboxes.length) return;
 		var allSelected = checkboxes.every(function (checkbox) {
@@ -751,6 +833,66 @@
 			setEmailSelected(checkbox, !allSelected);
 		});
 		updateActionBar();
+	}
+
+	async function selectAllAcrossViewNow() {
+		var ids = await loadViewIds();
+		selectAllAcrossView = true;
+		viewTotalCount = ids.length;
+		selectedIds = new Set(ids);
+		getEmailCheckboxes().forEach(function (checkbox) {
+			var on = selectedIds.has(checkbox.value);
+			checkbox.checked = on;
+			checkbox.closest('.ecc-email-item')?.classList.toggle('is-selected', on);
+		});
+		updateActionBar();
+	}
+
+	function onSelectAllAcrossClick(event) {
+		event.preventDefault();
+		if (selectAllAcrossView) {
+			clearSelection();
+			return;
+		}
+		selectAllAcrossViewNow().catch(function (err) {
+			showError(err.message || 'Failed to select all');
+		});
+	}
+
+	// Manually toggling a checkbox while "select all across view" is active drops
+	// back to an explicit, visible-only selection (mirrors batch.js behavior).
+	function demoteAcrossSelectionToVisible() {
+		selectAllAcrossView = false;
+		viewTotalCount = 0;
+		var checkboxes = getEmailCheckboxes();
+		selectedIds = new Set(checkboxes.filter(function (cb) { return cb.checked; }).map(function (cb) { return cb.value; }));
+		checkboxes.forEach(function (cb) {
+			cb.closest('.ecc-email-item')?.classList.toggle('is-selected', cb.checked);
+		});
+	}
+
+	function bindSelectCheckbox(checkbox) {
+		if (!checkbox) return;
+		checkbox.addEventListener('click', function (event) {
+			event.stopPropagation();
+			pendingShiftRange = (event.shiftKey && eccLastChecked && eccLastChecked !== checkbox) ? eccLastChecked : null;
+		});
+		checkbox.addEventListener('change', function () {
+			if (selectAllAcrossView) {
+				demoteAcrossSelectionToVisible();
+				pendingShiftRange = null;
+				eccLastChecked = checkbox;
+				updateActionBar();
+				return;
+			}
+			if (pendingShiftRange) {
+				applyRangeSelection(pendingShiftRange, checkbox, checkbox.checked);
+				pendingShiftRange = null;
+			} else {
+				setEmailSelected(checkbox, checkbox.checked);
+			}
+			eccLastChecked = checkbox;
+		});
 	}
 
 	function renderEmailAi(email) {
@@ -1154,7 +1296,7 @@
 			showListView();
 			selectedEmail = null;
 			replyTargetEmail = null;
-			selectedIds.clear();
+			resetSelectionState();
 			updateActionBar();
 			renderMoveMenu();
 			if (!emails.length) {
@@ -2059,13 +2201,7 @@
 					selectEmail(item.dataset.id || '');
 				}
 			});
-			var checkbox = item.querySelector('.ecc-email-select');
-			checkbox?.addEventListener('click', function (event) {
-				event.stopPropagation();
-			});
-			checkbox?.addEventListener('change', function () {
-				setEmailSelected(checkbox, checkbox.checked);
-			});
+			bindSelectCheckbox(item.querySelector('.ecc-email-select'));
 		}
 
 		function renderEmailListAi() {
@@ -2116,13 +2252,7 @@
 					selectDraft(item.dataset.id || '', item.dataset.sourceEmail || '');
 				}
 			});
-			var checkbox = item.querySelector('.ecc-email-select');
-			checkbox?.addEventListener('click', function (event) {
-				event.stopPropagation();
-			});
-			checkbox?.addEventListener('change', function () {
-				setEmailSelected(checkbox, checkbox.checked);
-			});
+			bindSelectCheckbox(item.querySelector('.ecc-email-select'));
 		}
 
 		function showEmptyEmailsIfNeeded() {
@@ -2139,7 +2269,7 @@
 	function renderEmails(emails) {
 		if (!listEl) return;
 		showListView();
-		selectedIds.clear();
+		resetSelectionState();
 		updateActionBar();
 		renderMoveMenu();
 		if (!emails.length) {
@@ -2167,7 +2297,7 @@
 	function renderDrafts(drafts) {
 		if (!listEl) return;
 		showListView();
-		selectedIds.clear();
+		resetSelectionState();
 		updateActionBar();
 		renderMoveMenu();
 		selectedEmail = null;
@@ -2358,7 +2488,7 @@
 			if (!listEl) return;
 			showListView();
 			listEl.innerHTML = '<div class="list-group-item text-muted">Loading emails...</div>';
-			selectedIds.clear();
+			resetSelectionState();
 			updateActionBar();
 			if (activeMailbox === 'drafts') {
 				var draftData = await api('GET', draftsPath());
@@ -2607,6 +2737,8 @@
 		selectAllText = document.getElementById('ecc-select-all-text');
 		actionBar = document.getElementById('ecc-action-bar');
 		actionCount = document.getElementById('ecc-action-count');
+		selectAllAcrossEl = document.getElementById('ecc-select-all-across');
+		selectAllAcrossLink = document.getElementById('ecc-select-all-across-link');
 		moveMenu = document.getElementById('ecc-move-menu');
 		trashBtn = document.getElementById('ecc-trash-btn');
 		resetTriageBtn = document.getElementById('ecc-reset-triage-btn');
@@ -2644,7 +2776,7 @@
 		triageProgress = null;
 		applyUrlState();
 		if (projectSelect) projectSelect.value = selectedProject;
-		selectedIds.clear();
+		resetSelectionState();
 		emailAiMessages = [];
 		renderEmailAi(null);
 		renderMoveMenu();
@@ -2673,6 +2805,7 @@
 			});
 		});
 		selectAllBtn?.addEventListener('click', toggleSelectAll);
+		selectAllAcrossLink?.addEventListener('click', onSelectAllAcrossClick);
 		trashBtn?.addEventListener('click', trashSelected);
 		resetTriageBtn?.addEventListener('click', resetSelectedTriage);
 		openEmailBtn?.addEventListener('click', openSelectedEmail);
@@ -2709,6 +2842,8 @@
 		selectAllText = null;
 		actionBar = null;
 		actionCount = null;
+		selectAllAcrossEl = null;
+		selectAllAcrossLink = null;
 		moveMenu = null;
 		trashBtn = null;
 		resetTriageBtn = null;
@@ -2746,7 +2881,7 @@
 		clearReplySuggestionsAutoClose();
 		triageRunId = '';
 		triageProgress = null;
-		selectedIds.clear();
+		resetSelectionState();
 		emailAiMessages = [];
 		emailReplySuggestions = [];
 	}

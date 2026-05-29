@@ -543,10 +543,24 @@ export async function ensureCollections(host_id) {
  * If doc looks like a raw Mongoose document (has _id but no id), it is
  * transformed automatically via toTypesenseDoc.
  */
+/**
+ * Build the Typesense chunk documents to upsert for a single source document.
+ *
+ * A raw Mongo/Mongoose document still has `_id` (and a hydrated Mongoose doc
+ * also exposes an `id` virtual), so it must go through toTypesenseDoc to map
+ * fields like `project` -> `project_id`. Only treat the input as an
+ * already-transformed Typesense doc (chunk it directly) when it has a string
+ * `id` and no `_id` — otherwise transform it. Skipping the transform would
+ * drop `project_id`, which silently breaks project-scoped counts/filters.
+ */
+export function toIndexDocs(type, doc) {
+	return doc.id && !doc._id ? chunkTypesenseDoc(type, doc) : toTypesenseDocs(type, doc);
+}
+
 export async function indexDocument(host_id, type, doc) {
 	const ts = getTypesenseClient();
 	const collectionName = `${type}_${host_id}`;
-	const tsDocs = doc.id ? chunkTypesenseDoc(type, doc) : toTypesenseDocs(type, doc);
+	const tsDocs = toIndexDocs(type, doc);
 	const sourceId = tsDocs[0]?.source_id || tsDocs[0]?.id;
 	if (sourceId) {
 		await removeDocument(host_id, type, sourceId);

@@ -416,6 +416,15 @@ router.get('/emails', requireEmailFeatureAccess, async (req, res) => {
 	res.json({ emails: emails.map(decorateEmailForClient) });
 });
 
+router.get('/emails/ids', requireEmailFeatureAccess, async (req, res) => {
+	const ids = await emailIngestService.listEmailIds(req.host_id, req.query.project, {
+		mailbox: req.query.mailbox,
+		label: req.query.label,
+		triaged: req.query.triaged,
+	});
+	res.json({ ids });
+});
+
 router.get('/email-labels', requireEmailFeatureAccess, async (req, res) => {
 	const data = await emailIngestService.listEmailLabels(req.host_id, {
 		project: req.query.project,
@@ -629,6 +638,14 @@ router.get('/email-drafts', requireEmailFeatureAccess, async (req, res) => {
 		limit: parseInt(req.query.limit, 10) || 50,
 	});
 	res.json({ drafts });
+});
+
+router.get('/email-drafts/ids', requireEmailFeatureAccess, async (req, res) => {
+	const ids = await emailIngestService.listEmailDraftIds(req.host_id, {
+		project: req.query.project,
+		status: req.query.status,
+	});
+	res.json({ ids });
 });
 
 router.get('/email-drafts/:id', requireEmailFeatureAccess, async (req, res) => {

@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { normalizeGroupedSearchResult, toTypesenseDocs } from '../modules/typesense.js';
+import { normalizeGroupedSearchResult, toTypesenseDocs, toIndexDocs } from '../modules/typesense.js';
 
 describe('Typesense chunking', () => {
 	it('splits large note text into overlapping source chunks', () => {
@@ -79,5 +79,38 @@ describe('Typesense chunking', () => {
 
 		assert.equal(result.hits[0].document.id, 'note-1');
 		assert.equal(result.hits[0].document.source_id, 'note-1');
+	});
+
+	it('maps project -> project_id when indexing a hydrated Mongoose-style email doc (has _id and id virtual)', () => {
+		// Reproduces the immediate-index path: indexEmailNow passes a hydrated
+		// Mongoose doc, which exposes both `_id` and an `id` virtual. It must still
+		// be transformed so project_id is set (otherwise project-scoped counts break).
+		const docs = toIndexDocs('emails', {
+			_id: 'email-1',
+			id: 'email-1',
+			subject: 'Hi',
+			text_content: 'body',
+			project: 'project-9',
+			mailbox: 'inbox',
+		});
+
+		assert.ok(docs.length >= 1);
+		assert.ok(docs.every((doc) => doc.project_id === 'project-9'));
+		assert.ok(docs.every((doc) => doc.source_id === 'email-1'));
+		assert.equal(docs[0].id, 'email-1');
+	});
+
+	it('chunks an already-transformed Typesense doc (string id, no _id) without re-transforming', () => {
+		const docs = toIndexDocs('emails', {
+			id: 'email-2',
+			source_id: 'email-2',
+			project_id: 'project-7',
+			subject: 'X',
+			text_content: '',
+		});
+
+		assert.equal(docs.length, 1);
+		assert.equal(docs[0].id, 'email-2');
+		assert.equal(docs[0].project_id, 'project-7');
 	});
 });

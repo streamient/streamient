@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailLabels, parseTriageResult, triageInboxEmails, backfillEmailTriageState, askEmailAi, askEmailListAi, buildEmailAiTypesenseFilter, buildTriageContext, parseEmailAiQuery, resetEmailTriage, updateEmail, parseEmailReplySuggestionsResult, suggestEmailReplies, suggestFromEmailAddresses, matchesEmailFilter } from '../services/email_ingest_service.js';
+import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailIds, listEmailLabels, parseTriageResult, triageInboxEmails, backfillEmailTriageState, askEmailAi, askEmailListAi, buildEmailAiTypesenseFilter, buildTriageContext, parseEmailAiQuery, resetEmailTriage, updateEmail, parseEmailReplySuggestionsResult, suggestEmailReplies, suggestFromEmailAddresses, matchesEmailFilter } from '../services/email_ingest_service.js';
 import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
 import { EmailLabel } from '../model/email_label.js';
@@ -1010,6 +1010,54 @@ describe('Email ingest service', () => {
 			assert.equal(findQuery.project, 'project-1');
 			assert.equal(findQuery.mailbox, 'sent');
 			assert.deepEqual(emails.map((email) => email._id), ['sent-newest', 'sent-other']);
+		} finally {
+			Email.find = originalFind;
+		}
+	});
+
+	it('listEmailIds returns id strings for the current view filters', async () => {
+		let findQuery = null;
+		const originalFind = Email.find;
+
+		Email.find = (query) => {
+			findQuery = query;
+			return {
+				select: () => ({
+					sort: () => ({
+						lean: async () => [{ _id: 'inbox-1' }, { _id: 'inbox-2' }],
+					}),
+				}),
+			};
+		};
+
+		try {
+			const ids = await listEmailIds('host-1', null, { mailbox: 'inbox', triaged: false });
+
+			assert.equal(findQuery.host_id, 'host-1');
+			assert.equal(findQuery.mailbox, 'inbox');
+			assert.equal(findQuery.in_trash, false);
+			assert.equal(findQuery.triaged, false);
+			assert.deepEqual(ids, ['inbox-1', 'inbox-2']);
+		} finally {
+			Email.find = originalFind;
+		}
+	});
+
+	it('listEmailIds collapses sent threads to the newest message id', async () => {
+		const originalFind = Email.find;
+		const sentOlder = { _id: 'sent-older', message_id: 'sent-older@example.com', in_reply_to: 'root@example.com', references: ['root@example.com'], updatedAt: '2026-01-01T10:00:00.000Z' };
+		const sentNewest = { _id: 'sent-newest', message_id: 'sent-newest@example.com', in_reply_to: 'root@example.com', references: ['root@example.com'], updatedAt: '2026-01-01T11:00:00.000Z' };
+		const sentOther = { _id: 'sent-other', message_id: 'sent-other@example.com', in_reply_to: 'other-root@example.com', references: ['other-root@example.com'], updatedAt: '2026-01-01T09:00:00.000Z' };
+
+		Email.find = () => ({
+			select: () => ({
+				lean: async () => [sentNewest, sentOlder, sentOther],
+			}),
+		});
+
+		try {
+			const ids = await listEmailIds('host-1', 'project-1', { mailbox: 'sent' });
+			assert.deepEqual(ids, ['sent-newest', 'sent-other']);
 		} finally {
 			Email.find = originalFind;
 		}
