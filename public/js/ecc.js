@@ -14,8 +14,6 @@
 	var trashBtn;
 	var resetTriageBtn;
 	var viewHeader;
-	var viewTitle;
-	var viewSubtitle;
 	var listWrap;
 	var detailEl;
 	var detailBackBtn;
@@ -1049,24 +1047,6 @@
 		});
 	}
 
-	function updateViewText() {
-		if (!viewTitle || !viewSubtitle) return;
-		var projectName = selectedProject
-			? projectSelect?.options[projectSelect.selectedIndex]?.text || 'selected project'
-			: 'all projects';
-		if (activeLabel) {
-			var labelBtn = labelsEl?.querySelector('[data-label="' + activeLabel + '"]');
-			viewTitle.textContent = labelBtn?.querySelector('.ecc-label-name')?.textContent || activeLabel;
-			viewSubtitle.textContent = 'Emails labeled ' + viewTitle.textContent + ' in ' + projectName + '.';
-			return;
-		}
-			var names = { inbox: 'Inbox', archived: 'Archived', sent: 'Sent', spam: 'Spam', drafts: 'Drafts', trash: 'Trash' };
-			viewTitle.textContent = names[activeMailbox] || 'Inbox';
-			viewSubtitle.textContent = activeMailbox === 'inbox'
-				? 'All untriaged emails in ' + projectName + '.'
-				: (names[activeMailbox] || 'Emails') + ' in ' + projectName + '.';
-		}
-
 	function renderLabels(labels) {
 		if (!labelsEl) return;
 		if (!labels.length) {
@@ -1177,11 +1157,6 @@
 			selectedIds.clear();
 			updateActionBar();
 			renderMoveMenu();
-			if (viewTitle) viewTitle.textContent = 'Email AI results';
-			if (viewSubtitle) {
-				var total = Number.isFinite(count) ? count : emails.length;
-				viewSubtitle.textContent = total === 1 ? '1 matching email.' : total + ' matching emails.';
-			}
 			if (!emails.length) {
 				listEl.innerHTML = '<div class="list-group-item text-muted ecc-email-empty">' + escapeHtml(answer || 'No matching emails.') + '</div>';
 				updateActionBar();
@@ -2395,7 +2370,6 @@
 		}
 
 		async function loadAll() {
-			updateViewText();
 			try {
 				await Promise.all([loadLabels(), loadEmails()]);
 			} catch (err) {
@@ -2637,8 +2611,6 @@
 		trashBtn = document.getElementById('ecc-trash-btn');
 		resetTriageBtn = document.getElementById('ecc-reset-triage-btn');
 		viewHeader = document.getElementById('ecc-view-header');
-		viewTitle = document.getElementById('ecc-view-title');
-		viewSubtitle = document.getElementById('ecc-view-subtitle');
 		listWrap = document.getElementById('ecc-list-wrap');
 		detailEl = document.getElementById('ecc-detail');
 		detailBackBtn = document.getElementById('ecc-detail-back-btn');
@@ -2740,8 +2712,6 @@
 		moveMenu = null;
 		trashBtn = null;
 		resetTriageBtn = null;
-		viewTitle = null;
-		viewSubtitle = null;
 		listWrap = null;
 		detailEl = null;
 		detailBackBtn = null;
