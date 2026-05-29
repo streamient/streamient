@@ -8,6 +8,9 @@ import { listGitRepos } from '../services/git_sync_service.js';
 import { listEmailIdentities } from '../services/email_identity_service.js';
 import { formatTrialEndsIn, hasProductAccess, hasProFeatureAccess } from '../services/subscription_access_service.js';
 import config from '../config.js';
+import { createLogger } from '../modules/logger.js';
+
+const log = createLogger('web');
 
 const is_hosted = config.isHosted;
 
@@ -52,7 +55,7 @@ async function renderUsageSettings(req, res, view) {
 	try {
 		counts = await getProjectCounts(req.host_id);
 	} catch (err) {
-		console.error('Usage settings counts error:', err);
+		log.error({ err, host_id: req.host_id }, 'Usage settings counts error');
 		usageLoadError = true;
 	}
 	res.render(view, {
@@ -219,7 +222,7 @@ router.get('/ajax/project-settings/:id', requireRestrictedSettingsAccess, async 
 			is_hosted,
 		});
 	} catch (err) {
-		console.error('Project settings modal error:', err);
+		log.error({ err, host_id: req.host_id, project_id: req.params.id }, 'Project settings modal error');
 		res.status(500).send('<div class="alert alert-danger mb-0">Failed to load project settings.</div>');
 	}
 });

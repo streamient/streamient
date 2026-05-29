@@ -10,6 +10,9 @@ import { sendMagicLink, isMagicLinkValid, verifyMagicLink } from '../services/ma
 import * as passkeyService from '../services/passkey_service.js';
 import * as teamService from '../services/team_service.js';
 import config from '../config.js';
+import { createLogger } from '../modules/logger.js';
+
+const log = createLogger('auth');
 
 const is_hosted = config.isHosted;
 import { createDefaultProject } from '../services/project_service.js';
@@ -94,7 +97,7 @@ router.post('/signup', async (req, res) => {
 			message: 'We sent a confirmation link to your email. Please verify to activate your account.',
 		});
 	} catch (err) {
-		console.error('Registration error:', err);
+		log.error({ err, email: req.body?.email }, 'Registration error');
 		res.status(500).json({ error: 'Registration failed' });
 	}
 });
@@ -122,7 +125,7 @@ router.get('/verify', async (req, res) => {
 
 		res.render('auth/verify', { token });
 	} catch (err) {
-		console.error('Verification page error:', err);
+		log.error({ err }, 'Verification page error');
 		res.render('auth/verify', { error: 'Something went wrong. Please try again.' });
 	}
 });
@@ -162,12 +165,12 @@ router.post('/verify', async (req, res) => {
 		await user.save();
 		if (createdHostedTrial) {
 			sendTrialSignupNotificationEmail(user.email).catch((e) =>
-				console.warn('Trial signup notification email failed:', e.message),
+				log.warn({ err: e, email: user.email }, 'Trial signup notification email failed'),
 			);
 		}
 
 		ensureCollections(tenant.host_id).catch((e) =>
-			console.warn('Typesense collection setup deferred:', e.message),
+			log.warn({ err: e, host_id: tenant.host_id }, 'Typesense collection setup deferred'),
 		);
 
 		await createDefaultProject(user._id, tenant.host_id);
@@ -177,7 +180,7 @@ router.post('/verify', async (req, res) => {
 
 		// Send welcome email (fire-and-forget)
 		sendWelcomeEmail(user.email, user.name).catch((e) =>
-			console.warn('Welcome email failed:', e.message),
+			log.warn({ err: e, email: user.email }, 'Welcome email failed'),
 		);
 
 		// Sign the user in directly
@@ -186,7 +189,7 @@ router.post('/verify', async (req, res) => {
 
 		res.redirect('/dashboard');
 	} catch (err) {
-		console.error('Verification error:', err);
+		log.error({ err }, 'Verification error');
 		res.render('auth/verify', { error: 'Verification failed. Please try again.' });
 	}
 });
@@ -239,7 +242,7 @@ router.post('/login', async (req, res) => {
 			redirect_to: consumePostAuthRedirect(req),
 		});
 	} catch (err) {
-		console.error('Login error:', err);
+		log.error({ err, email: req.body?.email }, 'Login error');
 		res.status(500).json({ error: 'Login failed' });
 	}
 });
@@ -259,7 +262,7 @@ router.post('/reset-password', async (req, res) => {
 
 		res.json({ password: newPassword });
 	} catch (err) {
-		console.error('Password reset error:', err);
+		log.error({ err, user_id: req.session?.userId }, 'Password reset error');
 		res.status(500).json({ error: 'Password reset failed' });
 	}
 });
@@ -278,14 +281,14 @@ router.post('/forgot-password', async (req, res) => {
 			user.password_reset_expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 			await user.save();
 			sendPasswordResetEmail(email, resetToken).catch((e) =>
-				console.warn('Password reset email failed:', e.message),
+				log.warn({ err: e, email }, 'Password reset email failed'),
 			);
 		}
 
 		// Always return success to prevent email enumeration
 		res.json({ message: 'If an account exists with that email, a password reset link has been sent.' });
 	} catch (err) {
-		console.error('Forgot password error:', err);
+		log.error({ err, email: req.body?.email }, 'Forgot password error');
 		res.status(500).json({ error: 'Failed to send reset email' });
 	}
 });
@@ -316,7 +319,7 @@ router.get('/reset-password', async (req, res) => {
 
 		res.render('auth/reset_password', { password: newPassword, token });
 	} catch (err) {
-		console.error('Reset password page error:', err);
+		log.error({ err }, 'Reset password page error');
 		res.render('auth/reset_password', { error: 'Something went wrong. Please try again.' });
 	}
 });
@@ -343,7 +346,7 @@ router.post('/reset-password/confirm', async (req, res) => {
 		delete req.session.pendingReset;
 		res.redirect('/login?reset=true');
 	} catch (err) {
-		console.error('Reset password confirm error:', err);
+		log.error({ err }, 'Reset password confirm error');
 		res.render('auth/reset_password', { error: 'Password reset failed. Please try again.' });
 	}
 });
@@ -378,7 +381,7 @@ router.post('/2fa/verify', async (req, res) => {
 			redirect_to: consumePostAuthRedirect(req),
 		});
 	} catch (err) {
-		console.error('2FA error:', err);
+		log.error({ err }, '2FA error');
 		res.status(500).json({ error: '2FA verification failed' });
 	}
 });
@@ -400,7 +403,7 @@ router.post('/2fa/setup', async (req, res) => {
 
 		res.json({ secret, otpauth });
 	} catch (err) {
-		console.error('2FA setup error:', err);
+		log.error({ err, user_id: req.session?.userId }, '2FA setup error');
 		res.status(500).json({ error: '2FA setup failed' });
 	}
 });
@@ -421,7 +424,7 @@ router.post('/2fa/confirm', async (req, res) => {
 
 		res.json({ message: '2FA enabled successfully' });
 	} catch (err) {
-		console.error('2FA confirm error:', err);
+		log.error({ err, user_id: req.session?.userId }, '2FA confirm error');
 		res.status(500).json({ error: '2FA confirmation failed' });
 	}
 });
@@ -436,7 +439,7 @@ router.post('/magic-link', async (req, res) => {
 		await sendMagicLink(email);
 		res.json({ message: 'If an account exists, a login link has been sent.' });
 	} catch (err) {
-		console.error('Magic link error:', err);
+		log.error({ err, email: req.body?.email }, 'Magic link error');
 		res.status(500).json({ error: 'Failed to send magic link' });
 	}
 });
@@ -458,7 +461,7 @@ router.get('/magic', async (req, res) => {
 
 		return res.render('auth/magic', { token });
 	} catch (err) {
-		console.error('Magic link page error:', err);
+		log.error({ err }, 'Magic link page error');
 		return res.render('auth/magic', { error: 'Something went wrong. Please try again.' });
 	}
 });
@@ -479,7 +482,7 @@ router.post('/magic', async (req, res) => {
 
 		return res.redirect(consumePostAuthRedirect(req));
 	} catch (err) {
-		console.error('Magic link verify error:', err);
+		log.error({ err }, 'Magic link verify error');
 		return res.render('auth/magic', { error: 'Magic link verification failed' });
 	}
 });
@@ -501,7 +504,7 @@ router.post('/passkey/register/options', async (req, res) => {
 		req.session.passkeyChallenge = options.challenge;
 		res.json(options);
 	} catch (err) {
-		console.error('Passkey register options error:', err);
+		log.error({ err, user_id: req.session?.userId }, 'Passkey register options error');
 		res.status(500).json({ error: 'Failed to generate passkey options' });
 	}
 });
@@ -524,7 +527,7 @@ router.post('/passkey/register/verify', async (req, res) => {
 		await passkeyService.verifyAndSaveRegistration(user, attestation, challenge, { name, browser_info });
 		res.json({ message: 'Passkey registered' });
 	} catch (err) {
-		console.error('Passkey register verify error:', err);
+		log.error({ err, user_id: req.session?.userId }, 'Passkey register verify error');
 		res.status(500).json({ error: 'Passkey registration failed' });
 	}
 });
@@ -535,7 +538,7 @@ router.post('/passkey/login/options', async (req, res) => {
 		req.session.passkeyChallenge = options.challenge;
 		res.json(options);
 	} catch (err) {
-		console.error('Passkey login options error:', err);
+		log.error({ err }, 'Passkey login options error');
 		res.status(500).json({ error: 'Failed to generate authentication options' });
 	}
 });
@@ -568,7 +571,7 @@ router.post('/passkey/login/verify', async (req, res) => {
 			redirect_to: consumePostAuthRedirect(req),
 		});
 	} catch (err) {
-		console.error('Passkey login verify error:', err);
+		log.error({ err }, 'Passkey login verify error');
 		res.status(500).json({ error: 'Passkey authentication failed' });
 	}
 });
@@ -599,7 +602,7 @@ router.get('/team-invite', async (req, res) => {
 			suggestedName: existingUser?.name || invite.name || invite.email.split('@')[0],
 		});
 	} catch (err) {
-		console.error('Team invite page error:', err);
+		log.error({ err }, 'Team invite page error');
 		res.render('auth/team_invite', { error: 'Something went wrong. Please try again.', invite: null });
 	}
 });
@@ -671,7 +674,7 @@ router.post('/team-invite', async (req, res) => {
 		await recordSuccessfulLogin(req, user);
 		return res.redirect('/dashboard');
 	} catch (err) {
-		console.error('Team invite accept error:', err);
+		log.error({ err, user_id: req.session?.userId }, 'Team invite accept error');
 		const token = typeof req.body.token === 'string' ? req.body.token : '';
 		const invite = token ? await teamService.getInviteByToken(token) : null;
 		return res.render('auth/team_invite', {
@@ -725,7 +728,7 @@ router.get('/api/v1/admin/users/search', requireSysadmin, async (req, res) => {
 
 		res.json(users);
 	} catch (err) {
-		console.error('Sysadmin user search error:', err);
+		log.error({ err }, 'Sysadmin user search error');
 		res.status(500).json({ error: 'Search failed' });
 	}
 });
@@ -746,7 +749,7 @@ router.post('/api/v1/admin/impersonate', requireSysadmin, async (req, res) => {
 
 		res.json({ ok: true, redirect: '/dashboard' });
 	} catch (err) {
-		console.error('Impersonate error:', err);
+		log.error({ err, user_id: req.body?.userId }, 'Impersonate error');
 		res.status(500).json({ error: 'Impersonation failed' });
 	}
 });

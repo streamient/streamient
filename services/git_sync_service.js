@@ -17,6 +17,9 @@ import * as audit from './audit_service.js';
 import { encrypt, decrypt } from '../modules/encryption.js';
 import { getRedisClient } from '../modules/redis.js';
 import { emitToTenant } from '../modules/socket.js';
+import { createLogger } from '../modules/logger.js';
+
+const log = createLogger('git-sync');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const GIT_REPOS_DIR = path.join(__dirname, '..', 'assets', 'git-repos');
@@ -213,7 +216,7 @@ async function logSyncEvent(gitRepo, level, message, details = {}) {
 			createdAt: { $lt: new Date(Date.now() - SYNC_LOG_RETENTION_MS) },
 		});
 	} catch (err) {
-		console.warn(`Git sync log failed for repo ${gitRepo._id}:`, err.message);
+		log.warn({ err, repo_id: gitRepo._id }, 'Git sync log cleanup failed');
 	}
 }
 
@@ -442,7 +445,7 @@ export async function startSyncRepo(repoId, userId, hostId, ctx = { channel: 'ap
 		try {
 			await executeSyncRepo(repoId, userId, hostId, ctx, prepared.gitRepoDoc, prepared.summary);
 		} catch (err) {
-			console.error(`Git sync failed for repo ${repoId}:`, err.message);
+			log.error({ err, repo_id: repoId }, 'Git sync failed');
 		} finally {
 			if (!ctx.skip_lock) await releaseLock(repoId);
 		}
@@ -1006,7 +1009,7 @@ export async function runScheduledSync() {
 			summary.synced++;
 		} catch (err) {
 			summary.failed++;
-			console.error(`Git sync failed for repo ${repo._id}:`, err.message);
+			log.error({ err, repo_id: repo._id }, 'Git sync failed');
 		}
 	}
 

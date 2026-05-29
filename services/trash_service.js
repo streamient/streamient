@@ -6,6 +6,9 @@ import { indexDocument, removeDocument } from '../modules/typesense.js';
 import { emitToTenant } from '../modules/socket.js';
 import { removeLinksForItem } from './graph_service.js';
 import { indexEmailNow, removeEmailFromIndexNow } from './email_index_service.js';
+import { createLogger } from '../modules/logger.js';
+
+const log = createLogger('trash');
 
 const MODEL_MAP = {
 	notes: { model: Note, tsType: 'notes' },
@@ -56,7 +59,7 @@ export async function restoreItem(host_id, type, id) {
 		if (type === 'emails') {
 			await indexEmailNow(host_id, doc);
 		} else {
-			indexDocument(host_id, tsType, doc).catch((err) => console.error('Typesense index error:', err.message));
+			indexDocument(host_id, tsType, doc).catch((err) => log.error({ err }, 'Typesense index error'));
 		}
 		const eventType = type === 'memories' ? 'memory' : type.slice(0, -1);
 		emitToTenant(host_id, `${eventType}:created`, doc);
@@ -73,9 +76,9 @@ export async function permanentDelete(host_id, type, id) {
 		if (type === 'emails') {
 			await removeEmailFromIndexNow(host_id, id);
 		} else {
-			removeDocument(host_id, tsType, id).catch((err) => console.error('Typesense remove error:', err.message));
+			removeDocument(host_id, tsType, id).catch((err) => log.error({ err }, 'Typesense remove error'));
 		}
-		removeLinksForItem(host_id, id).catch((err) => console.error('Graph link cleanup error:', err.message));
+		removeLinksForItem(host_id, id).catch((err) => log.error({ err }, 'Graph link cleanup error'));
 	}
 	return doc;
 }
@@ -103,7 +106,7 @@ export async function emptyTrash(host_id) {
 		await model.deleteMany({ host_id, in_trash: true });
 
 		for (const id of ids) {
-			removeDocument(host_id, tsType, id).catch((err) => console.error('Typesense remove error:', err.message));
+			removeDocument(host_id, tsType, id).catch((err) => log.error({ err }, 'Typesense remove error'));
 		}
 
 		return ids.length;

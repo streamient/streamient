@@ -11,6 +11,9 @@ import { cleanupExpiredExports } from '../services/export_service.js';
 import { runScheduledSync } from '../services/git_sync_service.js';
 import { deleteTenantData } from '../services/account_cleanup_service.js';
 import { removeLinksForItem } from '../services/graph_service.js';
+import { createLogger } from './logger.js';
+
+const log = createLogger('scheduler');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const EMAIL_RETENTION_DAYS = 30;
@@ -48,7 +51,7 @@ export async function runTrialLifecycle({
 			await sendTrialReminder(userModel, user, 'trial_reminder_3d_sent_at', now, send3DayEmail);
 			reminders3d++;
 		} catch (err) {
-			console.warn(`3-day trial reminder failed for ${user.email}:`, err.message);
+			log.warn({ err, email: user.email }, '3-day trial reminder failed');
 		}
 	}
 
@@ -65,7 +68,7 @@ export async function runTrialLifecycle({
 			await sendTrialReminder(userModel, user, 'trial_reminder_24h_sent_at', now, send24HourEmail);
 			reminders24h++;
 		} catch (err) {
-			console.warn(`24-hour trial reminder failed for ${user.email}:`, err.message);
+			log.warn({ err, email: user.email }, '24-hour trial reminder failed');
 		}
 	}
 
@@ -84,7 +87,7 @@ export async function runTrialLifecycle({
 			await sendExpiredEmail(user.email, user.name, endDate);
 			expired++;
 		} catch (err) {
-			console.warn(`Trial expired email failed for ${user.email}:`, err.message);
+			log.warn({ err, email: user.email }, 'Trial expired email failed');
 		}
 	}
 
@@ -103,7 +106,7 @@ export async function runTrialLifecycle({
 			await deleteTenant(user.host_id, user.tenant);
 			deleted++;
 		} catch (err) {
-			console.error(`Trial cleanup failed for host ${user.host_id}:`, err);
+			log.error({ err, host_id: user.host_id }, 'Trial cleanup failed');
 		}
 	}
 
@@ -130,10 +133,10 @@ async function cleanupDeletedEmailReferences(email, removeSearchDocument, remove
 
 	await Promise.all([
 		Promise.resolve(removeSearchDocument(email.host_id, 'emails', emailId)).catch((err) => {
-			console.error('Typesense remove error:', err.message);
+			log.error({ err }, 'Typesense remove error');
 		}),
 		Promise.resolve(removeGraphLinks(email.host_id, emailId)).catch((err) => {
-			console.error('Graph link cleanup error:', err.message);
+			log.error({ err }, 'Graph link cleanup error');
 		}),
 	]);
 }
@@ -184,9 +187,9 @@ export function startScheduler() {
 		crawlReindexRunning = true;
 		try {
 			const crawled = await reindexDue({ intervalHours: 24 });
-			if (crawled > 0) console.log(`Scheduled due crawl complete: crawled ${crawled} URL(s)`);
+			if (crawled > 0) log.info({ crawled }, 'Scheduled due crawl complete');
 		} catch (err) {
-			console.error('Scheduled due crawl error:', err);
+			log.error({ err }, 'Scheduled due crawl error');
 		} finally {
 			crawlReindexRunning = false;
 		}
@@ -196,9 +199,9 @@ export function startScheduler() {
 	new Cron('0 9 * * *', async () => {
 		try {
 			const summary = await runTrialLifecycle();
-			console.log(`Trial lifecycle run complete: 3d ${summary.reminders_3d}, 24h ${summary.reminders_24h}, expired ${summary.expired}, deleted ${summary.deleted}`);
+			log.info({ reminders_3d: summary.reminders_3d, reminders_24h: summary.reminders_24h, expired: summary.expired, deleted: summary.deleted }, 'Trial lifecycle run complete');
 		} catch (err) {
-			console.error('Trial lifecycle error:', err);
+			log.error({ err }, 'Trial lifecycle error');
 		}
 	});
 
@@ -206,9 +209,9 @@ export function startScheduler() {
 	new Cron('*/20 * * * * *', async () => {
 		try {
 			const indexed = await indexMissing({ Note, Memory, Url, Email });
-			if (indexed > 0) console.log(`Index batch complete: indexed ${indexed} document(s)`);
+			if (indexed > 0) log.info({ indexed }, 'Index batch complete');
 		} catch (err) {
-			console.error('Index batch error:', err);
+			log.error({ err }, 'Index batch error');
 		}
 	});
 
@@ -216,9 +219,9 @@ export function startScheduler() {
 	new Cron('0 * * * *', async () => {
 		try {
 			const cleaned = await cleanupExpiredExports();
-			console.log(`Export cleanup complete: removed ${cleaned} export(s)`);
+			log.info({ removed: cleaned }, 'Export cleanup complete');
 		} catch (err) {
-			console.error('Export cleanup error:', err);
+			log.error({ err }, 'Export cleanup error');
 		}
 	});
 
@@ -226,9 +229,9 @@ export function startScheduler() {
 	new Cron('30 2 * * *', async () => {
 		try {
 			const summary = await runEmailRetentionCleanup();
-			console.log(`Email retention cleanup complete: deleted ${summary.deleted} email(s)`);
+			log.info({ deleted: summary.deleted }, 'Email retention cleanup complete');
 		} catch (err) {
-			console.error('Email retention cleanup error:', err);
+			log.error({ err }, 'Email retention cleanup error');
 		}
 	});
 
@@ -236,11 +239,11 @@ export function startScheduler() {
 	new Cron('*/10 * * * *', async () => {
 		try {
 			const summary = await runScheduledSync();
-			console.log(`Git sync run complete: checked ${summary.checked} repo(s), due ${summary.due}, synced ${summary.synced}, failed ${summary.failed}`);
+			log.info({ checked: summary.checked, due: summary.due, synced: summary.synced, failed: summary.failed }, 'Git sync run complete');
 		} catch (err) {
-			console.error('Git sync scheduler error:', err);
+			log.error({ err }, 'Git sync scheduler error');
 		}
 	});
 
-	console.log('Scheduler started: due crawl every 10min, trial lifecycle at 09:00, batch index every 20s, export cleanup hourly, email retention daily at 02:30, git sync every 10min');
+	log.info('Scheduler started: due crawl every 10min, trial lifecycle at 09:00, batch index every 20s, export cleanup hourly, email retention daily at 02:30, git sync every 10min');
 }

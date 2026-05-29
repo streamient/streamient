@@ -3,6 +3,9 @@ import { searchCollection, removeDocument } from '../modules/typesense.js';
 import { emitToTenant } from '../modules/socket.js';
 import { invalidateGraphCache, removeLinksForItem } from './graph_service.js';
 import * as audit from './audit_service.js';
+import { createLogger } from '../modules/logger.js';
+
+const log = createLogger('note');
 
 export async function createNote(userId, host_id, data, ctx = {}) {
 	const note = await Note.create({
@@ -54,7 +57,7 @@ export async function updateNote(host_id, noteId, data, ctx = {}) {
 	);
 
 	if (note) {
-		removeDocument(host_id, 'notes', noteId).catch((err) => console.error('Typesense remove error:', err.message));
+		removeDocument(host_id, 'notes', noteId).catch((err) => log.error({ err }, 'Typesense remove error'));
 		emitToTenant(host_id, 'note:updated', note);
 		invalidateGraphCache(host_id).catch(() => {});
 		if (ctx.user_id) {
@@ -73,8 +76,8 @@ export async function deleteNote(host_id, noteId, ctx = {}) {
 		{ returnDocument: 'after' },
 	);
 	if (note) {
-		removeDocument(host_id, 'notes', noteId).catch((err) => console.error('Typesense remove error:', err.message));
-		removeLinksForItem(host_id, noteId).catch((err) => console.error('Remove links error:', err.message));
+		removeDocument(host_id, 'notes', noteId).catch((err) => log.error({ err }, 'Typesense remove error'));
+		removeLinksForItem(host_id, noteId).catch((err) => log.error({ err }, 'Remove links error'));
 		emitToTenant(host_id, 'note:deleted', { _id: noteId });
 		invalidateGraphCache(host_id).catch(() => {});
 		if (ctx.user_id) audit.log({ action: 'delete', resource: 'note', resource_id: noteId, host_id, ...ctx });

@@ -24,6 +24,9 @@ import { AuditLog } from '../model/audit_log.js';
 import { Tenant } from '../modules/tenancy.js';
 import { getTypesenseClient } from '../modules/typesense.js';
 import { deleteGitRepoHostDirectory } from './git_sync_service.js';
+import { createLogger } from '../modules/logger.js';
+
+const log = createLogger('account-cleanup');
 
 const TENANT_COLLECTION_TYPES = ['notes', 'memory', 'urls', 'emails', 'pages'];
 
@@ -34,7 +37,7 @@ async function deleteTypesenseCollection(collectionName) {
 		return true;
 	} catch (err) {
 		if (err.httpStatus !== 404) {
-			console.error(`Failed to delete Typesense collection ${collectionName}:`, err.message);
+			log.error({ err, collection: collectionName }, 'Failed to delete Typesense collection');
 		}
 		return false;
 	}

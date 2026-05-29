@@ -41,6 +41,9 @@ import { hasProductAccess, hasProFeatureAccess } from '../services/subscription_
 import { decorateEmailForClient } from '../modules/email_display.js';
 import config from '../config.js';
 import crypto from 'node:crypto';
+import { createLogger } from '../modules/logger.js';
+
+const log = createLogger('api');
 
 const router = Router();
 const is_hosted = config.isHosted;
@@ -58,7 +61,7 @@ if (is_hosted) {
 				redirect_to: '/settings/subscription',
 			});
 		} catch (err) {
-			console.error('Subscription access check error:', err);
+			log.error({ err, host_id: req.host_id }, 'Subscription access check error');
 			return res.status(500).json({ error: 'Subscription access check failed' });
 		}
 	});
@@ -613,7 +616,7 @@ router.post('/emails/triage-inbox', requireEmailFeatureAccess, async (req, res) 
 		});
 		res.json(result);
 	} catch (err) {
-		console.error('Email inbox triage error:', err);
+		log.error({ err, host_id: req.host_id }, 'Email inbox triage error');
 		res.status(400).json({ error: err.message || 'Inbox triage failed' });
 	}
 });
@@ -689,7 +692,7 @@ router.post('/urls', async (req, res) => {
 	const wasDuplicate = !!url.$locals?.wasDuplicate;
 
 	if (!wasDuplicate && url.crawl_enabled) {
-		crawlSite(url).catch((err) => console.error('Background crawl error:', err.message));
+		crawlSite(url).catch((err) => log.error({ err }, 'Background crawl error'));
 	}
 
 	res.status(wasDuplicate ? 200 : 201).json({ url, duplicate: wasDuplicate });
@@ -735,7 +738,7 @@ router.get('/urls/:id/pages', async (req, res) => {
 		if (err?.httpStatus === 404) {
 			return res.json({ pages: [], count: 0, page, per_page: perPage });
 		}
-		console.error('URL pages fetch error:', err);
+		log.error({ err }, 'URL pages fetch error');
 		res.status(500).json({ error: 'Failed to load crawled pages' });
 	}
 });
@@ -750,7 +753,7 @@ router.post('/urls/:id/resync', async (req, res) => {
 	if (!url) return res.status(404).json({ error: 'URL not found' });
 	if (!url.crawl_enabled) return res.status(400).json({ error: 'Crawling is not enabled for this URL' });
 
-	crawlSite(url).catch((err) => console.error('Manual URL resync error:', err.message));
+	crawlSite(url).catch((err) => log.error({ err }, 'Manual URL resync error'));
 	res.json({ message: 'URL crawl resync started' });
 });
 
@@ -762,7 +765,7 @@ router.delete('/urls/:id/pages', async (req, res) => {
 		const deleted = await removeUrlPages(req.host_id, req.params.id);
 		res.json({ message: `${deleted} crawled page${deleted === 1 ? '' : 's'} deleted`, deleted });
 	} catch (err) {
-		console.error('Delete URL pages error:', err);
+		log.error({ err }, 'Delete URL pages error');
 		res.status(500).json({ error: 'Failed to delete crawled pages' });
 	}
 });
@@ -774,7 +777,7 @@ router.put('/urls/:id', async (req, res) => {
 
 	const shouldStartFirstCrawl = !!url.crawl_enabled && !before?.crawl_enabled;
 	if (shouldStartFirstCrawl) {
-		crawlSite(url).catch((err) => console.error('Background crawl error:', err.message));
+		crawlSite(url).catch((err) => log.error({ err }, 'Background crawl error'));
 	}
 
 	const shouldRemoveCrawledPages = req.body.crawl_enabled === false;
@@ -783,7 +786,7 @@ router.put('/urls/:id', async (req, res) => {
 			const deletedPages = await removeUrlPages(req.host_id, req.params.id);
 			return res.json({ url, deleted_pages: deletedPages });
 		} catch (err) {
-			console.error('Disable URL crawl cleanup error:', err);
+			log.error({ err }, 'Disable URL crawl cleanup error');
 			return res.status(500).json({ error: 'URL saved but failed to delete crawled pages' });
 		}
 	}
@@ -827,7 +830,7 @@ router.get('/batch/count', async (req, res) => {
 		const count = await getFilteredCount(req.host_id, TS_TYPE_MAP[type], project || null);
 		res.json({ count });
 	} catch (err) {
-		console.error('Batch count error:', err);
+		log.error({ err }, 'Batch count error');
 		res.status(500).json({ error: 'Failed to get count' });
 	}
 });
@@ -849,7 +852,7 @@ router.post('/batch/delete', async (req, res) => {
 		const deleted = results.filter(Boolean).length;
 		res.json({ message: `${deleted} items deleted`, deleted });
 	} catch (err) {
-		console.error('Batch delete error:', err);
+		log.error({ err }, 'Batch delete error');
 		res.status(500).json({ error: 'Batch delete failed' });
 	}
 });
@@ -873,7 +876,7 @@ router.post('/batch/move', async (req, res) => {
 		if (moved) emitToTenant(req.host_id, 'counts:refresh');
 		res.json({ message: `${moved} items moved`, moved });
 	} catch (err) {
-		console.error('Batch move error:', err);
+		log.error({ err }, 'Batch move error');
 		res.status(500).json({ error: 'Batch move failed' });
 	}
 });
@@ -909,7 +912,7 @@ router.post('/batch/copy', async (req, res) => {
 		if (inserted.length) emitToTenant(req.host_id, 'counts:refresh');
 		res.json({ message: `${inserted.length} items copied`, copied: inserted.length });
 	} catch (err) {
-		console.error('Batch copy error:', err);
+		log.error({ err }, 'Batch copy error');
 		res.status(500).json({ error: 'Batch copy failed' });
 	}
 });
@@ -935,7 +938,7 @@ router.post('/search/all', async (req, res) => {
 
 		res.json({ results });
 	} catch (err) {
-		console.error('Search all error:', err);
+		log.error({ err }, 'Search all error');
 		res.status(500).json({ error: 'Search failed' });
 	}
 });
@@ -975,7 +978,7 @@ router.post('/links', async (req, res) => {
 		res.status(201).json({ link });
 	} catch (err) {
 		if (err.code === 11000) return res.status(409).json({ error: 'Link already exists' });
-		console.error('Create link error:', err);
+		log.error({ err }, 'Create link error');
 		res.status(400).json({ error: err.message });
 	}
 });
@@ -1006,7 +1009,7 @@ router.get('/graph', async (req, res) => {
 		});
 		res.json(data);
 	} catch (err) {
-		console.error('Graph data error:', err);
+		log.error({ err }, 'Graph data error');
 		res.status(500).json({ error: 'Failed to load graph data' });
 	}
 });
@@ -1018,7 +1021,7 @@ router.get('/counts', async (req, res) => {
 		const counts = await getProjectCounts(req.host_id);
 		res.json(counts);
 	} catch (err) {
-		console.error('Counts error:', err);
+		log.error({ err }, 'Counts error');
 		res.json({});
 	}
 });
@@ -1043,7 +1046,7 @@ router.post('/reindex', requireRestrictedSettingsAccess, async (req, res) => {
 
 		res.json({ message, total_queued: totalQueued, results });
 	} catch (err) {
-		console.error('Reindex error:', err);
+		log.error({ err, host_id: req.host_id }, 'Reindex error');
 		res.status(500).json({ error: 'Reindex failed: ' + err.message });
 	}
 });
@@ -1055,7 +1058,7 @@ router.get('/settings/byo-ai', requireRestrictedSettingsAccess, requireByoAiAcce
 		const settings = await byoAiService.getByoAiSettings(req.host_id);
 		res.json({ settings });
 	} catch (err) {
-		console.error('BYO AI settings read error:', err);
+		log.error({ err }, 'BYO AI settings read error');
 		res.status(500).json({ error: 'Failed to load BYO AI settings' });
 	}
 });
@@ -1065,7 +1068,7 @@ router.put('/settings/byo-ai', requireRestrictedSettingsAccess, requireByoAiAcce
 		const settings = await byoAiService.updateByoAiSettings(req.host_id, req.body || {});
 		res.json({ settings });
 	} catch (err) {
-		console.error('BYO AI settings update error:', err);
+		log.error({ err }, 'BYO AI settings update error');
 		res.status(400).json({ error: err.message || 'Failed to update BYO AI settings' });
 	}
 });
@@ -1115,7 +1118,7 @@ router.post('/chat', createChatLimiter(), async (req, res) => {
 			display_in: result.displayIn,
 		});
 	} catch (err) {
-		console.error('AI Chat error:', err);
+		log.error({ err, host_id: req.host_id }, 'AI Chat error');
 		res.status(500).json({ error: 'AI Chat failed' });
 	}
 });
@@ -1175,7 +1178,7 @@ router.post('/chat/stream', createChatLimiter(), async (req, res) => {
 			previous_conversation_id: conversationReset ? conversation_id : undefined,
 		});
 	} catch (err) {
-		console.error('AI Chat stream error:', err);
+		log.error({ err, host_id: req.host_id }, 'AI Chat stream error');
 		sendSSE('error', { error: 'AI Chat failed' });
 	}
 
@@ -1189,7 +1192,7 @@ router.get('/chat/conversations', async (req, res) => {
 		});
 		res.json({ conversations });
 	} catch (err) {
-		console.error('List conversations error:', err);
+		log.error({ err }, 'List conversations error');
 		res.json({ conversations: [] });
 	}
 });
@@ -1199,7 +1202,7 @@ router.delete('/chat/conversations/:id', async (req, res) => {
 		await deleteConversation(req.host_id, req.userId, req.params.id);
 		res.json({ message: 'Conversation deleted' });
 	} catch (err) {
-		console.error('Delete conversation error:', err);
+		log.error({ err }, 'Delete conversation error');
 		res.status(500).json({ error: 'Delete conversation failed' });
 	}
 });
@@ -1234,7 +1237,7 @@ router.post('/chat/search', async (req, res) => {
 			res.json({ answer });
 		}
 	} catch (err) {
-		console.error('AI Chat (legacy) error:', err);
+		log.error({ err }, 'AI Chat (legacy) error');
 		res.status(500).json({ error: 'AI Chat failed' });
 	}
 });
@@ -1250,7 +1253,7 @@ router.get('/trash', async (req, res) => {
 		});
 		res.json(result);
 	} catch (err) {
-		console.error('List trash error:', err);
+		log.error({ err }, 'List trash error');
 		res.status(500).json({ error: 'Failed to list trash' });
 	}
 });
@@ -1260,7 +1263,7 @@ router.get('/trash/count', async (req, res) => {
 		const count = await trashService.getTrashCount(req.host_id);
 		res.json({ count });
 	} catch (err) {
-		console.error('Trash count error:', err);
+		log.error({ err }, 'Trash count error');
 		res.json({ count: 0 });
 	}
 });
@@ -1275,7 +1278,7 @@ router.post('/trash/restore', async (req, res) => {
 		emitToTenant(req.host_id, 'counts:refresh');
 		res.json({ message: 'Item restored', item: doc });
 	} catch (err) {
-		console.error('Restore error:', err);
+		log.error({ err }, 'Restore error');
 		res.status(500).json({ error: 'Restore failed' });
 	}
 });
@@ -1289,7 +1292,7 @@ router.delete('/trash/:type/:id', async (req, res) => {
 		if (!doc) return res.status(404).json({ error: 'Item not found in trash' });
 		res.json({ message: 'Item permanently deleted' });
 	} catch (err) {
-		console.error('Permanent delete error:', err);
+		log.error({ err }, 'Permanent delete error');
 		res.status(500).json({ error: 'Delete failed' });
 	}
 });
@@ -1302,7 +1305,7 @@ router.post('/trash/batch/restore', async (req, res) => {
 		const restored = await trashService.batchRestore(req.host_id, items);
 		res.json({ message: `${restored.length} items restored`, restored: restored.length });
 	} catch (err) {
-		console.error('Batch restore error:', err);
+		log.error({ err }, 'Batch restore error');
 		res.status(500).json({ error: 'Batch restore failed' });
 	}
 });
@@ -1315,7 +1318,7 @@ router.post('/trash/batch/delete', async (req, res) => {
 		const deleted = await trashService.batchPermanentDelete(req.host_id, items);
 		res.json({ message: `${deleted.length} items permanently deleted`, deleted: deleted.length });
 	} catch (err) {
-		console.error('Batch permanent delete error:', err);
+		log.error({ err }, 'Batch permanent delete error');
 		res.status(500).json({ error: 'Batch delete failed' });
 	}
 });
@@ -1328,7 +1331,7 @@ router.delete('/trash', async (req, res) => {
 		emitToTenant(req.host_id, 'counts:refresh');
 		res.json({ message: `Trash emptied, ${result.deleted} items deleted`, deleted: result.deleted });
 	} catch (err) {
-		console.error('Empty trash error:', err);
+		log.error({ err }, 'Empty trash error');
 		res.status(500).json({ error: 'Empty trash failed' });
 	}
 });
@@ -1355,7 +1358,7 @@ router.post('/account/switch', async (req, res) => {
 			tenants: context.accessibleTenants,
 		});
 	} catch (err) {
-		console.error('Account switch error:', err);
+		log.error({ err }, 'Account switch error');
 		res.status(500).json({ error: 'Failed to switch account' });
 	}
 });
@@ -1365,7 +1368,7 @@ router.get('/team/members', requireTeamManager, async (req, res) => {
 		const members = await teamService.listTeamMembers(req.host_id);
 		res.json({ members });
 	} catch (err) {
-		console.error('List team members error:', err);
+		log.error({ err }, 'List team members error');
 		res.status(500).json({ error: 'Failed to list team members' });
 	}
 });
@@ -1375,7 +1378,7 @@ router.get('/team/invites', requireTeamManager, async (req, res) => {
 		const invites = await teamService.listTeamInvites(req.host_id);
 		res.json({ invites });
 	} catch (err) {
-		console.error('List team invites error:', err);
+		log.error({ err }, 'List team invites error');
 		res.status(500).json({ error: 'Failed to list team invites' });
 	}
 });
@@ -1393,7 +1396,7 @@ router.post('/team/invites', requireTeamManager, async (req, res) => {
 			},
 		});
 	} catch (err) {
-		console.error('Create team invite error:', err);
+		log.error({ err }, 'Create team invite error');
 		res.status(400).json({ error: err.message || 'Failed to create invite' });
 	}
 });
@@ -1416,7 +1419,7 @@ router.patch('/team/members/:id', requireTeamManager, async (req, res) => {
 			},
 		});
 	} catch (err) {
-		console.error('Update team member error:', err);
+		log.error({ err }, 'Update team member error');
 		res.status(400).json({ error: err.message || 'Failed to update member' });
 	}
 });
@@ -1426,7 +1429,7 @@ router.delete('/team/members/:id', requireTeamManager, async (req, res) => {
 		await teamService.removeTeamMember(req.host_id, req.params.id, { userId: req.userId, role: req.memberRole }, auditCtx(req));
 		res.json({ message: 'Team member removed' });
 	} catch (err) {
-		console.error('Remove team member error:', err);
+		log.error({ err }, 'Remove team member error');
 		res.status(400).json({ error: err.message || 'Failed to remove member' });
 	}
 });
@@ -1436,7 +1439,7 @@ router.delete('/team/invites/:id', requireTeamManager, async (req, res) => {
 		await teamService.cancelTeamInvite(req.host_id, req.params.id, { userId: req.userId, role: req.memberRole }, auditCtx(req));
 		res.json({ message: 'Invite cancelled' });
 	} catch (err) {
-		console.error('Cancel team invite error:', err);
+		log.error({ err }, 'Cancel team invite error');
 		res.status(400).json({ error: err.message || 'Failed to cancel invite' });
 	}
 });
@@ -1454,7 +1457,7 @@ router.put('/profile', async (req, res) => {
 
 		res.json({ user: user.toSafe() });
 	} catch (err) {
-		console.error('Profile update error:', err);
+		log.error({ err }, 'Profile update error');
 		res.status(500).json({ error: 'Profile update failed' });
 	}
 });
@@ -1470,7 +1473,7 @@ router.get('/oauth/consents', async (req, res) => {
 		const consents = await oauthService.listConsents(req.userId, req.host_id);
 		res.json({ consents });
 	} catch (err) {
-		console.error('List OAuth consents error:', err);
+		log.error({ err }, 'List OAuth consents error');
 		res.status(500).json({ error: 'Failed to list authorized apps' });
 	}
 });
@@ -1480,7 +1483,7 @@ router.delete('/oauth/consents/:id', async (req, res) => {
 		await oauthService.revokeConsent(req.params.id, req.userId, req.host_id, auditCtx(req));
 		res.json({ message: 'Authorized app revoked' });
 	} catch (err) {
-		console.error('Revoke OAuth consent error:', err);
+		log.error({ err }, 'Revoke OAuth consent error');
 		res.status(400).json({ error: err.message || 'Failed to revoke authorized app' });
 	}
 });
@@ -1490,7 +1493,7 @@ router.get('/oauth/clients', async (req, res) => {
 		const clients = await oauthService.listClients(req.host_id);
 		res.json({ clients });
 	} catch (err) {
-		console.error('List OAuth clients error:', err);
+		log.error({ err }, 'List OAuth clients error');
 		res.status(500).json({ error: 'Failed to list OAuth clients' });
 	}
 });
@@ -1523,7 +1526,7 @@ router.post('/oauth/clients', async (req, res) => {
 
 		res.status(201).json({ client, client_secret });
 	} catch (err) {
-		console.error('Create OAuth client error:', err);
+		log.error({ err }, 'Create OAuth client error');
 		res.status(400).json({ error: err.message || 'Failed to create OAuth client' });
 	}
 });
@@ -1533,7 +1536,7 @@ router.delete('/oauth/clients/:id', async (req, res) => {
 		await oauthService.deleteClient(req.host_id, req.params.id, auditCtx(req));
 		res.json({ message: 'OAuth client deleted' });
 	} catch (err) {
-		console.error('Delete OAuth client error:', err);
+		log.error({ err }, 'Delete OAuth client error');
 		res.status(400).json({ error: err.message || 'Failed to delete OAuth client' });
 	}
 });
@@ -1551,7 +1554,7 @@ router.get('/tokens', async (req, res) => {
 		}));
 		res.json({ tokens });
 	} catch (err) {
-		console.error('List tokens error:', err);
+		log.error({ err }, 'List tokens error');
 		res.status(500).json({ error: 'Failed to list tokens' });
 	}
 });
@@ -1571,7 +1574,7 @@ router.post('/tokens', async (req, res) => {
 		const entry = user.access_tokens[user.access_tokens.length - 1];
 		res.status(201).json({ token, _id: entry._id, name: entry.name, created_at: entry.created_at });
 	} catch (err) {
-		console.error('Create token error:', err);
+		log.error({ err }, 'Create token error');
 		res.status(500).json({ error: 'Failed to create token' });
 	}
 });
@@ -1589,7 +1592,7 @@ router.delete('/tokens/:id', async (req, res) => {
 
 		res.json({ message: 'Token deleted' });
 	} catch (err) {
-		console.error('Delete token error:', err);
+		log.error({ err }, 'Delete token error');
 		res.status(500).json({ error: 'Failed to delete token' });
 	}
 });
@@ -1607,7 +1610,7 @@ router.post('/2fa/disable', async (req, res) => {
 
 		res.json({ message: '2FA disabled' });
 	} catch (err) {
-		console.error('2FA disable error:', err);
+		log.error({ err }, '2FA disable error');
 		res.status(500).json({ error: 'Failed to disable 2FA' });
 	}
 });
@@ -1619,7 +1622,7 @@ router.get('/passkeys', async (req, res) => {
 		const passkeys = await UserPasskey.find({ user: req.userId }).select('name device_type backed_up browser_info transports last_used_at createdAt').lean();
 		res.json({ passkeys });
 	} catch (err) {
-		console.error('List passkeys error:', err);
+		log.error({ err }, 'List passkeys error');
 		res.status(500).json({ error: 'Failed to list passkeys' });
 	}
 });
@@ -1636,7 +1639,7 @@ router.patch('/passkeys/:id', async (req, res) => {
 		if (!passkey) return res.status(404).json({ error: 'Passkey not found' });
 		res.json({ passkey: { _id: passkey._id, name: passkey.name } });
 	} catch (err) {
-		console.error('Rename passkey error:', err);
+		log.error({ err }, 'Rename passkey error');
 		res.status(500).json({ error: 'Failed to rename passkey' });
 	}
 });
@@ -1647,7 +1650,7 @@ router.delete('/passkeys/:id', async (req, res) => {
 		if (!passkey) return res.status(404).json({ error: 'Passkey not found' });
 		res.json({ message: 'Passkey deleted' });
 	} catch (err) {
-		console.error('Delete passkey error:', err);
+		log.error({ err }, 'Delete passkey error');
 		res.status(500).json({ error: 'Failed to delete passkey' });
 	}
 });
@@ -1710,13 +1713,13 @@ router.post('/notes/import', async (req, res) => {
 
 			res.type('text').send(String(note._id));
 		} catch (err) {
-			console.error(`Import error for ${originalName}:`, err.message);
+			log.error({ err, file_name: originalName }, 'Import error');
 			res.status(415).type('text').send(err.message);
 		} finally {
 			fs.unlink(filePath, () => {});
 		}
 	} catch (err) {
-		console.error('Notes import error:', err);
+		log.error({ err }, 'Notes import error');
 		if (err?.code === 1010) {
 			return res.status(400).type('text').send('No files uploaded');
 		}
@@ -1743,7 +1746,7 @@ router.get('/audit-logs', requireRestrictedSettingsAccess, async (req, res) => {
 		});
 		res.json(result);
 	} catch (err) {
-		console.error('Audit logs error:', err);
+		log.error({ err }, 'Audit logs error');
 		res.status(500).json({ error: 'Failed to fetch audit logs' });
 	}
 });
@@ -1759,7 +1762,7 @@ router.post('/export', requireRestrictedSettingsAccess, async (req, res) => {
 		if (err.message === 'An export is already in progress') {
 			return res.status(409).json({ error: err.message });
 		}
-		console.error('Export start error:', err);
+		log.error({ err }, 'Export start error');
 		res.status(500).json({ error: 'Failed to start export' });
 	}
 });
@@ -1770,7 +1773,7 @@ router.get('/export/status', requireRestrictedSettingsAccess, async (req, res) =
 		if (!doc) return res.json({ status: null });
 		res.json({ status: doc.status, error: doc.error || undefined, expires_at: doc.expires_at, token: doc.status === 'ready' ? doc.token : undefined });
 	} catch (err) {
-		console.error('Export status error:', err);
+		log.error({ err }, 'Export status error');
 		res.status(500).json({ error: 'Failed to get export status' });
 	}
 });
@@ -1781,7 +1784,7 @@ router.get('/export/download/:token', requireRestrictedSettingsAccess, async (re
 		if (!filePath) return res.status(404).json({ error: 'Export not found or expired' });
 		res.download(filePath, 'kumbukum-export.zip');
 	} catch (err) {
-		console.error('Export download error:', err);
+		log.error({ err }, 'Export download error');
 		res.status(500).json({ error: 'Download failed' });
 	}
 });

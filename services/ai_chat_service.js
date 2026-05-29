@@ -5,6 +5,9 @@ import * as memoryService from './memory_service.js';
 import * as urlService from './url_service.js';
 import * as emailIngestService from './email_ingest_service.js';
 import { listProjects } from './project_service.js';
+import { createLogger } from '../modules/logger.js';
+
+const log = createLogger('ai-chat');
 
 // ────────────────────────────────────────────────────────────────────
 // Intent Classification (using lightweight NL_SEARCH_MODEL)
@@ -58,7 +61,7 @@ async function classifyIntent(hostId, query) {
 
 		if (parsed?.intent) return parsed;
 	} catch (err) {
-		console.error('Intent classification failed:', err.message);
+		log.error({ err }, 'Intent classification failed');
 	}
 
 	// Fallback: treat as search
@@ -526,7 +529,7 @@ async function handleAction({ hostId, userId, query, conversationId, projectId, 
 				};
 		}
 	} catch (err) {
-		console.error(`Action ${actionType} failed:`, err.message);
+		log.error({ err, action_type: actionType }, 'Action failed');
 		return {
 			answer: `Action failed: ${err.message}`,
 			results: [],

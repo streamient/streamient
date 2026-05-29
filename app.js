@@ -20,6 +20,7 @@ import { verifyScreenshotSignature, resolveScreenshotPath } from './modules/scre
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './swagger.js';
 import * as OtelRuntime from './modules/otel_runtime.js';
+import { createLogger, getPinoMiddleware } from './modules/logger.js';
 import authRoutes from './routes/auth.js';
 import oauthRoutes from './routes/oauth.js';
 import apiRoutes from './routes/api.js';
@@ -33,6 +34,8 @@ import { backfillEmailTriageState } from './services/email_ingest_service.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const SERVER_MODE = process.env.SERVER_MODE || 'app';
+
+const log = createLogger('app');
 
 const app = express();
 
@@ -151,6 +154,9 @@ app.use(sessionMiddleware);
 
 app.use(resolveTenant);
 
+// HTTP request logging — after tenant resolution so host_id/user_id are available.
+app.use(getPinoMiddleware());
+
 // Auth routes mounted at root (/login, /signup, /logout, etc.)
 app.use('/api/doc', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
 	swaggerOptions: {
@@ -210,19 +216,19 @@ async function start() {
 	if (SERVER_MODE === 'scheduler') {
 		const { startScheduler } = await import('./modules/scheduler.js');
 		startScheduler();
-		console.log(`Kumbukum scheduler running [${config.env}]`);
+		log.info({ env: config.env }, 'Kumbukum scheduler running');
 		return;
 	}
 
 	if (SERVER_MODE === 'email-worker') {
 		const { startOutgoingEmailWorker } = await import('./services/outgoing_email_service.js');
 		await startOutgoingEmailWorker();
-		console.log(`Kumbukum email worker running [${config.env}]`);
+		log.info({ env: config.env }, 'Kumbukum email worker running');
 		return;
 	}
 
 	const server = app.listen(config.port, () => {
-		console.log(`Kumbukum ${SERVER_MODE} running on port ${config.port} [${config.env}]`);
+		log.info({ mode: SERVER_MODE, port: config.port, env: config.env }, `Kumbukum ${SERVER_MODE} running on port ${config.port}`);
 	});
 
 	await setupSocketIO(server, sessionMiddleware);
@@ -230,15 +236,15 @@ async function start() {
 
 process.on('unhandledRejection', (reason, promise) => {
 	OtelRuntime.recordException(reason instanceof Error ? reason : new Error(String(reason)));
-	console.error('Unhandled rejection at:', promise, 'reason:', reason);
+	log.error({ err: reason instanceof Error ? reason : new Error(String(reason)) }, 'Unhandled rejection');
 });
 process.on('uncaughtException', (err) => {
 	OtelRuntime.recordException(err);
-	console.error('Uncaught exception:', err);
+	log.error({ err }, 'Uncaught exception');
 });
 
 start().catch((err) => {
-	console.error('Failed to start:', err);
+	log.error({ err }, 'Failed to start');
 	process.exit(1);
 });
 

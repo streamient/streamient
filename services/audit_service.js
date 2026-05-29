@@ -1,4 +1,7 @@
 import { AuditLog } from '../model/audit_log.js';
+import { createLogger } from '../modules/logger.js';
+
+const auditLog = createLogger('audit');
 
 const SENSITIVE_KEYS = new Set([
     'password', 'token', 'secret', 'totp_secret', 'access_tokens', 'api_key',
@@ -13,7 +16,7 @@ const SKIP_DIFF_KEYS = new Set(['updatedAt', '__v', 'is_indexed']);
  */
 export function log(params) {
     AuditLog.create(params).catch((err) => {
-        console.error('Audit log write error:', err.message);
+        auditLog.error({ err }, 'Audit log write error');
     });
 }
 

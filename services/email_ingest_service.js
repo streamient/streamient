@@ -20,6 +20,9 @@ import { emailAiCompletion, emailTriageCompletion } from '../modules/llm_client.
 import { getAiInstructions, getEmailSettings } from './byo_ai_service.js';
 import { sanitizeEmailHtml } from '../modules/email_html_sanitizer.js';
 import { indexEmailNow, removeEmailFromIndexNow } from './email_index_service.js';
+import { createLogger } from '../modules/logger.js';
+
+const log = createLogger('email-ingest');
 
 const MAX_ATTACHMENT_SIZE = 50 * 1024 * 1024;
 const DEFAULT_EMAIL_LABELS = [
@@ -335,6 +338,7 @@ async function extractAttachmentTextContent(attachments = []) {
 export async function parseEmailInput(data) {
 	if (data?.raw_email) {
 		const parsed = await simpleParser(data.raw_email);
+		log.debug({ bytes: data.raw_email.length, attachments: (parsed.attachments || []).length, has_html: !!parsed.html }, 'Parsed raw email');
 		return {
 			message_id: canonicalMessageId(parsed.messageId || getHeaderValue(parsed.headers, 'message-id')),
 			references: parseReferences(parsed.references || getHeaderValue(parsed.headers, 'references')),
@@ -552,7 +556,7 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 			ctx,
 			triageOptions: ctx.autoTriageOptions,
 		}).catch((err) => {
-			console.error(`Incoming email auto-triage error: ${err.message}`);
+			log.error({ err }, 'Incoming email auto-triage error');
 			return null;
 		});
 		if (ctx.awaitAutoTriage) await autoTriage;
@@ -945,7 +949,7 @@ export async function deleteEmail(host_id, emailId, ctx = {}) {
 	);
 	if (email) {
 		await removeEmailFromIndexNow(host_id, emailId, { removeFn: ctx.removeEmailIndexFn, updateFn: ctx.updateEmailIndexStateFn });
-		removeLinksForItem(host_id, emailId).catch((err) => console.error('Remove links error:', err.message));
+		removeLinksForItem(host_id, emailId).catch((err) => log.error({ err, host_id, email_id: emailId }, 'Remove links error'));
 		emitToTenant(host_id, 'email:deleted', { _id: emailId });
 		emitToTenant(host_id, 'counts:refresh');
 		invalidateGraphCache(host_id).catch(() => {});
@@ -1579,7 +1583,7 @@ export async function backfillEmailTriageState() {
 
 	const modified = [mailboxResult, trashResult, triagedTrueResult, triagedFalseResult]
 		.reduce((sum, result) => sum + (result?.modifiedCount || 0), 0);
-	if (modified > 0) console.log(`Email triage state backfilled: ${modified} updates`);
+	if (modified > 0) log.info({ updates: modified }, 'Email triage state backfilled');
 
 	return {
 		mailbox: mailboxResult?.modifiedCount || 0,

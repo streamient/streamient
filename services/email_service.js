@@ -2,6 +2,9 @@ import nodemailer from 'nodemailer';
 import config from '../config.js';
 import emailTemplates from '../config/email_templates.js';
 import { getSetting } from './system_settings_service.js';
+import { createLogger } from '../modules/logger.js';
+
+const log = createLogger('email');
 
 const transporters = new Map();
 let smtpRoundRobinIndex = 0;
@@ -58,7 +61,7 @@ async function sendMail({ to, subject, html, text, from, replyTo }) {
 	smtpRoundRobinIndex = picked.nextIndex;
 
 	if (!picked.server) {
-		console.log('Email (no SMTP):', JSON.stringify({ to, subject }));
+		log.info({ to, subject }, 'Email (no SMTP)');
 		return;
 	}
 

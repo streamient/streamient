@@ -88,6 +88,7 @@ export const configureOpenObserveEnvironment = function(options = {}, env = proc
 	env.OTEL_TRACES_EXPORTER = env.OTEL_TRACES_EXPORTER || 'otlp';
 	env.OTEL_EXPORTER_OTLP_PROTOCOL = env.OTEL_EXPORTER_OTLP_PROTOCOL || 'http/protobuf';
 	env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT || `${config.serverUrl}/api/${config.organization}/traces`;
+	env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT = env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || `${config.serverUrl}/api/${config.organization}/logs`;
 	env.OTEL_SERVICE_NAME = env.OTEL_SERVICE_NAME || config.service || serviceApp;
 
 	if (config.authHeader && !env.OTEL_EXPORTER_OTLP_HEADERS) {

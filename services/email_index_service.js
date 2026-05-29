@@ -1,5 +1,8 @@
 import { Email } from '../model/email.js';
 import { indexDocument, removeDocument } from '../modules/typesense.js';
+import { createLogger } from '../modules/logger.js';
+
+const log = createLogger('email-index');
 
 function emailIndexId(emailOrId) {
 	return emailOrId?._id?.toString?.() || emailOrId?.id?.toString?.() || String(emailOrId || '');
@@ -18,9 +21,10 @@ export async function indexEmailNow(hostId, email, options = {}) {
 			await indexFn(hostId, 'emails', email);
 		}
 		await updateFn({ _id: id, host_id: hostId }, { $set: { is_indexed: true } }, { timestamps: false });
+		log.debug({ host_id: hostId, email_id: id, action: email.in_trash === true ? 'remove' : 'index' }, 'Email index updated');
 		return true;
 	} catch (err) {
-		console.error('Email Typesense index error:', err.message);
+		log.error({ err, host_id: hostId, email_id: id }, 'Email Typesense index error');
 		return false;
 	}
 }
@@ -33,9 +37,10 @@ export async function removeEmailFromIndexNow(hostId, emailOrId, options = {}) {
 	try {
 		await removeFn(hostId, 'emails', id);
 		await updateFn({ _id: id, host_id: hostId }, { $set: { is_indexed: true } }, { timestamps: false });
+		log.debug({ host_id: hostId, email_id: id }, 'Email removed from index');
 		return true;
 	} catch (err) {
-		console.error('Email Typesense remove error:', err.message);
+		log.error({ err, host_id: hostId, email_id: id }, 'Email Typesense remove error');
 		return false;
 	}
 }

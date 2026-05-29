@@ -1,6 +1,9 @@
 import { PlaywrightCrawler } from 'crawlee';
 import { ensureCollections, indexDocument } from '../modules/typesense.js';
 import { Url } from '../model/url.js';
+import { createLogger } from './logger.js';
+
+const log = createLogger('crawler');
 
 const SKIP_URL_TOKEN_RE = /(^|[\/_.\-?=&])(login|log-in|signin|sign-in|signon|sso|oauth|auth|authenticate)([\/_.\-?=&]|$)/i;
 
@@ -103,7 +106,7 @@ export async function crawlSite(urlDoc) {
 		},
 
 		failedRequestHandler({ request }) {
-			console.warn(`Crawl failed: ${request.url}`);
+			log.warn({ url: request.url }, 'Crawl failed');
 		},
 	});
 
@@ -132,7 +135,7 @@ export async function crawlSite(urlDoc) {
 			});
 			indexedCount++;
 		} catch (err) {
-			console.error(`Page index error (${pageData.url}):`, err.message);
+			log.error({ err, url: pageData.url }, 'Page index error');
 		}
 	}
 
@@ -159,10 +162,7 @@ export async function crawlSite(urlDoc) {
 
 	await Url.updateOne({ _id: urlId, host_id: hostId }, { $set: update });
 
-	console.log(
-		`Crawled ${pages.length} requests for ${urlDoc.url}; indexed ${indexedCount} unique pages; ` +
-		`${partial ? `frontier remaining: ${newFrontier.length}` : 'crawl complete'}`,
-	);
+	log.info({ requests: pages.length, url: urlDoc.url, indexed: indexedCount, partial, frontierRemaining: partial ? newFrontier.length : 0 }, 'Crawl step complete');
 	return indexedCount;
 }
 
@@ -171,13 +171,13 @@ export async function crawlSite(urlDoc) {
 */
 export async function reindexAll() {
 	const urls = await Url.find({ crawl_enabled: true });
-	console.log(`Reindexing ${urls.length} crawl-enabled URLs`);
+	log.info({ count: urls.length }, 'Reindexing crawl-enabled URLs');
 
 	for (const urlDoc of urls) {
 		try {
 			await crawlSite(urlDoc);
 		} catch (err) {
-			console.error(`Reindex error for ${urlDoc.url}:`, err.message);
+			log.error({ err, url: urlDoc.url }, 'Reindex error');
 		}
 	}
 }
@@ -199,7 +199,7 @@ export async function reindexDue({ intervalHours = 24 } = {}) {
 	}).sort({ crawl_partial: -1, last_crawled: 1 });
 
 	if (!urls.length) return 0;
-	console.log(`Reindexing ${urls.length} due crawl-enabled URLs`);
+	log.info({ count: urls.length }, 'Reindexing due crawl-enabled URLs');
 
 	let crawled = 0;
 	for (const urlDoc of urls) {
@@ -207,7 +207,7 @@ export async function reindexDue({ intervalHours = 24 } = {}) {
 			await crawlSite(urlDoc);
 			crawled++;
 		} catch (err) {
-			console.error(`Reindex due error for ${urlDoc.url}:`, err.message);
+			log.error({ err, url: urlDoc.url }, 'Reindex due error');
 		}
 	}
 

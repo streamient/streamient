@@ -13,6 +13,9 @@ import { EmailInternalNote } from '../model/email_internal_note.js';
 import { OutgoingEmail } from '../model/outgoing_email.js';
 import { GraphLink } from '../model/graph_link.js';
 import { sendExportReadyEmail } from './email_service.js';
+import { createLogger } from '../modules/logger.js';
+
+const log = createLogger('export');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const EXPORT_DIR = path.join(__dirname, '..', 'assets', 'export');
@@ -37,7 +40,7 @@ export async function startExport(userId, hostId, userEmail, userName) {
 
 	setImmediate(() => {
 		processExport(doc._id, hostId, userEmail, userName).catch((err) => {
-			console.error('Export processing error:', err);
+			log.error({ err }, 'Export processing error');
 		});
 	});
 
@@ -91,7 +94,7 @@ async function processExport(exportId, hostId, userEmail, userName) {
 		await doc.save();
 
 		sendExportReadyEmail(userEmail, userName, doc.token).catch((e) =>
-			console.warn(`Export email failed for ${userEmail}:`, e.message),
+			log.warn({ err: e, user_email: userEmail }, 'Export email failed'),
 		);
 	} catch (err) {
 		doc.status = 'failed';
@@ -128,7 +131,7 @@ export async function cleanupExpiredExports() {
 	}
 
 	if (cleaned > 0) {
-		console.log(`Cleaned up ${cleaned} expired export(s)`);
+		log.info({ count: cleaned }, 'Cleaned up expired exports');
 	}
 
 	return cleaned;

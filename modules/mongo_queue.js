@@ -1,4 +1,7 @@
 import mongoose from 'mongoose';
+import { createLogger } from './logger.js';
+
+const log = createLogger('queue');
 
 export const COLLECTION_NAME = 'mongo_queue_jobs';
 export const STATUS = {
@@ -115,9 +118,9 @@ export class MongoWorker {
 		await this.recoverStalledJobs();
 		await this.sweepPendingJobs();
 		this.openChangeStream();
-		this.sweepInterval = setInterval(() => this.sweepPendingJobs().catch((err) => console.error('MongoWorker sweep error:', err.message)), 30000);
-		this.stalledInterval = setInterval(() => this.recoverStalledJobs().catch((err) => console.error('MongoWorker stalled recovery error:', err.message)), 120000);
-		console.log(`MongoWorker started queue=${this.queueName} concurrency=${this.concurrency}`);
+		this.sweepInterval = setInterval(() => this.sweepPendingJobs().catch((err) => log.error({ err, queue: this.queueName }, 'MongoWorker sweep error')), 30000);
+		this.stalledInterval = setInterval(() => this.recoverStalledJobs().catch((err) => log.error({ err, queue: this.queueName }, 'MongoWorker stalled recovery error')), 120000);
+		log.info({ queue: this.queueName, concurrency: this.concurrency }, 'MongoWorker started');
 	}
 
 	async stop() {
@@ -145,17 +148,17 @@ export class MongoWorker {
 				this.tryProcess(change.fullDocument);
 			});
 			this.changeStream.on('error', (err) => {
-				console.error('MongoWorker change stream error:', err.message);
+				log.error({ err, queue: this.queueName }, 'MongoWorker change stream error');
 				if (this.running) setTimeout(() => this.openChangeStream(), 5000);
 			});
 		} catch (err) {
-			console.warn('MongoWorker change stream unavailable; periodic sweep remains active:', err.message);
+			log.warn({ err, queue: this.queueName }, 'MongoWorker change stream unavailable; periodic sweep remains active');
 		}
 	}
 
 	tryProcess(doc) {
 		if (this.activeCount >= this.concurrency) return;
-		this.processJob(doc).catch((err) => console.error('MongoWorker process error:', err.message));
+		this.processJob(doc).catch((err) => log.error({ err, queue: this.queueName, job_id: String(doc?._id || '') }, 'MongoWorker process error'));
 	}
 
 	async processJob(doc) {
@@ -168,6 +171,8 @@ export class MongoWorker {
 		const claimed = result?.value || result;
 		if (!claimed?._id) return;
 		this.activeCount++;
+		const jobId = String(claimed._id);
+		const startedAt = Date.now();
 		try {
 			let timeoutHandle;
 			const timeout = new Promise((_, reject) => {
@@ -179,10 +184,13 @@ export class MongoWorker {
 				clearTimeout(timeoutHandle);
 			}
 			await col.updateOne(namespaced({ _id: claimed._id }, this.appInstance), { $set: { status: STATUS.COMPLETED, updated_at: new Date(), completed_at: new Date() } });
+			log.debug({ queue: this.queueName, job_id: jobId, attempts: claimed.attempts, duration_ms: Date.now() - startedAt }, 'Job completed');
 		} catch (err) {
 			const error = err?.message || String(err);
-			const nextStatus = claimed.attempts < claimed.max_attempts ? STATUS.PENDING : STATUS.FAILED;
+			const willRetry = claimed.attempts < claimed.max_attempts;
+			const nextStatus = willRetry ? STATUS.PENDING : STATUS.FAILED;
 			await col.updateOne(namespaced({ _id: claimed._id }, this.appInstance), { $set: { status: nextStatus, error, updated_at: new Date() } });
+			log[willRetry ? 'warn' : 'error']({ err, queue: this.queueName, job_id: jobId, attempts: claimed.attempts, max_attempts: claimed.max_attempts, will_retry: willRetry, duration_ms: Date.now() - startedAt }, willRetry ? 'Job failed; will retry' : 'Job failed permanently');
 			throw err;
 		} finally {
 			this.activeCount = Math.max(0, this.activeCount - 1);
@@ -208,6 +216,6 @@ export class MongoWorker {
 			status: STATUS.PROCESSING,
 			updated_at: { $lt: staleBefore },
 		}, this.appInstance), { $set: { status: STATUS.PENDING, updated_at: new Date(), error: 'Recovered stalled job' } });
-		if (result.modifiedCount) console.warn(`MongoWorker recovered ${result.modifiedCount} stalled ${this.queueName} jobs`);
+		if (result.modifiedCount) log.warn({ queue: this.queueName, recovered: result.modifiedCount }, 'MongoWorker recovered stalled jobs');
 	}
 }

@@ -4,6 +4,9 @@ import Redis from 'ioredis';
 import config from '../config.js';
 import { buildRedisConnectionOptions, isTransientRedisError } from './redis_options.js';
 import * as OtelRuntime from './otel_runtime.js';
+import { createLogger } from './logger.js';
+
+const log = createLogger('socket');
 
 let io;
 let bridgePublisher;
@@ -25,7 +28,7 @@ function attachRedisErrorHandler(redisClient, label) {
 		}
 		const msg = err?.message || '';
 		if (isTransientRedisError(msg)) return;
-		console.warn(`${label}:`, msg);
+		log.warn({ msg }, label);
 	});
 }
 
@@ -61,12 +64,12 @@ async function setupTenantEventBridge() {
 			if (!payload?.host_id || !payload?.event) return;
 			emitToTenantRoom(payload.host_id, payload.event, payload.data);
 		} catch (err) {
-			console.warn('Socket.IO bridge payload error:', err.message);
+			log.warn({ err }, 'Socket.IO bridge payload error');
 		}
 	});
 	await bridgeSubscriber.connect();
 	await bridgeSubscriber.subscribe(TENANT_EVENT_BRIDGE_CHANNEL);
-	console.log('Socket.IO tenant event bridge connected');
+	log.info('Socket.IO tenant event bridge connected');
 }
 
 function publishTenantEvent(host_id, event, data) {
@@ -76,7 +79,7 @@ function publishTenantEvent(host_id, event, data) {
 			return publisher.publish(TENANT_EVENT_BRIDGE_CHANNEL, JSON.stringify({ host_id, event, data }));
 		})
 		.catch((err) => {
-			console.warn('Socket.IO bridge publish failed:', err.message);
+			log.warn({ err }, 'Socket.IO bridge publish failed');
 		});
 }
 
@@ -115,10 +118,10 @@ export async function setupSocketIO(httpServer, sessionMiddleware) {
 				attachRedisErrorHandler(redisClient, 'Socket.IO Redis client error');
 				await redisClient.connect();
 				io.adapter(createAdapter(redisClient, { streamCount: 4, blockTimeInMs: 10_000, heartbeatInterval: 30000, heartbeatTimeout: 90000 }));
-				console.log('Socket.IO Redis streams adapter connected');
+				log.info('Socket.IO Redis streams adapter connected');
 			} catch (err) {
 				span.recordException(err);
-				console.warn('Socket.IO Redis adapter failed, using in-memory:', err.message);
+				log.warn({ err }, 'Socket.IO Redis adapter failed, using in-memory');
 				if (redisClient) redisClient.disconnect();
 			}
 		}
@@ -131,7 +134,7 @@ export async function setupSocketIO(httpServer, sessionMiddleware) {
 				connectionSpan.setAttribute('server.mode', process.env.SERVER_MODE || 'app');
 				connectionSpan.setAttribute('service.app', process.env.KUMBUKUM_APP || 'web');
 			});
-			console.log(`Socket.IO client connected ${socket.id} [${process.env.KUMBUKUM_APP || 'web'}]`);
+			log.info({ socketId: socket.id, app: process.env.KUMBUKUM_APP || 'web' }, 'Socket.IO client connected');
 
 			// Client subscribes to a tenant room
 			socket.on('subscribe', (room) => {
@@ -148,11 +151,11 @@ export async function setupSocketIO(httpServer, sessionMiddleware) {
 					disconnectSpan.setAttribute('socket.id', socket.id);
 					disconnectSpan.setAttribute('server.mode', process.env.SERVER_MODE || 'app');
 				});
-				console.log(`Socket.IO client disconnected ${socket.id} [${process.env.KUMBUKUM_APP || 'web'}]`);
+				log.info({ socketId: socket.id, app: process.env.KUMBUKUM_APP || 'web' }, 'Socket.IO client disconnected');
 			});
 		});
 
-		console.log(`Socket.IO initialized mode=${process.env.SERVER_MODE || 'app'} app=${process.env.KUMBUKUM_APP || 'web'} otel=${OtelRuntime.isEnabled() ? 'enabled' : 'disabled'}`);
+		log.info({ mode: process.env.SERVER_MODE || 'app', app: process.env.KUMBUKUM_APP || 'web', otel: OtelRuntime.isEnabled() ? 'enabled' : 'disabled' }, 'Socket.IO initialized');
 		return io;
 	});
 }

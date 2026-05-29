@@ -6,6 +6,9 @@ import { invalidateGraphCache, removeLinksForItem } from './graph_service.js';
 import * as audit from './audit_service.js';
 import { saveScreenshot, saveScreenshotDataUrl, signScreenshotUrl } from '../modules/screenshot.js';
 import { normalizeUrl } from '../modules/screenshot.js';
+import { createLogger } from '../modules/logger.js';
+
+const log = createLogger('url');
 
 function attachScreenshotUrl(doc) {
 	if (!doc) return doc;
@@ -44,7 +47,7 @@ export async function saveUrl(userId, host_id, data, ctx = {}) {
 			shouldSaveExisting = true;
 		}
 		if (shouldSaveExisting && typeof existingUrl.save === 'function') {
-			await existingUrl.save().catch((err) => console.error('URL duplicate update error:', err.message));
+			await existingUrl.save().catch((err) => log.error({ err }, 'URL duplicate update error'));
 		}
 		existingUrl.$locals = existingUrl.$locals || {};
 		existingUrl.$locals.wasDuplicate = true;
@@ -55,7 +58,7 @@ export async function saveUrl(userId, host_id, data, ctx = {}) {
 	try {
 		extracted = await extractUrlContent(rawUrl);
 	} catch (err) {
-		console.error('URL extraction error:', err.message);
+		log.error({ err }, 'URL extraction error');
 	}
 
 	const screenshot = await saveClientScreenshot(rawUrl, data.screenshot_data_url);
@@ -84,7 +87,7 @@ export async function saveUrl(userId, host_id, data, ctx = {}) {
 			if (filename) {
 				Url.updateOne({ _id: urlDoc._id }, { $set: { screenshot: filename } }).catch(() => {});
 			}
-		}).catch((err) => console.error('Screenshot capture error:', err.message));
+		}).catch((err) => log.error({ err }, 'Screenshot capture error'));
 	}
 
 	return urlDoc;
@@ -107,7 +110,7 @@ async function saveClientScreenshot(rawUrl, dataUrl) {
 	try {
 		return await saveScreenshotDataUrl(rawUrl, dataUrl);
 	} catch (err) {
-		console.error('Client screenshot save error:', err.message);
+		log.error({ err }, 'Client screenshot save error');
 		return '';
 	}
 }
@@ -146,7 +149,7 @@ export async function updateUrl(host_id, urlId, data, ctx = {}) {
 	);
 
 	if (urlDoc) {
-		removeDocument(host_id, 'urls', urlId).catch((err) => console.error('Typesense remove error:', err.message));
+		removeDocument(host_id, 'urls', urlId).catch((err) => log.error({ err }, 'Typesense remove error'));
 		emitToTenant(host_id, 'url:updated', urlDoc);
 		invalidateGraphCache(host_id).catch(() => {});
 		if (ctx.user_id) {
@@ -165,8 +168,8 @@ export async function deleteUrl(host_id, urlId, ctx = {}) {
 		{ returnDocument: 'after' },
 	);
 	if (urlDoc) {
-		removeDocument(host_id, 'urls', urlId).catch((err) => console.error('Typesense remove error:', err.message));
-		removeLinksForItem(host_id, urlId).catch((err) => console.error('Remove links error:', err.message));
+		removeDocument(host_id, 'urls', urlId).catch((err) => log.error({ err }, 'Typesense remove error'));
+		removeLinksForItem(host_id, urlId).catch((err) => log.error({ err }, 'Remove links error'));
 		emitToTenant(host_id, 'url:deleted', { _id: urlId });
 		invalidateGraphCache(host_id).catch(() => {});
 		if (ctx.user_id) audit.log({ action: 'delete', resource: 'url', resource_id: urlId, host_id, ...ctx });

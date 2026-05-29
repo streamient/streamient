@@ -3,6 +3,9 @@ import Keyv from 'keyv';
 import KeyvValkey from '@keyv/valkey';
 import config from '../config.js';
 import { buildRedisConnectionOptions, isRedisSentinelOptions, isTransientRedisError } from './redis_options.js';
+import { createLogger } from './logger.js';
+
+const log = createLogger('redis');
 
 let _sharedClient = null;
 let _keyv = null;
@@ -15,11 +18,7 @@ function createSharedClient() {
 	const connection = buildRedisConnectionOptions(opts, { lazyConnect: false });
 
 	if (isSentinel) {
-		console.log(`========================================================================`);
-		console.log(`Initializing SHARED Keyv Valkey SENTINEL client`);
-		console.log(`Master: ${opts.name}`);
-		console.log(`Sentinels: ${opts.sentinels.map(s => `${s.host}:${s.port}`).join(', ')}`);
-		console.log(`========================================================================`);
+		log.info({ master: opts.name, sentinels: opts.sentinels.map(s => `${s.host}:${s.port}`).join(', ') }, 'Initializing SHARED Keyv Valkey SENTINEL client');
 
 		_sharedClient = new Valkey(connection.options);
 
@@ -29,12 +28,12 @@ function createSharedClient() {
 			}
 			const errMsg = err?.message || '';
 			if (!isTransientRedisError(errMsg)) {
-				console.error('Keyv Valkey Sentinel client error:', err?.message || err);
+				log.error({ err }, 'Keyv Valkey Sentinel client error');
 			}
 		});
 	} else {
 		const url = connection.url || `redis://${connection.options.host || 'localhost'}:${connection.options.port || 6379}`;
-		console.log(`Initializing SHARED Keyv Valkey client: ${url}`);
+		log.info({ url }, 'Initializing SHARED Keyv Valkey client');
 
 		_sharedClient = connection.url
 			? new Valkey(connection.url, connection.options)
@@ -46,16 +45,16 @@ function createSharedClient() {
 			}
 			const errMsg = err?.message || '';
 			if (!isTransientRedisError(errMsg)) {
-				console.error('Keyv Valkey client error:', err?.message || err);
+				log.error({ err }, 'Keyv Valkey client error');
 			}
 		});
 
 		_sharedClient.on('ready', () => {
-			console.log('Keyv Valkey client connected and ready');
+			log.info('Keyv Valkey client connected and ready');
 		});
 	}
 
-	console.log('Keyv Valkey shared client initializing...');
+	log.info('Keyv Valkey shared client initializing...');
 
 	if (_sharedClient && typeof _sharedClient.setMaxListeners === 'function') {
 		_sharedClient.setMaxListeners(0);
@@ -77,7 +76,7 @@ function createKeyv() {
 		}
 		const errMsg = err?.message || '';
 		if (err && !isTransientRedisError(errMsg)) {
-			console.error('KeyvValkey store error:', err?.message || err);
+			log.error({ err }, 'KeyvValkey store error');
 		}
 	});
 
@@ -94,7 +93,7 @@ function createKeyv() {
 		}
 		const errMsg = err?.message || '';
 		if (err && !isTransientRedisError(errMsg)) {
-			console.error('Keyv Valkey connection error:', err?.message || err);
+			log.error({ err }, 'Keyv Valkey connection error');
 		}
 	});
 
@@ -162,9 +161,9 @@ export async function initRedis() {
 	if (client.status === 'ready') {
 		if (client.options?.sentinels) {
 			const nodes = client.options.sentinels.map(s => `${s.host}:${s.port}`).join(', ');
-			console.log(`Redis connected via sentinel (master: ${client.options.name}): ${nodes}`);
+			log.info({ master: client.options.name, nodes }, 'Redis connected via sentinel');
 		} else {
-			console.log(`Redis connected: ${client.options?.host || 'unknown'}:${client.options?.port || 'unknown'}`);
+			log.info({ host: client.options?.host || 'unknown', port: client.options?.port || 'unknown' }, 'Redis connected');
 		}
 	}
 }

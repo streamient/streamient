@@ -18,10 +18,11 @@ import { gitSyncTools } from './tools/git_sync.js';
 import { MCP_SERVER_INSTRUCTIONS } from './instructions.js';
 import { buildProtectedResourceMetadata, getRequestExternalBaseUrl } from '../../modules/oauth.js';
 import { recordException, setupExpressErrorHandler as setupOtelExpressErrorHandler } from './tracing.js';
+import { createLogger } from '../../modules/logger.js';
 
 const PORT = mcpConfig.port;
 const API_BASE_URL = mcpConfig.apiBaseUrl;
-const MCP_TOOL_TELEMETRY = process.env.MCP_TOOL_TELEMETRY === 'true';
+const log = createLogger('mcp');
 // Default project id + feature flags change rarely, so cache them long enough
 // to stay warm across a user's session and normal gaps between calls. 60s was
 // short enough that spaced-out calls always missed and re-paid the two upstream
@@ -47,8 +48,8 @@ function summarizeToolResult(result) {
 }
 
 function logToolTelemetry(event) {
-  if (!MCP_TOOL_TELEMETRY) return;
-  console.log(JSON.stringify({ event: 'mcp_tool_call', ...event }));
+  const level = event?.success === false ? 'warn' : 'info';
+  log[level]({ event: 'mcp_tool_call', ...event }, `mcp tool ${event?.tool || ''} ${event?.success === false ? 'failed' : 'ok'}`.trim());
 }
 
 function extractToken(req) {
@@ -105,8 +106,8 @@ async function resolveBootstrap(api, { projectId, cacheKey }) {
 }
 
 function logMcpRequest(event) {
-  if (!MCP_TOOL_TELEMETRY) return;
-  console.log(JSON.stringify({ event: 'mcp_request', ...event }));
+  const level = event?.success === false ? 'error' : 'info';
+  log[level]({ event: 'mcp_request', ...event }, `mcp ${event?.transport || 'http'} ${event?.method || ''}`.trim());
 }
 
 async function createServer(apiAuth, { projectId, oauthClientId, cacheKey } = {}) {
@@ -181,7 +182,7 @@ if (transportArg === '--stdio' || !transportArg) {
   // stdio transport (default for Claude Desktop etc.)
   const token = process.env['ACCESS-TOKEN'];
   if (!token) {
-    console.error('ACCESS-TOKEN environment variable required for stdio transport');
+    log.error('ACCESS-TOKEN environment variable required for stdio transport');
     process.exit(1);
   }
 
@@ -192,7 +193,7 @@ if (transportArg === '--stdio' || !transportArg) {
     await server.connect(transport);
   } catch (err) {
     recordException(err);
-    console.error('Fatal error starting Kumbukum MCP stdio server:', err);
+    log.error({ err }, 'Fatal error starting Kumbukum MCP stdio server');
     process.exit(1);
   }
 } else {
@@ -258,7 +259,7 @@ if (transportArg === '--stdio' || !transportArg) {
       await server.connect(transport);
     } catch (err) {
       recordException(err);
-      console.error('Error starting Kumbukum MCP SSE connection:', err);
+      log.error({ err }, 'Error starting Kumbukum MCP SSE connection');
       if (!res.headersSent) {
         res.status(500).json({ error: 'Internal server error' });
       }
@@ -280,7 +281,7 @@ if (transportArg === '--stdio' || !transportArg) {
       await session.transport.handlePostMessage(req, res);
     } catch (err) {
       recordException(err);
-      console.error('Error handling Kumbukum MCP SSE message:', err);
+      log.error({ err }, 'Error handling Kumbukum MCP SSE message');
       if (!res.headersSent) {
         res.status(500).json({ error: 'Internal server error' });
       }
@@ -315,7 +316,7 @@ if (transportArg === '--stdio' || !transportArg) {
       });
     } catch (err) {
       recordException(err);
-      console.error('Error handling Kumbukum MCP HTTP request:', err);
+      log.error({ err }, 'Error handling Kumbukum MCP HTTP request');
       logMcpRequest({
         method: mcpMethod,
         transport: 'streamable-http',
@@ -336,8 +337,6 @@ if (transportArg === '--stdio' || !transportArg) {
   setupOtelExpressErrorHandler(app);
 
   app.listen(PORT, () => {
-    console.log(`Kumbukum MCP server running on port ${PORT}`);
-    console.log(`  SSE: http://localhost:${PORT}/sse`);
-    console.log(`  HTTP: http://localhost:${PORT}/mcp`);
+    log.info({ port: PORT, sse: `/sse`, http: `/mcp` }, `Kumbukum MCP server running on port ${PORT}`);
   });
 }

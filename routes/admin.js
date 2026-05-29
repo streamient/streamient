@@ -11,6 +11,9 @@ import { getByCategory, setSetting, deleteSetting } from '../services/system_set
 import { sendTestEmail } from '../services/email_service.js';
 import * as auditService from '../services/audit_service.js';
 import { deleteAccountDataForUser } from '../services/account_cleanup_service.js';
+import { createLogger } from '../modules/logger.js';
+
+const log = createLogger('admin');
 
 const router = Router();
 
@@ -58,7 +61,7 @@ router.get('/accounts/:id/edit', async (req, res) => {
             account: user,
         });
     } catch (err) {
-        console.error('Admin account edit page error:', err);
+        log.error({ err, account_id: req.params.id }, 'Admin account edit page error');
         res.redirect('/admin');
     }
 });
@@ -105,7 +108,7 @@ router.get('/api/accounts', async (req, res) => {
 
         res.json({ accounts: enriched, total, page, pages: Math.ceil(total / limit) });
     } catch (err) {
-        console.error('Admin list accounts error:', err);
+        log.error({ err }, 'Admin list accounts error');
         res.status(500).json({ error: 'Failed to list accounts' });
     }
 });
@@ -116,7 +119,7 @@ router.get('/api/accounts/:id', async (req, res) => {
         if (!user) return res.status(404).json({ error: 'Not found' });
         res.json(user);
     } catch (err) {
-        console.error('Admin get account error:', err);
+        log.error({ err, account_id: req.params.id }, 'Admin get account error');
         res.status(500).json({ error: 'Failed to get account' });
     }
 });
@@ -139,7 +142,7 @@ router.put('/api/accounts/:id', async (req, res) => {
 
         res.json({ ok: true, account: user.toSafe() });
     } catch (err) {
-        console.error('Admin update account error:', err);
+        log.error({ err, account_id: req.params.id }, 'Admin update account error');
         res.status(500).json({ error: 'Failed to update account' });
     }
 });
@@ -153,7 +156,7 @@ router.delete('/api/accounts/:id', async (req, res) => {
 
         res.json({ ok: true });
     } catch (err) {
-        console.error('Admin delete account error:', err);
+        log.error({ err, account_id: req.params.id }, 'Admin delete account error');
         res.status(500).json({ error: 'Failed to delete account' });
     }
 });
@@ -186,7 +189,7 @@ router.get('/api/email-templates', async (req, res) => {
 
         res.json({ templates });
     } catch (err) {
-        console.error('Admin list email templates error:', err);
+        log.error({ err }, 'Admin list email templates error');
         res.status(500).json({ error: 'Failed to list email templates' });
     }
 });
@@ -208,7 +211,7 @@ router.put('/api/email-templates/:key', async (req, res) => {
 
         res.json({ ok: true });
     } catch (err) {
-        console.error('Admin update email template error:', err);
+        log.error({ err, template_key: req.params.key }, 'Admin update email template error');
         res.status(500).json({ error: 'Failed to update email template' });
     }
 });
@@ -226,7 +229,7 @@ router.post('/api/email-templates/:key/reset', async (req, res) => {
         const defaults = emailTemplates[key];
         res.json({ ok: true, subject: defaults.subject, html: defaults.html });
     } catch (err) {
-        console.error('Admin reset email template error:', err);
+        log.error({ err, template_key: req.params.key }, 'Admin reset email template error');
         res.status(500).json({ error: 'Failed to reset email template' });
     }
 });
@@ -257,7 +260,7 @@ router.post('/api/email-templates/:key/test', async (req, res) => {
         await sendTestEmail(email, key, sampleVars);
         res.json({ ok: true });
     } catch (err) {
-        console.error('Admin send test email error:', err);
+        log.error({ err, template_key: req.params.key }, 'Admin send test email error');
         res.status(500).json({ error: 'Failed to send test email' });
     }
 });
@@ -285,7 +288,7 @@ router.get('/api/audit-logs', async (req, res) => {
         });
         res.json(result);
     } catch (err) {
-        console.error('Admin audit logs error:', err);
+        log.error({ err }, 'Admin audit logs error');
         res.status(500).json({ error: 'Failed to fetch audit logs' });
     }
 });

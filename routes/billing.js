@@ -4,6 +4,9 @@ import { requireTenant } from '../modules/tenancy.js';
 import { User } from '../model/user.js';
 import { BILLING_SUBSCRIPTION_URL, applySubscriptionToUser, createCheckoutSession, createPortalSession, handleWebhook, resolveCheckoutPlan, resolveCheckoutPriceId } from '../services/billing_service.js';
 import express from 'express';
+import { createLogger } from '../modules/logger.js';
+
+const log = createLogger('billing');
 
 const router = Router();
 
@@ -19,7 +22,7 @@ router.post(
             await handleWebhook(req.body, sig);
             res.json({ received: true });
         } catch (err) {
-            console.error('Stripe webhook error:', err.message);
+            log.error({ err }, 'Stripe webhook error');
             res.status(400).send(`Webhook Error: ${err.message}`);
         }
     },
@@ -48,7 +51,7 @@ router.get('/billing/checkout', requireAuth, requireTenant, async (req, res) => 
         const checkoutUrl = await createCheckoutSession(user, plan);
         res.redirect(checkoutUrl);
     } catch (err) {
-        console.error('Checkout error:', err);
+        log.error({ err, user_id: req.userId }, 'Checkout error');
         res.status(500).render('billing/checkout_cancel', {
             title: 'Checkout Error',
             message: 'Something went wrong starting checkout. Please try again.',
@@ -78,7 +81,7 @@ router.get('/billing/success', requireAuth, requireTenant, async (req, res) => {
                 return res.redirect('/dashboard');
             }
         } catch (err) {
-            console.error('Billing success: failed to retrieve Stripe session:', err.message);
+            log.error({ err, user_id: req.userId, session_id: sessionId }, 'Billing success: failed to retrieve Stripe session');
         }
     }
 
@@ -98,7 +101,7 @@ router.get('/billing/portal', requireAuth, requireTenant, async (req, res) => {
         const portalUrl = await createPortalSession(user);
         res.redirect(portalUrl);
     } catch (err) {
-        console.error('Portal error:', err);
+        log.error({ err, user_id: req.userId }, 'Portal error');
         res.redirect('/settings/subscription');
     }
 });

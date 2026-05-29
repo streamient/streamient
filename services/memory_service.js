@@ -4,6 +4,9 @@ import { searchCollection, removeDocument } from '../modules/typesense.js';
 import { emitToTenant } from '../modules/socket.js';
 import { invalidateGraphCache, removeLinksForItem } from './graph_service.js';
 import * as audit from './audit_service.js';
+import { createLogger } from '../modules/logger.js';
+
+const log = createLogger('memory');
 
 function maybeObjectId(value) {
 	if (!value || typeof value !== 'string' || !mongoose.Types.ObjectId.isValid(value)) return value;
@@ -63,7 +66,7 @@ export async function updateMemory(host_id, memoryId, data, ctx = {}) {
 	);
 
 	if (mem) {
-		removeDocument(host_id, 'memory', memoryId).catch((err) => console.error('Typesense remove error:', err.message));
+		removeDocument(host_id, 'memory', memoryId).catch((err) => log.error({ err }, 'Typesense remove error'));
 		emitToTenant(host_id, 'memory:updated', mem);
 		invalidateGraphCache(host_id).catch(() => {});
 		if (ctx.user_id) {
@@ -82,8 +85,8 @@ export async function deleteMemory(host_id, memoryId, ctx = {}) {
 		{ returnDocument: 'after' },
 	);
 	if (mem) {
-		removeDocument(host_id, 'memory', memoryId).catch((err) => console.error('Typesense remove error:', err.message));
-		removeLinksForItem(host_id, memoryId).catch((err) => console.error('Remove links error:', err.message));
+		removeDocument(host_id, 'memory', memoryId).catch((err) => log.error({ err }, 'Typesense remove error'));
+		removeLinksForItem(host_id, memoryId).catch((err) => log.error({ err }, 'Remove links error'));
 		emitToTenant(host_id, 'memory:deleted', { _id: memoryId });
 		invalidateGraphCache(host_id).catch(() => {});
 		if (ctx.user_id) audit.log({ action: 'delete', resource: 'memory', resource_id: memoryId, host_id, ...ctx });

@@ -13,6 +13,9 @@ import { invalidateGraphCache } from './graph_service.js';
 import { indexEmailNow } from './email_index_service.js';
 import { createSystemTransport } from './email_service.js';
 import * as audit from './audit_service.js';
+import { createLogger } from '../modules/logger.js';
+
+const log = createLogger('email-send');
 
 const SEND_QUEUE = 'send_outgoing_email';
 const SEND_DELAY_MS = 10000;
@@ -169,6 +172,7 @@ export async function queueDraftSend(hostId, draftId, ctx = {}) {
 	).lean();
 	emitDraft(hostId, 'email-draft:updated', updatedDraft);
 	emitOutgoing(hostId, 'outgoing-email:queued', outgoing, { abort_until: sendAfter });
+	log.info({ host_id: hostId, outgoing_id: outgoing._id.toString(), to: outgoing.to.length, cc: outgoing.cc.length, bcc: outgoing.bcc.length, send_after: sendAfter.toISOString() }, 'Outgoing email queued');
 	if (ctx.user_id) {
 		audit.log({ action: 'create', resource: 'outgoing_email', resource_id: outgoing._id.toString(), host_id: hostId, details: { draft_id: draft._id.toString() }, ...ctx });
 	}
@@ -250,6 +254,8 @@ export async function processOutgoingEmail(outgoingId, options = {}) {
 		{ returnDocument: 'after' },
 	);
 	if (!outgoing) return null;
+	const sendStartedAt = Date.now();
+	log.info({ host_id: outgoing.host_id, outgoing_id: outgoing._id.toString(), attempts: outgoing.attempts, to: outgoing.to.length }, 'Sending outgoing email');
 	try {
 		const identity = await EmailIdentity.findOne({ _id: outgoing.email_identity, host_id: outgoing.host_id }).lean();
 		if (!identity) throw new Error('Email identity not found');
@@ -314,8 +320,10 @@ export async function processOutgoingEmail(outgoingId, options = {}) {
 		emitDraft(outgoing.host_id, 'email-draft:updated', draft);
 		emitOutgoing(outgoing.host_id, 'outgoing-email:sent', outgoing, { email: sentEmail, draft, source_email: sourceEmail });
 		emitToTenant(outgoing.host_id, 'counts:refresh');
+		log.info({ host_id: outgoing.host_id, outgoing_id: outgoing._id.toString(), message_id: outgoing.message_id, duration_ms: Date.now() - sendStartedAt }, 'Outgoing email sent');
 		return { outgoing_email: publicOutgoing(outgoing), email: sentEmail };
 	} catch (err) {
+		log.error({ err, host_id: outgoing.host_id, outgoing_id: outgoing._id.toString(), attempts: outgoing.attempts, duration_ms: Date.now() - sendStartedAt }, 'Outgoing email send failed');
 		await markOutgoingError(outgoing, err);
 		return null;
 	}

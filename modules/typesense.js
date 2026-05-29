@@ -5,6 +5,9 @@ import { emitToTenant } from './socket.js';
 import { getRedisClient } from './redis.js';
 import { normalizeLlmScope, resolveLlmApiKey } from '../services/byo_ai_service.js';
 import { sanitizeDeep } from './text_sanitize.js';
+import { createLogger } from './logger.js';
+
+const log = createLogger('typesense');
 
 let client;
 
@@ -67,9 +70,7 @@ function isTransientTypesenseError(err) {
 
 function openTypesenseCircuit(err, operation) {
 	typesenseCircuitOpenUntil = Date.now() + TYPESENSE_CIRCUIT_OPEN_MS;
-	console.warn(
-		`[TYPESENSE] Circuit open for ${TYPESENSE_CIRCUIT_OPEN_MS / 1000}s after ${operation}: ${err?.message || err}`,
-	);
+	log.warn({ err, durationSeconds: TYPESENSE_CIRCUIT_OPEN_MS / 1000, operation }, 'Circuit open');
 }
 
 function isTypesenseCircuitOpen() {
@@ -81,7 +82,7 @@ function logCircuitSkip(operation) {
 	if (now - lastCircuitLogAt < 10_000) return;
 	lastCircuitLogAt = now;
 	const remaining = Math.max(Math.ceil((typesenseCircuitOpenUntil - now) / 1000), 0);
-	console.warn(`[TYPESENSE] Skipping ${operation}; circuit open (${remaining}s remaining)`);
+	log.warn({ operation, remainingSeconds: remaining }, 'Skipping operation; circuit open');
 }
 
 async function withTypesenseResilience(operation, fn, options = {}) {
@@ -516,13 +517,13 @@ export async function ensureCollections(host_id) {
 			const missingFields = schema.fields.filter((field) => !existingFields.has(field.name));
 			if (missingFields.length) {
 				await ts.collections(schema.name).update({ fields: missingFields });
-				console.log(`Updated Typesense collection fields: ${schema.name}`);
+				log.info({ collection: schema.name }, 'Updated Typesense collection fields');
 			}
 		} catch (err) {
 			if (err.httpStatus === 404) {
 				try {
 					await ts.collections().create(schema);
-					console.log(`Created Typesense collection: ${schema.name}`);
+					log.info({ collection: schema.name }, 'Created Typesense collection');
 				} catch (createErr) {
 					if (createErr.httpStatus === 409) {
 						// Another instance created it first — safe to ignore
@@ -572,7 +573,7 @@ export async function importDocuments(host_id, type, docs, action = 'upsert') {
 			{ fallback: [] },
 		);
 	} catch (err) {
-		console.error(`[TYPESENSE] import error (${docs.length} docs → ${collectionName}):`, err.message);
+		log.error({ err, docCount: docs.length, collection: collectionName }, 'import error');
 		return err.importResults || [];
 	}
 }
@@ -782,7 +783,7 @@ export async function getCollectionCounts(host_id) {
 			);
 			counts[type] = col.num_documents || 0;
 		} catch (err) {
-			console.error(`getCollectionCounts: ${type}_${host_id} failed:`, err.message);
+			log.error({ err, collection: `${type}_${host_id}` }, 'getCollectionCounts failed');
 			counts[type] = 0;
 		}
 	}));
@@ -825,7 +826,7 @@ export async function getFilteredCount(host_id, type, projectId) {
 		);
 		return result.found || 0;
 	} catch (err) {
-		console.error(`getFilteredCount: ${collectionName} failed:`, err.message);
+		log.error({ err, collection: collectionName }, 'getFilteredCount failed');
 		return 0;
 	}
 }
@@ -854,10 +855,10 @@ export async function reindexHost(host_id, models) {
 	for (const collectionName of allCollections) {
 		try {
 			await ts.collections(collectionName).delete();
-			console.log(`Dropped collection: ${collectionName}`);
+			log.info({ collection: collectionName }, 'Dropped collection');
 		} catch (err) {
 			if (err.httpStatus !== 404) {
-				console.error(`Failed to drop collection ${collectionName}:`, err.message);
+				log.error({ err, collection: collectionName }, 'Failed to drop collection');
 			}
 		}
 	}
@@ -872,7 +873,7 @@ export async function reindexHost(host_id, models) {
 		// Recreate empty collection so scheduler can repopulate it
 		try {
 			await ts.collections().create(schemaFn(host_id));
-			console.log(`Created empty collection for reindex: ${type}_${host_id}`);
+			log.info({ collection: `${type}_${host_id}` }, 'Created empty collection for reindex');
 		} catch (createErr) {
 			if (createErr.httpStatus !== 409) throw createErr;
 		}
@@ -881,14 +882,14 @@ export async function reindexHost(host_id, models) {
 		const total = await model.countDocuments(query);
 		await model.updateMany(query, { $set: { is_indexed: false } }, { timestamps: false });
 		results[type] = { queued: total };
-		console.log(`Queued ${total} ${type} docs for scheduler reindex on host ${host_id}`);
+		log.info({ count: total, type, host_id }, 'Queued docs for scheduler reindex');
 	}
 
 	// Recreate pages collection (populated by crawling, not reindexed from DB)
 	if (schemas.pages) {
 		try {
 			await ts.collections().create(schemas.pages(host_id));
-			console.log(`Recreated empty pages collection: pages_${host_id}`);
+			log.info({ collection: `pages_${host_id}` }, 'Recreated empty pages collection');
 		} catch (createErr) {
 			if (createErr.httpStatus !== 409) throw createErr;
 		}
@@ -918,9 +919,9 @@ export async function initTypesense() {
 			() => ts.health.retrieve({ 'exclude_fields': 'fields' }),
 		);
 		const nodes = config.typesense.nodes.map(n => `${n.host}:${n.port}`).join(', ');
-		console.log(`Typesense connected (${health.ok ? 'healthy' : 'unhealthy'}): ${nodes}`);
+		log.info({ healthy: health.ok, nodes }, 'Typesense connected');
 	} catch (err) {
-		console.warn('Typesense not available — indexing will fail until connected:', err.message);
+		log.warn({ err }, 'Typesense not available — indexing will fail until connected');
 	}
 }
 
@@ -1058,11 +1059,11 @@ export async function indexMissing(models) {
 			}
 
 			if (failed.length) {
-				console.error(`indexMissing: ${failed.length} ${type} failed for host ${host_id}:`, failed);
+				log.error({ failedCount: failed.length, type, host_id, failed }, 'indexMissing: failures');
 			}
 
 			if (docs.length > 0) {
-				console.log(`indexMissing: imported ${successIds.length}/${docs.length} ${type} docs for host ${host_id}`);
+				log.info({ imported: successIds.length, total: docs.length, type, host_id }, 'indexMissing: imported docs');
 			}
 		}
 	}
@@ -1095,7 +1096,7 @@ export async function indexMissing(models) {
 	}
 
 	if (totalIndexed > 0) {
-		console.log(`indexMissing: indexed ${totalIndexed} documents total`);
+		log.info({ totalIndexed }, 'indexMissing: indexed documents total');
 	}
 
 	return totalIndexed;
@@ -1201,7 +1202,7 @@ export async function ensureConversationModel(hostId, userId, options = {}) {
 			};
 			try {
 				await ts.collections().create(schema);
-				console.log(`Created conversation store collection: ${collectionName}`);
+				log.info({ collection: collectionName }, 'Created conversation store collection');
 			} catch (createErr) {
 				if (createErr.httpStatus !== 409) throw createErr;
 			}
@@ -1246,7 +1247,7 @@ export async function ensureConversationModel(hostId, userId, options = {}) {
 				await _updateConversationModel(modelId, updateFields);
 				await setStoredConversationModelSignature(modelId, desiredSignature);
 			} catch (err) {
-				console.error(`Error updating conversation model ${modelId}:`, err.message);
+				log.error({ err, modelId }, 'Error updating conversation model');
 				throw err;
 			}
 		}
@@ -1277,7 +1278,7 @@ export async function ensureConversationModel(hostId, userId, options = {}) {
 		if (!createResp.ok) {
 			const body = await createResp.text();
 			if (createResp.status === 409) {
-				console.log(`Conversation model ${modelId} already exists`);
+				log.info({ modelId }, 'Conversation model already exists');
 				await setStoredConversationModelSignature(modelId, desiredSignature);
 				syncedConvoModels.set(modelId, desiredSignature);
 				return;
@@ -1288,14 +1289,14 @@ export async function ensureConversationModel(hostId, userId, options = {}) {
 		// Step 2: PUT system_prompt separately
 		const updateResp = await fetch(`${baseUrl}/${modelId}`, { method: 'PUT', headers, body: JSON.stringify({ system_prompt: systemPrompt }) });
 		if (!updateResp.ok) {
-			console.warn(`Conversation model ${modelId} created but system_prompt update failed: ${updateResp.status}`);
+			log.warn({ modelId, status: updateResp.status }, 'Conversation model created but system_prompt update failed');
 		}
 
 		await setStoredConversationModelSignature(modelId, desiredSignature);
 		syncedConvoModels.set(modelId, desiredSignature);
-		console.log(`Created conversation model: ${modelId}`);
+		log.info({ modelId }, 'Created conversation model');
 	} catch (err) {
-		console.error(`Error creating conversation model ${modelId}:`, err.message);
+		log.error({ err, modelId }, 'Error creating conversation model');
 		throw err;
 	}
 }
@@ -1384,7 +1385,7 @@ export async function conversationSearch(hostId, userId, query, options = {}) {
 		}
 
 		delete searchParams.conversation_id;
-		console.warn(`Conversation ${staleConversationId} is invalid for model ${convoModelId}; starting a new conversation.`);
+		log.warn({ staleConversationId, convoModelId }, 'Conversation is invalid for model; starting a new conversation');
 		return performConversationMultiSearch();
 	}
 
@@ -1401,7 +1402,7 @@ export async function conversationSearch(hostId, userId, query, options = {}) {
 		);
 
 		if (needsConversationRepair) {
-			console.warn(`Conversation model ${convoModelId} needs repair, recreating metadata...`);
+			log.warn({ convoModelId }, 'Conversation model needs repair, recreating metadata...');
 			await ensureConversationModel(hostId, userId, { llmScope });
 			try {
 				data = await performConversationMultiSearch();

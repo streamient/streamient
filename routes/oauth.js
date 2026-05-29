@@ -2,6 +2,9 @@ import { Router } from 'express';
 import { Tenant } from '../modules/tenancy.js';
 import { listScopeDetails } from '../modules/oauth.js';
 import * as oauthService from '../services/oauth_service.js';
+import { createLogger } from '../modules/logger.js';
+
+const log = createLogger('oauth');
 
 const router = Router();
 
@@ -117,7 +120,7 @@ router.get('/oauth/authorize', async (req, res) => {
 			active_tenant: activeTenant,
 		});
 	} catch (err) {
-		console.error('OAuth authorize page error:', err);
+		log.error({ err, user_id: req.session?.userId, host_id: req.host_id }, 'OAuth authorize page error');
 		return renderError(res, err?.status || 400, err?.message || 'Authorization request failed');
 	}
 });
@@ -173,7 +176,7 @@ router.post('/oauth/authorize', async (req, res) => {
 
 		return res.redirect(redirectWithCode(oauthRequest.redirect_uri, code, oauthRequest.state));
 	} catch (err) {
-		console.error('OAuth authorize submit error:', err);
+		log.error({ err, user_id: req.session?.userId, host_id: req.host_id }, 'OAuth authorize submit error');
 		return renderError(res, err?.status || 400, err?.message || 'Authorization failed');
 	}
 });
@@ -217,7 +220,7 @@ router.post('/oauth/token', async (req, res) => {
 
 		throw new oauthService.OAuthError('unsupported_grant_type', 'Only authorization_code and refresh_token grants are supported', 400);
 	} catch (err) {
-		console.error('OAuth token error:', err);
+		log.error({ err }, 'OAuth token error');
 		return sendTokenError(res, err);
 	}
 });
@@ -234,8 +237,8 @@ router.post('/oauth/register', async (req, res) => {
 			client_secret_expires_at: client_secret ? 0 : undefined,
 		});
 	} catch (err) {
-		if (err?.oauthError === 'invalid_redirect_uri') console.error('OAuth register rejected redirect_uris:', JSON.stringify(summarizeRedirectUrisForLog(req.body)));
-		console.error('OAuth register error:', err);
+		if (err?.oauthError === 'invalid_redirect_uri') log.warn({ redirect_uris: summarizeRedirectUrisForLog(req.body) }, 'OAuth register rejected redirect_uris');
+		log.error({ err }, 'OAuth register error');
 		return sendTokenError(res, err);
 	}
 });

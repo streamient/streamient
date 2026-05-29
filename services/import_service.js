@@ -3,6 +3,9 @@ import mammoth from 'mammoth';
 import extractPdf from 'pdfjs-parse';
 import lineByLine from 'n-readlines';
 import striptags from 'striptags';
+import { createLogger } from '../modules/logger.js';
+
+const log = createLogger('import');
 
 const PDF_TYPES = ['application/pdf'];
 const WORD_TYPES = [
@@ -92,7 +95,7 @@ async function extractTextContent(filePath) {
         } catch (e) {
             errorCount++;
             if (errorCount >= 10) {
-                console.warn(`Too many read errors for ${filePath}, stopping extraction`);
+                log.warn({ file_path: filePath }, 'Too many read errors, stopping extraction');
                 break;
             }
         }

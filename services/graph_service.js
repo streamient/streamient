@@ -6,6 +6,9 @@ import { Email } from '../model/email.js';
 import { searchCollection, listDocuments } from '../modules/typesense.js';
 import { cacheGet, cacheSet, cacheInvalidate } from '../modules/redis.js';
 import * as audit from './audit_service.js';
+import { createLogger } from '../modules/logger.js';
+
+const log = createLogger('graph');
 
 const MODEL_MAP = {
 	notes: Note,
@@ -142,9 +145,9 @@ export async function getGraphData(hostId, options = {}) {
 	};
 
 	const [notesRes, memoriesRes, urlsRes] = await Promise.all([
-		listDocuments(hostId, 'notes', listOpts).catch((e) => { console.error('Graph listDocuments notes:', e.message); return { hits: [] }; }),
-		listDocuments(hostId, 'memory', listOpts).catch((e) => { console.error('Graph listDocuments memory:', e.message); return { hits: [] }; }),
-		listDocuments(hostId, 'urls', urlListOpts).catch((e) => { console.error('Graph listDocuments urls:', e.message); return { hits: [] }; }),
+		listDocuments(hostId, 'notes', listOpts).catch((e) => { log.error({ err: e, collection: 'notes' }, 'Graph listDocuments failed'); return { hits: [] }; }),
+		listDocuments(hostId, 'memory', listOpts).catch((e) => { log.error({ err: e, collection: 'memory' }, 'Graph listDocuments failed'); return { hits: [] }; }),
+		listDocuments(hostId, 'urls', urlListOpts).catch((e) => { log.error({ err: e, collection: 'urls' }, 'Graph listDocuments failed'); return { hits: [] }; }),
 	]);
 
 	const nodes = [];
