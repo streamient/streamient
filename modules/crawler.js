@@ -95,6 +95,13 @@ export async function crawlSite(urlDoc) {
 			await enqueueLinks({
 				strategy: 'same-hostname',
 				transformRequestFunction: (req) => {
+					// Drop non-HTTP(S) links (mailto:, tel:, etc.) before they reach the
+					// request queue, where Crawlee validates url against http:/https: only.
+					try {
+						if (!/^https?:$/.test(new URL(req.url).protocol)) return false;
+					} catch {
+						return false;
+					}
 					if (shouldSkipCrawledUrl(req.url)) return false;
 					const normalized = normalizeCrawlUrl(req.url);
 					if (visited.has(normalized)) return false;
