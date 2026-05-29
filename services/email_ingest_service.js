@@ -936,7 +936,16 @@ function collectFromEmailSuggestions(result, query, limit) {
 	const addresses = [];
 	const seen = new Set();
 	for (const hit of result?.hits || []) {
-		for (const address of normalizeRecipientList([...(hit.document?.from_emails || []), ...(hit.document?.from || [])])) {
+		const doc = hit.document || {};
+		const candidates = doc.participant_emails?.length
+			? doc.participant_emails
+			: [
+				...(doc.from_emails || []), ...(doc.from || []),
+				...(doc.to_emails || []), ...(doc.to || []),
+				...(doc.cc_emails || []), ...(doc.cc || []),
+				...(doc.bcc_emails || []), ...(doc.bcc || []),
+			];
+		for (const address of normalizeRecipientList(candidates)) {
 			if (needle && !address.includes(needle)) continue;
 			if (seen.has(address)) continue;
 			seen.add(address);
@@ -954,10 +963,10 @@ export async function suggestFromEmailAddresses(host_id, { query = '', project =
 
 	async function runSearch(projectId) {
 		return searchFn(host_id, 'emails', searchQuery, {
-			queryBy: 'from_emails,from',
+			queryBy: 'participant_emails,from,to,cc,bcc',
 			perPage: 50,
 			group: false,
-			include_fields: 'from_emails,from,project_id,updated_at',
+			include_fields: 'participant_emails,from_emails,to_emails,cc_emails,bcc_emails,from,to,cc,bcc,project_id,updated_at',
 			exclude_fields: 'embedding',
 			filter_by: projectId ? `project_id:=${exactTypesenseValue(projectId)}` : undefined,
 			extra: { sort_by: 'updated_at:desc', prefix: true },

@@ -1592,9 +1592,24 @@ describe('Email ingest service', () => {
 			assert.equal(calls.length, 2);
 			assert.equal(calls[0].type, 'emails');
 			assert.equal(calls[0].query, 'sender');
-			assert.equal(calls[0].options.queryBy, 'from_emails,from');
+			assert.equal(calls[0].options.queryBy, 'participant_emails,from,to,cc,bcc');
 			assert.match(calls[0].options.filter_by, /project_id:=`project-1`/);
 			assert.equal(result.scope, 'tenant');
 			assert.deepEqual(result.addresses, ['sender@example.com', 'sender-two@example.com']);
+		});
+
+		it('suggests addresses we have only ever sent to (recipient fields)', async () => {
+			const result = await suggestFromEmailAddresses('host-1', {
+				query: 'new',
+				limit: 10,
+				searchFn: async () => ({
+					hits: [
+						{ document: { participant_emails: ['me@example.com', 'new-contact@example.com'] } },
+						{ document: { to_emails: ['another-new@example.com'] } },
+					],
+				}),
+			});
+
+			assert.deepEqual(result.addresses, ['new-contact@example.com', 'another-new@example.com']);
 		});
 	});
