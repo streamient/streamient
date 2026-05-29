@@ -19,7 +19,7 @@
 
 import pino from 'pino';
 import pinoHttp from 'pino-http';
-import { buildServiceName } from './otel_runtime.js';
+import { buildServiceName, getCurrentTraceInfo } from './otel_runtime.js';
 import { buildPinoOtelHooks } from './pino_otel_hook.js';
 
 const isProduction = process.env.NODE_ENV === 'production';
@@ -42,6 +42,14 @@ const baseConfig = {
 		pid: process.pid,
 	},
 	hooks: buildPinoOtelHooks('pino'),
+	// Stamp the active trace_id/span_id onto every stdout/stderr record so logs
+	// scraped from container output (not just the OTLP log stream) are
+	// trace-correlated. Returns {} when there is no active span (e.g. background
+	// work not wrapped in a custom span), so the fields are simply omitted.
+	mixin() {
+		const { traceId, spanId } = getCurrentTraceInfo();
+		return traceId ? { trace_id: traceId, span_id: spanId } : {};
+	},
 };
 
 // The MCP server uses stdout as its stdio protocol channel — logging there would
