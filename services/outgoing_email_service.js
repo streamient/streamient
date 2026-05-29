@@ -11,6 +11,7 @@ import { decrypt } from '../modules/encryption.js';
 import { emitToTenant } from '../modules/socket.js';
 import { invalidateGraphCache } from './graph_service.js';
 import { indexEmailNow } from './email_index_service.js';
+import { createSystemTransport } from './email_service.js';
 import * as audit from './audit_service.js';
 
 const SEND_QUEUE = 'send_outgoing_email';
@@ -95,8 +96,13 @@ async function findIdentityForDraft(hostId, draft) {
 }
 
 async function createTransport(identity) {
+	if (identity.use_system_smtp) {
+		const system = createSystemTransport();
+		if (!system) throw new Error('System SMTP is not configured');
+		return { transport: system.transporter, shared: true };
+	}
 	const smtp = identity.smtp || {};
-	return nodemailer.createTransport({
+	const transport = nodemailer.createTransport({
 		host: smtp.host,
 		port: smtp.port || 587,
 		secure: Boolean(smtp.ssl),
@@ -105,6 +111,7 @@ async function createTransport(identity) {
 			? { user: smtp.auth_user, pass: decrypt(smtp.auth_password || '') }
 			: undefined,
 	});
+	return { transport, shared: false };
 }
 
 export async function queueDraftSend(hostId, draftId, ctx = {}) {
@@ -246,7 +253,7 @@ export async function processOutgoingEmail(outgoingId, options = {}) {
 	try {
 		const identity = await EmailIdentity.findOne({ _id: outgoing.email_identity, host_id: outgoing.host_id }).lean();
 		if (!identity) throw new Error('Email identity not found');
-		const transport = await createTransport(identity);
+		const { transport, shared } = await createTransport(identity);
 		const html = outgoing.body_html || '';
 		const text = outgoing.body_text || (html ? striptags(html, [], ' ').replace(/\s+/g, ' ').trim() : '');
 		const mailOptions = {
@@ -263,7 +270,7 @@ export async function processOutgoingEmail(outgoingId, options = {}) {
 			references: outgoing.references.map(messageIdForHeader).filter(Boolean),
 		};
 		await transport.sendMail(mailOptions);
-		transport.close?.();
+		if (!shared) transport.close?.();
 
 		outgoing.status = 'sent';
 		outgoing.sent_at = new Date();

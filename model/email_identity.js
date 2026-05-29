@@ -8,8 +8,9 @@ const emailIdentitySchema = new mongoose.Schema(
 		name: { type: String, trim: true, default: '' },
 		email: { type: String, required: true, trim: true, lowercase: true },
 		signature: { type: String, trim: true, default: '' },
+		use_system_smtp: { type: Boolean, default: false },
 		smtp: {
-			host: { type: String, required: true, trim: true },
+			host: { type: String, trim: true, default: '' },
 			port: { type: Number, required: true, default: 587, min: 1, max: 65535 },
 			auth_user: { type: String, trim: true, default: '' },
 			auth_password: { type: String, default: '' },

@@ -560,6 +560,26 @@ function bindProjectEmailIdentityForm(bodyEl, projectId) {
 		return value === true || value === 'true' || value === '1' || value === 'on';
 	}
 
+	var SMTP_FIELD_IDS = [
+		'#project-email-identity-smtp-host',
+		'#project-email-identity-smtp-port',
+		'#project-email-identity-smtp-user',
+		'#project-email-identity-smtp-password',
+		'#project-email-identity-smtp-tls',
+		'#project-email-identity-smtp-ssl',
+	];
+
+	function toggleSystemSmtp() {
+		var useSystem = field('#project-email-identity-use-system-smtp').checked;
+		SMTP_FIELD_IDS.forEach(function (id) {
+			var el = field(id);
+			if (!el) return;
+			el.disabled = useSystem;
+			var group = el.closest('.col-md-8, .col-md-6, .col-md-4');
+			if (group) group.classList.toggle('opacity-50', useSystem);
+		});
+	}
+
 	function placeIdentityForm(row) {
 		var divider = field('#project-email-identity-form-wrap .project-email-identity-form-divider');
 		if (row) {
@@ -588,6 +608,8 @@ function bindProjectEmailIdentityForm(bodyEl, projectId) {
 		field('#project-email-identity-smtp-password').value = '';
 		field('#project-email-identity-smtp-tls').checked = dataBool(identity?.smtpTls);
 		field('#project-email-identity-smtp-ssl').checked = dataBool(identity?.smtpSsl);
+		field('#project-email-identity-use-system-smtp').checked = dataBool(identity?.useSystemSmtp);
+		toggleSystemSmtp();
 		field('#project-email-identity-clear-password').checked = false;
 		field('#project-email-identity-form-title').textContent = isEdit ? 'Edit outbound email address' : 'Add outbound email address';
 		var passwordConfigured = dataBool(identity?.smtpPasswordConfigured);
@@ -617,6 +639,8 @@ function bindProjectEmailIdentityForm(bodyEl, projectId) {
 	});
 
 	cancelBtn?.addEventListener('click', hideIdentityForm);
+
+	field('#project-email-identity-use-system-smtp')?.addEventListener('change', toggleSystemSmtp);
 
 	bodyEl.querySelectorAll('.project-email-identity-row').forEach(function (row) {
 		row.addEventListener('click', function () {
@@ -659,6 +683,7 @@ function bindProjectEmailIdentityForm(bodyEl, projectId) {
 			name: field('#project-email-identity-name').value.trim(),
 			email: field('#project-email-identity-email').value.trim(),
 			signature: field('#project-email-identity-signature').value.trim(),
+			use_system_smtp: field('#project-email-identity-use-system-smtp').checked,
 			smtp: {
 				host: field('#project-email-identity-smtp-host').value.trim(),
 				port: parseInt(field('#project-email-identity-smtp-port').value, 10) || 587,

@@ -115,6 +115,7 @@
 									data-name=identity.name
 									data-email=identity.email
 									data-signature=identity.signature
+									data-use-system-smtp=(identity.use_system_smtp ? 'true' : 'false')
 									data-smtp-host=identity.smtp.host
 									data-smtp-port=identity.smtp.port
 									data-smtp-auth-user=identity.smtp.auth_user
@@ -127,15 +128,18 @@
 											.fw-bold.text-break= identity.name || identity.email
 											.text-muted.small.text-break= identity.email
 											.text-muted.small.text-break
-												span= `${identity.smtp.host}:${identity.smtp.port}`
-												if identity.smtp.auth_user
-													span= ` · ${identity.smtp.auth_user}`
-												if identity.smtp.auth_password_configured
-													span  · password configured
-												if identity.smtp.tls
-													span  · TLS
-												if identity.smtp.ssl
-													span  · SSL
+												if identity.use_system_smtp
+													span System SMTP
+												else
+													span= `${identity.smtp.host}:${identity.smtp.port}`
+													if identity.smtp.auth_user
+														span= ` · ${identity.smtp.auth_user}`
+													if identity.smtp.auth_password_configured
+														span  · password configured
+													if identity.smtp.tls
+														span  · TLS
+													if identity.smtp.ssl
+														span  · SSL
 										.ms-auto.text-nowrap
 											button.btn.btn-sm.btn-outline-secondary.me-1.project-email-identity-edit(
 												type="button"
@@ -162,6 +166,11 @@
 							.col-12
 								label.form-label(for="project-email-identity-signature") Signature
 								textarea.form-control.form-control-sm#project-email-identity-signature(rows="4")
+							.col-12
+								.form-check
+									input.form-check-input#project-email-identity-use-system-smtp(type="checkbox")
+									label.form-check-label(for="project-email-identity-use-system-smtp") Use system SMTP
+								.form-text Send through the platform's shared SMTP servers instead of your own. No SMTP settings below are required.
 							.col-md-8
 								label.form-label(for="project-email-identity-smtp-host") SMTP host
 								input.form-control.form-control-sm#project-email-identity-smtp-host(type="text" autocomplete="off")

@@ -7,6 +7,7 @@ import { EmailDraft } from '../model/email_draft.js';
 import { EmailIdentity } from '../model/email_identity.js';
 import { OutgoingEmail } from '../model/outgoing_email.js';
 import { MongoQueue } from '../modules/mongo_queue.js';
+import config from '../config.js';
 import * as outgoingEmailService from '../services/outgoing_email_service.js';
 
 function queryResult(value) {
@@ -29,6 +30,7 @@ describe('Outgoing email service', () => {
 		originals.queueAdd = MongoQueue.add;
 		originals.queueRemoveJob = MongoQueue.removeJob;
 		originals.createTransport = nodemailer.createTransport;
+		originals.smtpServers = config.smtp.servers;
 	});
 
 	afterEach(() => {
@@ -44,6 +46,7 @@ describe('Outgoing email service', () => {
 		MongoQueue.add = originals.queueAdd;
 		MongoQueue.removeJob = originals.queueRemoveJob;
 		nodemailer.createTransport = originals.createTransport;
+		config.smtp.servers = originals.smtpServers;
 	});
 
 	it('queues a draft with a 10 second delayed job', async () => {
@@ -205,5 +208,123 @@ describe('Outgoing email service', () => {
 		assert.ok(sourceUpdate.update.$set.triaged_at instanceof Date);
 		assert.equal(sourceUpdate.update.$addToSet.labels, 'triaged');
 		assert.deepEqual(indexed.map((item) => item.email._id), ['email-1', 'sent-email-1']);
+	});
+
+	it('routes an identity with use_system_smtp through the shared system SMTP transport', async () => {
+		let systemTransportArgs = null;
+		let mailOptions = null;
+		let closeCalled = false;
+		config.smtp.servers = [{
+			name: 'system-test',
+			host: 'smtp.system.example.com',
+			port: 587,
+			secure: false,
+			user: 'sys-user',
+			pass: 'sys-pass',
+			from: 'hi@kumbukum.com',
+		}];
+
+		const outgoing = {
+			_id: 'outgoing-2',
+			draft: 'draft-2',
+			source_email: 'email-2',
+			email_identity: 'identity-2',
+			from: 'support@example.com',
+			to: ['customer@example.com'],
+			cc: [],
+			bcc: [],
+			subject: 'Hello',
+			body_text: 'Body',
+			body_html: '<p>Body</p>',
+			message_id: 'msg@example.com',
+			in_reply_to: '',
+			references: [],
+			project: 'project-1',
+			owner: 'user-1',
+			host_id: 'host-1',
+			save: async function () {
+				return this;
+			},
+		};
+
+		OutgoingEmail.findOneAndUpdate = async () => outgoing;
+		EmailIdentity.findOne = () => queryResult({
+			_id: 'identity-2',
+			name: 'Support',
+			email: 'support@example.com',
+			use_system_smtp: true,
+			smtp: { host: '', port: 587, auth_user: '', auth_password: '', tls: false, ssl: false },
+		});
+		nodemailer.createTransport = (args) => {
+			systemTransportArgs = args;
+			return {
+				sendMail: async (options) => {
+					mailOptions = options;
+					return { accepted: ['customer@example.com'] };
+				},
+				close: () => {
+					closeCalled = true;
+				},
+			};
+		};
+		Email.create = async (payload) => ({ _id: 'sent-email-2', ...payload });
+		Email.findOneAndUpdate = async (filter, update) => ({
+			_id: filter._id,
+			host_id: filter.host_id,
+			mailbox: 'inbox',
+			triaged: update.$set.triaged,
+			triaged_at: update.$set.triaged_at,
+			labels: [],
+		});
+		EmailDraft.findOneAndUpdate = () => queryResult({ _id: 'draft-2', status: 'discarded' });
+
+		const result = await outgoingEmailService.processOutgoingEmail('outgoing-2', {
+			indexEmailFn: async () => {},
+			updateEmailIndexStateFn: async () => {},
+		});
+
+		assert.equal(outgoing.status, 'sent');
+		assert.equal(result.email._id, 'sent-email-2');
+		// Used the system SMTP server, not the (empty) identity SMTP.
+		assert.equal(systemTransportArgs.host, 'smtp.system.example.com');
+		assert.deepEqual(systemTransportArgs.auth, { user: 'sys-user', pass: 'sys-pass' });
+		// From address stays the identity email (DNS handled separately).
+		assert.equal(mailOptions.from, 'Support <support@example.com>');
+		// Shared transporter must not be closed by the caller.
+		assert.equal(closeCalled, false);
+	});
+
+	it('fails to send when use_system_smtp is set but no system SMTP is configured', async () => {
+		config.smtp.servers = [];
+		let errorSaved = null;
+		const outgoing = {
+			_id: 'outgoing-3',
+			email_identity: 'identity-3',
+			from: 'support@example.com',
+			to: ['customer@example.com'],
+			cc: [],
+			bcc: [],
+			subject: 'Hello',
+			body_html: '<p>Body</p>',
+			references: [],
+			host_id: 'host-1',
+			save: async function () {
+				errorSaved = { status: this.status, error: this.error };
+				return this;
+			},
+		};
+		OutgoingEmail.findOneAndUpdate = async () => outgoing;
+		EmailIdentity.findOne = () => queryResult({
+			_id: 'identity-3',
+			email: 'support@example.com',
+			use_system_smtp: true,
+			smtp: { host: '', port: 587 },
+		});
+		EmailDraft.findOneAndUpdate = () => queryResult({ _id: 'draft-3', status: 'draft' });
+
+		const result = await outgoingEmailService.processOutgoingEmail('outgoing-3');
+		assert.equal(result, null);
+		assert.equal(errorSaved.status, 'error');
+		assert.match(errorSaved.error, /System SMTP is not configured/);
 	});
 });

@@ -44,6 +44,14 @@ function getTransporter(server) {
 	return transporters.get(key);
 }
 
+export function createSystemTransport() {
+	const servers = getConfiguredSmtpServers();
+	const picked = pickSmtpServer(servers, smtpRoundRobinIndex);
+	smtpRoundRobinIndex = picked.nextIndex;
+	if (!picked.server) return null;
+	return { transporter: getTransporter(picked.server), server: picked.server };
+}
+
 async function sendMail({ to, subject, html, text, from, replyTo }) {
 	const servers = getConfiguredSmtpServers();
 	const picked = pickSmtpServer(servers, smtpRoundRobinIndex);

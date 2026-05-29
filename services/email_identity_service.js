@@ -37,6 +37,7 @@ function publicIdentity(identity) {
 	return {
 		...obj,
 		signature: obj.signature || '',
+		use_system_smtp: Boolean(obj.use_system_smtp),
 		smtp: {
 			host: obj.smtp?.host || '',
 			port: obj.smtp?.port || 587,
@@ -53,9 +54,10 @@ function createPayload(userId, hostId, projectId, data = {}) {
 	const email = normalizeString(data.email).toLowerCase();
 	const smtp = data.smtp || {};
 	const host = normalizeString(smtp.host);
+	const useSystem = normalizeBoolean(data.use_system_smtp);
 
 	if (!email || !EMAIL_RE.test(email)) throw new Error('Valid email is required');
-	if (!host) throw new Error('SMTP host is required');
+	if (!useSystem && !host) throw new Error('SMTP host is required');
 
 	return {
 		project: projectId,
@@ -64,6 +66,7 @@ function createPayload(userId, hostId, projectId, data = {}) {
 		name,
 		email,
 		signature: normalizeString(data.signature),
+		use_system_smtp: useSystem,
 		smtp: {
 			host,
 			port: normalizePort(smtp.port || 587),
@@ -85,10 +88,13 @@ function updatePayload(data = {}) {
 		update.email = email;
 	}
 
+	const useSystem = data.use_system_smtp !== undefined ? normalizeBoolean(data.use_system_smtp) : undefined;
+	if (useSystem !== undefined) update.use_system_smtp = useSystem;
+
 	const smtp = data.smtp || {};
 	if (smtp.host !== undefined) {
 		const host = normalizeString(smtp.host);
-		if (!host) throw new Error('SMTP host is required');
+		if (!host && useSystem !== true) throw new Error('SMTP host is required');
 		update['smtp.host'] = host;
 	}
 	if (smtp.port !== undefined) update['smtp.port'] = normalizePort(smtp.port);
