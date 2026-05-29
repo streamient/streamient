@@ -179,6 +179,78 @@ describe('Email forwarding import route', () => {
 		}
 	});
 
+	it('trashes forwarded email when sender matches the project email filter', async () => {
+		Project.findOne = () => ({
+			lean: async () => ({
+				_id: projectId,
+				owner: '507f1f77bcf86cd799439012',
+				host_id: 'host-1',
+				is_active: true,
+				email_filter: 'noisy.com\nspam@bad.com',
+			}),
+		});
+		let createdPayload = null;
+		Email.create = async (payload) => {
+			createdPayload = payload;
+			return { _id: { toString: () => emailIds[0] }, ...payload };
+		};
+
+		const server = createServer();
+		try {
+			const response = await request(server, JSON.stringify({
+				message_id: '<filtered-1@example.com>',
+				from: 'Newsletter <hello@noisy.com>',
+				to: `${projectId}@email.kumbukum.com`,
+				subject: 'Filtered',
+				text: 'Body',
+			}));
+			const json = await response.json();
+
+			assert.equal(response.status, 200);
+			assert.deepEqual(json, { accepted: true, email_id: emailIds[0] });
+			assert.equal(createdPayload.in_trash, true);
+			assert.ok(createdPayload.trashed_at instanceof Date);
+			assert.equal(createdPayload.triaged, false);
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
+	it('does not trash forwarded email when sender does not match the project email filter', async () => {
+		Project.findOne = () => ({
+			lean: async () => ({
+				_id: projectId,
+				owner: '507f1f77bcf86cd799439012',
+				host_id: 'host-1',
+				is_active: true,
+				email_filter: 'noisy.com',
+			}),
+		});
+		let createdPayload = null;
+		Email.create = async (payload) => {
+			createdPayload = payload;
+			return { _id: { toString: () => emailIds[0] }, ...payload };
+		};
+
+		const server = createServer();
+		try {
+			const response = await request(server, JSON.stringify({
+				message_id: '<unfiltered-1@example.com>',
+				from: 'Friend <friend@good.com>',
+				to: `${projectId}@email.kumbukum.com`,
+				subject: 'Not filtered',
+				text: 'Body',
+			}));
+			const json = await response.json();
+
+			assert.equal(response.status, 200);
+			assert.equal(createdPayload.in_trash, false);
+			assert.equal(createdPayload.trashed_at, null);
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
 	it('rejects forwarded email for the wrong domain', async () => {
 		const server = createServer();
 		try {

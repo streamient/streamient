@@ -40,9 +40,14 @@ export async function getProject(host_id, projectId) {
 export async function updateProject(host_id, projectId, data, ctx = {}) {
 	const before = ctx.user_id ? await Project.findOne({ _id: projectId, host_id }).lean() : null;
 
+	const set = {};
+	if (data.name !== undefined) set.name = data.name;
+	if (data.color !== undefined) set.color = data.color;
+	if (data.email_filter !== undefined) set.email_filter = String(data.email_filter || '');
+
 	const project = await Project.findOneAndUpdate(
 		{ _id: projectId, host_id },
-		{ $set: { name: data.name, color: data.color } },
+		{ $set: set },
 		{ returnDocument: 'after' },
 	);
 	if (project) {

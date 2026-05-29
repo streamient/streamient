@@ -372,6 +372,39 @@ export async function parseEmailInput(data) {
 	};
 }
 
+export function matchesEmailFilter(filterText, fromAddresses = []) {
+	const rules = String(filterText || '')
+		.split(/[\n,]/)
+		.map((rule) => rule.trim().toLowerCase())
+		.filter(Boolean);
+	if (!rules.length) return false;
+
+	const exact = new Set();
+	const domains = new Set();
+	const localParts = new Set();
+	for (const rawRule of rules) {
+		const rule = rawRule.replace(/\*+$/, ''); // allow trailing wildcard, e.g. "noreply@*"
+		if (rule.endsWith('@')) {
+			localParts.add(rule.slice(0, -1)); // local-part only, any domain (e.g. "noreply@")
+		} else if (rule.includes('@') && !rule.startsWith('@')) {
+			exact.add(rule);
+		} else {
+			domains.add(rule.replace(/^@+/, ''));
+		}
+	}
+
+	return (fromAddresses || []).some((addr) => {
+		const value = String(addr || '').trim().toLowerCase();
+		if (!value) return false;
+		if (exact.has(value)) return true;
+		const atIndex = value.lastIndexOf('@');
+		const local = atIndex === -1 ? value : value.slice(0, atIndex);
+		const domain = atIndex === -1 ? '' : value.slice(atIndex + 1);
+		if (local && localParts.has(local)) return true;
+		return domain && domains.has(domain);
+	});
+}
+
 export function parseForwardedEmailInput(data) {
 	const parsed = data?.parsed_email || data?.mailparser || data;
 	if (!parsed || typeof parsed !== 'object') {
@@ -441,6 +474,7 @@ function emitEmailCreatedOrUpdated(host_id, event, email) {
 
 export async function maybeAutoTriageIncomingEmail(host_id, userId, email, options = {}) {
 	if (!email || email.triaged) return null;
+	if (email.in_trash) return null;
 	if ((email.mailbox || 'inbox') !== 'inbox') return null;
 
 	const settings = await getEmailSettings(host_id);
@@ -480,8 +514,8 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 		owner: userId,
 		host_id,
 		is_indexed: false,
-		in_trash: false,
-		trashed_at: null,
+		in_trash: Boolean(data.in_trash),
+		trashed_at: data.in_trash ? (data.trashed_at || new Date()) : null,
 	};
 
 	let email;
@@ -508,7 +542,7 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 
 	await createEmailThreadLinks(email, userId, host_id, { skipSideEffects: ctx.skipSideEffects });
 	if (!ctx.skipSideEffects) {
-		await indexEmailNow(host_id, email, { indexFn: ctx.indexEmailFn, updateFn: ctx.updateEmailIndexStateFn });
+		if (!email.in_trash) await indexEmailNow(host_id, email, { indexFn: ctx.indexEmailFn, updateFn: ctx.updateEmailIndexStateFn });
 		emitEmailCreatedOrUpdated(host_id, created ? 'email:created' : 'email:updated', email);
 		invalidateGraphCache(host_id).catch(() => {});
 		audit.log({ action: 'create', resource: 'email', resource_id: email._id.toString(), user_id: userId, host_id, ...ctx });

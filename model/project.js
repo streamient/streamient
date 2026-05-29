@@ -6,6 +6,7 @@ const projectSchema = new mongoose.Schema(
 		owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 		host_id: { type: String, required: true, index: true },
 		color: { type: String, default: '#7C6AF7' },
+		email_filter: { type: String, default: '' },
 		is_default: { type: Boolean, default: false },
 		is_active: { type: Boolean, default: true },
 	},

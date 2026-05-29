@@ -526,6 +526,18 @@ function bindProjectSettingsModal(projectId, activeTab) {
 		}
 	});
 
+	var emailFilterForm = bodyEl.querySelector('#project-email-filter-form');
+	emailFilterForm?.addEventListener('submit', async function (e) {
+		e.preventDefault();
+		var email_filter = bodyEl.querySelector('#project-settings-email-filter')?.value || '';
+		try {
+			await api('PUT', `/projects/${projectId}`, { email_filter });
+			showSuccess('Email filter saved');
+		} catch (err) {
+			showError(err.message);
+		}
+	});
+
 	var copyForwardingEmailBtn = bodyEl.querySelector('#project-settings-copy-forwarding-email');
 	copyForwardingEmailBtn?.addEventListener('click', async function () {
 		var value = copyForwardingEmailBtn.dataset.copyValue || bodyEl.querySelector('#project-settings-forwarding-email')?.value || '';

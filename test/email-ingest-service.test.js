@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailLabels, parseTriageResult, triageInboxEmails, backfillEmailTriageState, askEmailAi, askEmailListAi, buildEmailAiTypesenseFilter, buildTriageContext, parseEmailAiQuery, resetEmailTriage, updateEmail, parseEmailReplySuggestionsResult, suggestEmailReplies, suggestFromEmailAddresses } from '../services/email_ingest_service.js';
+import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailLabels, parseTriageResult, triageInboxEmails, backfillEmailTriageState, askEmailAi, askEmailListAi, buildEmailAiTypesenseFilter, buildTriageContext, parseEmailAiQuery, resetEmailTriage, updateEmail, parseEmailReplySuggestionsResult, suggestEmailReplies, suggestFromEmailAddresses, matchesEmailFilter } from '../services/email_ingest_service.js';
 import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
 import { EmailLabel } from '../model/email_label.js';
@@ -11,6 +11,25 @@ import { toTypesenseDoc } from '../modules/typesense.js';
 
 describe('Email ingest service', () => {
 	const userId = '507f1f77bcf86cd799439012';
+
+	it('matchesEmailFilter matches exact addresses, domains, and local parts, ignoring blanks', () => {
+		const filter = 'spam@bad.com\nnoisy.com, @also-noisy.com\n';
+		assert.equal(matchesEmailFilter(filter, ['spam@bad.com']), true);
+		assert.equal(matchesEmailFilter(filter, ['anyone@noisy.com']), true);
+		assert.equal(matchesEmailFilter(filter, ['anyone@also-noisy.com']), true);
+		assert.equal(matchesEmailFilter(filter, ['SPAM@BAD.COM']), true);
+		assert.equal(matchesEmailFilter(filter, ['friend@good.com']), false);
+		assert.equal(matchesEmailFilter(filter, ['someone@notbad.com']), false);
+		assert.equal(matchesEmailFilter('', ['spam@bad.com']), false);
+		assert.equal(matchesEmailFilter('   ', ['spam@bad.com']), false);
+		assert.equal(matchesEmailFilter('spam@bad.com', []), false);
+
+		// local-part-only rules match the name on any domain (both "noreply@" and "noreply@*")
+		assert.equal(matchesEmailFilter('noreply@', ['noreply@anywhere.com']), true);
+		assert.equal(matchesEmailFilter('noreply@*', ['noreply@other.org']), true);
+		assert.equal(matchesEmailFilter('noreply@', ['no-reply@anywhere.com']), false);
+		assert.equal(matchesEmailFilter('noreply@', ['hello@noreply.com']), false);
+	});
 
 	it('normalizes parsed payload fields', async () => {
 		const normalized = await parseEmailInput({
