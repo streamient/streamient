@@ -63,6 +63,18 @@ describe('MCP Tools — Git Sync', () => {
 		assert.equal(api.lastCall.body.commit_history_days, 120);
 	});
 
+	it('add_git_repo passes sync_mode through', async () => {
+		await tools.add_git_repo.handler({ repo_url: repo.repo_url, sync_mode: 'read_write' });
+		assert.equal(api.lastCall.method, 'POST');
+		assert.equal(api.lastCall.body.sync_mode, 'read_write');
+	});
+
+	it('update_git_repo passes sync_mode through', async () => {
+		await tools.update_git_repo.handler({ id: repo._id, sync_mode: 'read_only' });
+		assert.equal(api.lastCall.method, 'PUT');
+		assert.equal(api.lastCall.body.sync_mode, 'read_only');
+	});
+
 	it('git_sync_status returns rich status fields', async () => {
 		const result = await tools.git_sync_status.handler({ id: repo._id });
 		const parsed = JSON.parse(result.content[0].text);

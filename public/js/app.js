@@ -1034,6 +1034,12 @@ async function addGitRepo(projectId) {
 			<label class="swal-label" for="swal-git-branch">Branch</label>
 			<input id="swal-git-branch" class="swal2-input">
 			<span class="swal-hint">Default: main</span>
+			<label class="swal-label" for="swal-git-mode">Sync mode</label>
+			<select id="swal-git-mode" class="swal2-select">
+				<option value="read_only" selected>Read-only (import from git)</option>
+				<option value="read_write">Read/write (also export back to git)</option>
+			</select>
+			<span class="swal-hint">Read-only never writes to your repo</span>
 			<label class="swal-label" for="swal-git-token">Access token <small class="fw-normal text-muted">(private repos)</small></label>
 			<input id="swal-git-token" class="swal2-input" type="password">
 			<label class="swal-label" for="swal-git-notes">Notes directory</label>
@@ -1059,6 +1065,7 @@ async function addGitRepo(projectId) {
 				name: document.getElementById('swal-git-name').value.trim(),
 				repo_url: url,
 				branch: document.getElementById('swal-git-branch').value.trim() || 'main',
+				sync_mode: document.getElementById('swal-git-mode').value,
 				auth_token: document.getElementById('swal-git-token').value.trim(),
 				notes_path: document.getElementById('swal-git-notes').value.trim() || 'notes',
 				memories_path: document.getElementById('swal-git-memories').value.trim() || 'memories',
@@ -1095,6 +1102,12 @@ async function editGitRepo(repoId) {
 				<label class="swal-label" for="swal-git-branch">Branch</label>
 				<input id="swal-git-branch" class="swal2-input" value="${repo.branch || 'main'}">
 				<span class="swal-hint">Default: main</span>
+				<label class="swal-label" for="swal-git-mode">Sync mode</label>
+				<select id="swal-git-mode" class="swal2-select">
+					<option value="read_only" ${repo.sync_mode !== 'read_write' ? 'selected' : ''}>Read-only (import from git)</option>
+					<option value="read_write" ${repo.sync_mode === 'read_write' ? 'selected' : ''}>Read/write (also export back to git)</option>
+				</select>
+				<span class="swal-hint">Read-only never writes to your repo</span>
 				<label class="swal-label" for="swal-git-token">Access token <small class="fw-normal text-muted">(leave empty to keep)</small></label>
 				<input id="swal-git-token" class="swal2-input" type="password">
 				<label class="swal-label" for="swal-git-notes">Notes directory</label>
@@ -1127,6 +1140,7 @@ async function editGitRepo(repoId) {
 					commit_sync_enabled: document.getElementById('swal-git-commit-sync').checked,
 					commit_history_days: parseInt(document.getElementById('swal-git-commit-days').value, 10) || 90,
 					enabled: document.getElementById('swal-git-enabled').checked,
+					sync_mode: document.getElementById('swal-git-mode').value,
 				};
 				const tok = document.getElementById('swal-git-token').value.trim();
 				if (tok) data.auth_token = tok;

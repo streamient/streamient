@@ -18,11 +18,12 @@ export function gitSyncTools(api, defaultProjectId) {
 		},
 
 		add_git_repo: {
-			description: 'Add a git repository to sync with a project. Syncs markdown files as notes/memories.',
+			description: 'Add a git repository to sync with a project. Imports markdown files as notes/memories. Defaults to read-only (never writes back to the repo).',
 			inputSchema: {
 				repo_url: z.string().describe('HTTPS git repo URL'),
 				name: z.string().optional().describe('Friendly label for this repo'),
 				branch: z.string().optional().describe('Branch to sync (default: main)'),
+				sync_mode: z.enum(['read_only', 'read_write']).optional().describe('read_only (default) imports only; read_write also exports notes/memories back to git'),
 				auth_token: z.string().optional().describe('Personal access token for private repos'),
 				notes_path: z.string().optional().describe('Directory in repo mapped to notes (default: notes)'),
 				memories_path: z.string().optional().describe('Directory in repo mapped to memories (default: memories)'),
@@ -49,6 +50,7 @@ export function gitSyncTools(api, defaultProjectId) {
 				branch: z.string().optional(),
 				auth_token: z.string().optional(),
 				enabled: z.boolean().optional(),
+				sync_mode: z.enum(['read_only', 'read_write']).optional().describe('read_only imports only; read_write also exports notes/memories back to git'),
 				notes_path: z.string().optional(),
 				memories_path: z.string().optional(),
 				sync_path: z.string().optional(),
@@ -76,7 +78,7 @@ export function gitSyncTools(api, defaultProjectId) {
 		},
 
 		trigger_git_sync: {
-			description: 'Manually trigger a sync for a git repo (pull from git + push to git)',
+			description: 'Manually trigger a sync for a git repo (pull from git; push to git only in read/write mode)',
 			inputSchema: {
 				id: z.string().describe('Git repo ID'),
 			},

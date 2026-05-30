@@ -6,7 +6,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import test from 'node:test';
 
-import { syncRepo } from '../services/git_sync_service.js';
+import { syncRepo, backfillGitSyncMode } from '../services/git_sync_service.js';
 import { GitRepo } from '../model/git_repo.js';
 import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
@@ -182,6 +182,7 @@ function makeRepo(remote, overrides = {}) {
 		auth_token: '',
 		sync_interval: 10,
 		enabled: true,
+		sync_mode: 'read_write',
 		notes_path: 'notes',
 		memories_path: 'memories',
 		sync_path: '/',
@@ -353,4 +354,79 @@ test('records conflict and skips overwrite when git and local item both changed'
 
 	assert.equal(summary.conflicts, 1);
 	assert.equal(state.notes[0].content, '<p>Local edit</p>');
+});
+
+test('read-only repo imports but never exports to git', async (t) => {
+	const remote = await createRemoteRepo();
+	t.after(() => fs.rmSync(remote.root, { recursive: true, force: true }));
+	fs.mkdirSync(path.join(remote.work, 'notes'), { recursive: true });
+	fs.writeFileSync(path.join(remote.work, 'notes', 'Foo.md'), '---\ntitle: Foo\n---\n\nOriginal remote\n');
+	await commitAll(remote.work, 'add foo');
+	await git(remote.work, ['push']);
+
+	const repo = makeRepo(remote, { sync_mode: 'read_only', commit_sync_enabled: false });
+	t.after(() => cleanupClone(repo.host_id));
+	const state = {
+		repos: [repo],
+		notes: [makeDoc({ _id: oid('local-bar'), title: 'Bar', content: '<p>Bar</p>', text_content: 'Bar', project: repo.project, owner: oid('user-1'), host_id: repo.host_id, in_trash: false })],
+		memories: [],
+	};
+	installModelMocks(state);
+
+	const summary = await syncRepo(repo._id.toString(), 'user-1', repo.host_id, { skip_lock: true, skip_audit: true });
+	const tree = await git(remote.bare, ['ls-tree', '-r', '--name-only', 'main']);
+
+	assert.equal(summary.exported_files, 0);
+	assert.equal(tree.stdout.includes('Bar.md'), false);
+	// Import direction still works in read-only mode.
+	assert.equal(state.notes.some((note) => note.title === 'Foo'), true);
+});
+
+test('read-write export never overwrites an existing repo file', async (t) => {
+	const remote = await createRemoteRepo();
+	t.after(() => fs.rmSync(remote.root, { recursive: true, force: true }));
+	fs.mkdirSync(path.join(remote.work, 'notes'), { recursive: true });
+	fs.writeFileSync(path.join(remote.work, 'notes', 'Foo.md'), '---\ntitle: Foo\n---\n\nOriginal remote\n');
+	await commitAll(remote.work, 'add foo');
+	await git(remote.work, ['push']);
+
+	// Single enabled read-write repo + a brand-new local note whose title collides with Foo.md.
+	const repo = makeRepo(remote, { commit_sync_enabled: false });
+	t.after(() => cleanupClone(repo.host_id));
+	const state = {
+		repos: [repo],
+		notes: [makeDoc({ _id: oid('local-foo'), title: 'Foo', content: '<p>New local body</p>', text_content: 'New local body', project: repo.project, owner: oid('user-1'), host_id: repo.host_id, in_trash: false })],
+		memories: [],
+	};
+	installModelMocks(state);
+
+	await syncRepo(repo._id.toString(), 'user-1', repo.host_id, { skip_lock: true, skip_audit: true });
+
+	const tree = (await git(remote.bare, ['ls-tree', '-r', '--name-only', 'main'])).stdout;
+	assert.equal(tree.includes('notes/Foo.md'), true);
+	assert.equal(tree.includes('notes/Foo-2.md'), true);
+	// Existing repo file is untouched; the new note lands at a non-colliding path.
+	assert.match((await git(remote.bare, ['show', 'main:notes/Foo.md'])).stdout, /Original remote/);
+	assert.match((await git(remote.bare, ['show', 'main:notes/Foo-2.md'])).stdout, /New local body/);
+});
+
+test('backfillGitSyncMode sets read_write only on repos missing sync_mode', async () => {
+	const repos = [{ sync_mode: undefined }, { sync_mode: 'read_only' }, {}];
+	const original = GitRepo.updateMany;
+	let captured;
+	GitRepo.updateMany = async (query, update) => {
+		captured = { query, update };
+		const matched = repos.filter((r) => r.sync_mode === undefined);
+		matched.forEach((r) => Object.assign(r, update.$set));
+		return { modifiedCount: matched.length };
+	};
+	try {
+		const result = await backfillGitSyncMode();
+		assert.deepEqual(captured.query, { sync_mode: { $exists: false } });
+		assert.equal(captured.update.$set.sync_mode, 'read_write');
+		assert.equal(result.sync_mode, 2);
+		assert.equal(repos[1].sync_mode, 'read_only'); // untouched
+	} finally {
+		GitRepo.updateMany = original;
+	}
 });

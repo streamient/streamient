@@ -282,13 +282,14 @@ List git repos configured for a project.
 | `project_id` | string | no       | Project ID (default: auto) |
 
 ### `add_git_repo`
-Add a git repository to sync with a project. Syncs markdown files as notes/memories.
+Add a git repository to sync with a project. Imports markdown files as notes/memories. Defaults to read-only — it never writes back to the repo unless `sync_mode` is `read_write`.
 
 | Parameter       | Type   | Required | Description                                        |
 | --------------- | ------ | -------- | -------------------------------------------------- |
 | `repo_url`      | string | yes      | HTTPS git repo URL                                 |
 | `name`          | string | no       | Friendly label for this repo                       |
 | `branch`        | string | no       | Branch to sync (default: main)                     |
+| `sync_mode`     | string | no       | `read_only` (default) imports only; `read_write` also exports notes/memories back to git |
 | `auth_token`    | string | no       | Personal access token for private repos            |
 | `notes_path`    | string | no       | Directory in repo mapped to notes (default: notes) |
 | `memories_path` | string | no       | Directory in repo mapped to memories               |
@@ -309,6 +310,7 @@ Update settings of a configured git repo.
 | `branch`         | string  | no       |
 | `auth_token`     | string  | no       |
 | `enabled`        | boolean | no       |
+| `sync_mode`      | string  | no       |
 | `notes_path`     | string  | no       |
 | `memories_path`  | string  | no       |
 | `sync_path`      | string  | no       |
@@ -325,7 +327,7 @@ Remove a git repo configuration and its local working copy.
 | `id`      | string | yes      |
 
 ### `trigger_git_sync`
-Manually trigger a sync for a git repo (pull from git + push to git).
+Manually trigger a sync for a git repo (pull from git; push to git only when `sync_mode` is `read_write`).
 
 | Parameter | Type   | Required |
 | --------- | ------ | -------- |

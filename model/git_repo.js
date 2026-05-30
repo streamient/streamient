@@ -11,6 +11,8 @@ const gitRepoSchema = new mongoose.Schema(
 		auth_token: { type: String, default: '' }, // encrypted PAT
 		sync_interval: { type: Number, default: 10, min: 5 }, // minutes
 		enabled: { type: Boolean, default: true },
+		// read_only: import-only (never writes back to git). read_write: also export notes/memories to git.
+		sync_mode: { type: String, enum: ['read_only', 'read_write'], default: 'read_only' },
 		notes_path: { type: String, default: 'notes' },
 		memories_path: { type: String, default: 'memories' },
 		sync_path: { type: String, default: '/' }, // subfolder within repo

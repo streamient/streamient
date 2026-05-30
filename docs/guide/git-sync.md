@@ -1,6 +1,6 @@
 # Git Sync
 
-Kumbukum can synchronize markdown files and read commit messages from Git repositories, keeping your notes, memories, and project history in sync with a version-controlled repo. Changes flow both ways: edits in the repo appear in Kumbukum, and edits in Kumbukum are pushed back as commits.
+Kumbukum can synchronize markdown files and read commit messages from Git repositories, keeping your notes, memories, and project history in sync with a version-controlled repo. By default a repo is **read-only** — content flows from the repo into Kumbukum and nothing is ever written back. Switch a repo to **read/write** to also push notes and memories back to the repo as commits.
 
 ::: info Availability
 Git Sync requires the **Pro** plan or a **self-hosted** (open-source) installation.
@@ -12,8 +12,17 @@ Git Sync requires the **Pro** plan or a **self-hosted** (open-source) installati
 2. Kumbukum clones the repo and scans for `.md` files
 3. Files in the **notes directory** become Notes; files in the **memories directory** become Memories
 4. A scheduler re-syncs every 10 minutes (configurable per repo)
-5. Items edited in Kumbukum are converted back to Markdown and pushed as commits
+5. In **read/write** mode, items edited in Kumbukum are converted back to Markdown and pushed as commits (read-only repos skip this entirely)
 6. Git commits are imported as searchable Memories by default
+
+### Sync Modes
+
+Each repo has a **sync mode**:
+
+- **Read-only** (default) — Kumbukum only *imports* from the repo. It never commits or pushes, so adding a repo can never modify it. This is the safe default.
+- **Read/write** — Kumbukum also *exports* notes and memories back to the repo as commits. The export is non-destructive: the repo's existing content is always imported first, and a new item never overwrites an existing file — if a generated filename is already taken, Kumbukum writes to a free `name-2.md` instead.
+
+You can change the mode any time from the repo's settings or via the API/MCP `sync_mode` field. Existing repos created before sync modes were introduced keep read/write behavior.
 
 ### Conflict Resolution
 
@@ -82,7 +91,8 @@ The actual content starts here…
 2. Scroll to the **Git Sync** section
 3. Click **Add Repo**
 4. Enter the repo URL, branch, and optional access token
-5. Adjust the notes/memories directory paths if needed
+5. Choose the **sync mode** — Read-only (default) or Read/write
+6. Adjust the notes/memories directory paths if needed
 
 ### Via the API
 
@@ -93,6 +103,7 @@ curl -X POST https://app.kumbukum.com/api/v1/projects/{project_id}/git-repos \
   -d '{
     "repo_url": "https://github.com/user/my-notes.git",
     "branch": "main",
+    "sync_mode": "read_only",
     "auth_token": "ghp_xxxx",
     "notes_path": "notes",
     "memories_path": "memories"
@@ -106,6 +117,7 @@ Use the `add_git_repo` tool:
 ```
 repo_url: https://github.com/user/my-notes.git
 branch: main
+sync_mode: read_only
 auth_token: ghp_xxxx
 ```
 
@@ -115,6 +127,7 @@ auth_token: ghp_xxxx
 |-----------------|------------|----------------------------------------------------------|
 | `repo_url`      | —          | HTTPS URL of the Git repository (required)               |
 | `branch`        | `main`     | Branch to sync                                           |
+| `sync_mode`     | `read_only`| `read_only` imports only; `read_write` also exports back to git |
 | `auth_token`    | —          | Personal access token for private repos (encrypted)      |
 | `sync_interval` | `10`       | Minutes between automatic syncs (minimum 5)              |
 | `notes_path`    | `notes`    | Directory in repo mapped to Notes                        |

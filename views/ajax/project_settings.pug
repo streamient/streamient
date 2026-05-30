@@ -65,6 +65,10 @@
 										span.badge.bg-success.me-2 Enabled
 									else
 										span.badge.bg-secondary.me-2 Disabled
+									if repo.sync_mode === 'read_write'
+										span.badge.bg-warning.me-2(title="Exports notes/memories back to git") Read/write
+									else
+										span.badge.bg-light.text-dark.me-2(title="Imports only — never writes to your repo") Read-only
 									if repo.last_sync_status === 'success'
 										span.badge.bg-info Last sync: success
 									else if repo.last_sync_status === 'failed'

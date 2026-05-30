@@ -1229,6 +1229,14 @@
           "enabled": {
             "type": "boolean"
           },
+          "sync_mode": {
+            "type": "string",
+            "enum": [
+              "read_only",
+              "read_write"
+            ],
+            "description": "read_only imports only; read_write also exports back to git"
+          },
           "notes_path": {
             "type": "string"
           },
@@ -7571,6 +7579,15 @@
                     "type": "string",
                     "description": "Personal access token (stored encrypted)"
                   },
+                  "sync_mode": {
+                    "type": "string",
+                    "enum": [
+                      "read_only",
+                      "read_write"
+                    ],
+                    "default": "read_only",
+                    "description": "read_only (default) imports only; read_write also exports notes/memories back to git"
+                  },
                   "sync_interval": {
                     "type": "integer",
                     "default": 10,
@@ -7735,6 +7752,14 @@
                   },
                   "enabled": {
                     "type": "boolean"
+                  },
+                  "sync_mode": {
+                    "type": "string",
+                    "enum": [
+                      "read_only",
+                      "read_write"
+                    ],
+                    "description": "read_only imports only; read_write also exports back to git"
                   },
                   "notes_path": {
                     "type": "string"

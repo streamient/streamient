@@ -30,6 +30,7 @@ import billingRoutes from './routes/billing.js';
 import healthRoutes from './routes/health.js';
 import importRoutes from './routes/import.js';
 import { backfillEmailTriageState } from './services/email_ingest_service.js';
+import { backfillGitSyncMode } from './services/git_sync_service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -209,6 +210,7 @@ OtelRuntime.setupExpressErrorHandler(app);
 async function start() {
 	await connectDB();
 	await backfillEmailTriageState();
+	await backfillGitSyncMode();
 	await initRedis();
 	await initTypesense();
 

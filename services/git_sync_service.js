@@ -324,6 +324,19 @@ async function releaseLock(repoId) {
 
 // ── CRUD ──
 
+// Existing repos predate sync_mode and relied on bidirectional push. Without this, the
+// schema default (read_only) would silently disable their export on the next sync, so
+// backfill them to read_write to preserve behavior. New repos default to read_only.
+export async function backfillGitSyncMode() {
+	const result = await GitRepo.updateMany(
+		{ sync_mode: { $exists: false } },
+		{ $set: { sync_mode: 'read_write' } },
+		{ timestamps: false },
+	);
+	if (result?.modifiedCount > 0) log.info({ updates: result.modifiedCount }, 'Git repo sync_mode backfilled');
+	return { sync_mode: result?.modifiedCount || 0 };
+}
+
 export async function createGitRepo(userId, hostId, data, ctx = {}) {
 	const tokenEncrypted = data.auth_token ? encrypt(data.auth_token) : '';
 	const repo = await GitRepo.create({
@@ -336,6 +349,7 @@ export async function createGitRepo(userId, hostId, data, ctx = {}) {
 		auth_token: tokenEncrypted,
 		sync_interval: data.sync_interval || 10,
 		enabled: data.enabled !== false,
+		sync_mode: data.sync_mode === 'read_write' ? 'read_write' : 'read_only',
 		notes_path: data.notes_path || 'notes',
 		memories_path: data.memories_path || 'memories',
 		sync_path: data.sync_path || '/',
@@ -383,6 +397,7 @@ export async function updateGitRepo(hostId, repoId, data, ctx = {}) {
 	if (data.auth_token !== undefined) update.auth_token = data.auth_token ? encrypt(data.auth_token) : '';
 	if (data.sync_interval !== undefined) update.sync_interval = data.sync_interval;
 	if (data.enabled !== undefined) update.enabled = data.enabled;
+	if (data.sync_mode !== undefined) update.sync_mode = data.sync_mode;
 	if (data.notes_path !== undefined) update.notes_path = data.notes_path;
 	if (data.memories_path !== undefined) update.memories_path = data.memories_path;
 	if (data.sync_path !== undefined) update.sync_path = data.sync_path;
@@ -509,13 +524,17 @@ async function executeSyncRepo(repoId, userId, hostId, ctx, gitRepoDoc, summary)
 			});
 		}
 
-		await logSyncEvent(gitRepoDoc, 'info', 'Exporting local changes to Git');
-		const beforePush = syncLogDetails(summary);
-		await pushToGit(localGit, dir, syncBase, gitRepoDoc, userId, hostId, token, summary);
-		await logSyncEvent(gitRepoDoc, 'info', 'Git export complete', {
-			exported_files: summary.exported_files - beforePush.exported_files,
-			skipped: summary.skipped - beforePush.skipped,
-		});
+		if (gitRepoDoc.sync_mode === 'read_write') {
+			await logSyncEvent(gitRepoDoc, 'info', 'Exporting local changes to Git');
+			const beforePush = syncLogDetails(summary);
+			await pushToGit(localGit, dir, syncBase, gitRepoDoc, userId, hostId, token, summary);
+			await logSyncEvent(gitRepoDoc, 'info', 'Git export complete', {
+				exported_files: summary.exported_files - beforePush.exported_files,
+				skipped: summary.skipped - beforePush.skipped,
+			});
+		} else {
+			await logSyncEvent(gitRepoDoc, 'info', 'Read-only repo: skipping export to Git');
+		}
 
 		gitRepoDoc.last_sync_status = 'success';
 		gitRepoDoc.last_synced_at = new Date();
@@ -696,6 +715,22 @@ async function trashDeletedGitItems(gitRepo, hostId, activeFilePaths, summary) {
 	}
 }
 
+// Ensure a brand-new item never clobbers an existing repo file: if the target path is
+// already taken (by a pre-existing repo file or another item written this run), pick the
+// next free `name-N.md`. Import runs before push, so the clone reflects the remote here.
+function resolveNonCollidingPath(dir, syncBase, relPath) {
+	if (!fs.existsSync(path.join(dir, syncBase, relPath))) return relPath;
+	const dirName = path.dirname(relPath);
+	const ext = path.extname(relPath);
+	const base = path.basename(relPath, ext);
+	const join = (name) => path.join(dirName, name).split(path.sep).join('/');
+	for (let i = 2; i < 1000; i++) {
+		const candidate = join(`${base}-${i}${ext}`);
+		if (!fs.existsSync(path.join(dir, syncBase, candidate))) return candidate;
+	}
+	return join(`${base}-${crypto.randomBytes(4).toString('hex')}${ext}`);
+}
+
 async function pushToGit(git, dir, syncBase, gitRepo, userId, hostId, token, summary) {
 	const notesDir = cleanRepoPath(gitRepo.notes_path, 'notes');
 	const memoriesDir = cleanRepoPath(gitRepo.memories_path, 'memories');
@@ -718,6 +753,7 @@ async function pushToGit(git, dir, syncBase, gitRepo, userId, hostId, token, sum
 		const sha = fileSha(md);
 
 		let relPath = note.git_source?.file_path;
+		const isNewPath = !relPath;
 		if (!relPath) {
 			relPath = `${notesDir}/${safeFileName(note.title)}.md`;
 		}
@@ -726,11 +762,16 @@ async function pushToGit(git, dir, syncBase, gitRepo, userId, hostId, token, sum
 			continue;
 		}
 
-		const absPath = path.join(dir, syncBase, relPath);
+		let absPath = path.join(dir, syncBase, relPath);
 
 		if (note.git_source?.last_sha === sha && fs.existsSync(absPath)) {
 			summary.skipped++;
 			continue;
+		}
+
+		if (isNewPath) {
+			relPath = resolveNonCollidingPath(dir, syncBase, relPath);
+			absPath = path.join(dir, syncBase, relPath);
 		}
 
 		fs.mkdirSync(path.dirname(absPath), { recursive: true });
@@ -758,6 +799,7 @@ async function pushToGit(git, dir, syncBase, gitRepo, userId, hostId, token, sum
 		const sha = fileSha(md);
 
 		let relPath = mem.git_source?.file_path;
+		const isNewPath = !relPath;
 		if (!relPath) {
 			relPath = `${memoriesDir}/${safeFileName(mem.title)}.md`;
 		}
@@ -766,11 +808,16 @@ async function pushToGit(git, dir, syncBase, gitRepo, userId, hostId, token, sum
 			continue;
 		}
 
-		const absPath = path.join(dir, syncBase, relPath);
+		let absPath = path.join(dir, syncBase, relPath);
 
 		if (mem.git_source?.last_sha === sha && fs.existsSync(absPath)) {
 			summary.skipped++;
 			continue;
+		}
+
+		if (isNewPath) {
+			relPath = resolveNonCollidingPath(dir, syncBase, relPath);
+			absPath = path.join(dir, syncBase, relPath);
 		}
 
 		fs.mkdirSync(path.dirname(absPath), { recursive: true });
