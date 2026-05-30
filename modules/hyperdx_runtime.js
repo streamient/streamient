@@ -28,7 +28,12 @@ export const initializeHyperDX = function(options = {}) {
 		const url = env.HYPERDX_API_URL || env.OTEL_EXPORTER_OTLP_ENDPOINT;
 		if (url) initOptions.url = url;
 
-		if (env.HDX_NODE_CONSOLE_CAPTURE === '0') {
+		// Match Helpmonks: export only structured pino logs (via pino_otel_hook),
+		// not raw console.*. HyperDX's console capture double-ships library chatter
+		// — most visibly the benign typesense-js "node-logger" 503 "Not Ready or
+		// Lagging" retry warnings (the client retries the next node and succeeds).
+		// Opt back in with HDX_NODE_CONSOLE_CAPTURE=1.
+		if (env.HDX_NODE_CONSOLE_CAPTURE !== '1') {
 			initOptions.consoleCapture = false;
 		}
 
