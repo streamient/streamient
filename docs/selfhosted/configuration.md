@@ -135,26 +135,6 @@ These are only needed if you enable subscription billing (Cloud deployments).
 | `OPENPANEL_CLIENT_SECRET` | OpenPanel client secret | No | — |
 | `OPENPANEL_API_URL` | OpenPanel API URL | No | — |
 
-### Observability (OpenObserve)
-
-Start the bundled OpenObserve service with `docker compose --profile observability up -d openobserve`, then set `ENABLE_OPENOBSERVE=true` on app services.
-
-| Variable | Description | Required | Default |
-| --- | --- | --- | --- |
-| `ENABLE_OPENOBSERVE` | Enable OpenObserve server traces/logs and browser RUM config | No | `false` |
-| `OPENOBSERVE_URL` | Internal OpenObserve URL used by server-side OTLP/log ingestion | No | `http://openobserve:5080` |
-| `OPENOBSERVE_PUBLIC_URL` | Browser-reachable OpenObserve URL for RUM/browser logs | Yes for RUM | — |
-| `OPENOBSERVE_ORG` | OpenObserve organization identifier; same as `OPENOBSERVE_ORGANIZATION` | No | `default` |
-| `OPENOBSERVE_ORGANIZATION` | OpenObserve organization identifier | No | `default` |
-| `OPENOBSERVE_TOKEN` | OpenObserve ingestion token. Raw token is sent as `Basic ${OPENOBSERVE_TOKEN}`; include `Basic ` or `Bearer ` to override scheme | Yes for server logs/traces unless using user/password | — |
-| `OPENOBSERVE_USER` | OpenObserve ingestion/root user for server logs and traces | Yes for server logs | — |
-| `OPENOBSERVE_PASSWORD` | OpenObserve ingestion/root password for server logs and traces | Yes for server logs | — |
-| `OPENOBSERVE_RUM_CLIENT_TOKEN` | OpenObserve RUM/browser logs client token from the Ingestion page; same as `OPENOBSERVE_CLIENT_TOKEN` | Yes for RUM | — |
-| `OPENOBSERVE_CLIENT_TOKEN` | OpenObserve RUM/browser logs client token from the Ingestion page | Yes for RUM | — |
-| `OPENOBSERVE_LOG_STREAM` | Server console log stream name | No | `kumbukum_logs` |
-| `OPENOBSERVE_SESSION_REPLAY` | Enable browser session replay recording | No | `false` |
-| `OPENOBSERVE_RUM_PRIVACY_LEVEL` | RUM privacy level | No | `mask-user-input` |
-
 ## Reverse Proxy
 
 When running behind a reverse proxy (nginx, Caddy, etc.):

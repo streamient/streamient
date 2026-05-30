@@ -35,20 +35,6 @@ x-environment: &environment
   OPENPANEL_CLIENT_ID: ${OPENPANEL_CLIENT_ID:-}
   OPENPANEL_CLIENT_SECRET: ${OPENPANEL_CLIENT_SECRET:-}
   OPENPANEL_API_URL: ${OPENPANEL_API_URL:-}
-  ENABLE_OPENOBSERVE: ${ENABLE_OPENOBSERVE:-false}
-  OPENOBSERVE_URL: ${OPENOBSERVE_URL:-http://openobserve:5080}
-  OPENOBSERVE_PUBLIC_URL: ${OPENOBSERVE_PUBLIC_URL:-}
-  OPENOBSERVE_TOKEN: ${OPENOBSERVE_TOKEN:-}
-  OPENOBSERVE_ORG: ${OPENOBSERVE_ORG:-}
-  OPENOBSERVE_ORGANIZATION: ${OPENOBSERVE_ORGANIZATION:-default}
-  OPENOBSERVE_LOG_STREAM: ${OPENOBSERVE_LOG_STREAM:-kumbukum_logs}
-  OPENOBSERVE_USER: ${OPENOBSERVE_USER:-root@example.com}
-  OPENOBSERVE_PASSWORD: ${OPENOBSERVE_PASSWORD:-}
-  OPENOBSERVE_RUM_CLIENT_TOKEN: ${OPENOBSERVE_RUM_CLIENT_TOKEN:-}
-  OPENOBSERVE_CLIENT_TOKEN: ${OPENOBSERVE_CLIENT_TOKEN:-}
-  OPENOBSERVE_APPLICATION_ID: ${OPENOBSERVE_APPLICATION_ID:-kumbukum-web}
-  OPENOBSERVE_SESSION_REPLAY: ${OPENOBSERVE_SESSION_REPLAY:-false}
-  OPENOBSERVE_RUM_PRIVACY_LEVEL: ${OPENOBSERVE_RUM_PRIVACY_LEVEL:-mask-user-input}
   HYPERDX_API_KEY: ${HYPERDX_API_KEY:-}
   HYPERDX_API_URL: ${HYPERDX_API_URL:-}
   HYPERDX_BROWSER_URL: ${HYPERDX_BROWSER_URL:-}
@@ -194,25 +180,8 @@ services:
     shm_size: '2g'
     hostname: screenshot
 
-  openobserve:
-    image: o2cr.ai/openobserve/openobserve:latest
-    profiles:
-      - observability
-    ports:
-      - "5080:5080"
-    environment:
-      ZO_ROOT_USER_EMAIL: ${OPENOBSERVE_USER:-root@example.com}
-      ZO_ROOT_USER_PASSWORD: ${OPENOBSERVE_PASSWORD:-}
-      ZO_DATA_DIR: /data
-      ZO_WEB_URL: ${OPENOBSERVE_PUBLIC_URL:-}
-      ZO_TELEMETRY: "false"
-    volumes:
-      - openobserve_data:/data
-    restart: unless-stopped
-
 volumes:
   mongo_data:
   typesense_data:
   redis_data:
   assets_data:
-  openobserve_data:

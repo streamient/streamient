@@ -66,7 +66,7 @@ export const emitFromPinoArgs = function(inputArgs = [], level, source = 'pino')
 	const pinoLevel = PINO_LEVELS[level] || 'info';
 
 	// Promote error/fatal log calls to span exceptions so they appear in the
-	// HyperDX/OpenObserve "Errors" view alongside framework-captured exceptions.
+	// HyperDX "Errors" view alongside framework-captured exceptions.
 	// Without this, every `catch (err) { log.error(err) }` would only appear as a
 	// log record, never as a recorded exception on the trace.
 	if (pinoLevel === 'error' || pinoLevel === 'fatal') {

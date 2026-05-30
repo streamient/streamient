@@ -3,7 +3,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 import { createRequire } from 'node:module';
-import { configureOpenObserveEnvironment, getOpenObserveOtelHeaders } from './openobserve_runtime.js';
 import * as HyperDXRuntime from './hyperdx_runtime.js';
 
 const require = createRequire(import.meta.url);
@@ -29,6 +28,20 @@ const _isTrue = function(value) {
 
 const _requirePackage = function(packageName) {
 	return require(packageName);
+};
+
+const _parseOtlpHeaders = function(env = process.env) {
+	const value = env.OTEL_EXPORTER_OTLP_HEADERS;
+	if (!value || typeof value !== 'string') return {};
+
+	return value.split(',').reduce((headers, pair) => {
+		const index = pair.indexOf('=');
+		if (index <= 0) return headers;
+		const key = pair.slice(0, index).trim();
+		const headerValue = decodeURIComponent(pair.slice(index + 1).trim());
+		if (key) headers[key] = headerValue;
+		return headers;
+	}, {});
 };
 
 export const buildServiceName = function(options = {}) {
@@ -96,7 +109,7 @@ const _buildTraceExporter = function() {
 		const { OTLPTraceExporter } = _requirePackage('@opentelemetry/exporter-trace-otlp-http');
 		const options = {};
 		if (endpoint) options.url = endpoint;
-		const headers = getOpenObserveOtelHeaders();
+		const headers = _parseOtlpHeaders();
 		if (Object.keys(headers).length > 0) options.headers = headers;
 		return new OTLPTraceExporter(options);
 	}
@@ -196,7 +209,7 @@ const _initializeLogExporter = function(resource) {
 	try {
 		const { LoggerProvider, BatchLogRecordProcessor } = _requirePackage('@opentelemetry/sdk-logs');
 		const { OTLPLogExporter } = _requirePackage('@opentelemetry/exporter-logs-otlp-http');
-		const headers = getOpenObserveOtelHeaders();
+		const headers = _parseOtlpHeaders();
 		const exporter = new OTLPLogExporter({
 			url: endpoint,
 			...(Object.keys(headers).length > 0 ? { headers } : {}),
@@ -223,7 +236,6 @@ export const initializeOpenTelemetry = function(options = {}) {
 	}
 
 	_initAttempted = true;
-	configureOpenObserveEnvironment(options);
 
 	if (HyperDXRuntime.isHyperDXEnabled()) {
 		process.env.ENABLE_OTEL = 'true';
@@ -258,7 +270,7 @@ export const initializeOpenTelemetry = function(options = {}) {
 			_sdk.start();
 			console.log(`[OTEL] Initialized service=${_serviceName}`);
 
-			// Own OTLP logs pipeline (e.g. OpenObserve). HyperDX manages its own below.
+			// Own OTLP logs pipeline. HyperDX manages its own below.
 			_initializeLogExporter(resource);
 		}
 
