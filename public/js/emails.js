@@ -1,11 +1,23 @@
 // Emails section — mount/unmount for SPA navigation
 (function () {
+	var PAGE_SIZE = 50;
 	var listEl;
 	var windowListeners = [];
+	var pageNum = 1;
+	var loadingMore = false;
+	var hasMore = false;
+	var loadSeq = 0;
+	var observer = null;
+	var sentinelEl = null;
 
 	function addWindowListener(event, handler) {
 		window.addEventListener(event, handler);
 		windowListeners.push([event, handler]);
+	}
+
+	function formatDateTime(value) {
+		if (!value) return '';
+		return new Date(value).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 	}
 
 	function cleanEmailExcerpt(value) {
@@ -55,7 +67,7 @@
 		var senders = (e.from || []).slice(0, 3).join(', ');
 		var senderSummary = senders || '';
 		var hasMoreSenders = (e.from || []).length > 3 ? ' +' + ((e.from || []).length - 3) : '';
-		var date = e.updatedAt ? new Date(e.updatedAt).toLocaleDateString() : '';
+		var date = formatDateTime(e.updatedAt);
 		var excerpt = e.excerpt || cleanEmailExcerpt(e.text_content || e.attachment_text_content || '').slice(0, 220);
 		return '<div class="list-group-item list-group-item-action email-item" data-id="' + escapeHtml(id) + '">'
 			+ '<div class="d-flex align-items-start gap-2">'
@@ -135,14 +147,60 @@
 		}
 	}
 
+	function emailsPath(page) {
+		var params = ['page=' + page, 'limit=' + PAGE_SIZE];
+		if (currentProjectId) params.push('project=' + currentProjectId);
+		return '/emails?' + params.join('&');
+	}
+
 	async function loadEmails() {
 		if (!listEl) return;
-		var params = currentProjectId ? '?project=' + currentProjectId : '';
-		var data = await api('GET', '/emails' + params);
-		if (!listEl) return;
+		var seq = ++loadSeq;
+		pageNum = 1;
+		loadingMore = false;
+		var data = await api('GET', emailsPath(pageNum));
+		if (!listEl || seq !== loadSeq) return;
 		var emails = data.emails || [];
+		hasMore = emails.length === PAGE_SIZE;
 
 		renderEmails(emails);
+	}
+
+	function appendEmailItems(emails) {
+		if (!listEl || !emails.length) return;
+		listEl.querySelector('.email-empty')?.remove();
+		var wrapper = document.createElement('div');
+		wrapper.innerHTML = emails.map(renderEmailItemHtml).join('');
+		var items = Array.prototype.slice.call(wrapper.children);
+		items.forEach(function (item) {
+			bindEmailItem(item);
+			listEl.appendChild(item);
+		});
+	}
+
+	async function loadMore() {
+		if (!listEl || loadingMore || !hasMore) return;
+		loadingMore = true;
+		var seq = loadSeq;
+		var page = pageNum + 1;
+		try {
+			var data = await api('GET', emailsPath(page));
+			if (!listEl || seq !== loadSeq) return;
+			var emails = data.emails || [];
+			pageNum = page;
+			hasMore = emails.length === PAGE_SIZE;
+			appendEmailItems(emails);
+			// Re-arm the observer so it re-fires if the sentinel is still in view
+			// (IntersectionObserver only reports transitions, not steady state).
+			if (hasMore && observer && sentinelEl) {
+				observer.unobserve(sentinelEl);
+				observer.observe(sentinelEl);
+			}
+		} catch (err) {
+			showError('Failed to load more emails: ' + (err.message || 'Unknown error'));
+		} finally {
+			if (seq === loadSeq) loadingMore = false;
+		}
 	}
 
 	function onModalDeleted(e) { if (e.detail?.type === 'emails') loadEmails(); }
@@ -153,6 +211,19 @@
 		var div = document.createElement('div');
 		div.textContent = str || '';
 		return div.innerHTML;
+	}
+
+	function setupInfiniteScroll() {
+		var root = document.getElementById('main-content');
+		if (!root || typeof IntersectionObserver === 'undefined') return;
+		sentinelEl = document.createElement('div');
+		sentinelEl.className = 'emails-scroll-sentinel';
+		sentinelEl.setAttribute('aria-hidden', 'true');
+		listEl.parentNode.insertBefore(sentinelEl, listEl.nextSibling);
+		observer = new IntersectionObserver(function (entries) {
+			if (entries.some(function (entry) { return entry.isIntersecting; })) loadMore();
+		}, { root: root, rootMargin: '400px' });
+		observer.observe(sentinelEl);
 	}
 
 	function mount() {
@@ -166,6 +237,7 @@
 		addWindowListener('email:updated', onEmailSocketEvent);
 		addWindowListener('email:deleted', onEmailDeleted);
 
+		setupInfiniteScroll();
 		loadEmails();
 	}
 
@@ -174,6 +246,10 @@
 			window.removeEventListener(windowListeners[i][0], windowListeners[i][1]);
 		}
 		windowListeners.length = 0;
+		if (observer) observer.disconnect();
+		observer = null;
+		if (sentinelEl) sentinelEl.remove();
+		sentinelEl = null;
 		listEl = null;
 	}
 

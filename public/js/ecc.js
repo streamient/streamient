@@ -84,6 +84,13 @@
 	];
 	var SYSTEM_TRIAGE_LABELS = ['reply-required', 'human-do', 'waiting', 'no-action', 'triaged', 'spam'];
 	var DRAFT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+	var EMAIL_PAGE_SIZE = 50;
+	var emailPage = 1;
+	var emailLoadingMore = false;
+	var emailHasMore = false;
+	var emailLoadSeq = 0;
+	var eccObserver = null;
+	var eccSentinelEl = null;
 
 	function addWindowListener(event, handler) {
 		window.addEventListener(event, handler);
@@ -584,6 +591,12 @@
 		}
 		if (selectedProject) params.push('project=' + encodeURIComponent(selectedProject));
 			return '/emails' + (params.length ? '?' + params.join('&') : '');
+		}
+
+		function emailsPagePath(page) {
+			var base = emailsPath();
+			var sep = base.indexOf('?') === -1 ? '?' : '&';
+			return base + sep + 'page=' + page + '&limit=' + EMAIL_PAGE_SIZE;
 		}
 
 		function draftsPath() {
@@ -2179,7 +2192,7 @@
 				+ '<div class="min-w-0 flex-grow-1">'
 				+ '<div class="d-flex justify-content-between align-items-center gap-2 min-w-0">'
 				+ '<span class="ecc-email-sender text-muted text-truncate">' + escapeHtml(senders) + '</span>'
-				+ '<time class="ecc-email-date text-muted text-nowrap flex-shrink-0">' + escapeHtml(formatDate(email.updatedAt)) + '</time>'
+				+ '<time class="ecc-email-date text-muted text-nowrap flex-shrink-0">' + escapeHtml(formatDateTime(email.updatedAt)) + '</time>'
 				+ '</div>'
 				+ '<div class="fw-semibold text-truncate ecc-email-subject">' + escapeHtml(subject) + '</div>'
 				+ (body ? '<div class="ecc-email-excerpt text-muted text-truncate">' + escapeHtml(body) + '</div>' : '')
@@ -2320,7 +2333,7 @@
 				+ '<div class="min-w-0 flex-grow-1">'
 				+ '<div class="fw-semibold text-truncate">' + escapeHtml(draft.subject || '(No subject)') + '</div>'
 				+ '</div>'
-				+ '<small class="text-muted text-nowrap">' + escapeHtml(formatDate(draft.updatedAt)) + '</small>'
+				+ '<small class="text-muted text-nowrap">' + escapeHtml(formatDateTime(draft.updatedAt)) + '</small>'
 				+ '</div>'
 				+ '</div>';
 		}).join('');
@@ -2486,17 +2499,75 @@
 
 		async function loadEmails() {
 			if (!listEl) return;
+			var seq = ++emailLoadSeq;
+			emailPage = 1;
+			emailLoadingMore = false;
+			emailHasMore = false;
 			showListView();
 			listEl.innerHTML = '<div class="list-group-item text-muted">Loading emails...</div>';
 			resetSelectionState();
 			updateActionBar();
 			if (activeMailbox === 'drafts') {
 				var draftData = await api('GET', draftsPath());
+				if (!listEl || seq !== emailLoadSeq) return;
 				renderDrafts(draftData.drafts || []);
 				return;
 			}
-			var data = await api('GET', emailsPath());
-			renderEmails(data.emails || []);
+			var data = await api('GET', emailsPagePath(1));
+			if (!listEl || seq !== emailLoadSeq) return;
+			var emails = data.emails || [];
+			emailHasMore = emails.length === EMAIL_PAGE_SIZE;
+			renderEmails(emails);
+		}
+
+		function appendEmails(emails) {
+			if (!listEl || !emails.length) return;
+			listEl.querySelector('.ecc-email-empty')?.remove();
+			var wrapper = document.createElement('div');
+			wrapper.innerHTML = emails.map(renderEmailItemHtml).join('');
+			Array.prototype.slice.call(wrapper.children).forEach(function (item) {
+				bindEmailItem(item);
+				listEl.appendChild(item);
+			});
+		}
+
+		async function loadMoreEmails() {
+			if (!listEl || emailLoadingMore || !emailHasMore) return;
+			if (detailActive || activeMailbox === 'drafts') return;
+			emailLoadingMore = true;
+			var seq = emailLoadSeq;
+			var page = emailPage + 1;
+			try {
+				var data = await api('GET', emailsPagePath(page));
+				if (!listEl || seq !== emailLoadSeq) return;
+				var emails = data.emails || [];
+				emailPage = page;
+				emailHasMore = emails.length === EMAIL_PAGE_SIZE;
+				appendEmails(emails);
+				// Re-arm the observer so it re-fires if the sentinel is still in view
+				// (IntersectionObserver only reports transitions, not steady state).
+				if (emailHasMore && eccObserver && eccSentinelEl) {
+					eccObserver.unobserve(eccSentinelEl);
+					eccObserver.observe(eccSentinelEl);
+				}
+			} catch (err) {
+				showError(err.message || 'Failed to load more emails');
+			} finally {
+				if (seq === emailLoadSeq) emailLoadingMore = false;
+			}
+		}
+
+		function setupInfiniteScroll() {
+			var root = document.querySelector('.ecc-main');
+			if (!root || !listEl || typeof IntersectionObserver === 'undefined') return;
+			eccSentinelEl = document.createElement('div');
+			eccSentinelEl.className = 'ecc-scroll-sentinel';
+			eccSentinelEl.setAttribute('aria-hidden', 'true');
+			listEl.parentNode.insertBefore(eccSentinelEl, listEl.nextSibling);
+			eccObserver = new IntersectionObserver(function (entries) {
+				if (entries.some(function (entry) { return entry.isIntersecting; })) loadMoreEmails();
+			}, { root: root, rootMargin: '400px' });
+			eccObserver.observe(eccSentinelEl);
 		}
 
 		async function loadAll() {
@@ -2822,6 +2893,7 @@
 		addWindowListener('email-internal-note:deleted', handleInternalNoteSocketEvent);
 		addWindowListener('outgoing-email:sent', handleOutgoingSent);
 		addWindowListener('outgoing-email:error', handleOutgoingError);
+		setupInfiniteScroll();
 		loadAll().then(function () {
 			if (pendingEmailId) selectEmail(pendingEmailId);
 		});
@@ -2832,6 +2904,10 @@
 			window.removeEventListener(windowListeners[i][0], windowListeners[i][1]);
 		}
 		windowListeners.length = 0;
+		if (eccObserver) eccObserver.disconnect();
+		eccObserver = null;
+		if (eccSentinelEl) eccSentinelEl.remove();
+		eccSentinelEl = null;
 		listEl = null;
 		mailboxesEl = null;
 		labelsEl = null;
