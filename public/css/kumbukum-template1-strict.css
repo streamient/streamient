@@ -397,8 +397,8 @@ body.kk-template1 #project-list .list-group-item{
 body.kk-template1 #project-list .active,
 body.kk-template1 #project-list .selected,
 body.kk-template1 #project-list .list-group-item.active{
-  box-shadow:0 0 0 1px var(--brand-strong) inset;
-  border-color:var(--brand-strong)!important;
+  box-shadow:0 0 0 1px color-mix(in srgb, var(--brand-strong) 35%, transparent) inset;
+  border-color:color-mix(in srgb, var(--brand-strong) 35%, transparent)!important;
 }
 body.kk-template1 #project-list .kk-project-row,
 body.kk-template1 #project-list a{
@@ -411,6 +411,36 @@ body.kk-template1 #project-list a{
 }
 body.kk-template1 #project-list .kk-project-row:hover,
 body.kk-template1 #project-list a:hover{background:var(--hover)}
+body.kk-template1 #project-list .section-active{
+  background:var(--hover);
+}
+/* Full-bleed project card rows: hover/selected background spans the whole card */
+body.kk-template1 #project-list .project-item{
+  padding:0;
+  overflow:hidden;
+}
+body.kk-template1 #project-list .project-item-section{
+  padding-left:12px;
+}
+/* Project header gear (settings) */
+body.kk-template1 #project-list .project-settings-gear{
+  margin-left:auto;
+  padding:2px;
+  border:0;
+  background:transparent;
+  color:var(--muted);
+  line-height:1;
+  border-radius:6px;
+  opacity:.7;
+}
+body.kk-template1 #project-list .project-settings-gear:hover{
+  color:var(--text);
+  background:var(--hover-3);
+  opacity:1;
+}
+body.kk-template1 #project-list .project-settings-gear .kk-icon{
+  font-size:15px;
+}
 
 body.kk-template1 #sidebar a.text-muted{
   display:block;
@@ -437,6 +467,32 @@ body.kk-template1 #main-content .preview-container{
   border-radius:10px;
   background:var(--panel2b);
   color:var(--text);
+}
+
+/* ── Sticky list toolbars ── */
+/* Drop the scroll container's TOP padding only on pages that have a sticky bar,
+   so the bar's at-rest position already equals its stuck position (top:0) — it
+   never shifts while scrolling. The bar restores the top spacing via padding-top. */
+body.kk-template1 #main-content:has(.kk-list-toolbar){
+  padding-top: 0 !important;
+}
+body.kk-template1.kk-ecc-page .ecc-main{
+  padding-top: 0 !important;
+}
+body.kk-template1 .kk-list-toolbar{
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--panel-solid);
+  padding-top: 12px;      /* restores the top spacing removed from the container */
+  margin-bottom: 4px;
+}
+body.kk-template1 #ecc-view-header{
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--panel-solid);
+  padding-top: 12px;
 }
 
 /* ── List items ── */
@@ -487,17 +543,22 @@ body.kk-template1 #main-content .ecc-email-item .ecc-email-excerpt {
 body.kk-template1 .ecc-left .list-group-item.active,
 body.kk-template1 .ecc-email-item.is-active {
   color: var(--text-strong) !important;
-  border-color: var(--brand-strong) !important;
-  box-shadow: inset 0 0 0 1px var(--brand-strong);
+  border-color: color-mix(in srgb, var(--brand-strong) 35%, transparent) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-strong) 35%, transparent);
+}
+
+body.kk-template1 .ecc-left .list-group-item:hover,
+body.kk-template1 .ecc-left .list-group-item.active {
+  background: var(--hover) !important;
 }
 
 body.kk-template1 .ecc-email-item.is-selected {
-  border-color: var(--brand-strong) !important;
-  box-shadow: inset 3px 0 0 var(--brand-strong);
+  border-color: color-mix(in srgb, var(--brand-strong) 35%, transparent) !important;
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--brand-strong) 35%, transparent);
 }
 
 body.kk-template1 .ecc-email-item.is-selected.is-active {
-  box-shadow: inset 3px 0 0 var(--brand-strong), inset 0 0 0 1px var(--brand-strong);
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--brand-strong) 35%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--brand-strong) 35%, transparent);
 }
 
 body.kk-template1 .ecc-ai-section,
@@ -1267,7 +1328,7 @@ body.kk-template1 .input-group-text {
 /* ── Floating batch action bar ── */
 .batch-floating-bar {
   position: fixed;
-  top: 70px;
+  top: 92px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 1050;
@@ -1324,6 +1385,9 @@ body.kk-template1 .input-group-text {
 .batch-floating-close:hover {
   color: #fff !important;
 }
+/* Win over `body.kk-template1 .small` (higher specificity) so the banner
+   stays readable on the brand-coloured bar in both themes. */
+body.kk-template1 .batch-floating-inner .small,
 .batch-floating-banner {
   flex: 0 0 100%;
   color: rgba(255, 255, 255, .85) !important;

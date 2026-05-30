@@ -5,11 +5,13 @@ each p in projects
 			.project-drop-overlay-inner
 				!= icon('uploadCloud')
 				span Upload as notes
-		.card-body.p-0.pb-3
-			.d-flex.align-items-center.py-2.ps-2.p-3.bg-hover-light
+		.card-body.p-0
+			.d-flex.align-items-center.py-2.ps-2.p-3.bg-hover-light.project-item-name-row
 				span.project-color(style=`background:${p.color}`)
 				span.project-item-name #{p.name}
-			.d-flex.align-items-center.mt-1.py-1.pe-3.bg-hover-light.project-item-section.position-relative
+				button.project-settings-gear(type="button" title="Open project" onclick=`event.stopPropagation(); setActiveProject('${p._id}'); navigateTo('/dashboard')`)
+					!= icon('moreHoriz')
+			.d-flex.align-items-center.py-1.pe-3.bg-hover-light.project-item-section.position-relative
 				a.stretched-link(href="/notes")
 				.pe-2.section-link
 					span Notes

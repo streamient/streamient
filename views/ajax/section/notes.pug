@@ -6,30 +6,31 @@
 			h5 Files upload
 			p.text-muted Drop files here to upload
 	input#import-filepond(type="file" multiple hidden)
-	.d-flex.justify-content-between.align-items-center.mb-3
-		h4 Notes
-		button.btn.btn-sm.btn-primary#new-note-btn
-			!= icon('add')
-			span.ms-1 New Note
-	#batch-toolbar(data-type="notes")
-		.form-check.mb-2
-			input.form-check-input#select-all-cb(type="checkbox")
-			label.form-check-label.small(for="select-all-cb") Select all
-		#batch-actions.batch-floating-bar.d-none
-			.batch-floating-inner
-				.d-flex.align-items-center.gap-3
-					span.batch-floating-count#batch-count 0 selected
-					.d-flex.align-items-center.gap-2
-						button.btn.btn-sm#batch-delete-btn
-							!= icon('delete', 'me-1')
-							| Delete
-						button.btn.btn-sm#batch-move-btn
-							!= icon('drive_file_move', 'me-1')
-							| Move
-						button.btn.btn-sm#batch-copy-btn
-							!= icon('copy', 'me-1')
-							| Copy
-					span.batch-floating-banner.small.d-none#select-all-records-banner
-				button.btn.btn-sm.batch-floating-close#batch-dismiss-btn(type="button")
-					!= icon('close')
+	.kk-list-toolbar
+		.d-flex.justify-content-between.align-items-center.mb-3
+			h4 Notes
+			button.btn.btn-sm.btn-primary#new-note-btn
+				!= icon('add')
+				span.ms-1 New Note
+		#batch-toolbar(data-type="notes")
+			.form-check.mb-2
+				input.form-check-input#select-all-cb(type="checkbox")
+				label.form-check-label.small(for="select-all-cb") Select all
+			#batch-actions.batch-floating-bar.d-none
+				.batch-floating-inner
+					.d-flex.align-items-center.gap-3
+						span.batch-floating-count#batch-count 0 selected
+						.d-flex.align-items-center.gap-2
+							button.btn.btn-sm#batch-delete-btn
+								!= icon('delete', 'me-1')
+								| Delete
+							button.btn.btn-sm#batch-move-btn
+								!= icon('drive_file_move', 'me-1')
+								| Move
+							button.btn.btn-sm#batch-copy-btn
+								!= icon('copy', 'me-1')
+								| Copy
+						span.batch-floating-banner.small.d-none#select-all-records-banner
+					button.btn.btn-sm.batch-floating-close#batch-dismiss-btn(type="button")
+						!= icon('close')
 	#notes-list.list-group
