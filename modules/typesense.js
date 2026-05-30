@@ -944,7 +944,7 @@ export async function initTypesense() {
  * Runs on a scheduler interval. Uses aggregate to group by host_id,
  * then batch-imports up to BATCH_LIMIT docs per host via Typesense import().
  */
-const BATCH_LIMIT = 100;
+const BATCH_LIMIT = 150;
 const REINDEX_STATUS_TTL_SECONDS = 3600;
 
 function getReindexStatusKey(host_id) {
