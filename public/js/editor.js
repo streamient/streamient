@@ -12169,7 +12169,7 @@ function keydownHandler(bindings) {
   };
 }
 
-// node_modules/.pnpm/@tiptap+core@3.23.6_@tiptap+pm@3.23.6/node_modules/@tiptap/core/dist/index.js
+// node_modules/.pnpm/@tiptap+core@3.24.0_@tiptap+pm@3.24.0/node_modules/@tiptap/core/dist/index.js
 var __defProp = Object.defineProperty;
 var __export = (target, all) => {
   for (var name in all)
@@ -12454,7 +12454,9 @@ var deleteCurrentNode = () => ({ tr: tr2, dispatch }) => {
 function getNodeType(nameOrType, schema) {
   if (typeof nameOrType === "string") {
     if (!schema.nodes[nameOrType]) {
-      throw Error(`There is no node type named '${nameOrType}'. Maybe you forgot to add the extension?`);
+      throw Error(
+        `There is no node type named '${nameOrType}'. Maybe you forgot to add the extension?`
+      );
     }
     return schema.nodes[nameOrType];
   }
@@ -12597,7 +12599,9 @@ function getMarkRange($pos, type, attributes) {
 function getMarkType(nameOrType, schema) {
   if (typeof nameOrType === "string") {
     if (!schema.marks[nameOrType]) {
-      throw Error(`There is no mark type named '${nameOrType}'. Maybe you forgot to add the extension?`);
+      throw Error(
+        `There is no mark type named '${nameOrType}'. Maybe you forgot to add the extension?`
+      );
     }
     return schema.marks[nameOrType];
   }
@@ -12646,15 +12650,25 @@ function resolveFocusPosition(doc3, position = null) {
   const minPos = selectionAtStart.from;
   const maxPos = selectionAtEnd.to;
   if (position === "all") {
-    return TextSelection.create(doc3, minMax(0, minPos, maxPos), minMax(doc3.content.size, minPos, maxPos));
+    return TextSelection.create(
+      doc3,
+      minMax(0, minPos, maxPos),
+      minMax(doc3.content.size, minPos, maxPos)
+    );
   }
-  return TextSelection.create(doc3, minMax(position, minPos, maxPos), minMax(position, minPos, maxPos));
+  return TextSelection.create(
+    doc3,
+    minMax(position, minPos, maxPos),
+    minMax(position, minPos, maxPos)
+  );
 }
 function isAndroid() {
   return navigator.platform === "Android" || /android/i.test(navigator.userAgent);
 }
 function isiOS() {
-  return ["iPad Simulator", "iPhone Simulator", "iPod Simulator", "iPad", "iPhone", "iPod"].includes(navigator.platform) || // iPad on iOS 13 detection
+  return ["iPad Simulator", "iPhone Simulator", "iPod Simulator", "iPad", "iPhone", "iPod"].includes(
+    navigator.platform
+  ) || // iPad on iOS 13 detection
   navigator.userAgent.includes("Mac") && "ontouchend" in document;
 }
 function isSafari() {
@@ -12711,7 +12725,11 @@ var forEach = (items, fn) => (props) => {
   return items.every((item, index) => fn(item, { ...props, index }));
 };
 var insertContent = (value, options) => ({ tr: tr2, commands }) => {
-  return commands.insertContentAt({ from: tr2.selection.from, to: tr2.selection.to }, value, options);
+  return commands.insertContentAt(
+    { from: tr2.selection.from, to: tr2.selection.to },
+    value,
+    options
+  );
 };
 var removeWhitespaces = (node) => {
   const children = node.childNodes;
@@ -12727,7 +12745,9 @@ var removeWhitespaces = (node) => {
 };
 function elementFromString(value) {
   if (typeof window === "undefined") {
-    throw new Error("[tiptap error]: there is no window object available, so this function cannot be used");
+    throw new Error(
+      "[tiptap error]: there is no window object available, so this function cannot be used"
+    );
   }
   const wrappedValue = `<body>${value}</body>`;
   const html = new window.DOMParser().parseFromString(wrappedValue, "text/html").body;
@@ -12790,9 +12810,15 @@ function createNodeFromContent(content, schema, options) {
         })
       });
       if (options.slice) {
-        DOMParser.fromSchema(contentCheckSchema).parseSlice(elementFromString(content), options.parseOptions);
+        DOMParser.fromSchema(contentCheckSchema).parseSlice(
+          elementFromString(content),
+          options.parseOptions
+        );
       } else {
-        DOMParser.fromSchema(contentCheckSchema).parse(elementFromString(content), options.parseOptions);
+        DOMParser.fromSchema(contentCheckSchema).parse(
+          elementFromString(content),
+          options.parseOptions
+        );
       }
       if (options.errorOnInvalidContent && hasInvalidContent) {
         throw new Error("[tiptap error]: Invalid HTML content", {
@@ -13147,7 +13173,11 @@ var resetAttributes = (typeOrName, attributes) => ({ tr: tr2, state, dispatch })
           if (markType === mark.type) {
             canReset = true;
             if (dispatch) {
-              tr2.addMark(pos, pos + node.nodeSize, markType.create(deleteProps(mark.attrs, attributes)));
+              tr2.addMark(
+                pos,
+                pos + node.nodeSize,
+                markType.create(deleteProps(mark.attrs, attributes))
+              );
             }
           }
         });
@@ -13296,7 +13326,11 @@ function flattenExtensions(extensions) {
       options: extension.options,
       storage: extension.storage
     };
-    const addExtensions = getExtensionField(extension, "addExtensions", context);
+    const addExtensions = getExtensionField(
+      extension,
+      "addExtensions",
+      context
+    );
     if (addExtensions) {
       return [extension, ...flattenExtensions(addExtensions())];
     }
@@ -13326,7 +13360,9 @@ function isEmptyObject(value = {}) {
   return Object.keys(value).length === 0 && value.constructor === Object;
 }
 function splitExtensions(extensions) {
-  const baseExtensions = extensions.filter((extension) => extension.type === "extension");
+  const baseExtensions = extensions.filter(
+    (extension) => extension.type === "extension"
+  );
   const nodeExtensions = extensions.filter((extension) => extension.type === "node");
   const markExtensions = extensions.filter((extension) => extension.type === "mark");
   return {
@@ -13400,11 +13436,7 @@ function getAttributesFromExtensions(extensions) {
       options: extension.options,
       storage: extension.storage
     };
-    const addAttributes = getExtensionField(
-      extension,
-      "addAttributes",
-      context
-    );
+    const addAttributes = getExtensionField(extension, "addAttributes", context);
     if (!addAttributes) {
       return;
     }
@@ -13502,10 +13534,15 @@ function mergeAttributes(...objects) {
       if (key === "class") {
         const valueClasses = value ? String(value).split(" ") : [];
         const existingClasses = mergedAttributes[key] ? mergedAttributes[key].split(" ") : [];
-        const insertClasses = valueClasses.filter((valueClass) => !existingClasses.includes(valueClass));
+        const insertClasses = valueClasses.filter(
+          (valueClass) => !existingClasses.includes(valueClass)
+        );
         mergedAttributes[key] = [...existingClasses, ...insertClasses].join(" ");
       } else if (key === "style") {
-        const styleMap = new Map([...parseStyleEntries(mergedAttributes[key]), ...parseStyleEntries(value)]);
+        const styleMap = new Map([
+          ...parseStyleEntries(mergedAttributes[key]),
+          ...parseStyleEntries(value)
+        ]);
         mergedAttributes[key] = Array.from(styleMap.entries()).map(([property, val]) => `${property}: ${val}`).join("; ");
       } else {
         mergedAttributes[key] = value;
@@ -13593,7 +13630,9 @@ function getSchemaByResolvedExtensions(extensions, editor) {
   const topNode = (_a = nodeExtensions.find((extension) => getExtensionField(extension, "topNode"))) == null ? void 0 : _a.name;
   const nodes = Object.fromEntries(
     nodeExtensions.map((extension) => {
-      const extensionAttributes = allAttributes.filter((attribute) => attribute.type === extension.name);
+      const extensionAttributes = allAttributes.filter(
+        (attribute) => attribute.type === extension.name
+      );
       const context = {
         name: extension.name,
         options: extension.options,
@@ -13601,7 +13640,11 @@ function getSchemaByResolvedExtensions(extensions, editor) {
         editor
       };
       const extraNodeFields = extensions.reduce((fields, e) => {
-        const extendNodeSchema = getExtensionField(e, "extendNodeSchema", context);
+        const extendNodeSchema = getExtensionField(
+          e,
+          "extendNodeSchema",
+          context
+        );
         return {
           ...fields,
           ...extendNodeSchema ? extendNodeSchema(extension) : {}
@@ -13609,36 +13652,62 @@ function getSchemaByResolvedExtensions(extensions, editor) {
       }, {});
       const schema = cleanUpSchemaItem({
         ...extraNodeFields,
-        content: callOrReturn(getExtensionField(extension, "content", context)),
+        content: callOrReturn(
+          getExtensionField(extension, "content", context)
+        ),
         marks: callOrReturn(getExtensionField(extension, "marks", context)),
         group: callOrReturn(getExtensionField(extension, "group", context)),
         inline: callOrReturn(getExtensionField(extension, "inline", context)),
         atom: callOrReturn(getExtensionField(extension, "atom", context)),
-        selectable: callOrReturn(getExtensionField(extension, "selectable", context)),
-        draggable: callOrReturn(getExtensionField(extension, "draggable", context)),
-        code: callOrReturn(getExtensionField(extension, "code", context)),
-        whitespace: callOrReturn(getExtensionField(extension, "whitespace", context)),
-        linebreakReplacement: callOrReturn(
-          getExtensionField(extension, "linebreakReplacement", context)
+        selectable: callOrReturn(
+          getExtensionField(extension, "selectable", context)
         ),
-        defining: callOrReturn(getExtensionField(extension, "defining", context)),
-        isolating: callOrReturn(getExtensionField(extension, "isolating", context)),
+        draggable: callOrReturn(
+          getExtensionField(extension, "draggable", context)
+        ),
+        code: callOrReturn(getExtensionField(extension, "code", context)),
+        whitespace: callOrReturn(
+          getExtensionField(extension, "whitespace", context)
+        ),
+        linebreakReplacement: callOrReturn(
+          getExtensionField(
+            extension,
+            "linebreakReplacement",
+            context
+          )
+        ),
+        defining: callOrReturn(
+          getExtensionField(extension, "defining", context)
+        ),
+        isolating: callOrReturn(
+          getExtensionField(extension, "isolating", context)
+        ),
         attrs: Object.fromEntries(extensionAttributes.map(buildAttributeSpec))
       });
-      const parseHTML = callOrReturn(getExtensionField(extension, "parseHTML", context));
+      const parseHTML = callOrReturn(
+        getExtensionField(extension, "parseHTML", context)
+      );
       if (parseHTML) {
         schema.parseDOM = parseHTML.map(
           (parseRule) => injectExtensionAttributesToParseRule(parseRule, extensionAttributes)
         );
       }
-      const renderHTML = getExtensionField(extension, "renderHTML", context);
+      const renderHTML = getExtensionField(
+        extension,
+        "renderHTML",
+        context
+      );
       if (renderHTML) {
         schema.toDOM = (node) => renderHTML({
           node,
           HTMLAttributes: getRenderedAttributes(node, extensionAttributes)
         });
       }
-      const renderText = getExtensionField(extension, "renderText", context);
+      const renderText = getExtensionField(
+        extension,
+        "renderText",
+        context
+      );
       if (renderText) {
         schema.toText = renderText;
       }
@@ -13647,7 +13716,9 @@ function getSchemaByResolvedExtensions(extensions, editor) {
   );
   const marks = Object.fromEntries(
     markExtensions.map((extension) => {
-      const extensionAttributes = allAttributes.filter((attribute) => attribute.type === extension.name);
+      const extensionAttributes = allAttributes.filter(
+        (attribute) => attribute.type === extension.name
+      );
       const context = {
         name: extension.name,
         options: extension.options,
@@ -13655,7 +13726,11 @@ function getSchemaByResolvedExtensions(extensions, editor) {
         editor
       };
       const extraMarkFields = extensions.reduce((fields, e) => {
-        const extendMarkSchema = getExtensionField(e, "extendMarkSchema", context);
+        const extendMarkSchema = getExtensionField(
+          e,
+          "extendMarkSchema",
+          context
+        );
         return {
           ...fields,
           ...extendMarkSchema ? extendMarkSchema(extension) : {}
@@ -13663,20 +13738,32 @@ function getSchemaByResolvedExtensions(extensions, editor) {
       }, {});
       const schema = cleanUpSchemaItem({
         ...extraMarkFields,
-        inclusive: callOrReturn(getExtensionField(extension, "inclusive", context)),
-        excludes: callOrReturn(getExtensionField(extension, "excludes", context)),
+        inclusive: callOrReturn(
+          getExtensionField(extension, "inclusive", context)
+        ),
+        excludes: callOrReturn(
+          getExtensionField(extension, "excludes", context)
+        ),
         group: callOrReturn(getExtensionField(extension, "group", context)),
-        spanning: callOrReturn(getExtensionField(extension, "spanning", context)),
+        spanning: callOrReturn(
+          getExtensionField(extension, "spanning", context)
+        ),
         code: callOrReturn(getExtensionField(extension, "code", context)),
         attrs: Object.fromEntries(extensionAttributes.map(buildAttributeSpec))
       });
-      const parseHTML = callOrReturn(getExtensionField(extension, "parseHTML", context));
+      const parseHTML = callOrReturn(
+        getExtensionField(extension, "parseHTML", context)
+      );
       if (parseHTML) {
         schema.parseDOM = parseHTML.map(
           (parseRule) => injectExtensionAttributesToParseRule(parseRule, extensionAttributes)
         );
       }
-      const renderHTML = getExtensionField(extension, "renderHTML", context);
+      const renderHTML = getExtensionField(
+        extension,
+        "renderHTML",
+        context
+      );
       if (renderHTML) {
         schema.toDOM = (mark) => renderHTML({
           mark,
@@ -13900,16 +13987,20 @@ function getSplittedAttributes(extensionAttributes, typeName, attributes) {
 var getTextContentFromNodes = ($from, maxMatch = 500) => {
   let textBefore = "";
   const sliceEndPos = $from.parentOffset;
-  $from.parent.nodesBetween(Math.max(0, sliceEndPos - maxMatch), sliceEndPos, (node, pos, parent, index) => {
-    var _a, _b;
-    const chunk = ((_b = (_a = node.type.spec).toText) == null ? void 0 : _b.call(_a, {
-      node,
-      pos,
-      parent,
-      index
-    })) || node.textContent || "%leaf%";
-    textBefore += node.isAtom && !node.isText ? chunk : chunk.slice(0, Math.max(0, sliceEndPos - pos));
-  });
+  $from.parent.nodesBetween(
+    Math.max(0, sliceEndPos - maxMatch),
+    sliceEndPos,
+    (node, pos, parent, index) => {
+      var _a, _b;
+      const chunk = ((_b = (_a = node.type.spec).toText) == null ? void 0 : _b.call(_a, {
+        node,
+        pos,
+        parent,
+        index
+      })) || node.textContent || "%leaf%";
+      textBefore += node.isAtom && !node.isText ? chunk : chunk.slice(0, Math.max(0, sliceEndPos - pos));
+    }
+  );
   return textBefore;
 };
 function isMarkActive(state, typeOrName, attributes = {}) {
@@ -14258,7 +14349,11 @@ var splitBlock2 = ({ keepMarks = true } = {}) => ({ tr: tr2, state, dispatch, ed
   const { selection, doc: doc3 } = tr2;
   const { $from, $to } = selection;
   const extensionAttributes = editor.extensionManager.attributes;
-  const newAttributes = getSplittedAttributes(extensionAttributes, $from.node().type.name, $from.node().attrs);
+  const newAttributes = getSplittedAttributes(
+    extensionAttributes,
+    $from.node().type.name,
+    $from.node().attrs
+  );
   if (selection instanceof NodeSelection && selection.node.isBlock) {
     if (!$from.parentOffset || !canSplit(doc3, $from.pos)) {
       return false;
@@ -14337,7 +14432,7 @@ var splitListItem = (typeOrName, overrideAttrs = {}) => ({ tr: tr2, state, dispa
         wrap2 = Fragment.from($from.node(d).copy(wrap2));
       }
       const depthAfter = (
-        // eslint-disable-next-line no-nested-ternary
+        // oxlint-disable-next-line no-nested-ternary
         $from.indexAfter(-1) < $from.node(-2).childCount ? 1 : $from.indexAfter(-2) < $from.node(-3).childCount ? 2 : 3
       );
       const newNextTypeAttributes2 = {
@@ -14793,7 +14888,9 @@ var inputRuleMatcherHandler = (text, find2) => {
   result.data = inputRuleMatch.data;
   if (inputRuleMatch.replaceWith) {
     if (!inputRuleMatch.text.includes(inputRuleMatch.replaceWith)) {
-      console.warn('[tiptap warn]: "inputRuleMatch.replaceWith" must be part of "inputRuleMatch.text".');
+      console.warn(
+        '[tiptap warn]: "inputRuleMatch.replaceWith" must be part of "inputRuleMatch.text".'
+      );
     }
     result.push(inputRuleMatch.replaceWith);
   }
@@ -14995,7 +15092,7 @@ var Extendable = class {
         getExtensionField(this, "addOptions", {
           name: this.name
         })
-      ) || {}
+      )
     };
   }
   get storage() {
@@ -15005,7 +15102,7 @@ var Extendable = class {
           name: this.name,
           options: this.options
         })
-      ) || {}
+      )
     };
   }
   configure(options = {}) {
@@ -15093,7 +15190,9 @@ var pasteRuleMatcherHandler = (text, find2, event) => {
     result.data = pasteRuleMatch.data;
     if (pasteRuleMatch.replaceWith) {
       if (!pasteRuleMatch.text.includes(pasteRuleMatch.replaceWith)) {
-        console.warn('[tiptap warn]: "pasteRuleMatch.replaceWith" must be part of "pasteRuleMatch.text".');
+        console.warn(
+          '[tiptap warn]: "pasteRuleMatch.replaceWith" must be part of "pasteRuleMatch.text".'
+        );
       }
       result.push(pasteRuleMatch.replaceWith);
     }
@@ -15235,7 +15334,10 @@ function pasteRulesPlugin(props) {
                 setTimeout(() => {
                   const selection = dragFromOtherEditor.state.selection;
                   if (selection) {
-                    dragFromOtherEditor.commands.deleteRange({ from: selection.from, to: selection.to });
+                    dragFromOtherEditor.commands.deleteRange({
+                      from: selection.from,
+                      to: selection.to
+                    });
                   }
                 }, 10);
               }
@@ -15317,7 +15419,11 @@ var ExtensionManager = class {
         editor: this.editor,
         type: getSchemaTypeByName(extension.name, this.schema)
       };
-      const addCommands = getExtensionField(extension, "addCommands", context);
+      const addCommands = getExtensionField(
+        extension,
+        "addCommands",
+        context
+      );
       if (!addCommands) {
         return commands;
       }
@@ -15362,7 +15468,11 @@ var ExtensionManager = class {
       }
       const keyMapPlugin = keymap(defaultBindings);
       plugins.push(keyMapPlugin);
-      const addInputRules = getExtensionField(extension, "addInputRules", context);
+      const addInputRules = getExtensionField(
+        extension,
+        "addInputRules",
+        context
+      );
       if (isExtensionRulesEnabled(extension, editor.options.enableInputRules) && addInputRules) {
         const rules = addInputRules();
         if (rules && rules.length) {
@@ -15374,7 +15484,11 @@ var ExtensionManager = class {
           plugins.push(...inputPlugins);
         }
       }
-      const addPasteRules = getExtensionField(extension, "addPasteRules", context);
+      const addPasteRules = getExtensionField(
+        extension,
+        "addPasteRules",
+        context
+      );
       if (isExtensionRulesEnabled(extension, editor.options.enablePasteRules) && addPasteRules) {
         const rules = addPasteRules();
         if (rules && rules.length) {
@@ -15411,7 +15525,9 @@ var ExtensionManager = class {
     const { nodeExtensions } = splitExtensions(this.extensions);
     return Object.fromEntries(
       nodeExtensions.filter((extension) => !!getExtensionField(extension, "addNodeView")).map((extension) => {
-        const extensionAttributes = this.attributes.filter((attribute) => attribute.type === extension.name);
+        const extensionAttributes = this.attributes.filter(
+          (attribute) => attribute.type === extension.name
+        );
         const context = {
           name: extension.name,
           options: extension.options,
@@ -15419,7 +15535,11 @@ var ExtensionManager = class {
           editor,
           type: getNodeType(extension.name, this.schema)
         };
-        const addNodeView = getExtensionField(extension, "addNodeView", context);
+        const addNodeView = getExtensionField(
+          extension,
+          "addNodeView",
+          context
+        );
         if (!addNodeView) {
           return [];
         }
@@ -15513,7 +15633,9 @@ var ExtensionManager = class {
     const { markExtensions } = splitExtensions(this.extensions);
     return Object.fromEntries(
       markExtensions.filter((extension) => !!getExtensionField(extension, "addMarkView")).map((extension) => {
-        const extensionAttributes = this.attributes.filter((attribute) => attribute.type === extension.name);
+        const extensionAttributes = this.attributes.filter(
+          (attribute) => attribute.type === extension.name
+        );
         const context = {
           name: extension.name,
           options: extension.options,
@@ -15521,7 +15643,11 @@ var ExtensionManager = class {
           editor,
           type: getMarkType(extension.name, this.schema)
         };
-        const addMarkView = getExtensionField(extension, "addMarkView", context);
+        const addMarkView = getExtensionField(
+          extension,
+          "addMarkView",
+          context
+        );
         if (!addMarkView) {
           return [];
         }
@@ -15599,7 +15725,11 @@ var ExtensionManager = class {
           this.splittableMarks.push(extension.name);
         }
       }
-      const onBeforeCreate = getExtensionField(extension, "onBeforeCreate", context);
+      const onBeforeCreate = getExtensionField(
+        extension,
+        "onBeforeCreate",
+        context
+      );
       const onCreate = getExtensionField(extension, "onCreate", context);
       const onUpdate = getExtensionField(extension, "onUpdate", context);
       const onSelectionUpdate = getExtensionField(
@@ -15607,7 +15737,11 @@ var ExtensionManager = class {
         "onSelectionUpdate",
         context
       );
-      const onTransaction = getExtensionField(extension, "onTransaction", context);
+      const onTransaction = getExtensionField(
+        extension,
+        "onTransaction",
+        context
+      );
       const onFocus = getExtensionField(extension, "onFocus", context);
       const onBlur = getExtensionField(extension, "onBlur", context);
       const onDestroy = getExtensionField(extension, "onDestroy", context);
@@ -15724,28 +15858,35 @@ var Delete = Extension.create({
       if ((_d = (_c2 = (_b2 = (_a2 = this.editor.options.coreExtensionOptions) == null ? void 0 : _a2.delete) == null ? void 0 : _b2.filterTransaction) == null ? void 0 : _c2.call(_b2, transaction)) != null ? _d : transaction.getMeta("y-sync$")) {
         return;
       }
-      const nextTransaction = combineTransactionSteps(transaction.before, [transaction, ...appendedTransactions]);
+      const nextTransaction = combineTransactionSteps(transaction.before, [
+        transaction,
+        ...appendedTransactions
+      ]);
       const changes = getChangedRanges(nextTransaction);
       changes.forEach((change) => {
         if (nextTransaction.mapping.mapResult(change.oldRange.from).deletedAfter && nextTransaction.mapping.mapResult(change.oldRange.to).deletedBefore) {
-          nextTransaction.before.nodesBetween(change.oldRange.from, change.oldRange.to, (node, from2) => {
-            const to = from2 + node.nodeSize - 2;
-            const isFullyWithinRange = change.oldRange.from <= from2 && to <= change.oldRange.to;
-            this.editor.emit("delete", {
-              type: "node",
-              node,
-              from: from2,
-              to,
-              newFrom: nextTransaction.mapping.map(from2),
-              newTo: nextTransaction.mapping.map(to),
-              deletedRange: change.oldRange,
-              newRange: change.newRange,
-              partial: !isFullyWithinRange,
-              editor: this.editor,
-              transaction,
-              combinedTransform: nextTransaction
-            });
-          });
+          nextTransaction.before.nodesBetween(
+            change.oldRange.from,
+            change.oldRange.to,
+            (node, from2) => {
+              const to = from2 + node.nodeSize - 2;
+              const isFullyWithinRange = change.oldRange.from <= from2 && to <= change.oldRange.to;
+              this.editor.emit("delete", {
+                type: "node",
+                node,
+                from: from2,
+                to,
+                newFrom: nextTransaction.mapping.map(from2),
+                newTo: nextTransaction.mapping.map(to),
+                deletedRange: change.oldRange,
+                newRange: change.newRange,
+                partial: !isFullyWithinRange,
+                editor: this.editor,
+                transaction,
+                combinedTransform: nextTransaction
+              });
+            }
+          );
         }
       });
       const mapping = nextTransaction.mapping;
@@ -15925,7 +16066,9 @@ var Keymap = Extension.create({
             return;
           }
           const docChanges = transactions.some((transaction) => transaction.docChanged) && !oldState.doc.eq(newState.doc);
-          const ignoreTr = transactions.some((transaction) => transaction.getMeta("preventClearDocument"));
+          const ignoreTr = transactions.some(
+            (transaction) => transaction.getMeta("preventClearDocument")
+          );
           if (!docChanges || ignoreTr) {
             return;
           }
@@ -16092,7 +16235,9 @@ var NodePos = class _NodePos {
     let to = this.to;
     if (this.isBlock) {
       if (this.content.size === 0) {
-        console.error(`You can\u2019t set content on a block node. Tried to set content on ${this.name} at ${this.pos}`);
+        console.error(
+          `You can\u2019t set content on a block node. Tried to set content on ${this.name} at ${this.pos}`
+        );
         return;
       }
       from2 = this.from + 1;
@@ -16163,7 +16308,12 @@ var NodePos = class _NodePos {
       if (!isBlock && !isInline2 && $pos.depth <= this.depth) {
         return;
       }
-      const childNodePos = new _NodePos($pos, this.editor, isBlock, isBlock || isInline2 ? node : null);
+      const childNodePos = new _NodePos(
+        $pos,
+        this.editor,
+        isBlock,
+        isBlock || isInline2 ? node : null
+      );
       if (isBlock) {
         childNodePos.actualDepth = this.depth + 1;
       }
@@ -16214,7 +16364,9 @@ var NodePos = class _NodePos {
         return;
       }
       if (childPos.node.type.name === selector) {
-        const doesAllAttributesMatch = attrKeys.every((key) => attributes[key] === childPos.node.attrs[key]);
+        const doesAllAttributesMatch = attrKeys.every(
+          (key) => attributes[key] === childPos.node.attrs[key]
+        );
         if (doesAllAttributesMatch) {
           nodes.push(childPos);
         }
@@ -16663,7 +16815,9 @@ var Editor = class extends EventEmitter {
         errorOnInvalidContent: this.options.enableContentCheck
       });
     } catch (e) {
-      if (!(e instanceof Error) || !["[tiptap error]: Invalid JSON content", "[tiptap error]: Invalid HTML content"].includes(e.message)) {
+      if (!(e instanceof Error) || !["[tiptap error]: Invalid JSON content", "[tiptap error]: Invalid HTML content"].includes(
+        e.message
+      )) {
         throw e;
       }
       this.emit("contentError", {
@@ -16674,7 +16828,9 @@ var Editor = class extends EventEmitter {
             ;
             this.storage.collaboration.isDisabled = true;
           }
-          this.options.extensions = this.options.extensions.filter((extension) => extension.name !== "collaboration");
+          this.options.extensions = this.options.extensions.filter(
+            (extension) => extension.name !== "collaboration"
+          );
           this.createExtensionManager();
         }
       });
@@ -16792,7 +16948,7 @@ var Editor = class extends EventEmitter {
       this.emit("focus", {
         editor: this,
         event: focus2.event,
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        // oxlint-disable-next-lineno-non-null-assertion
         transaction: mostRecentFocusTr
       });
     }
@@ -16800,7 +16956,7 @@ var Editor = class extends EventEmitter {
       this.emit("blur", {
         editor: this,
         event: blur2.event,
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        // oxlint-disable-next-lineno-non-null-assertion
         transaction: mostRecentFocusTr
       });
     }
@@ -16954,7 +17110,10 @@ function nodeInputRule(config) {
         tr2.replaceWith(matchStart, end, newNode);
       } else if (match[0]) {
         const insertionStart = config.type.isInline ? start : start - 1;
-        tr2.insert(insertionStart, config.type.create(attributes)).delete(tr2.mapping.map(start), tr2.mapping.map(end));
+        tr2.insert(insertionStart, config.type.create(attributes)).delete(
+          tr2.mapping.map(start),
+          tr2.mapping.map(end)
+        );
       }
       tr2.scrollIntoView();
     },
@@ -17022,7 +17181,12 @@ var ResizableNodeView = class {
    * @param options - Configuration options for the resizable node view
    */
   constructor(options) {
-    this.directions = ["bottom-left", "bottom-right", "top-left", "top-right"];
+    this.directions = [
+      "bottom-left",
+      "bottom-right",
+      "top-left",
+      "top-right"
+    ];
     this.minSize = {
       height: 8,
       width: 8
@@ -17323,7 +17487,10 @@ var ResizableNodeView = class {
         this.positionHandle(handle, direction);
       }
       handle.addEventListener("mousedown", (event) => this.handleResizeStart(event, direction));
-      handle.addEventListener("touchstart", (event) => this.handleResizeStart(event, direction));
+      handle.addEventListener(
+        "touchstart",
+        (event) => this.handleResizeStart(event, direction)
+      );
       this.handleMap.set(direction, handle);
       this.wrapper.appendChild(handle);
     });
@@ -17895,7 +18062,9 @@ function createInlineMarkdownSpec(options) {
         return index !== void 0 ? index : -1;
       },
       tokenize(src, _tokens, _lexer) {
-        const tokenPattern = selfClosing ? new RegExp(`^\\[${escapedShortcode}\\s*([^\\]]*)\\]`) : new RegExp(`^\\[${escapedShortcode}\\s*([^\\]]*)\\]([\\s\\S]*?)\\[\\/${escapedShortcode}\\]`);
+        const tokenPattern = selfClosing ? new RegExp(`^\\[${escapedShortcode}\\s*([^\\]]*)\\]`) : new RegExp(
+          `^\\[${escapedShortcode}\\s*([^\\]]*)\\]([\\s\\S]*?)\\[\\/${escapedShortcode}\\]`
+        );
         const match = src.match(tokenPattern);
         if (!match) {
           return void 0;
@@ -18136,7 +18305,7 @@ function markPasteRule(config) {
   });
 }
 
-// node_modules/.pnpm/@tiptap+core@3.23.6_@tiptap+pm@3.23.6/node_modules/@tiptap/core/dist/jsx-runtime/jsx-runtime.js
+// node_modules/.pnpm/@tiptap+core@3.24.0_@tiptap+pm@3.24.0/node_modules/@tiptap/core/dist/jsx-runtime/jsx-runtime.js
 var h = (tag, attributes) => {
   if (tag === "slot") {
     return 0;
@@ -18146,12 +18315,14 @@ var h = (tag, attributes) => {
   }
   const { children, ...rest } = attributes != null ? attributes : {};
   if (tag === "svg") {
-    throw new Error("SVG elements are not supported in the JSX syntax, use the array syntax instead");
+    throw new Error(
+      "SVG elements are not supported in the JSX syntax, use the array syntax instead"
+    );
   }
   return [tag, rest, children];
 };
 
-// node_modules/.pnpm/@tiptap+extension-blockquote@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6_/node_modules/@tiptap/extension-blockquote/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-blockquote@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0_/node_modules/@tiptap/extension-blockquote/dist/index.js
 var inputRegex = /^\s*>\s$/;
 var Blockquote = Node3.create({
   name: "blockquote",
@@ -18224,7 +18395,7 @@ ${prefix}
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-bold@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6_/node_modules/@tiptap/extension-bold/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-bold@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0_/node_modules/@tiptap/extension-bold/dist/index.js
 var starInputRegex = /(?:^|\s)(\*\*(?!\s+\*\*)((?:[^*]+))\*\*(?!\s+\*\*))$/;
 var starPasteRegex = /(?:^|\s)(\*\*(?!\s+\*\*)((?:[^*]+))\*\*(?!\s+\*\*))/g;
 var underscoreInputRegex = /(?:^|\s)(__(?!\s+__)((?:[^_]+))__(?!\s+__))$/;
@@ -18316,7 +18487,7 @@ var Bold = Mark2.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-code@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6_/node_modules/@tiptap/extension-code/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-code@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0_/node_modules/@tiptap/extension-code/dist/index.js
 var inputRegex2 = /(^|[^`])`([^`]+)`(?!`)$/;
 var pasteRegex = /(^|[^`])`([^`]+)`(?!`)/g;
 var Code = Mark2.create({
@@ -18381,7 +18552,7 @@ var Code = Mark2.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-code-block@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6__@tiptap+pm@3.23.6/node_modules/@tiptap/extension-code-block/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-code-block@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0__@tiptap+pm@3.24.0/node_modules/@tiptap/extension-code-block/dist/index.js
 var DEFAULT_TAB_SIZE = 4;
 var backtickInputRegex = /^```([a-z]+)?[\s\n]$/;
 var tildeInputRegex = /^~~~([a-z]+)?[\s\n]$/;
@@ -18680,7 +18851,9 @@ var CodeBlock = Node3.create({
             const textNode = schema.text(text.replace(/\r\n?/g, "\n"));
             tr2.replaceSelectionWith(this.type.create({ language }, textNode));
             if (tr2.selection.$from.parent.type !== this.type) {
-              tr2.setSelection(TextSelection.near(tr2.doc.resolve(Math.max(0, tr2.selection.from - 2))));
+              tr2.setSelection(
+                TextSelection.near(tr2.doc.resolve(Math.max(0, tr2.selection.from - 2)))
+              );
             }
             tr2.setMeta("paste", true);
             view.dispatch(tr2);
@@ -18693,7 +18866,7 @@ var CodeBlock = Node3.create({
 });
 var index_default = CodeBlock;
 
-// node_modules/.pnpm/@tiptap+extension-document@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6_/node_modules/@tiptap/extension-document/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-document@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0_/node_modules/@tiptap/extension-document/dist/index.js
 var Document = Node3.create({
   name: "doc",
   topNode: true,
@@ -18706,7 +18879,7 @@ var Document = Node3.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-hard-break@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6_/node_modules/@tiptap/extension-hard-break/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-hard-break@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0_/node_modules/@tiptap/extension-hard-break/dist/index.js
 var HardBreak = Node3.create({
   name: "hardBreak",
   markdownTokenName: "br",
@@ -18751,7 +18924,9 @@ var HardBreak = Node3.create({
             const marks = storedMarks || selection.$to.parentOffset && selection.$from.marks();
             return chain().insertContent({ type: this.name }).command(({ tr: tr2, dispatch }) => {
               if (dispatch && marks && keepMarks) {
-                const filteredMarks = marks.filter((mark) => splittableMarks.includes(mark.type.name));
+                const filteredMarks = marks.filter(
+                  (mark) => splittableMarks.includes(mark.type.name)
+                );
                 tr2.ensureMarks(filteredMarks);
               }
               return true;
@@ -18769,7 +18944,7 @@ var HardBreak = Node3.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-heading@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6_/node_modules/@tiptap/extension-heading/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-heading@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0_/node_modules/@tiptap/extension-heading/dist/index.js
 var Heading = Node3.create({
   name: "heading",
   addOptions() {
@@ -18801,7 +18976,11 @@ var Heading = Node3.create({
     return [`h${level}`, mergeAttributes(this.options.HTMLAttributes, HTMLAttributes), 0];
   },
   parseMarkdown: (token, helpers) => {
-    return helpers.createNode("heading", { level: token.depth || 1 }, helpers.parseInline(token.tokens || []));
+    return helpers.createNode(
+      "heading",
+      { level: token.depth || 1 },
+      helpers.parseInline(token.tokens || [])
+    );
   },
   renderMarkdown: (node, h2) => {
     var _a;
@@ -18832,9 +19011,7 @@ var Heading = Node3.create({
     return this.options.levels.reduce(
       (items, level) => ({
         ...items,
-        ...{
-          [`Mod-Alt-${level}`]: () => this.editor.commands.toggleHeading({ level })
-        }
+        [`Mod-Alt-${level}`]: () => this.editor.commands.toggleHeading({ level })
       }),
       {}
     );
@@ -18852,7 +19029,7 @@ var Heading = Node3.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-horizontal-rule@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6__@tiptap+pm@3.23.6/node_modules/@tiptap/extension-horizontal-rule/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-horizontal-rule@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0__@tiptap+pm@3.24.0/node_modules/@tiptap/extension-horizontal-rule/dist/index.js
 var HorizontalRule = Node3.create({
   name: "horizontalRule",
   addOptions() {
@@ -18929,7 +19106,7 @@ var HorizontalRule = Node3.create({
 });
 var index_default2 = HorizontalRule;
 
-// node_modules/.pnpm/@tiptap+extension-italic@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6_/node_modules/@tiptap/extension-italic/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-italic@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0_/node_modules/@tiptap/extension-italic/dist/index.js
 var starInputRegex2 = /(?:^|\s)(\*(?!\s+\*)((?:[^*]+))\*(?!\s+\*))$/;
 var starPasteRegex2 = /(?:^|\s)(\*(?!\s+\*)((?:[^*]+))\*(?!\s+\*))/g;
 var underscoreInputRegex2 = /(?:^|\s)(_(?!\s+_)((?:[^_]+))_(?!\s+_))$/;
@@ -20167,7 +20344,7 @@ function find(str, type = null, opts = null) {
   return filtered;
 }
 
-// node_modules/.pnpm/@tiptap+extension-link@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6__@tiptap+pm@3.23.6/node_modules/@tiptap/extension-link/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-link@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0__@tiptap+pm@3.24.0/node_modules/@tiptap/extension-link/dist/index.js
 var UNICODE_WHITESPACE_PATTERN = "[\0- \xA0\u1680\u180E\u2000-\u2029\u205F\u3000]";
 var UNICODE_WHITESPACE_REGEX = new RegExp(UNICODE_WHITESPACE_PATTERN);
 var UNICODE_WHITESPACE_REGEX_END = new RegExp(`${UNICODE_WHITESPACE_PATTERN}$`);
@@ -20186,7 +20363,9 @@ function autolink(options) {
     key: new PluginKey("autolink"),
     appendTransaction: (transactions, oldState, newState) => {
       const docChanges = transactions.some((transaction) => transaction.docChanged) && !oldState.doc.eq(newState.doc);
-      const preventAutolink = transactions.some((transaction) => transaction.getMeta("preventAutolink"));
+      const preventAutolink = transactions.some(
+        (transaction) => transaction.getMeta("preventAutolink")
+      );
       if (!docChanges || preventAutolink) {
         return;
       }
@@ -20194,7 +20373,11 @@ function autolink(options) {
       const transform = combineTransactionSteps(oldState.doc, [...transactions]);
       const changes = getChangedRanges(transform);
       changes.forEach(({ newRange }) => {
-        const nodesInChangedRanges = findChildrenInRange(newState.doc, newRange, (node) => node.isTextblock);
+        const nodesInChangedRanges = findChildrenInRange(
+          newState.doc,
+          newRange,
+          (node) => node.isTextblock
+        );
         let textBlock;
         let textBeforeWhitespace;
         if (nodesInChangedRanges.length > 1) {
@@ -20211,7 +20394,12 @@ function autolink(options) {
             return;
           }
           textBlock = nodesInChangedRanges[0];
-          textBeforeWhitespace = newState.doc.textBetween(textBlock.pos, newRange.to, void 0, " ");
+          textBeforeWhitespace = newState.doc.textBetween(
+            textBlock.pos,
+            newRange.to,
+            void 0,
+            " "
+          );
         }
         if (textBlock && textBeforeWhitespace) {
           const wordsBeforeWhitespace = textBeforeWhitespace.split(UNICODE_WHITESPACE_REGEX).filter(Boolean);
@@ -20223,7 +20411,9 @@ function autolink(options) {
           if (!lastWordBeforeSpace) {
             return false;
           }
-          const linksBeforeSpace = tokenize(lastWordBeforeSpace).map((t) => t.toObject(options.defaultProtocol));
+          const linksBeforeSpace = tokenize(lastWordBeforeSpace).map(
+            (t) => t.toObject(options.defaultProtocol)
+          );
           if (!isValidLinkStructure(linksBeforeSpace)) {
             return false;
           }
@@ -20237,7 +20427,9 @@ function autolink(options) {
             }
             return !newState.doc.rangeHasMark(link.from, link.to, newState.schema.marks.code);
           }).filter((link) => options.validate(link.value)).filter((link) => options.shouldAutoLink(link.value)).forEach((link) => {
-            if (getMarksBetween(link.from, link.to, newState.doc).some((item) => item.mark.type === options.type)) {
+            if (getMarksBetween(link.from, link.to, newState.doc).some(
+              (item) => item.mark.type === options.type
+            )) {
               return;
             }
             tr2.addMark(
@@ -20335,7 +20527,18 @@ function pasteHandler(options) {
   });
 }
 function isAllowedUri(uri, protocols) {
-  const allowedProtocols = ["http", "https", "ftp", "ftps", "mailto", "tel", "callto", "sms", "cid", "xmpp"];
+  const allowedProtocols = [
+    "http",
+    "https",
+    "ftp",
+    "ftps",
+    "mailto",
+    "tel",
+    "callto",
+    "sms",
+    "cid",
+    "xmpp"
+  ];
   if (protocols) {
     protocols.forEach((protocol) => {
       const nextProtocol = typeof protocol === "string" ? protocol : protocol.scheme;
@@ -20346,7 +20549,7 @@ function isAllowedUri(uri, protocols) {
   }
   return !uri || uri.replace(UNICODE_WHITESPACE_REGEX_GLOBAL, "").match(
     new RegExp(
-      // eslint-disable-next-line no-useless-escape
+      // oxlint-disable-next-line no-useless-escape
       `^(?:(?:${allowedProtocols.join("|")}):|[^a-z]|[a-z0-9+.-]+(?:[^a-z+.-:]|$))`,
       "i"
     )
@@ -20360,7 +20563,9 @@ var Link = Mark2.create({
   onCreate() {
     if (this.options.validate && !this.options.shouldAutoLink) {
       this.options.shouldAutoLink = this.options.validate;
-      console.warn("The `validate` option is deprecated. Rename to the `shouldAutoLink` option instead.");
+      console.warn(
+        "The `validate` option is deprecated. Rename to the `shouldAutoLink` option instead."
+      );
     }
     this.options.protocols.forEach((protocol) => {
       if (typeof protocol === "string") {
@@ -20582,7 +20787,7 @@ var Link = Mark2.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-list@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6__@tiptap+pm@3.23.6/node_modules/@tiptap/extension-list/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-list@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0__@tiptap+pm@3.24.0/node_modules/@tiptap/extension-list/dist/index.js
 var __defProp2 = Object.defineProperty;
 var __export2 = (target, all) => {
   for (var name in all)
@@ -21031,7 +21236,14 @@ var ORDERED_LIST_ITEM_REGEX = /^(\s*)(\d+)\.\s+(.*)$/;
 var INDENTED_LINE_REGEX = /^\s/;
 function isBlockContentLine(line) {
   const trimmedLine = line.trimStart();
-  return /^[-+*]\s+/.test(trimmedLine) || /^\d+\.\s+/.test(trimmedLine) || /^>\s?/.test(trimmedLine) || /^```/.test(trimmedLine) || /^~~~/.test(trimmedLine);
+  return (
+    // oxlint-disable-next-line prefer-string-starts-ends-with
+    /^[-+*]\s+/.test(trimmedLine) || // oxlint-disable-next-line prefer-string-starts-ends-with
+    /^\d+\.\s+/.test(trimmedLine) || // oxlint-disable-next-line prefer-string-starts-ends-with
+    /^>\s?/.test(trimmedLine) || // oxlint-disable-next-line prefer-string-starts-ends-with
+    /^```/.test(trimmedLine) || // oxlint-disable-next-line prefer-string-starts-ends-with
+    /^~~~/.test(trimmedLine)
+  );
 }
 function splitItemContent(contentLines) {
   const paragraphLines = [];
@@ -21543,7 +21755,11 @@ var TaskList = Node3.create({
     ];
   },
   renderHTML({ HTMLAttributes }) {
-    return ["ul", mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, { "data-type": this.name }), 0];
+    return [
+      "ul",
+      mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, { "data-type": this.name }),
+      0
+    ];
   },
   parseMarkdown: (token, h2) => {
     return h2.createNode("taskList", {}, h2.parseChildren(token.items || []));
@@ -21675,7 +21891,7 @@ var ListKit = Extension.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-paragraph@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6_/node_modules/@tiptap/extension-paragraph/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-paragraph@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0_/node_modules/@tiptap/extension-paragraph/dist/index.js
 var EMPTY_PARAGRAPH_MARKDOWN = "&nbsp;";
 var NBSP_CHAR = "\xA0";
 var Paragraph = Node3.create({
@@ -21733,7 +21949,7 @@ var Paragraph = Node3.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-strike@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6_/node_modules/@tiptap/extension-strike/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-strike@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0_/node_modules/@tiptap/extension-strike/dist/index.js
 var inputRegex4 = /(?:^|\s)(~~(?!\s+~~)((?:[^~]+))~~(?!\s+~~))$/;
 var pasteRegex2 = /(?:^|\s)(~~(?!\s+~~)((?:[^~]+))~~(?!\s+~~))/g;
 var Strike = Mark2.create({
@@ -21807,7 +22023,7 @@ var Strike = Mark2.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-text@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6_/node_modules/@tiptap/extension-text/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-text@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0_/node_modules/@tiptap/extension-text/dist/index.js
 var Text2 = Node3.create({
   name: "text",
   group: "inline",
@@ -21820,7 +22036,7 @@ var Text2 = Node3.create({
   renderMarkdown: (node) => node.text || ""
 });
 
-// node_modules/.pnpm/@tiptap+extension-underline@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6_/node_modules/@tiptap/extension-underline/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-underline@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0_/node_modules/@tiptap/extension-underline/dist/index.js
 var Underline = Mark2.create({
   name: "underline",
   addOptions() {
@@ -22774,7 +22990,7 @@ var redo = buildCommand(true, true);
 var undoNoScroll = buildCommand(false, false);
 var redoNoScroll = buildCommand(true, false);
 
-// node_modules/.pnpm/@tiptap+extensions@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6__@tiptap+pm@3.23.6/node_modules/@tiptap/extensions/dist/index.js
+// node_modules/.pnpm/@tiptap+extensions@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0__@tiptap+pm@3.24.0/node_modules/@tiptap/extensions/dist/index.js
 var CharacterCount = Extension.create({
   name: "characterCount",
   addOptions() {
@@ -22962,6 +23178,9 @@ var Gapcursor = Extension.create({
     };
   }
 });
+var DEFAULT_DATA_ATTRIBUTE = "placeholder";
+var PLUGIN_KEY = new PluginKey("tiptap__placeholder");
+var VIEWPORT_OVERSCAN_PX = 200;
 function createPlaceholderDecoration(options) {
   const {
     editor,
@@ -22986,6 +23205,77 @@ function createPlaceholderDecoration(options) {
       hasAnchor
     }) : placeholder
   });
+}
+function buildPlaceholderDecorations({
+  editor,
+  options,
+  dataAttribute,
+  doc: doc3,
+  selection
+}) {
+  var _a, _b;
+  const active = editor.isEditable || !options.showOnlyWhenEditable;
+  if (!active) {
+    return null;
+  }
+  const { anchor } = selection;
+  const decorations = [];
+  const isEmptyDoc = editor.isEmpty;
+  const classes = {
+    emptyEditor: options.emptyEditorClass,
+    emptyNode: options.emptyNodeClass
+  };
+  const useResolvedPath = options.showOnlyCurrent && !options.includeChildren;
+  if (useResolvedPath) {
+    const resolved = doc3.resolve(anchor);
+    const node = resolved.depth > 0 ? resolved.node(1) : resolved.nodeAfter;
+    const nodeStart = resolved.depth > 0 ? resolved.before(1) : anchor;
+    if (node && node.type.isTextblock && isNodeEmpty(node)) {
+      const hasAnchor = anchor >= nodeStart && anchor <= nodeStart + node.nodeSize;
+      decorations.push(
+        createPlaceholderDecoration({
+          editor,
+          isEmptyDoc,
+          dataAttribute,
+          hasAnchor,
+          placeholder: options.placeholder,
+          classes,
+          node,
+          pos: nodeStart
+        })
+      );
+    }
+  } else {
+    const pluginState = PLUGIN_KEY.getState(editor.state);
+    const from2 = (_a = pluginState == null ? void 0 : pluginState.topPos) != null ? _a : 0;
+    const to = (_b = pluginState == null ? void 0 : pluginState.bottomPos) != null ? _b : doc3.content.size;
+    doc3.nodesBetween(from2, to, (node, pos) => {
+      const hasAnchor = anchor >= pos && anchor <= pos + node.nodeSize;
+      const isEmpty = !node.isLeaf && isNodeEmpty(node);
+      if (!node.type.isTextblock) {
+        return options.includeChildren;
+      }
+      if ((hasAnchor || !options.showOnlyCurrent) && isEmpty) {
+        decorations.push(
+          createPlaceholderDecoration({
+            editor,
+            isEmptyDoc,
+            dataAttribute,
+            hasAnchor,
+            placeholder: options.placeholder,
+            classes,
+            node,
+            pos
+          })
+        );
+      }
+      return options.includeChildren;
+    });
+  }
+  return DecorationSet.create(doc3, decorations);
+}
+function preparePlaceholderAttribute(attr) {
+  return attr.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9-]/g, "").replace(/^[0-9-]+/, "").replace(/^-+/, "").toLowerCase();
 }
 function isScrollable(el) {
   const style2 = getComputedStyle(el);
@@ -23024,8 +23314,8 @@ function getViewportBoundaryPositions({
 }) {
   const editorRect = view.dom.getBoundingClientRect();
   const containerRect = scrollContainer ? getContainerRect(scrollContainer) : { top: 0, bottom: window.innerHeight };
-  const visibleTop = Math.max(editorRect.top, containerRect.top);
-  const visibleBottom = Math.min(editorRect.bottom, containerRect.bottom);
+  const visibleTop = Math.max(editorRect.top, containerRect.top) - VIEWPORT_OVERSCAN_PX;
+  const visibleBottom = Math.min(editorRect.bottom, containerRect.bottom) + VIEWPORT_OVERSCAN_PX;
   if (visibleTop >= visibleBottom) {
     return { top: 0, bottom: doc3.content.size };
   }
@@ -23038,30 +23328,92 @@ function getViewportBoundaryPositions({
     bottom: bottomPos ? bottomPos.pos : doc3.content.size
   };
 }
-function throttle(fn, delay) {
-  let timer = null;
-  const call = ((...args) => {
-    if (timer) {
+var viewportPluginState = {
+  /**
+   * Initialises the viewport state with no known positions.
+   * @returns The initial viewport state.
+   */
+  init() {
+    return { topPos: null, bottomPos: null };
+  },
+  /**
+   * Updates the viewport state from incoming transactions.
+   * @param tr - The transaction being applied.
+   * @param prev - The previous viewport state.
+   * @returns The next viewport state.
+   */
+  apply(tr2, prev) {
+    const meta = tr2.getMeta(PLUGIN_KEY);
+    if (meta == null ? void 0 : meta.positions) {
+      return { topPos: meta.positions.top, bottomPos: meta.positions.bottom };
+    }
+    if (!tr2.docChanged) {
+      return prev;
+    }
+    return {
+      topPos: prev.topPos !== null ? tr2.mapping.map(prev.topPos) : null,
+      bottomPos: prev.bottomPos !== null ? tr2.mapping.map(prev.bottomPos) : null
+    };
+  }
+};
+function createViewportPluginView(view) {
+  const scrollContainer = findScrollParent(view.dom);
+  const computeAndDispatch = () => {
+    const positions = getViewportBoundaryPositions({
+      view,
+      doc: view.state.doc,
+      scrollContainer
+    });
+    const prev = PLUGIN_KEY.getState(view.state);
+    if ((prev == null ? void 0 : prev.topPos) === positions.top && (prev == null ? void 0 : prev.bottomPos) === positions.bottom) {
       return;
     }
-    fn(...args);
-    timer = setTimeout(() => {
-      timer = null;
-    }, delay);
-  });
-  const cancel = () => {
-    if (timer) {
-      clearTimeout(timer);
-      timer = null;
+    const tr2 = view.state.tr.setMeta(PLUGIN_KEY, { positions });
+    view.dispatch(tr2);
+  };
+  let frame = null;
+  let lastCompute = 0;
+  const MIN_SCROLL_INTERVAL = 150;
+  const scheduleFrame = () => {
+    if (frame !== null) return;
+    frame = requestAnimationFrame(() => {
+      frame = null;
+      const now = performance.now();
+      if (now - lastCompute >= MIN_SCROLL_INTERVAL) {
+        lastCompute = now;
+        computeAndDispatch();
+      } else {
+        scheduleFrame();
+      }
+    });
+  };
+  scrollContainer.addEventListener("scroll", scheduleFrame, { passive: true });
+  computeAndDispatch();
+  return {
+    update(_view, prevState) {
+      if (view.state.doc.content.size !== prevState.doc.content.size) {
+        scheduleFrame();
+      }
+    },
+    destroy: () => {
+      if (frame !== null) {
+        cancelAnimationFrame(frame);
+      }
+      scrollContainer.removeEventListener("scroll", scheduleFrame);
     }
   };
-  return { call, cancel };
 }
-var DEFAULT_DATA_ATTRIBUTE = "placeholder";
-function preparePlaceholderAttribute(attr) {
-  return attr.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9-]/g, "").replace(/^[0-9-]+/, "").replace(/^-+/, "").toLowerCase();
+function createPlaceholderPlugin({ editor, options }) {
+  const dataAttribute = options.dataAttribute ? `data-${preparePlaceholderAttribute(options.dataAttribute)}` : `data-${DEFAULT_DATA_ATTRIBUTE}`;
+  return new Plugin({
+    key: PLUGIN_KEY,
+    state: viewportPluginState,
+    view: createViewportPluginView,
+    props: {
+      decorations: ({ doc: doc3, selection }) => buildPlaceholderDecorations({ editor, options, dataAttribute, doc: doc3, selection })
+    }
+  });
 }
-var PLUGIN_KEY = new PluginKey("tiptap__placeholder");
 var Placeholder = Extension.create({
   name: "placeholder",
   addOptions() {
@@ -23076,132 +23428,7 @@ var Placeholder = Extension.create({
     };
   },
   addProseMirrorPlugins() {
-    const dataAttribute = this.options.dataAttribute ? `data-${preparePlaceholderAttribute(this.options.dataAttribute)}` : `data-${DEFAULT_DATA_ATTRIBUTE}`;
-    return [
-      new Plugin({
-        state: {
-          init() {
-            return {
-              // null means "no viewport info yet" — decoration callback falls
-              // back to full document scan until the scroll handler fires.
-              topPos: null,
-              bottomPos: null
-            };
-          },
-          apply(tr2, prev) {
-            const meta = tr2.getMeta(PLUGIN_KEY);
-            if (meta == null ? void 0 : meta.positions) {
-              return {
-                topPos: meta.positions.top,
-                bottomPos: meta.positions.bottom
-              };
-            }
-            if (!tr2.docChanged) {
-              return prev;
-            }
-            return {
-              topPos: prev.topPos !== null ? tr2.mapping.map(prev.topPos) : null,
-              bottomPos: prev.bottomPos !== null ? tr2.mapping.map(prev.bottomPos) : null
-            };
-          }
-        },
-        key: PLUGIN_KEY,
-        view(view) {
-          const scrollContainer = findScrollParent(view.dom);
-          const computeAndDispatch = () => {
-            const positions = getViewportBoundaryPositions({
-              view,
-              doc: view.state.doc,
-              scrollContainer
-            });
-            const prev = PLUGIN_KEY.getState(view.state);
-            if (prev.topPos === positions.top && prev.bottomPos === positions.bottom) {
-              return;
-            }
-            const tr2 = view.state.tr.setMeta(PLUGIN_KEY, { positions }).setMeta("tiptap__viewportUpdate", true);
-            view.dispatch(tr2);
-          };
-          const { call: throttledUpdate, cancel: cancelThrottle } = throttle(computeAndDispatch, 250);
-          const scrollParent = scrollContainer;
-          scrollParent.addEventListener("scroll", throttledUpdate, { passive: true });
-          computeAndDispatch();
-          return {
-            update(_, prevState) {
-              if (view.state.doc.content.size !== prevState.doc.content.size) {
-                computeAndDispatch();
-              }
-            },
-            destroy: () => {
-              cancelThrottle();
-              scrollParent.removeEventListener("scroll", throttledUpdate);
-            }
-          };
-        },
-        props: {
-          decorations: ({ doc: doc3, selection }) => {
-            var _a, _b;
-            const active = this.editor.isEditable || !this.options.showOnlyWhenEditable;
-            if (!active) {
-              return null;
-            }
-            const { anchor } = selection;
-            const decorations = [];
-            const isEmptyDoc = this.editor.isEmpty;
-            const useResolvedPath = this.options.showOnlyCurrent && !this.options.includeChildren;
-            if (useResolvedPath) {
-              const resolved = doc3.resolve(anchor);
-              if (resolved.depth > 0) {
-                const node = resolved.node(1);
-                const nodeStart = resolved.before(1);
-                if (node.type.isTextblock && isNodeEmpty(node)) {
-                  const hasAnchor = anchor >= nodeStart && anchor <= nodeStart + node.nodeSize;
-                  const decoration = createPlaceholderDecoration({
-                    node,
-                    dataAttribute,
-                    hasAnchor,
-                    placeholder: this.options.placeholder,
-                    classes: {
-                      emptyEditor: this.options.emptyEditorClass,
-                      emptyNode: this.options.emptyNodeClass
-                    },
-                    editor: this.editor,
-                    isEmptyDoc,
-                    pos: resolved.before(1)
-                  });
-                  decorations.push(decoration);
-                }
-              }
-            } else {
-              const pluginState = PLUGIN_KEY.getState(this.editor.state);
-              const from2 = (_a = pluginState.topPos) != null ? _a : 0;
-              const to = (_b = pluginState.bottomPos) != null ? _b : doc3.content.size;
-              doc3.nodesBetween(from2, to, (node, pos) => {
-                const hasAnchor = anchor >= pos && anchor <= pos + node.nodeSize;
-                const isEmpty = !node.isLeaf && isNodeEmpty(node);
-                if (!node.type.isTextblock) {
-                  return this.options.includeChildren;
-                }
-                if ((hasAnchor || !this.options.showOnlyCurrent) && isEmpty) {
-                  const decoration = createPlaceholderDecoration({
-                    classes: { emptyEditor: this.options.emptyEditorClass, emptyNode: this.options.emptyNodeClass },
-                    editor: this.editor,
-                    isEmptyDoc,
-                    dataAttribute,
-                    hasAnchor,
-                    placeholder: this.options.placeholder,
-                    node,
-                    pos
-                  });
-                  decorations.push(decoration);
-                }
-                return this.options.includeChildren;
-              });
-            }
-            return DecorationSet.create(doc3, decorations);
-          }
-        }
-      })
-    ];
+    return [createPlaceholderPlugin({ editor: this.editor, options: this.options })];
   }
 });
 var Selection2 = Extension.create({
@@ -23233,7 +23460,10 @@ var Selection2 = Extension.create({
   }
 });
 var skipTrailingNodeMeta = "skipTrailingNode";
-function nodeEqualsType({ types, node }) {
+function nodeEqualsType({
+  types,
+  node
+}) {
   return node && Array.isArray(types) && types.includes(node.type) || (node == null ? void 0 : node.type) === types;
 }
 var TrailingNode = Extension.create({
@@ -23318,7 +23548,7 @@ var UndoRedo = Extension.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+starter-kit@3.23.6/node_modules/@tiptap/starter-kit/dist/index.js
+// node_modules/.pnpm/@tiptap+starter-kit@3.24.0/node_modules/@tiptap/starter-kit/dist/index.js
 var StarterKit = Extension.create({
   name: "starterKit",
   addExtensions() {
@@ -23395,16 +23625,16 @@ var StarterKit = Extension.create({
 });
 var index_default3 = StarterKit;
 
-// node_modules/.pnpm/@tiptap+extension-placeholder@3.23.6_@tiptap+extensions@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6__@tiptap+pm@3.23.6_/node_modules/@tiptap/extension-placeholder/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-placeholder@3.24.0_@tiptap+extensions@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0__@tiptap+pm@3.24.0_/node_modules/@tiptap/extension-placeholder/dist/index.js
 var index_default4 = Placeholder;
 
-// node_modules/.pnpm/@tiptap+extension-task-list@3.23.6_@tiptap+extension-list@3.23.6_@tiptap+core@3.23.6_@t_d7d5651a1d82dc8b9392c573f25a0927/node_modules/@tiptap/extension-task-list/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-task-list@3.24.0_@tiptap+extension-list@3.24.0_@tiptap+core@3.24.0_@t_509e6bc88266616e437a8debc435c053/node_modules/@tiptap/extension-task-list/dist/index.js
 var index_default5 = TaskList;
 
-// node_modules/.pnpm/@tiptap+extension-task-item@3.23.6_@tiptap+extension-list@3.23.6_@tiptap+core@3.23.6_@t_46ae0f20fb8cae494b41892f2ccf5e01/node_modules/@tiptap/extension-task-item/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-task-item@3.24.0_@tiptap+extension-list@3.24.0_@tiptap+core@3.24.0_@t_b4050e11811e9a6f4abb7e5f646f8b27/node_modules/@tiptap/extension-task-item/dist/index.js
 var index_default6 = TaskItem;
 
-// node_modules/.pnpm/@tiptap+extension-image@3.23.6_@tiptap+core@3.23.6_@tiptap+pm@3.23.6_/node_modules/@tiptap/extension-image/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-image@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0_/node_modules/@tiptap/extension-image/dist/index.js
 var inputRegex5 = /(?:^|\s)(!\[(.+|:?)]\((\S+)(?:(?:\s+)["'](\S+)["'])?\))$/;
 var Image = Node3.create({
   name: "image",
