@@ -339,12 +339,16 @@ describe('no-card trial tenant cleanup', () => {
 		const deletedCollections = [];
 		const unlinkedFiles = [];
 		let deletedGitHost = '';
+		let conversationCleanupHost = '';
 
 		const result = await deleteTenantData('host-1', 'tenant-1', {
 			models,
 			deleteTypesenseCollection: async (collectionName) => {
 				deletedCollections.push(collectionName);
 				return true;
+			},
+			deleteConversationDataForHost: async (hostId) => {
+				conversationCleanupHost = hostId;
 			},
 			deleteGitRepoHostDirectory: (hostId) => {
 				deletedGitHost = hostId;
@@ -366,10 +370,11 @@ describe('no-card trial tenant cleanup', () => {
 		assert.equal(calls.Tenant, 'tenant-1');
 		assert.deepEqual(unlinkedFiles, ['/tmp/kumbukum-export.zip']);
 		assert.equal(deletedGitHost, 'host-1');
+		assert.equal(conversationCleanupHost, 'host-1');
 		assert.deepEqual(deletedCollections, getTenantTypesenseCollectionNames('host-1'));
 		assert.equal(result.deleted, true);
 		assert.equal(result.users, 1);
 		assert.equal(result.export_files, 1);
-		assert.equal(result.typesense_collections_deleted, 6);
+		assert.equal(result.typesense_collections_deleted, 5);
 	});
 });

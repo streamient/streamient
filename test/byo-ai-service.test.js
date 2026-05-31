@@ -242,7 +242,7 @@ describe('BYO AI service', () => {
 	});
 
 	it('uses distinct Typesense conversation model IDs per LLM scope', () => {
-		assert.equal(getConversationModelId('user-1', 'global'), 'convo-user-1');
-		assert.equal(getConversationModelId('user-1', 'email'), 'convo-user-1-email');
+		assert.equal(getConversationModelId('host-1', 'user-1', 'global'), 'convo-host-1-user-1');
+		assert.equal(getConversationModelId('host-1', 'user-1', 'email'), 'convo-host-1-user-1-email');
 	});
 });

@@ -22,7 +22,7 @@ import { MagicLink } from '../model/magic_link.js';
 import { Export } from '../model/export.js';
 import { AuditLog } from '../model/audit_log.js';
 import { Tenant } from '../modules/tenancy.js';
-import { getTypesenseClient } from '../modules/typesense.js';
+import { getTypesenseClient, deleteConversationDataForHost } from '../modules/typesense.js';
 import { deleteGitRepoHostDirectory } from './git_sync_service.js';
 import { createLogger } from '../modules/logger.js';
 
@@ -44,10 +44,7 @@ async function deleteTypesenseCollection(collectionName) {
 }
 
 export function getTenantTypesenseCollectionNames(hostId) {
-	return [
-		...TENANT_COLLECTION_TYPES.map((type) => `${type}_${hostId}`),
-		`conversation_store_${hostId}`,
-	];
+	return TENANT_COLLECTION_TYPES.map((type) => `${type}_${hostId}`);
 }
 
 async function deleteExportFiles(hostId, exportModel = Export, unlink = fs.unlink) {
@@ -97,6 +94,7 @@ export async function deleteTenantData(hostId, tenantId = null, deps = {}) {
 	};
 	const removeTypesenseCollection = deps.deleteTypesenseCollection || deleteTypesenseCollection;
 	const removeGitRepoHostDirectory = deps.deleteGitRepoHostDirectory || deleteGitRepoHostDirectory;
+	const removeConversationData = deps.deleteConversationDataForHost || deleteConversationDataForHost;
 	const unlink = deps.unlink || fs.unlink;
 
 	const tenant = tenantId ? await models.Tenant.findById(tenantId) : await models.Tenant.findOne({ host_id: hostId });
@@ -143,6 +141,8 @@ export async function deleteTenantData(hostId, tenantId = null, deps = {}) {
 	}
 
 	removeGitRepoHostDirectory(hostId);
+
+	await removeConversationData(hostId, tenantUserIds.map((id) => id.toString()));
 
 	const collectionNames = getTenantTypesenseCollectionNames(hostId);
 	const typesenseDeleted = await Promise.all(collectionNames.map(removeTypesenseCollection));

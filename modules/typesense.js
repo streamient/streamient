@@ -15,6 +15,10 @@ const _ts_exlude_default = 'embedding';
 const _chunk_size = 3000;
 const _chunk_overlap = 200;
 
+// Single shared collection for all tenants' conversation history.
+// Isolation is enforced via the conversation model_id, which encodes host + user.
+const CONVERSATION_STORE_COLLECTION = 'conversation_store';
+
 const _chunk_fields = {
 	notes: ['text_content'],
 	memory: ['content'],
@@ -38,8 +42,9 @@ function resolveExcludeFields(excludeFields, type) {
 	return excludeFields || _ts_exlude_default;
 }
 
-export function getConversationModelId(userId, llmScope = 'global') {
-	return normalizeLlmScope(llmScope) === 'email' ? `convo-${userId}-email` : `convo-${userId}`;
+export function getConversationModelId(hostId, userId, llmScope = 'global') {
+	const base = `convo-${hostId}-${userId}`;
+	return normalizeLlmScope(llmScope) === 'email' ? `${base}-email` : base;
 }
 
 const _token_separators = ['+', '-', '@', '.', '_', ' ', '=', '\\', ';', ',', ':', "'", '|', '&', '(', ')', '[', ']', '{', '}', '<', '>', '/', '?', '!', '#', '$', '%', '^', '*', '~', '`', '"', '\n', '\t', '\r', '\f', '\v'];
@@ -1177,14 +1182,14 @@ Always include project_id in action params. If the user doesn't specify a projec
 
 /**
  * Ensure the conversation store collection and conversation model exist for a user.
- * Model ID: convo-{userId}, one per user and scope.
- * Collection: conversation_store_{hostId}, shared per tenant.
+ * Model ID: convo-{hostId}-{userId}, one per host + user + scope.
+ * Collection: conversation_store, a single shared collection for all tenants.
  */
 export async function ensureConversationModel(hostId, userId, options = {}) {
 	const ts = getTypesenseClient();
-	const collectionName = `conversation_store_${hostId}`;
+	const collectionName = CONVERSATION_STORE_COLLECTION;
 	const llmScope = normalizeLlmScope(options.llmScope);
-	const modelId = getConversationModelId(userId, llmScope);
+	const modelId = getConversationModelId(hostId, userId, llmScope);
 
 	// 1. Resolve model configuration
 	let tsModelName = config.llm.tsConversationModel || 'gemini-2.0-flash';
@@ -1351,7 +1356,7 @@ async function _updateConversationModel(modelId, fields) {
 export async function conversationSearch(hostId, userId, query, options = {}) {
 	const ts = getTypesenseClient();
 	const llmScope = normalizeLlmScope(options.llmScope);
-	const convoModelId = getConversationModelId(userId, llmScope);
+	const convoModelId = getConversationModelId(hostId, userId, llmScope);
 	const { conversationId, projectId, perPage = 10, includeEmails = true } = options;
 
 	await ensureConversationModel(hostId, userId, { llmScope });
@@ -1496,8 +1501,8 @@ function parseConversationAnswer(raw) {
  */
 export async function listConversations(hostId, userId, { limit = 10 } = {}) {
 	const ts = getTypesenseClient();
-	const collectionName = `conversation_store_${hostId}`;
-	const modelId = `convo-${userId}`;
+	const collectionName = CONVERSATION_STORE_COLLECTION;
+	const modelId = getConversationModelId(hostId, userId);
 
 	try {
 		const result = await withTypesenseResilience(
@@ -1558,12 +1563,40 @@ export async function listConversations(hostId, userId, { limit = 10 } = {}) {
  */
 export async function deleteConversation(hostId, userId, conversationId) {
 	const ts = getTypesenseClient();
-	const collectionName = `conversation_store_${hostId}`;
+	const collectionName = CONVERSATION_STORE_COLLECTION;
+	const modelId = getConversationModelId(hostId, userId);
 	return withTypesenseResilience(
 		`delete conversation ${collectionName}/${conversationId}`,
 		() => ts.collections(collectionName).documents().delete({
-			filter_by: `conversation_id:=${conversationId} && model_id:=convo-${userId}`,
+			filter_by: `conversation_id:=${conversationId} && model_id:=${modelId}`,
 		}),
 		{ fallback: null },
 	);
+}
+
+/**
+ * Delete all conversation history and conversation models for a host's users.
+ * Used during tenant deletion — the shared conversation_store collection itself
+ * is never dropped, so we remove only this host's documents and models.
+ */
+export async function deleteConversationDataForHost(hostId, userIds = []) {
+	const ts = getTypesenseClient();
+	const scopes = ['global', 'email'];
+	for (const userId of userIds) {
+		for (const scope of scopes) {
+			const modelId = getConversationModelId(hostId, userId, scope);
+			await withTypesenseResilience(
+				`delete conversation docs ${CONVERSATION_STORE_COLLECTION}/${modelId}`,
+				() => ts.collections(CONVERSATION_STORE_COLLECTION).documents().delete({ filter_by: `model_id:=${modelId}` }),
+				{ fallback: null },
+			);
+			try {
+				await ts.conversations().models(modelId).delete();
+			} catch (err) {
+				if (err.httpStatus !== 404) {
+					log.error({ err, modelId }, 'Failed to delete conversation model during tenant cleanup');
+				}
+			}
+		}
+	}
 }
