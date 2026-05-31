@@ -51,81 +51,22 @@ const _token_separators = ['+', '-', '@', '.', '_', ' ', '=', '\\', ';', ',', ':
 
 // Track conversation model signatures synced in this process lifetime.
 const syncedConvoModels = new Map();
-const TRANSIENT_TYPESENSE_HTTP_CODES = new Set([408, 425, 429, 500, 502, 503, 504]);
-const TYPESENSE_CIRCUIT_OPEN_MS = 30_000;
-
-let typesenseCircuitOpenUntil = 0;
-let lastCircuitLogAt = 0;
-
-function sleep(ms) {
-	return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function isTransientTypesenseError(err) {
-	if (!err) return false;
-	if (TRANSIENT_TYPESENSE_HTTP_CODES.has(err.httpStatus)) return true;
-	const msg = (err.message || '').toLowerCase();
-	return msg.includes('econnrefused')
-		|| msg.includes('etimedout')
-		|| msg.includes('enotfound')
-		|| msg.includes('socket hang up')
-		|| msg.includes('service unavailable')
-		|| msg.includes('timed out');
-}
-
-function openTypesenseCircuit(err, operation) {
-	typesenseCircuitOpenUntil = Date.now() + TYPESENSE_CIRCUIT_OPEN_MS;
-	log.warn({ err, durationSeconds: TYPESENSE_CIRCUIT_OPEN_MS / 1000, operation }, 'Circuit open');
-}
-
-function isTypesenseCircuitOpen() {
-	return Date.now() < typesenseCircuitOpenUntil;
-}
-
-function logCircuitSkip(operation) {
-	const now = Date.now();
-	if (now - lastCircuitLogAt < 10_000) return;
-	lastCircuitLogAt = now;
-	const remaining = Math.max(Math.ceil((typesenseCircuitOpenUntil - now) / 1000), 0);
-	log.warn({ operation, remainingSeconds: remaining }, 'Skipping operation; circuit open');
-}
-
+/**
+ * Thin wrapper: run a Typesense operation and, on error, return a graceful
+ * fallback instead of throwing. Mirrors helpmonks/razuna — no app-level retry
+ * and no circuit breaker; the typesense-js client already handles node retries
+ * and health-checking. `fallback` may be a value (returned on error), a
+ * function (called with the error), or omitted (the error is re-thrown).
+ */
 async function withTypesenseResilience(operation, fn, options = {}) {
-	const {
-		maxAttempts = 3,
-		fallback,
-	} = options;
-
-	if (isTypesenseCircuitOpen()) {
-		logCircuitSkip(operation);
-		if (typeof fallback === 'function') return fallback();
+	const { fallback } = options;
+	try {
+		return await fn();
+	} catch (err) {
+		if (typeof fallback === 'function') return fallback(err);
 		if (fallback !== undefined) return fallback;
-		const err = new Error(`Typesense circuit open for ${operation}`);
-		err.code = 'TS_CIRCUIT_OPEN';
 		throw err;
 	}
-
-	let lastErr;
-	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-		try {
-			return await fn();
-		} catch (err) {
-			lastErr = err;
-			const transient = isTransientTypesenseError(err);
-			const canRetry = transient && attempt < maxAttempts;
-			if (!canRetry) break;
-			const waitMs = Math.min(2000, 200 * (2 ** (attempt - 1))) + Math.floor(Math.random() * 150);
-			await sleep(waitMs);
-		}
-	}
-
-	if (isTransientTypesenseError(lastErr)) {
-		openTypesenseCircuit(lastErr, operation);
-	}
-
-	if (typeof fallback === 'function') return fallback(lastErr);
-	if (fallback !== undefined) return fallback;
-	throw lastErr;
 }
 
 function getConversationModelSyncKey(modelId) {
@@ -641,6 +582,36 @@ export async function removeDocumentsByFilter(host_id, type, filterBy) {
 }
 
 /**
+ * Bulk-remove all chunks for a set of source documents in a SINGLE
+ * delete-by-filter request (mirrors helpmonks' bulk delete-by-query).
+ *
+ * Every chunk carries its parent's `source_id`, so one `source_id:=[...]`
+ * filter clears every chunk for the whole batch at once. This replaces the
+ * previous per-document fan-out (one delete request per doc), which round-
+ * robined ~N/3 writes onto each Typesense node and stalled an entire batch
+ * whenever a single node was momentarily slow.
+ */
+export async function removeDocumentsBySourceIds(host_id, type, sourceIds) {
+	const ids = [...new Set((sourceIds || []).map((id) => String(id)).filter(Boolean))];
+	if (!ids.length) return null;
+	const ts = getTypesenseClient();
+	const collectionName = `${type}_${host_id}`;
+	const filterBy = `source_id:=[${ids.map(exactFilterValue).join(',')}]`;
+	return withTypesenseResilience(
+		`bulk delete ${collectionName} (${ids.length} sources)`,
+		async () => {
+			try {
+				return await ts.collections(collectionName).documents().delete({ filter_by: filterBy });
+			} catch (err) {
+				if (err?.httpStatus === 404) return null;
+				throw err;
+			}
+		},
+		{ fallback: null },
+	);
+}
+
+/**
  * Search a single collection.
  */
 export async function searchCollection(host_id, type, query, options = {}) {
@@ -1034,7 +1005,9 @@ export async function indexMissing(models) {
 				hostProgress.set(host_id, progress);
 			}
 
-			await Promise.all(docs.map((doc) => removeDocument(host_id, type, doc._id.toString())));
+			// Clear existing chunks for the whole batch in ONE bulk delete-by-filter
+			// (not one delete per doc) before re-importing — see removeDocumentsBySourceIds.
+			await removeDocumentsBySourceIds(host_id, type, docs.map((doc) => doc._id.toString()));
 
 			const tsDocEntries = [];
 			const chunkCounts = new Map();

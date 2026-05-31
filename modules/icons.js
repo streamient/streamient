@@ -59,6 +59,7 @@ const ICON_GLYPHS = {
 	close: 'close',
 	darkMode: 'dark_mode',
 	lightMode: 'light_mode',
+	moreHoriz: 'more_horiz',
 };
 
 const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (ch) => ({

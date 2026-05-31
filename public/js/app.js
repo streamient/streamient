@@ -63,6 +63,26 @@ function setActiveProject(projectId) {
 	});
 }
 
+// Persistently highlight the row (name/dashboard or Notes/Memories/URLs/Emails)
+// of the active project that matches the current page.
+function setActiveSection(path) {
+	var SECTION_PATHS = ['/notes', '/memories', '/urls', '/emails'];
+	document.querySelectorAll('#project-list .section-active').forEach((el) => {
+		el.classList.remove('section-active');
+	});
+	var activeCard = document.querySelector('#project-list .project-item.active');
+	if (!activeCard) return;
+	if (path === '/dashboard') {
+		var nameRow = activeCard.querySelector('.project-item-name-row');
+		if (nameRow) nameRow.classList.add('section-active');
+		return;
+	}
+	if (!path || SECTION_PATHS.indexOf(path) === -1) return;
+	var link = activeCard.querySelector('.project-item-section a[href="' + path + '"]');
+	var section = link && link.closest('.project-item-section');
+	if (section) section.classList.add('section-active');
+}
+
 async function importFilesToProject(files, projectId) {
 	if (!files || !files.length || !projectId) return;
 	var ok = 0;
@@ -146,6 +166,8 @@ async function loadProjects() {
 				setActiveProject(first.dataset.id);
 			}
 		}
+
+		setActiveSection(__currentRoute || window.location.pathname);
 	} catch (err) {
 		console.error('Failed to load projects:', err);
 	}
@@ -361,6 +383,7 @@ function mountCurrent(path) {
 	var route = ROUTES[path];
 	if (!route) return;
 	__currentRoute = path;
+	setActiveSection(path);
 	if (route.section && window.__sections?.[route.section]) window.__sections[route.section].mount();
 	if (route.batch && window.__sections?.batch) window.__sections.batch.mount();
 }
