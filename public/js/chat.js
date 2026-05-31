@@ -232,10 +232,22 @@ function initChat() {
 				item.className = 'chat-history-item p-2 rounded mb-1';
 				item.style.cursor = 'pointer';
 				item.textContent = c.title || `Conversation ${c.conversation_id.slice(0, 8)}`;
-				item.addEventListener('click', () => {
+				item.addEventListener('click', async () => {
 					currentConversationId = c.conversation_id;
 					messagesEl.innerHTML = '';
-					addMessage('assistant', `Resumed conversation: ${c.title || c.conversation_id.slice(0, 8)}`);
+					try {
+						const msgRes = await api('GET', `/chat/conversations/${c.conversation_id}/messages`);
+						const messages = msgRes.messages || [];
+						if (messages.length) {
+							// Messages are oldest → newest; addMessage() appends, so render in order.
+							messages.forEach((m) => addMessage(m.role === 'user' ? 'user' : 'assistant', m.message));
+							messagesEl.scrollTop = messagesEl.scrollHeight;
+						} else {
+							addMessage('assistant', `Resumed conversation: ${c.title || c.conversation_id.slice(0, 8)}`);
+						}
+					} catch {
+						addMessage('assistant', `Resumed conversation: ${c.title || c.conversation_id.slice(0, 8)}`);
+					}
 				});
 				messagesEl.appendChild(item);
 			});

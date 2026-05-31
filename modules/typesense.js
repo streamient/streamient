@@ -1532,6 +1532,39 @@ export async function listConversations(hostId, userId, { limit = 10 } = {}) {
 }
 
 /**
+ * Fetch all messages for a single past conversation, oldest → newest.
+ * Scoped to the user via model_id (host + user) so a conversation can never be read
+ * across users or hosts. Assistant turns are stored as the raw JSON answer, so we parse
+ * them down to their display text — matching how the live chat renders an answer.
+ */
+export async function getConversationMessages(hostId, userId, conversationId) {
+	const ts = getTypesenseClient();
+	const collectionName = CONVERSATION_STORE_COLLECTION;
+	const modelId = getConversationModelId(hostId, userId);
+
+	const result = await withTypesenseResilience(
+		`get conversation messages ${collectionName}/${conversationId}`,
+		() => ts.collections(collectionName).documents().search({
+			q: '*',
+			query_by: 'conversation_id',
+			filter_by: `conversation_id:=${conversationId} && model_id:=${modelId}`,
+			sort_by: 'timestamp:asc',
+			per_page: 200,
+			exclude_fields: _ts_exlude_default,
+		}),
+		{ fallback: { hits: [] } },
+	);
+
+	return (result.hits || []).map((hit) => {
+		const doc = hit.document;
+		const message = doc.role === 'assistant'
+			? (parseConversationAnswer(doc.message).response || doc.message)
+			: doc.message;
+		return { role: doc.role, message, timestamp: doc.timestamp };
+	});
+}
+
+/**
  * Delete a conversation's messages from the store.
  */
 export async function deleteConversation(hostId, userId, conversationId) {

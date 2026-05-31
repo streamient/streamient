@@ -16,7 +16,7 @@ import * as emailIngestService from '../services/email_ingest_service.js';
 import * as emailInternalNoteService from '../services/email_internal_note_service.js';
 import * as outgoingEmailService from '../services/outgoing_email_service.js';
 import { searchKnowledge, aiChatSearch, processChat, processChatStream } from '../services/ai_chat_service.js';
-import { listConversations, deleteConversation } from '../modules/typesense.js';
+import { listConversations, getConversationMessages, deleteConversation } from '../modules/typesense.js';
 import * as trashService from '../services/trash_service.js';
 import { crawlSite } from '../modules/crawler.js';
 import { getProjectCounts } from '../services/project_service.js';
@@ -1211,6 +1211,16 @@ router.get('/chat/conversations', async (req, res) => {
 	} catch (err) {
 		log.error({ err }, 'List conversations error');
 		res.json({ conversations: [] });
+	}
+});
+
+router.get('/chat/conversations/:id/messages', async (req, res) => {
+	try {
+		const messages = await getConversationMessages(req.host_id, req.userId, req.params.id);
+		res.json({ messages });
+	} catch (err) {
+		log.error({ err }, 'Get conversation messages error');
+		res.json({ messages: [] });
 	}
 });
 
