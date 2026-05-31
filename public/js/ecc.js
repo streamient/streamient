@@ -14,6 +14,8 @@
 	var selectAllAcrossLink;
 	var moveMenu;
 	var trashBtn;
+	var emptyTrashBtn;
+	var trashToolbar;
 	var resetTriageBtn;
 	var viewHeader;
 	var listWrap;
@@ -1254,6 +1256,7 @@
 			destroyNoteEditor();
 			internalNotesEl?.classList.add('d-none');
 			viewHeader?.classList.remove('d-none');
+			trashToolbar?.classList.toggle('d-none', !(activeMailbox === 'trash' && !activeLabel));
 			listWrap?.classList.remove('d-none');
 			detailEl?.classList.add('d-none');
 			updateActionBar();
@@ -1274,6 +1277,7 @@
 		function showDetailView() {
 			detailActive = true;
 			viewHeader?.classList.add('d-none');
+			trashToolbar?.classList.add('d-none');
 			listWrap?.classList.add('d-none');
 			detailEl?.classList.remove('d-none');
 			updateActionBar();
@@ -2812,6 +2816,8 @@
 		selectAllAcrossLink = document.getElementById('ecc-select-all-across-link');
 		moveMenu = document.getElementById('ecc-move-menu');
 		trashBtn = document.getElementById('ecc-trash-btn');
+		emptyTrashBtn = document.getElementById('ecc-empty-trash-btn');
+		trashToolbar = document.getElementById('ecc-trash-toolbar');
 		resetTriageBtn = document.getElementById('ecc-reset-triage-btn');
 		viewHeader = document.getElementById('ecc-view-header');
 		listWrap = document.getElementById('ecc-list-wrap');
@@ -2878,6 +2884,17 @@
 		selectAllBtn?.addEventListener('click', toggleSelectAll);
 		selectAllAcrossLink?.addEventListener('click', onSelectAllAcrossClick);
 		trashBtn?.addEventListener('click', trashSelected);
+		emptyTrashBtn?.addEventListener('click', async function () {
+			var confirmed = await confirmAction('Empty Trash', 'All emails in trash will be permanently deleted. This cannot be undone.');
+			if (!confirmed) return;
+			try {
+				await api('DELETE', '/trash?confirm=true');
+				showSuccess('Trash emptied');
+				await loadAll();
+			} catch (err) {
+				showError(err.message || 'Failed to empty trash');
+			}
+		});
 		resetTriageBtn?.addEventListener('click', resetSelectedTriage);
 		openEmailBtn?.addEventListener('click', openSelectedEmail);
 		detailBackBtn?.addEventListener('click', backToListView);
@@ -2922,6 +2939,8 @@
 		selectAllAcrossLink = null;
 		moveMenu = null;
 		trashBtn = null;
+		emptyTrashBtn = null;
+		trashToolbar = null;
 		resetTriageBtn = null;
 		listWrap = null;
 		detailEl = null;
