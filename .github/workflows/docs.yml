@@ -40,5 +40,7 @@ jobs:
                   platforms: linux/amd64
                   push: true
                   tags: ${{ env.GHCR_IMAGE }}:latest
+                  build-args: |
+                      KUMBUKUM_DOCS_VANITY_BASE=/
                   cache-from: type=gha
                   cache-to: type=gha,mode=max

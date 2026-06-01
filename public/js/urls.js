@@ -33,7 +33,7 @@
 						+ '</div></div>';
 				})
 				.join('')
-			: '<p class="text-muted p-3">No URLs saved yet. Hint: Add new URLs and notes with the <a href="https://app.kumbukum.com/docs/guide/browser-extension" target="_blank">Kumbkum browser extension</a></p>';
+			: '<p class="text-muted p-3">No URLs saved yet. Hint: Add new URLs and notes with the <a href="https://docs.kumbukum.com/guide/browser-extension" target="_blank">Kumbkum browser extension</a></p>';
 
 		listEl.querySelectorAll('.url-item').forEach(function (item) {
 			item.addEventListener('click', function (e) {

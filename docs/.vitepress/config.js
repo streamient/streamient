@@ -5,14 +5,18 @@ import spec from './data/openapi.json' with { type: 'json' };
 
 const sidebar = useSidebar({ spec, linkPrefix: '/api/operations/' });
 
+// Base is build-time configurable: '/docs/' for app.kumbukum.com/docs/, and '/'
+// for the vanity domain build served at docs.kumbukum.com (KUMBUKUM_DOCS_BASE=/).
+const docsBase = process.env.KUMBUKUM_DOCS_BASE || '/docs/';
+
 export default defineConfig({
     title: 'Kumbukum Docs',
     description: 'Documentation for Kumbukum — Notes, Memory, URLs, AI Chat',
-    base: '/docs/',
+    base: docsBase,
     cleanUrls: true,
 
     head: [
-        ['link', { rel: 'icon', type: 'image/x-icon', href: '/docs/favicon.ico' }],
+        ['link', { rel: 'icon', type: 'image/x-icon', href: `${docsBase}favicon.ico` }],
     ],
 
     markdown: {

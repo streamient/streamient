@@ -28,9 +28,9 @@ const emailTemplates = {
 <p>Exciting times ahead! You now have access to a powerful shared knowledge layer for your team and your AI tools.</p>
 <p>Here are great resources to get you started:</p>
 <ul>
-<li><a href="https://app.kumbukum.com/docs/guide/">What Kumbukum can do for you</a></li>
-<li><a href="https://app.kumbukum.com/docs/mcp/">Use Kumbukum with Your AI Tools</a></li>
-<li><a href="https://app.kumbukum.com/docs/guide/browser-extension">Collect knowledge with the Browser Extension</a></li>
+<li><a href="https://docs.kumbukum.com/guide/">What Kumbukum can do for you</a></li>
+<li><a href="https://docs.kumbukum.com/mcp/">Use Kumbukum with Your AI Tools</a></li>
+<li><a href="https://docs.kumbukum.com/guide/browser-extension">Collect knowledge with the Browser Extension</a></li>
 </ul>
 <p>Use the Kumbukum app to add your existing documents and knowledge. Once you add the Kumbukum MCP, you can also tell your AI tools to migrate everything for you automatically.</p>
 <p></p>

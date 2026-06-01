@@ -57,6 +57,7 @@ jobs:
                   provenance: false
                   build-args: |
                       APP_VERSION=${{ steps.meta.outputs.version }}
+                      KUMBUKUM_DOCS_VANITY_BASE=/
                   cache-from: type=gha
                   cache-to: type=gha,mode=max
             

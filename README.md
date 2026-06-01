@@ -11,7 +11,7 @@ Stop reset loops. Give every AI tool trusted memory your team can inspect, contr
 
 Kumbukum is an open-source memory layer for AI-native teams and MCP-compatible tools. Store notes, memories, URLs, and relationships in one place, then let assistants retrieve the right context across sessions, projects, and clients.
 
-[Website](https://kumbukum.com) · [Cloud](https://app.kumbukum.com) · [Docs](https://app.kumbukum.com/docs/) · [Self-Hosted Guide](https://app.kumbukum.com/docs/selfhosted/) · [MCP Docs](https://app.kumbukum.com/docs/mcp/) · [API Reference](https://app.kumbukum.com/docs/api/)
+[Website](https://kumbukum.com) · [Cloud](https://app.kumbukum.com) · [Docs](https://docs.kumbukum.com) · [Self-Hosted Guide](https://docs.kumbukum.com/selfhosted/) · [MCP Docs](https://docs.kumbukum.com/mcp/) · [API Reference](https://docs.kumbukum.com/api/)
 
 ![Kumbukum homepage preview](docs/assets/readme-hero.jpg)
 
@@ -207,11 +207,11 @@ env 'ACCESS-TOKEN'=your-access-token API_BASE_URL=https://your-instance.com node
 
 ## Documentation
 
-- [Guide](https://app.kumbukum.com/docs/guide/)
-- [Self-Hosted](https://app.kumbukum.com/docs/selfhosted/)
-- [MCP Server](https://app.kumbukum.com/docs/mcp/)
-- [API Reference](https://app.kumbukum.com/docs/api/)
-- [Cloud](https://app.kumbukum.com/docs/cloud/)
+- [Guide](https://docs.kumbukum.com/guide/)
+- [Self-Hosted](https://docs.kumbukum.com/selfhosted/)
+- [MCP Server](https://docs.kumbukum.com/mcp/)
+- [API Reference](https://docs.kumbukum.com/api/)
+- [Cloud](https://docs.kumbukum.com/cloud/)
 
 ## License
 

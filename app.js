@@ -123,6 +123,20 @@ var _static_cache_control = process.env.NODE_ENV === 'production'
         },
     };
 
+// --- Vanity docs domain (docs.kumbukum.com): serve the root-base build at / so
+// URLs are clean (docs.kumbukum.com/guide/ instead of .../docs/guide/). Caddy
+// preserves the Host header, so req.hostname reflects the public domain. ---
+var _docs_dist_root = path.join(__dirname, 'docs-dist-root');
+var _docs_vanity_hosts = (process.env.KUMBUKUM_DOCS_VANITY_HOSTS || 'docs.kumbukum.com')
+    .split(',').map((h) => h.trim().toLowerCase()).filter(Boolean);
+if (fs.existsSync(_docs_dist_root)) {
+    var _serve_docs_root = express.static(_docs_dist_root, { ..._static_cache_control, extensions: ['html'], index: 'index.html' });
+    app.use((req, res, next) => {
+        if (_docs_vanity_hosts.indexOf((req.hostname || '').toLowerCase()) === -1) return next();
+        _serve_docs_root(req, res, () => res.sendFile(path.join(_docs_dist_root, '404.html')));
+    });
+}
+
 // --- Docs site (VitePress built output) ---
 var _docs_dist = path.join(__dirname, 'docs-dist');
 if (fs.existsSync(_docs_dist)) {

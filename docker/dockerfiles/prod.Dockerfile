@@ -35,10 +35,20 @@ FROM deps AS build
 
 ARG APP_VERSION=latest
 ENV VITEPRESS_VERSION=$APP_VERSION
+# Base for the vanity-domain docs build (docs.kumbukum.com) — root so URLs are clean.
+ARG KUMBUKUM_DOCS_VANITY_BASE=/
 
 COPY --link . .
 RUN NODE_ENV=production node build.js
-RUN node docs/scripts/export-openapi.js && pnpm --filter @kumbukum/docs exec vitepress build
+# Build the docs twice from one source: the prefixed build (/docs/) served at
+# app.kumbukum.com/docs/, and a root build (/) served at docs.kumbukum.com.
+# VitePress always writes to .vitepress/dist, so move the first aside.
+RUN node docs/scripts/export-openapi.js \
+    && pnpm --filter @kumbukum/docs exec vitepress build \
+    && mv docs/.vitepress/dist docs/.vitepress/dist-prefixed \
+    && KUMBUKUM_DOCS_BASE="${KUMBUKUM_DOCS_VANITY_BASE}" pnpm --filter @kumbukum/docs exec vitepress build \
+    && mv docs/.vitepress/dist docs/.vitepress/dist-root \
+    && mv docs/.vitepress/dist-prefixed docs/.vitepress/dist
 
 # ──────────────────────────────────────────────
 # Stage 4: Production image (prod deps only)
@@ -63,6 +73,7 @@ COPY --link --from=build /opt/kumbukum/public/css/vendor.css ./public/css/vendor
 COPY --link --from=build /opt/kumbukum/public/css/*.woff2 ./public/css/
 COPY --link --from=build /opt/kumbukum/public/build-id ./public/build-id
 COPY --link --from=build /opt/kumbukum/docs/.vitepress/dist ./docs-dist
+COPY --link --from=build /opt/kumbukum/docs/.vitepress/dist-root ./docs-dist-root
 
 USER node
 EXPOSE 3000
