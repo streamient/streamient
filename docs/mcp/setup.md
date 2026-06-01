@@ -5,7 +5,18 @@ Most MCP clients can be connected in about a minute. Use Cloud for the fastest p
 ## Prerequisites
 
 - A running Kumbukum instance
-- For stdio only: a personal access token (generate in **Settings > Access Tokens**)
+- For stdio only: a personal access token (generate in **Settings → Access Tokens**)
+
+## Authentication
+
+Kumbukum supports two ways to authenticate. **OAuth 2.1 is recommended** — use a personal access token only for stdio setups, scripts, or clients that don't support OAuth.
+
+| Method | Best for | What you do |
+| --- | --- | --- |
+| **OAuth 2.1** _(recommended)_ | Claude, Cursor, ChatGPT, VS Code, and most modern clients | Enter the MCP endpoint URL and approve access in your browser |
+| **Access token** | stdio bridges, scripts, clients without OAuth | Generate a token in **Settings → Access Tokens** and send it as a Bearer credential |
+
+With OAuth you only ever need the **MCP endpoint URL**. The client discovers Kumbukum's OAuth endpoints automatically, opens Kumbukum in your browser, and asks you to approve access — nothing to copy or store. See [HTTP Transport](#http-transport) for the OAuth path; the per-client sections below show the token-based stdio setup.
 
 ## Claude Desktop
 
@@ -51,19 +62,15 @@ When a client needs approval, Kumbukum shows a simple OAuth consent screen in th
 
 :::tabs
 == Cloud
-The Cloud MCP endpoint is available at:
+Point your client at the Cloud MCP endpoint — that's all an OAuth-capable client needs:
 
 ```
 https://app.kumbukum.com/mcp
 ```
 
-The authorization server issuer is:
+The client discovers Kumbukum's OAuth endpoints from this URL automatically, opens Kumbukum in your browser, and asks you to approve access. No issuer or token setup required.
 
-```
-https://app.kumbukum.com/oauth
-```
-
-No manual token setup is required for OAuth-capable HTTP clients.
+> If a client ever asks for the authorization server manually, it's `https://app.kumbukum.com/oauth` — but you normally never need to enter it. See [ChatGPT field mapping](#chatgpt-field-mapping) for the full list of manual values.
 
 == Self-Hosted
 ```bash

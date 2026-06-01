@@ -1,40 +1,51 @@
-# MCP Server
+# Kumbukum MCP Server
 
-Kumbukum includes a [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that exposes 28 tools for Claude Desktop, Cursor, and other MCP-compatible clients.
+Connect your AI tools to Kumbukum with the Model Context Protocol (MCP) — an open standard that lets AI assistants work directly with your notes, memories, saved URLs, projects, and knowledge graph.
 
-Connect once, then let every compatible AI tool retrieve trusted notes, memories, URLs, and links from the same shared memory layer.
+Instead of copying context between tools, your assistant reads and writes the same shared memory layer your team already trusts — across sessions, projects, and clients.
 
-## Features
+## What is MCP?
 
-- **28 tools** across notes, memories, URLs, projects, graph, search, and AI chat
-- **Shared memory across tools** — capture once, retrieve everywhere
-- **Fast setup** — connect most MCP clients in about a minute
-- **Automatic default project** — tools work without specifying a project
-- **Three transports**: stdio (default), SSE, and Streamable HTTP
-- **Token-based auth** via `Authorization: Bearer`, `access-token`, or stdio env vars
+MCP is an open standard, developed by Anthropic, that creates a universal bridge between AI assistants and external tools. With the Kumbukum MCP server, your assistant can search and update your knowledge base directly — securely, and with your permission — without you leaving the chat.
 
-## Quick Start
+## What you can do with it
 
-```bash
-# Run with stdio transport (default)
-env 'ACCESS-TOKEN'=your-access-token API_BASE_URL=https://your-instance.com node apps/mcp/server.js
+With Kumbukum MCP, your AI assistant can:
 
-# Run with HTTP transport
-node apps/mcp/server.js --transport http --port 3002
-```
+- **Search across everything** — find relevant notes, memories, and URLs with one knowledge search
+- **Remember decisions and learnings** — store memories so context persists across sessions
+- **Create and update notes** — keep specs, docs, and meeting notes in one place
+- **Save and read URLs** — bookmark pages with extracted content for later retrieval
+- **Connect related knowledge** — link items into a graph and traverse connections
+- **Organize by project** — work within the right project automatically
+- **Ask in natural language** — use AI chat to search, create, and analyze
 
-See [Setup](./setup) for Claude Desktop configuration and [Tools](./tools) for the full tool reference.
+The server exposes **28 tools** across notes, memories, URLs, projects, graph, and search. See the [Tools reference](./tools) for the full list.
 
-For **Claude Code** (hooks for automatic search-before-work and store-after-work), see [Claude Code](./claude-code).
+## How it works
 
-For **Cursor** (global User Rules, project `.cursor/rules`, and MCP server naming), see [Cursor (IDE)](./cursor-ide).
+1. **Connect once** — add the Kumbukum MCP server to your AI client.
+2. **Authenticate** — sign in with OAuth (recommended) or a personal access token.
+3. **Ask in natural language** — tell your assistant what you need ("save this decision", "what did we decide about auth?").
+4. **Kumbukum runs the tool** — the request executes securely against your account, respecting your permissions.
+5. **Get results back** — your assistant returns the answer and keeps the context for next time.
 
-## Tool Categories
+## Supported AI clients
 
-| Category | Tools | Description |
-| -------- | ----- | ----------- |
-| Notes    | 6     | Create, read, update, delete, list, search notes |
-| Memories | 9     | Store, recall, search, CRUD memories + tags + knowledge search + AI chat |
-| URLs     | 6     | Save, list, search, read, update, delete URLs |
-| Projects | 2     | List and get projects |
-| Graph    | 5     | Create/delete links, get graph, traverse connections |
+Kumbukum MCP works with any MCP-compatible client, including:
+
+- Claude Desktop & Claude.ai
+- Claude Code
+- Cursor
+- VS Code (with Copilot)
+- ChatGPT
+- Windsurf
+- Codex CLI
+
+## Next steps
+
+- **[Setup & Authentication](./setup)** — connect your client with OAuth or a token
+- **[Tools](./tools)** — the full reference for all 28 tools
+- **[Claude Code](./claude-code)** — hooks for automatic search-before-work and store-after-work
+- **[Cursor (IDE)](./cursor-ide)** — global User Rules and project rules
+- **[Agent configuration](./agents)** — the `AGENTS.md` / `CLAUDE.md` template

@@ -26,6 +26,7 @@ export default defineConfig({
             { text: 'Guide', link: '/guide/' },
             { text: 'Cloud', link: '/cloud/' },
             { text: 'Self-Hosted', link: '/selfhosted/' },
+            { text: 'MCP', link: '/mcp/' },
             {
                 text: 'API Reference',
                 items: [
@@ -33,7 +34,6 @@ export default defineConfig({
                     { text: 'Authentication', link: '/api/authentication' },
                 ],
             },
-            { text: 'MCP', link: '/mcp/' },
         ],
 
         sidebar: {
