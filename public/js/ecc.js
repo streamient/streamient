@@ -389,6 +389,8 @@
 			if (options?.showMove) {
 				var moveDropdown = buildBodyMoveDropdown(email);
 				if (moveDropdown) replyActions.appendChild(moveDropdown);
+				var trashBtn = buildBodyTrashButton(email);
+				if (trashBtn) replyActions.appendChild(trashBtn);
 			}
 
 			var controls = document.createElement('div');
@@ -786,11 +788,26 @@
 		return wrap;
 	}
 
+	function buildBodyTrashButton(email) {
+		if (!email?._id) return null;
+		// Don't offer "move to trash" when already viewing a trashed email.
+		if (email.in_trash === true) return null;
+		var btn = document.createElement('button');
+		btn.type = 'button';
+		btn.className = 'btn btn-outline-secondary btn-sm';
+		btn.innerHTML = kkIcon('delete', 'me-1') + '<span>Trash</span>';
+		btn.addEventListener('click', function () {
+			trashCurrentEmail();
+		});
+		return btn;
+	}
+
 	async function moveCurrentEmail(mailbox) {
 		var email = selectedEmail;
 		if (!email?._id) return;
 		var target = MAILBOX_ACTIONS.find(function (item) { return item.slug === mailbox; });
 		if (!target) return;
+		var id = emailId(email);
 		try {
 			if (email.in_trash) {
 				await api('POST', '/trash/batch/restore', {
@@ -799,11 +816,33 @@
 			}
 			await api('PUT', '/emails/' + email._id, { mailbox: mailbox });
 			showSuccess('Email moved to ' + target.name);
-			var id = emailId(email);
-			await loadLabels();
-			await selectEmail(id);
+			// Optimistically drop the moved email from the list, return to it, and
+			// let the socket-driven update (email:updated -> applyEmailSocketUpdate)
+			// reconcile once Typesense re-indexes. Avoid an immediate list reload,
+			// which would re-read stale Typesense data and re-show the moved email.
+			removeEmailFromList(id);
+			backToListView();
+			loadLabels().catch(function () {});
 		} catch (err) {
 			showError(err.message || 'Failed to move email');
+		}
+	}
+
+	async function trashCurrentEmail() {
+		var email = selectedEmail;
+		if (!email?._id || email.in_trash === true) return;
+		var id = emailId(email);
+		try {
+			// Reuse the same trash mechanism the list view uses.
+			await api('POST', '/batch/delete', { type: 'emails', ids: [email._id] });
+			showSuccess('Email moved to trash');
+			// Optimistically drop from the list and return to it; the socket-driven
+			// update reconciles once Typesense re-indexes (no stale list reload).
+			removeEmailFromList(id);
+			backToListView();
+			loadLabels().catch(function () {});
+		} catch (err) {
+			showError(err.message || 'Failed to move email to trash');
 		}
 	}
 
