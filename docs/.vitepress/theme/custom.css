@@ -1,0 +1,43 @@
+/* Turn the HTTP-method badge (GET/POST/PUT/DELETE) in the OpenAPI sidebar
+   into a small colour-coded dot. The method colour comes from the
+   .OAMethodBadge--{method} class; we just shrink the badge to a circle and
+   hide its text so the eye can follow each operation down the list. */
+.OASidebarItem-badge {
+    flex: none;
+    width: 7px;
+    height: 7px;
+    min-width: 7px;
+    padding: 0;
+    border-radius: 9999px;
+    font-size: 0;
+    line-height: 0;
+    overflow: hidden;
+    color: transparent;
+}
+
+/* Operation description text: smaller font, comfortable line-height,
+   and proper left alignment. */
+.OAPath .OAMarkdown.oa-doc {
+    font-size: 0.85rem;
+    line-height: 1.55;
+    text-align: left;
+}
+
+/* "Try" panel (right column) section headers — Authorization, Variables,
+   Server (<summary>) and Samples (<h2>) — are oversized relative to the
+   rest of the panel. Scale them down so all three match.
+   The <summary> font-size/weight is set by a Vue-scoped rule
+   `.OAPlaygroundParameters>details>summary[data-v-…]` (specificity 0,2,2;
+   1.125rem / 700), so we need a 3-class selector (0,3,2) to override it —
+   without depending on the volatile data-v hash. Matches the Samples h2. */
+.OAPath .OAPathContentEnd .OAPlaygroundParameters > details > summary {
+    font-size: 1rem;
+    font-weight: 600;
+}
+.OAPath .OAPathContentEnd h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-top: 1.25rem;
+    padding-top: 0;
+    border-top: none;
+}

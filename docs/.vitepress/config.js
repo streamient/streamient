@@ -31,13 +31,7 @@ export default defineConfig({
             { text: 'Cloud', link: '/cloud/' },
             { text: 'Self-Hosted', link: '/selfhosted/' },
             { text: 'MCP', link: '/mcp/' },
-            {
-                text: 'API Reference',
-                items: [
-                    { text: 'Overview', link: '/api/' },
-                    { text: 'Authentication', link: '/api/authentication' },
-                ],
-            },
+            { text: 'API', link: '/api/' },
         ],
 
         sidebar: {
@@ -121,12 +115,12 @@ export default defineConfig({
                     ],
                 },
                 {
-                    text: 'OpenAPI Reference',
-                    collapsed: true,
-                    items: sidebar.generateSidebarGroups().map(group => ({
-                        ...group,
-                        collapsed: true,
-                    })),
+                    text: 'OpenAPI',
+                    items: sidebar.generateSidebarGroups()
+                        .slice()
+                        .sort((a, b) => a.text.localeCompare(b.text))
+                        // collapsed: true → collapsed by default but expandable
+                        .map(group => ({ ...group, collapsed: true })),
                 },
             ],
             '/mcp/': [
