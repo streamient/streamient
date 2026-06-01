@@ -1,6 +1,14 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
+function safeAccessTokens(access_tokens = []) {
+	return access_tokens.map((access_token) => ({
+		_id: access_token._id,
+		name: access_token.name,
+		created_at: access_token.created_at,
+	}));
+}
+
 const userSchema = new mongoose.Schema(
 	{
 		email: { type: String, required: true, unique: true, lowercase: true, trim: true },
@@ -58,8 +66,11 @@ userSchema.methods.toSafe = function () {
 	delete obj.password;
 	delete obj.totp_secret;
 	delete obj.verification_token;
+	delete obj.password_reset_token;
+	delete obj.password_reset_expires;
 	delete obj.stripe_customer_id;
 	delete obj.stripe_subscription_id;
+	if (Array.isArray(obj.access_tokens)) obj.access_tokens = safeAccessTokens(obj.access_tokens);
 	return obj;
 };
 
