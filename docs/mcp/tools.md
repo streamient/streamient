@@ -1,6 +1,6 @@
 # MCP Tools Reference
 
-All 38 tools available in the Kumbukum MCP server. Use `search_knowledge` first when you want the fastest path to relevant context across notes, memories, URLs, and pages. Parameters marked with `*` are required.
+All 44 tools available in the Kumbukum MCP server. Use `search_knowledge` first when you want the fastest path to relevant context across notes, memories, URLs, and pages. Parameters marked with `*` are required.
 
 ## Notes
 

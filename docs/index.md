@@ -28,7 +28,7 @@ features:
     - title: AI Chat
       details: Search, analyze, and manage your shared memory system with natural language.
     - title: MCP Server
-      details: 28 tools for Claude Desktop and other LLM clients via Model Context Protocol.
+      details: 44 tools for Claude Desktop and other LLM clients via Model Context Protocol.
     - title: Browser Extension
       details: Save notes and URLs from anywhere, plus an email side panel for Gmail, Outlook, and Fastmail. Chrome only.
     - title: Bidirectional Git Sync

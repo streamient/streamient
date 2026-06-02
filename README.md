@@ -33,7 +33,7 @@ Kumbukum gives you a shared, searchable, editable memory layer that sits between
 - **URLs** — saved pages with extracted content and optional full-site crawling
 - **Knowledge Graph** — manual, tag-based, and semantic links between items
 - **AI Chat** — search and manage knowledge with natural language
-- **MCP Server** — 28 tools for notes, memories, URLs, projects, graph, and search
+- **MCP Server** — 44 tools for notes, memories, URLs, projects, graph, and search
 - **Browser Extension** — save notes and URLs from anywhere
 - **Bidirectional Git Sync** — sync project knowledge to and from Git repositories
 
@@ -184,7 +184,7 @@ Useful scripts:
 
 Kumbukum includes a built-in [Model Context Protocol](https://modelcontextprotocol.io/) server with:
 
-- **28 tools** across notes, memories, URLs, projects, graph, search, and AI chat
+- **44 tools** across notes, memories, URLs, projects, graph, search, and AI chat
 - **Shared memory across tools** so Claude Desktop, Cursor, and others pull from the same context
 - **Three transports** — stdio, SSE, and Streamable HTTP
 - **Token-based auth** via `Authorization: Bearer`, `access-token`, or stdio env vars

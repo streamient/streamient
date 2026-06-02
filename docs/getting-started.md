@@ -48,5 +48,5 @@ To rotate outbound mail across several SMTP servers, set `SMTP_SERVERS` to a JSO
 ## Next Steps
 
 - [API Reference](/api/) — REST API for notes, memories, URLs, and search
-- [MCP Server](/mcp/) — 28 tools for Claude Desktop and other LLM clients
+- [MCP Server](/mcp/) — 44 tools for Claude Desktop and other LLM clients
 - [Knowledge Graph](/guide/graph) — Connect your data with manual, tag-based, and semantic links

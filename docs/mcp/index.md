@@ -20,7 +20,7 @@ With Kumbukum MCP, your AI assistant can:
 - **Organize by project** — work within the right project automatically
 - **Ask in natural language** — use AI chat to search, create, and analyze
 
-The server exposes **28 tools** across notes, memories, URLs, projects, graph, and search. See the [Tools reference](./tools) for the full list.
+The server exposes **44 tools** across notes, memories, URLs, projects, graph, and search. See the [Tools reference](./tools) for the full list.
 
 ## How it works
 
@@ -45,7 +45,7 @@ Kumbukum MCP works with any MCP-compatible client, including:
 ## Next steps
 
 - **[Setup & Authentication](./setup)** — connect your client with OAuth or a token
-- **[Tools](./tools)** — the full reference for all 28 tools
+- **[Tools](./tools)** — the full reference for all 44 tools
 - **[Claude Code](./claude-code)** — hooks for automatic search-before-work and store-after-work
 - **[Cursor (IDE)](./cursor-ide)** — global User Rules and project rules
 - **[Agent configuration](./agents)** — the `AGENTS.md` / `CLAUDE.md` template
