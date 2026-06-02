@@ -83,6 +83,22 @@ describe('oauth helpers', () => {
 		assert.equal(parsed.resource, 'http://localhost:3002/mcp');
 	});
 
+	it('parses a valid authorization request for the MCP app-profile resource', () => {
+		const parsed = parseAuthorizationRequest({
+			client_id: 'https://example.com/oauth/client.json',
+			redirect_uri: 'http://127.0.0.1:3000/callback',
+			response_type: 'code',
+			scope: 'mcp:read mcp:email',
+			state: 'abc123',
+			code_challenge: 'challenge',
+			code_challenge_method: 'S256',
+			resource: 'http://localhost:3002/mcp/app',
+		});
+
+		assert.deepEqual(parsed.scopes, ['mcp:email', 'mcp:read']);
+		assert.equal(parsed.resource, 'http://localhost:3002/mcp/app');
+	});
+
 	it('rejects authorization requests for unknown resources', () => {
 		assert.throws(
 			() => parseAuthorizationRequest({
@@ -140,6 +156,21 @@ describe('oauth helpers', () => {
 		assert.equal(payload.host_id, 'host-1');
 		assert.equal(payload.client_id, 'client-1');
 		assert.equal(payload.aud, 'http://localhost:3002/mcp');
+	});
+
+	it('signs and verifies MCP access tokens for the app-profile audience', () => {
+		const token = signMcpAccessToken({
+			userId: 'user-1',
+			tenantId: 'tenant-1',
+			host_id: 'host-1',
+			clientId: 'client-1',
+			scopes: ['mcp:read'],
+			audience: 'http://localhost:3002/mcp/app',
+		});
+
+		const payload = verifyMcpAccessToken(token);
+		assert.equal(payload.sub, 'user-1');
+		assert.equal(payload.aud, 'http://localhost:3002/mcp/app');
 	});
 
 	it('accepts metadata clients that list extra grant types when authorization_code is supported', async () => {

@@ -6,7 +6,7 @@ import { startTestServer, createTestClient } from './helpers/test-server.js';
 import { FIXTURES } from './helpers/fixtures.js';
 
 describe('MCP Server — Streamable HTTP transport', () => {
-    let server, client;
+    let server, client, appClient;
 
     before(async () => {
         const api = createMockApi({
@@ -15,10 +15,12 @@ describe('MCP Server — Streamable HTTP transport', () => {
         });
         server = await startTestServer(api);
         client = await createTestClient(server.url);
+        appClient = await createTestClient(server.appUrl);
     });
 
     after(async () => {
         try { await client?.close(); } catch {}
+        try { await appClient?.close(); } catch {}
         await server?.close();
     });
 
@@ -39,6 +41,16 @@ describe('MCP Server — Streamable HTTP transport', () => {
         it('should list all 33 tools', async () => {
             const { tools } = await client.listTools();
             assert.equal(tools.length, 33);
+        });
+
+        it('should list the app-profile tools at /mcp/app', async () => {
+            const { tools } = await appClient.listTools();
+            const names = tools.map((t) => t.name);
+            assert.equal(tools.length, 32);
+            assert.equal(names.includes('chat'), false);
+            for (const name of ['ingest_email', 'read_email', 'list_emails', 'search_emails', 'get_email_thread', 'delete_email']) {
+                assert.ok(names.includes(name), `missing email tool: ${name}`);
+            }
         });
 
         it('should include expected tool names', async () => {

@@ -1,6 +1,6 @@
 # Kumbukum MCP Server
 
-Connect your AI tools to Kumbukum with the Model Context Protocol (MCP) — an open standard that lets AI assistants work directly with your notes, memories, saved URLs, projects, and knowledge graph.
+Connect your AI tools to Kumbukum with the Model Context Protocol (MCP) — an open standard that lets AI assistants work directly with your notes, memories, saved URLs, emails, projects, and knowledge graph.
 
 Instead of copying context between tools, your assistant reads and writes the same shared memory layer your team already trusts — across sessions, projects, and clients.
 
@@ -12,15 +12,18 @@ MCP is an open standard, developed by Anthropic, that creates a universal bridge
 
 With Kumbukum MCP, your AI assistant can:
 
-- **Search across everything** — find relevant notes, memories, and URLs with one knowledge search
+- **Search across everything** — find relevant notes, memories, URLs, emails, and pages with one knowledge search
 - **Remember decisions and learnings** — store memories so context persists across sessions
 - **Create and update notes** — keep specs, docs, and meeting notes in one place
 - **Save and read URLs** — bookmark pages with extracted content for later retrieval
+- **Search and read emails** — retrieve email records, inspect threads, and keep email context available to AI clients
 - **Connect related knowledge** — link items into a graph and traverse connections
 - **Organize by project** — work within the right project automatically
 - **Ask in natural language** — use AI chat to search, create, and analyze
 
-The server exposes **44 tools** across notes, memories, URLs, projects, graph, and search. See the [Tools reference](./tools) for the full list.
+The server exposes **44 tools** across notes, memories, URLs, emails, projects, graph, git sync, and search. See the [Tools reference](./tools) for the full list.
+
+Public app submissions can use the curated `/mcp/app` endpoint on the same server. It exposes the explicit tools and hides broad chat orchestration.
 
 ## How it works
 

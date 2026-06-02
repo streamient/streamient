@@ -1,6 +1,6 @@
 # MCP Tools Reference
 
-All 44 tools available in the Kumbukum MCP server. Use `search_knowledge` first when you want the fastest path to relevant context across notes, memories, URLs, and pages. Parameters marked with `*` are required.
+All 44 tools available in the Kumbukum MCP server. Use `search_knowledge` first when you want the fastest path to relevant context across notes, memories, URLs, emails, and pages. Parameters marked with `*` are required.
 
 ## Notes
 
@@ -128,6 +128,8 @@ Returns lean hits with metadata and bounded `excerpt` fields where searchable bo
 ### `chat`
 AI chat with intent classification — search, create items, or analyze. Maintains context across messages.
 
+The `/mcp/app` app profile hides this broad chat tool and exposes the explicit search/read/write tools instead.
+
 | Parameter         | Type   | Required |
 | ----------------- | ------ | -------- |
 | `query`           | string | yes      |
@@ -182,6 +184,56 @@ Update a saved URL.
 
 ### `delete_url`
 Delete a saved URL by ID.
+
+| Parameter | Type   | Required |
+| --------- | ------ | -------- |
+| `id`      | string | yes      |
+
+## Emails
+
+### `ingest_email`
+Ingest an email into the knowledge base from raw RFC822 content or a parsed email payload.
+
+| Parameter      | Type   | Required | Description                     |
+| -------------- | ------ | -------- | ------------------------------- |
+| `project_id`   | string | no       | Project ID (default: auto)      |
+| `raw_email`    | string | no       | Raw RFC822 email content        |
+| `parsed_email` | object | no       | Pre-parsed email payload        |
+
+### `read_email`
+Read an email by ID.
+
+| Parameter | Type   | Required |
+| --------- | ------ | -------- |
+| `id`      | string | yes      |
+
+### `list_emails`
+List emails, optionally filtered by project.
+
+| Parameter    | Type   | Required |
+| ------------ | ------ | -------- |
+| `project_id` | string | no       |
+| `page`       | number | no       |
+| `limit`      | number | no       |
+
+### `search_emails`
+Search emails using semantic/text search.
+Returns lean hits with metadata and a bounded `excerpt`; use `read_email` for full email content.
+
+| Parameter  | Type   | Required |
+| ---------- | ------ | -------- |
+| `query`    | string | yes      |
+| `per_page` | number | no       |
+
+### `get_email_thread`
+Get the message thread linked by message IDs and references.
+
+| Parameter | Type   | Required |
+| --------- | ------ | -------- |
+| `id`      | string | yes      |
+
+### `delete_email`
+Delete an email by ID.
 
 | Parameter | Type   | Required |
 | --------- | ------ | -------- |

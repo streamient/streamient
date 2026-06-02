@@ -29,7 +29,7 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
     "mcpServers": {
         "kumbukum": {
             "command": "npx",
-            "args": ["-y", "mcp-remote", "https://app.kumbukum.com/mcp"],
+            "args": ["-y", "mcp-remote", "https://mcp.kumbukum.com/mcp"],
             "env": {
                 "ACCESS-TOKEN": "your-access-token"
             }
@@ -65,7 +65,7 @@ When a client needs approval, Kumbukum shows a simple OAuth consent screen in th
 Point your client at the Cloud MCP endpoint — that's all an OAuth-capable client needs:
 
 ```
-https://app.kumbukum.com/mcp
+https://mcp.kumbukum.com/mcp
 ```
 
 The client discovers Kumbukum's OAuth endpoints from this URL automatically, opens Kumbukum in your browser, and asks you to approve access. No issuer or token setup required.
@@ -79,6 +79,8 @@ node apps/mcp/server.js --transport http --port 3002
 ```
 
 The server will listen at `http://localhost:3002/mcp` for Streamable HTTP connections and `http://localhost:3002/sse` for SSE connections.
+
+For public app-store submissions, the same server also exposes `http://localhost:3002/mcp/app`. This endpoint uses the curated app profile and hides broad tools such as `chat` while keeping the explicit email search/read tools.
 
 Set `MCP_BASE_URL` to the public base URL that serves the MCP server so OAuth resource metadata and audience checks use the correct value.
 
@@ -95,14 +97,18 @@ Personal access tokens are still accepted for backward compatibility via `Author
 
 ## ChatGPT / OpenAI connector setup
 
-If ChatGPT or another OpenAI connector discovers OAuth automatically, you usually only need to enter the MCP server URL:
+If ChatGPT or another OpenAI connector discovers OAuth automatically, you usually only need to enter the MCP server URL.
+
+For public OpenAI app submission, use the curated app-profile endpoint:
 
 :::tabs
 == Cloud
-`https://app.kumbukum.com/mcp`
+`https://mcp.kumbukum.com/mcp/app`
 == Self-Hosted
-`https://mcp.your-instance.com/mcp`
+`https://mcp.your-instance.com/mcp/app`
 :::
+
+For regular ChatGPT developer-mode testing or general MCP clients, use the full endpoint: `https://mcp.kumbukum.com/mcp`.
 
 The extra OAuth values are only needed when the client asks for them explicitly.
 
@@ -140,23 +146,23 @@ Use these values if ChatGPT asks for manual OAuth fields:
 == Cloud
 | ChatGPT field | Value |
 | --- | --- |
-| MCP Server URL | `https://app.kumbukum.com/mcp` |
+| MCP Server URL | `https://mcp.kumbukum.com/mcp/app` |
 | Auth URL | `https://app.kumbukum.com/oauth/authorize` |
 | Token URL | `https://app.kumbukum.com/oauth/token` |
 | Registration URL | `https://app.kumbukum.com/oauth/register` |
 | Authorization server base | `https://app.kumbukum.com/oauth` |
-| Resource | `https://app.kumbukum.com/mcp` or `https://app.kumbukum.com` |
+| Resource | `https://mcp.kumbukum.com/mcp/app` |
 | OIDC | Leave disabled unless the client explicitly requires it |
 
 == Self-Hosted
 | ChatGPT field | Value |
 | --- | --- |
-| MCP Server URL | `https://mcp.your-instance.com/mcp` |
+| MCP Server URL | `https://mcp.your-instance.com/mcp/app` |
 | Auth URL | `https://your-instance.com/oauth/authorize` |
 | Token URL | `https://your-instance.com/oauth/token` |
 | Registration URL | `https://your-instance.com/oauth/register` |
 | Authorization server base | `https://your-instance.com/oauth` |
-| Resource | `https://mcp.your-instance.com` or `https://mcp.your-instance.com/mcp` |
+| Resource | `https://mcp.your-instance.com/mcp/app` |
 | OIDC | Leave disabled unless the client explicitly requires it |
 :::
 

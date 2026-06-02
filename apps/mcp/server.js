@@ -15,6 +15,7 @@ import { emailTools } from './tools/emails.js';
 import { projectTools } from './tools/projects.js';
 import { graphTools } from './tools/graph.js';
 import { gitSyncTools } from './tools/git_sync.js';
+import { applyToolProfile, MCP_TOOL_PROFILES } from './tools/profile.js';
 import { MCP_SERVER_INSTRUCTIONS } from './instructions.js';
 import { buildProtectedResourceMetadata, getRequestExternalBaseUrl } from '../../modules/oauth.js';
 import { recordException, setupExpressErrorHandler as setupOtelExpressErrorHandler } from './tracing.js';
@@ -110,7 +111,7 @@ function logMcpRequest(event) {
   log[level]({ event: 'mcp_request', ...event }, `mcp ${event?.transport || 'http'} ${event?.method || ''}`.trim());
 }
 
-async function createServer(apiAuth, { projectId, oauthClientId, cacheKey } = {}) {
+async function createServer(apiAuth, { projectId, oauthClientId, cacheKey, toolProfile = MCP_TOOL_PROFILES.FULL } = {}) {
   const api = new ApiClient(API_BASE_URL, apiAuth);
   const bootstrapStart = Date.now();
   const { defaultProjectId, emailFeatureEnabled, gitSyncFeatureEnabled, cacheHit } =
@@ -124,7 +125,7 @@ async function createServer(apiAuth, { projectId, oauthClientId, cacheKey } = {}
   });
 
   // Register all tools, wrapping handlers to inject MCP client identity
-  const allTools = {
+  let allTools = {
     ...noteTools(api, defaultProjectId),
     ...memoryTools(api, defaultProjectId),
     ...urlTools(api, defaultProjectId),
@@ -133,6 +134,7 @@ async function createServer(apiAuth, { projectId, oauthClientId, cacheKey } = {}
     ...graphTools(api),
     ...(gitSyncFeatureEnabled ? gitSyncTools(api, defaultProjectId) : {}),
   };
+  allTools = applyToolProfile(allTools, toolProfile);
 
   for (const [name, tool] of Object.entries(allTools)) {
     const originalHandler = tool.handler;
@@ -215,6 +217,11 @@ if (transportArg === '--stdio' || !transportArg) {
 	res.json(buildProtectedResourceMetadata(`${baseUrl}/mcp`));
   });
 
+  app.get('/.well-known/oauth-protected-resource/mcp/app', (req, res) => {
+	const baseUrl = getRequestExternalBaseUrl(req);
+	res.json(buildProtectedResourceMetadata(`${baseUrl}/mcp/app`));
+  });
+
   app.get('/.well-known/oauth-protected-resource/sse', (req, res) => {
 	const baseUrl = getRequestExternalBaseUrl(req);
 	res.json(buildProtectedResourceMetadata(`${baseUrl}/sse`));
@@ -289,8 +296,8 @@ if (transportArg === '--stdio' || !transportArg) {
   });
 
   // Streamable HTTP endpoint — stateless (no sessions)
-  // Shared handler for all methods on /mcp
-  const handleMcp = async (req, res) => {
+  // Shared handler for all methods on /mcp and /mcp/app
+  const handleMcp = (toolProfile = MCP_TOOL_PROFILES.FULL) => async (req, res) => {
     const requestStart = Date.now();
     const mcpMethod = req.body?.method || req.method;
     try {
@@ -302,7 +309,7 @@ if (transportArg === '--stdio' || !transportArg) {
       const projectId = req.headers['x-project-id'] || null;
       const oauthClientId = authContext.tokenClaims?.client_name || authContext.tokenClaims?.client_id || null;
       const cacheKey = `${authKeyForContext(authContext)}:${projectId || ''}`;
-      const { server, bootstrapMs, bootstrapCacheHit } = await createServer(authContext.apiAuth, { projectId, oauthClientId, cacheKey });
+      const { server, bootstrapMs, bootstrapCacheHit } = await createServer(authContext.apiAuth, { projectId, oauthClientId, cacheKey, toolProfile });
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
@@ -312,6 +319,7 @@ if (transportArg === '--stdio' || !transportArg) {
         duration_ms: Date.now() - requestStart,
         bootstrap_ms: bootstrapMs,
         bootstrap_cache_hit: bootstrapCacheHit,
+        tool_profile: toolProfile,
         success: true,
       });
     } catch (err) {
@@ -321,6 +329,7 @@ if (transportArg === '--stdio' || !transportArg) {
         method: mcpMethod,
         transport: 'streamable-http',
         duration_ms: Date.now() - requestStart,
+        tool_profile: toolProfile,
         success: false,
         error: err?.message || 'unknown',
       });
@@ -330,13 +339,19 @@ if (transportArg === '--stdio' || !transportArg) {
     }
   };
 
-  app.post('/mcp', handleMcp);
-  app.get('/mcp', handleMcp);
-  app.delete('/mcp', handleMcp);
+  const handleFullMcp = handleMcp(MCP_TOOL_PROFILES.FULL);
+  const handleAppMcp = handleMcp(MCP_TOOL_PROFILES.APP);
+
+  app.post('/mcp', handleFullMcp);
+  app.get('/mcp', handleFullMcp);
+  app.delete('/mcp', handleFullMcp);
+  app.post('/mcp/app', handleAppMcp);
+  app.get('/mcp/app', handleAppMcp);
+  app.delete('/mcp/app', handleAppMcp);
 
   setupOtelExpressErrorHandler(app);
 
   app.listen(PORT, () => {
-    log.info({ port: PORT, sse: `/sse`, http: `/mcp` }, `Kumbukum MCP server running on port ${PORT}`);
+    log.info({ port: PORT, sse: `/sse`, http: `/mcp`, app: `/mcp/app` }, `Kumbukum MCP server running on port ${PORT}`);
   });
 }

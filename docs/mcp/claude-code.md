@@ -257,7 +257,7 @@ Follow [MCP setup](./setup) to configure the Kumbukum MCP server. Claude Code re
     "mcpServers": {
         "kumbukum": {
             "command": "npx",
-            "args": ["-y", "mcp-remote", "https://app.kumbukum.com/mcp"],
+            "args": ["-y", "mcp-remote", "https://mcp.kumbukum.com/mcp"],
             "env": {
                 "ACCESS-TOKEN": "your-access-token"
             }

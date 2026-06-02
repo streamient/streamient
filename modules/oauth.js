@@ -99,16 +99,20 @@ export function getRequestExternalBaseUrl(req) {
 
 export function getRequestMcpResourceUrls(req) {
 	const base = getRequestExternalBaseUrl(req);
-	return [base, `${base}/mcp`, `${base}/sse`];
+	return [base, `${base}/mcp`, `${base}/mcp/app`, `${base}/sse`];
 }
 
 export function getRequestProtectedResourceMetadataUrl(req) {
-	const path = req?.path === '/mcp' || req?.path === '/sse' ? req.path : '';
+	const path = ['/mcp', '/mcp/app', '/sse'].includes(req?.path) ? req.path : '';
 	return `${getRequestExternalBaseUrl(req)}/.well-known/oauth-protected-resource${path}`;
 }
 
 export function getMcpEndpointUrl() {
 	return `${getMcpBaseUrl()}/mcp`;
+}
+
+export function getMcpAppEndpointUrl() {
+	return `${getMcpBaseUrl()}/mcp/app`;
 }
 
 export function getMcpSseUrl() {
@@ -122,7 +126,7 @@ export function getProtectedResourceMetadataUrl(path = '') {
 
 export function getAllowedMcpResourceUrls(extraResources = []) {
 	const base = getMcpBaseUrl();
-	return [...new Set([base, getMcpEndpointUrl(), getMcpSseUrl(), ...extraResources].map((url) => normalizeBaseUrl(url)).filter(Boolean))];
+	return [...new Set([base, getMcpEndpointUrl(), getMcpAppEndpointUrl(), getMcpSseUrl(), ...extraResources].map((url) => normalizeBaseUrl(url)).filter(Boolean))];
 }
 
 export function getAuthorizationServerMetadataUrls() {

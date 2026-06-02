@@ -12,26 +12,27 @@ import { memoryTools } from '../../../apps/mcp/tools/memory.js';
 import { urlTools } from '../../../apps/mcp/tools/urls.js';
 import { emailTools } from '../../../apps/mcp/tools/emails.js';
 import { projectTools } from '../../../apps/mcp/tools/projects.js';
+import { applyToolProfile, MCP_TOOL_PROFILES } from '../../../apps/mcp/tools/profile.js';
 
 import { FIXTURES } from './fixtures.js';
 
 /**
  * Create an MCP server instance wired to the given api mock.
  */
-export function buildMcpServer(api) {
+export function buildMcpServer(api, { toolProfile = MCP_TOOL_PROFILES.FULL } = {}) {
     const defaultProjectId = FIXTURES.project._id;
     const server = new McpServer({
         name: 'kumbukum-test',
         version: '0.0.1',
     });
 
-    const allTools = {
+    const allTools = applyToolProfile({
         ...noteTools(api, defaultProjectId),
         ...memoryTools(api, defaultProjectId),
         ...urlTools(api, defaultProjectId),
         ...emailTools(api, defaultProjectId),
         ...projectTools(api),
-    };
+    }, toolProfile);
 
     for (const [name, tool] of Object.entries(allTools)) {
         server.tool(name, tool.description, tool.inputSchema, tool.annotations, tool.handler);
@@ -69,12 +70,35 @@ export async function startTestServer(api) {
         await transport.handleRequest(req, res, req.body);
     });
 
+    app.post('/mcp/app', async (req, res) => {
+        const server = buildMcpServer(api, { toolProfile: MCP_TOOL_PROFILES.APP });
+        const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+        await server.connect(transport);
+        await transport.handleRequest(req, res, req.body);
+    });
+
+    app.get('/mcp/app', async (req, res) => {
+        const server = buildMcpServer(api, { toolProfile: MCP_TOOL_PROFILES.APP });
+        const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+        await server.connect(transport);
+        await transport.handleRequest(req, res, req.body);
+    });
+
+    app.delete('/mcp/app', async (req, res) => {
+        const server = buildMcpServer(api, { toolProfile: MCP_TOOL_PROFILES.APP });
+        const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+        await server.connect(transport);
+        await transport.handleRequest(req, res, req.body);
+    });
+
     return new Promise((resolve) => {
         const httpServer = app.listen(0, () => {
             const port = httpServer.address().port;
             const url = `http://127.0.0.1:${port}/mcp`;
+            const appUrl = `http://127.0.0.1:${port}/mcp/app`;
             resolve({
                 url,
+                appUrl,
                 port,
                 app,
                 close: () => new Promise((r) => httpServer.close(r)),
