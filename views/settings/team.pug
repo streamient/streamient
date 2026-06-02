@@ -14,23 +14,22 @@ block settings
 						.card-body
 							h5.card-title.mb-3
 								!= icon('userAdd', 'me-2')
-								| Invite teammate
-							form#team-invite-form
+								| Add teammate
+							form#team-member-form
 								.mb-3
-									label.form-label(for="team-invite-email") Email
-									input.form-control.form-control-sm#team-invite-email(type="email" required placeholder="teammate@example.com")
+									label.form-label(for="team-member-name") Name
+									input.form-control.form-control-sm#team-member-name(type="text" required autocomplete="name")
 								.mb-3
-									label.form-label(for="team-invite-name") Name (optional)
-									input.form-control.form-control-sm#team-invite-name(type="text" placeholder="Teammate name")
+									label.form-label(for="team-member-email") Email
+									input.form-control.form-control-sm#team-member-email(type="email" required autocomplete="email")
+								.mb-3
+									label.form-label(for="team-member-password") Password
+									input.form-control.form-control-sm#team-member-password(type="password" required minlength="8" autocomplete="new-password")
+								.form-check.mb-3
+									input.form-check-input#team-member-send-welcome(type="checkbox" checked)
+									label.form-check-label(for="team-member-send-welcome") Send welcome email
 								.text-end
-									button.btn.btn-outline-secondary.btn-sm(type="submit") Send invite
-								//- .small.text-muted.mt-2 Invites join as members by default.
-					.card
-						.card-body
-							h5.card-title.mb-3
-								!= icon('email', 'me-2')
-								| Pending invites
-							#team-invites-list.text-muted Loading invites…
+									button.btn.btn-primary.btn-sm(type="submit") Add user
 				.col-lg-7
 					.card
 						.card-body

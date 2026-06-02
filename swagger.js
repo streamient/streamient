@@ -62,25 +62,6 @@ const swaggerSpec = {
                     },
                 },
             },
-            TeamInvite: {
-                type: 'object',
-                properties: {
-                    _id: { type: 'string' },
-                    email: { type: 'string' },
-                    name: { type: 'string' },
-                    role: { type: 'string', enum: ['admin', 'member'] },
-                    expires_at: { type: 'string', format: 'date-time' },
-                    createdAt: { type: 'string', format: 'date-time' },
-                    invited_by: {
-                        type: 'object',
-                        properties: {
-                            _id: { type: 'string' },
-                            name: { type: 'string' },
-                            email: { type: 'string' },
-                        },
-                    },
-                },
-            },
             OAuthClient: {
                 type: 'object',
                 properties: {
@@ -770,6 +751,33 @@ const swaggerSpec = {
                     },
                 },
             },
+            post: {
+                tags: ['Team'],
+                summary: 'Create a team member',
+                description: 'Creates an active team member directly with email/password login access. New members are added with the member role.',
+                requestBody: {
+                    required: true,
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    name: { type: 'string' },
+                                    email: { type: 'string', format: 'email' },
+                                    password: { type: 'string', minLength: 8 },
+                                    send_welcome_email: { type: 'boolean', default: true },
+                                },
+                                required: ['name', 'email', 'password'],
+                            },
+                        },
+                    },
+                },
+                responses: {
+                    201: { description: 'Created', content: { 'application/json': { schema: { type: 'object', properties: { member: { $ref: '#/components/schemas/TeamMember' } } } } } },
+                    400: { description: 'Invalid member payload', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+                    403: { description: 'Team admin access required', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+                },
+            },
         },
         '/team/members/{id}': {
             patch: {
@@ -803,60 +811,6 @@ const swaggerSpec = {
                 },
             },
         },
-        '/team/invites': {
-            get: {
-                tags: ['Team'],
-                summary: 'List pending team invites',
-                responses: {
-                    200: {
-                        description: 'OK',
-                        content: {
-                            'application/json': {
-                                schema: {
-                                    type: 'object',
-                                    properties: {
-                                        invites: { type: 'array', items: { $ref: '#/components/schemas/TeamInvite' } },
-                                    },
-                                },
-                            },
-                        },
-                    },
-                },
-            },
-            post: {
-                tags: ['Team'],
-                summary: 'Create a team invite',
-                requestBody: {
-                    required: true,
-                    content: {
-                        'application/json': {
-                            schema: {
-                                type: 'object',
-                                properties: {
-                                    email: { type: 'string' },
-                                    name: { type: 'string' },
-                                },
-                                required: ['email'],
-                            },
-                        },
-                    },
-                },
-                responses: {
-                    201: { description: 'Created', content: { 'application/json': { schema: { type: 'object', properties: { invite: { $ref: '#/components/schemas/TeamInvite' } } } } } },
-                },
-            },
-        },
-        '/team/invites/{id}': {
-            delete: {
-                tags: ['Team'],
-                summary: 'Cancel a pending team invite',
-                parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-                responses: {
-                    200: { description: 'Deleted', content: { 'application/json': { schema: { type: 'object', properties: { message: { type: 'string' } } } } } },
-                },
-            },
-        },
-
         '/oauth/config': {
             get: {
                 tags: ['OAuth'],

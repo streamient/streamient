@@ -5,25 +5,33 @@
 	if (page.dataset.canManageTeam !== 'true') return;
 
 	var currentUserId = page.dataset.userId;
-	var inviteForm = document.getElementById('team-invite-form');
+	var memberForm = document.getElementById('team-member-form');
 	var membersList = document.getElementById('team-members-list');
-	var invitesList = document.getElementById('team-invites-list');
 
 	loadMembers();
-	loadInvites();
 
-	inviteForm?.addEventListener('submit', async function (e) {
+	memberForm?.addEventListener('submit', async function (e) {
 		e.preventDefault();
-		var email = document.getElementById('team-invite-email').value.trim();
-		var name = document.getElementById('team-invite-name').value.trim();
+		var name = document.getElementById('team-member-name').value.trim();
+		var email = document.getElementById('team-member-email').value.trim();
+		var password = document.getElementById('team-member-password').value;
+		var sendWelcomeEmail = document.getElementById('team-member-send-welcome').checked;
 
+		if (!name) return showError('Name is required');
 		if (!email) return showError('Email is required');
+		if (password.length < 8) return showError('Password must be at least 8 characters');
 
 		try {
-			await api('POST', '/team/invites', { email: email, name: name });
-			inviteForm.reset();
-			showSuccess('Invite sent');
-			loadInvites();
+			await api('POST', '/team/members', {
+				name: name,
+				email: email,
+				password: password,
+				send_welcome_email: sendWelcomeEmail,
+			});
+			memberForm.reset();
+			document.getElementById('team-member-send-welcome').checked = true;
+			showSuccess('User added');
+			loadMembers();
 		} catch (err) {
 			showError(err.message);
 		}
@@ -78,45 +86,6 @@
 			});
 		} catch (err) {
 			membersList.innerHTML = '<p class="text-danger mb-0">Failed to load team members.</p>';
-		}
-	}
-
-	async function loadInvites() {
-		try {
-			var data = await api('GET', '/team/invites');
-			var invites = Array.isArray(data.invites) ? data.invites : [];
-			if (!invites.length) {
-				invitesList.innerHTML = '<p class="text-muted mb-0">No pending invites.</p>';
-				return;
-			}
-
-			invitesList.innerHTML = '<div class="list-group">' + invites.map(function (invite) {
-				var subtitle = (invite.name ? escapeHtml(invite.name) + ' · ' : '') + escapeHtml(invite.email);
-				return '<div class="list-group-item d-flex justify-content-between align-items-start gap-3">'
-					+ '<div class="flex-grow-1">'
-						+ '<div class="fw-semibold">Pending invite</div>'
-						+ '<div class="text-muted small">' + subtitle + '</div>'
-						+ '<small class="text-muted">Expires ' + escapeHtml(new Date(invite.expires_at).toLocaleDateString()) + '</small>'
-					+ '</div>'
-					+ '<button class="btn btn-sm btn-outline-danger team-cancel-invite" data-id="' + invite._id + '">' + kkIcon('close') + '</button>'
-				+ '</div>';
-			}).join('') + '</div>';
-
-			invitesList.querySelectorAll('.team-cancel-invite').forEach(function (button) {
-				button.addEventListener('click', async function () {
-					var confirmed = await confirmAction('Cancel invite', 'This invitation link will stop working.');
-					if (!confirmed) return;
-					try {
-						await api('DELETE', '/team/invites/' + button.dataset.id);
-						showSuccess('Invite cancelled');
-						loadInvites();
-					} catch (err) {
-						showError(err.message);
-					}
-				});
-			});
-		} catch (err) {
-			invitesList.innerHTML = '<p class="text-danger mb-0">Failed to load invites.</p>';
 		}
 	}
 

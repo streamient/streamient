@@ -1400,31 +1400,13 @@ router.get('/team/members', requireTeamManager, async (req, res) => {
 	}
 });
 
-router.get('/team/invites', requireTeamManager, async (req, res) => {
+router.post('/team/members', requireTeamManager, async (req, res) => {
 	try {
-		const invites = await teamService.listTeamInvites(req.host_id);
-		res.json({ invites });
+		const member = await teamService.createTeamMember(req.userId, req.host_id, req.body, auditCtx(req));
+		res.status(201).json({ member });
 	} catch (err) {
-		log.error({ err }, 'List team invites error');
-		res.status(500).json({ error: 'Failed to list team invites' });
-	}
-});
-
-router.post('/team/invites', requireTeamManager, async (req, res) => {
-	try {
-		const invite = await teamService.createTeamInvite(req.userId, req.host_id, req.body, auditCtx(req));
-		res.status(201).json({
-			invite: {
-				_id: invite._id,
-				email: invite.email,
-				name: invite.name,
-				role: invite.role,
-				expires_at: invite.expires_at,
-			},
-		});
-	} catch (err) {
-		log.error({ err }, 'Create team invite error');
-		res.status(400).json({ error: err.message || 'Failed to create invite' });
+		log.error({ err }, 'Create team member error');
+		res.status(400).json({ error: err.message || 'Failed to create team member' });
 	}
 });
 
@@ -1458,16 +1440,6 @@ router.delete('/team/members/:id', requireTeamManager, async (req, res) => {
 	} catch (err) {
 		log.error({ err }, 'Remove team member error');
 		res.status(400).json({ error: err.message || 'Failed to remove member' });
-	}
-});
-
-router.delete('/team/invites/:id', requireTeamManager, async (req, res) => {
-	try {
-		await teamService.cancelTeamInvite(req.host_id, req.params.id, { userId: req.userId, role: req.memberRole }, auditCtx(req));
-		res.json({ message: 'Invite cancelled' });
-	} catch (err) {
-		log.error({ err }, 'Cancel team invite error');
-		res.status(400).json({ error: err.message || 'Failed to cancel invite' });
 	}
 });
 

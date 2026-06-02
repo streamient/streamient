@@ -8,7 +8,6 @@ import { generateToken } from '../middleware/auth.js';
 import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail, sendTrialSignupNotificationEmail } from '../services/email_service.js';
 import { sendMagicLink, isMagicLinkValid, verifyMagicLink } from '../services/magic_link_service.js';
 import * as passkeyService from '../services/passkey_service.js';
-import * as teamService from '../services/team_service.js';
 import config from '../config.js';
 import { createLogger } from '../modules/logger.js';
 
@@ -576,114 +575,14 @@ router.post('/passkey/login/verify', async (req, res) => {
 	}
 });
 
-// ---- Team Invite ----
+// ---- Team Invite (disabled) ----
 
-router.get('/team-invite', async (req, res) => {
-	try {
-		const token = typeof req.query.token === 'string' ? req.query.token : '';
-		if (!token) return res.render('auth/team_invite', { error: 'Invite token required', invite: null });
-
-		const invite = await teamService.getInviteByToken(token);
-		if (!invite) {
-			return res.render('auth/team_invite', { error: 'This invitation has expired or has already been used.', invite: null });
-		}
-
-		const existingUser = await User.findOne({ email: invite.email }).select('name email').lean();
-		const currentUser = req.session?.userId
-			? await User.findById(req.session.userId).select('name email').lean()
-			: null;
-
-		res.render('auth/team_invite', {
-			invite,
-			token,
-			existingUser,
-			currentUser,
-			wrongUser: currentUser && currentUser.email.toLowerCase() !== invite.email.toLowerCase(),
-			suggestedName: existingUser?.name || invite.name || invite.email.split('@')[0],
-		});
-	} catch (err) {
-		log.error({ err }, 'Team invite page error');
-		res.render('auth/team_invite', { error: 'Something went wrong. Please try again.', invite: null });
-	}
-});
-
-router.post('/team-invite', async (req, res) => {
-	try {
-		const token = typeof req.body.token === 'string' ? req.body.token : '';
-		const invite = await teamService.getInviteByToken(token);
-		if (!invite) {
-			return res.render('auth/team_invite', { error: 'This invitation has expired or has already been used.', invite: null });
-		}
-
-		let user = null;
-		if (req.session?.userId) {
-			user = await User.findById(req.session.userId).select('name email');
-			if (!user) {
-				return res.render('auth/team_invite', { error: 'Signed-in user not found.', invite, token });
-			}
-			if (user.email.toLowerCase() !== invite.email.toLowerCase()) {
-				return res.render('auth/team_invite', {
-					error: `This invite is for ${invite.email}. Please sign in with that email address first.`,
-					invite,
-					token,
-					currentUser: user,
-					wrongUser: true,
-					existingUser: { name: user.name, email: user.email },
-					suggestedName: invite.name || invite.email.split('@')[0],
-				});
-			}
-		} else {
-			const existingUser = await User.findOne({ email: invite.email }).select('name email');
-			if (existingUser) {
-				return res.render('auth/team_invite', {
-					error: 'This email already has a Kumbukum account. Please sign in first, then open the invite link again.',
-					invite,
-					token,
-					existingUser,
-					suggestedName: existingUser.name || invite.name || invite.email.split('@')[0],
-				});
-			}
-
-			const password = typeof req.body.password === 'string' ? req.body.password.trim() : '';
-			if (password.length < 8) {
-				return res.render('auth/team_invite', {
-					error: 'Please choose a password with at least 8 characters.',
-					invite,
-					token,
-					suggestedName: req.body.name?.trim() || invite.name || invite.email.split('@')[0],
-				});
-			}
-
-			const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
-			user = await User.create({
-				email: invite.email,
-				password,
-				name: name || invite.name || invite.email.split('@')[0],
-				is_verified: true,
-				is_active: true,
-			});
-		}
-
-		await teamService.acceptTeamInvite(invite, user, {
-			channel: 'web',
-			ip: req.ip,
-			user_agent: req.headers['user-agent'],
-		});
-
-		await hydrateSessionForUser(req, user, invite.tenant._id.toString(), invite.host_id);
-		await recordSuccessfulLogin(req, user);
-		return res.redirect('/dashboard');
-	} catch (err) {
-		log.error({ err, user_id: req.session?.userId }, 'Team invite accept error');
-		const token = typeof req.body.token === 'string' ? req.body.token : '';
-		const invite = token ? await teamService.getInviteByToken(token) : null;
-		return res.render('auth/team_invite', {
-			error: err.message || 'Failed to accept invitation.',
-			invite,
-			token,
-			suggestedName: req.body.name?.trim() || invite?.name || invite?.email?.split('@')[0],
-		});
-	}
+router.all('/team-invite', (req, res) => {
+	res.status(410).format({
+		html: () => res.send('Team invites are disabled. Team admins add users directly from Settings > My Team.'),
+		json: () => res.json({ error: 'Team invites are disabled' }),
+		default: () => res.type('text').send('Team invites are disabled'),
+	});
 });
 
 // ---- Logout ----
