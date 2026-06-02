@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { mcpJson } from './output.js';
 
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
 const REACHES_GIT = { readOnlyHint: false, destructiveHint: false, openWorldHint: true };
@@ -18,7 +19,7 @@ export function gitSyncTools(api, defaultProjectId) {
 			handler: async (args) => {
 				const pid = args.project_id || defaultProjectId;
 				const { repos } = await api.get(`/projects/${pid}/git-repos`);
-				return { content: [{ type: 'text', text: JSON.stringify(repos, null, 2), cache_control: { type: 'ephemeral' } }] };
+				return mcpJson(repos, { ephemeral: true });
 			},
 		},
 
@@ -43,7 +44,7 @@ export function gitSyncTools(api, defaultProjectId) {
 				const { project_id, ...rest } = args;
 				const pid = project_id || defaultProjectId;
 				const { repo } = await api.post(`/projects/${pid}/git-repos`, rest);
-				return { content: [{ type: 'text', text: JSON.stringify(repo, null, 2) }] };
+				return mcpJson(repo);
 			},
 		},
 
@@ -69,7 +70,7 @@ export function gitSyncTools(api, defaultProjectId) {
 			handler: async (args) => {
 				const { id, ...rest } = args;
 				const { repo } = await api.put(`/git-repos/${id}`, rest);
-				return { content: [{ type: 'text', text: JSON.stringify(repo, null, 2) }] };
+				return mcpJson(repo);
 			},
 		},
 
@@ -105,7 +106,7 @@ export function gitSyncTools(api, defaultProjectId) {
 			},
 			handler: async (args) => {
 				const status = await api.get(`/git-repos/${args.id}/status`);
-				return { content: [{ type: 'text', text: JSON.stringify(status, null, 2), cache_control: { type: 'ephemeral' } }] };
+				return mcpJson(status, { ephemeral: true });
 			},
 		},
 	};

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { mcpJson } from './output.js';
 import { slimSearchResults } from './search-results.js';
 
 const MCP_KNOWLEDGE_SEARCH_EXCLUDE_FIELDS = {
@@ -32,7 +33,7 @@ export function memoryTools(api, defaultProjectId) {
       handler: async (args) => {
         const { project_id, ...rest } = args;
         const { memory } = await api.post('/memories', { ...rest, project: project_id || defaultProjectId });
-        return { content: [{ type: 'text', text: JSON.stringify(memory, null, 2) }] };
+        return mcpJson(memory);
       },
     },
 
@@ -53,7 +54,7 @@ export function memoryTools(api, defaultProjectId) {
             exclude_fields: MCP_MEMORY_SEARCH_EXCLUDE_FIELDS,
           },
         });
-        return { content: [{ type: 'text', text: JSON.stringify(slimSearchResults(results, { type: 'memory' }), null, 2), cache_control: { type: 'ephemeral' } }] };
+        return mcpJson(slimSearchResults(results, { type: 'memory' }), { ephemeral: true });
       },
     },
 
@@ -74,7 +75,7 @@ export function memoryTools(api, defaultProjectId) {
             exclude_fields: MCP_MEMORY_SEARCH_EXCLUDE_FIELDS,
           },
         });
-        return { content: [{ type: 'text', text: JSON.stringify(slimSearchResults(results, { type: 'memory' }), null, 2), cache_control: { type: 'ephemeral' } }] };
+        return mcpJson(slimSearchResults(results, { type: 'memory' }), { ephemeral: true });
       },
     },
 
@@ -86,7 +87,7 @@ export function memoryTools(api, defaultProjectId) {
       },
       handler: async (args) => {
         const { memory } = await api.get(`/memories/${args.id}`);
-        return { content: [{ type: 'text', text: JSON.stringify(memory, null, 2), cache_control: { type: 'ephemeral' } }] };
+        return mcpJson(memory, { ephemeral: true });
       },
     },
 
@@ -102,7 +103,7 @@ export function memoryTools(api, defaultProjectId) {
       handler: async (args) => {
         const { id, ...data } = args;
         const { memory } = await api.put(`/memories/${id}`, data);
-        return { content: [{ type: 'text', text: JSON.stringify(memory, null, 2) }] };
+        return mcpJson(memory);
       },
     },
 
@@ -124,7 +125,7 @@ export function memoryTools(api, defaultProjectId) {
       inputSchema: {},
       handler: async () => {
         const { tags } = await api.get('/memories/tags/suggest');
-        return { content: [{ type: 'text', text: JSON.stringify(tags, null, 2), cache_control: { type: 'ephemeral' } }] };
+        return mcpJson(tags, { ephemeral: true });
       },
     },
 
@@ -145,7 +146,7 @@ export function memoryTools(api, defaultProjectId) {
             exclude_fields: MCP_KNOWLEDGE_SEARCH_EXCLUDE_FIELDS,
           },
         });
-        return { content: [{ type: 'text', text: JSON.stringify(slimSearchResults(results), null, 2), cache_control: { type: 'ephemeral' } }] };
+        return mcpJson(slimSearchResults(results), { ephemeral: true });
       },
     },
 
@@ -163,7 +164,7 @@ export function memoryTools(api, defaultProjectId) {
           conversation_id: args.conversation_id,
           project_id: args.project_id,
         });
-        return { content: [{ type: 'text', text: JSON.stringify(res, null, 2), cache_control: { type: 'ephemeral' } }] };
+        return mcpJson(res, { ephemeral: true });
       },
     },
   };

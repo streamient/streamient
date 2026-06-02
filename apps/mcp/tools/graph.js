@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { mcpJson } from './output.js';
 
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
 const WRITE_INTERNAL = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
@@ -21,7 +22,7 @@ export function graphTools(api) {
             },
             handler: async (args) => {
                 const { link } = await api.post('/links', args);
-                return { content: [{ type: 'text', text: JSON.stringify(link, null, 2) }] };
+                return mcpJson(link);
             },
         },
 
@@ -33,7 +34,7 @@ export function graphTools(api) {
             },
             handler: async (args) => {
                 const { links } = await api.get(`/links/${args.item_id}`);
-                return { content: [{ type: 'text', text: JSON.stringify(links, null, 2), cache_control: { type: 'ephemeral' } }] };
+                return mcpJson(links, { ephemeral: true });
             },
         },
 
@@ -53,7 +54,7 @@ export function graphTools(api) {
                 if (args.include_semantic !== undefined) params.set('include_semantic', args.include_semantic);
                 if (args.semantic_threshold !== undefined) params.set('semantic_threshold', args.semantic_threshold);
                 const data = await api.get(`/graph?${params.toString()}`);
-                return { content: [{ type: 'text', text: JSON.stringify(data, null, 2), cache_control: { type: 'ephemeral' } }] };
+                return mcpJson(data, { ephemeral: true });
             },
         },
 
@@ -71,17 +72,11 @@ export function graphTools(api) {
                     connectedIds.add(link.target_id.toString());
                 }
                 connectedIds.delete(args.item_id);
-                return {
-                    content: [{
-                        type: 'text',
-                        text: JSON.stringify({
-                            item_id: args.item_id,
-                            links,
-                            connected_item_ids: [...connectedIds],
-                        }, null, 2),
-                        cache_control: { type: 'ephemeral' },
-                    }],
-                };
+                return mcpJson({
+                    item_id: args.item_id,
+                    links,
+                    connected_item_ids: [...connectedIds],
+                }, { ephemeral: true });
             },
         },
 

@@ -62,7 +62,8 @@ describe('MCP Tools — Notes', () => {
         assert.equal(api.lastCall.method, 'GET');
         assert.ok(api.lastCall.path.includes(FIXTURES.note._id));
         const parsed = JSON.parse(result.content[0].text);
-        assert.equal(parsed._id, FIXTURES.note._id);
+        assert.equal(parsed.id, FIXTURES.note._id);
+        assert.equal(parsed.host_id, undefined);
     });
 
     // ── update_note ───────────────────────────────────────────────

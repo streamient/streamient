@@ -44,7 +44,8 @@ describe('MCP Tools — Emails', () => {
 		assert.equal(api.lastCall.path, '/emails');
 		assert.equal(api.lastCall.body.project, '507f1f77bcf86cd799439011');
 		const parsed = JSON.parse(result.content[0].text);
-		assert.ok(parsed._id);
+		assert.equal(parsed.id, EMAIL_FIXTURE._id);
+		assert.equal(parsed.message_id, undefined);
 	});
 
 	it('list_emails calls GET /emails with params', async () => {
@@ -52,7 +53,8 @@ describe('MCP Tools — Emails', () => {
 		assert.equal(api.lastCall.method, 'GET');
 		assert.ok(api.lastCall.path.startsWith('/emails?'));
 		const parsed = JSON.parse(result.content[0].text);
-		assert.equal(parsed[0]._id, EMAIL_FIXTURE._id);
+		assert.equal(parsed[0].id, EMAIL_FIXTURE._id);
+		assert.equal(parsed[0].message_id, undefined);
 	});
 
 	it('search_emails posts to /emails/search', async () => {
@@ -60,7 +62,8 @@ describe('MCP Tools — Emails', () => {
 		assert.equal(api.lastCall.method, 'POST');
 		assert.equal(api.lastCall.path, '/emails/search');
 		const parsed = JSON.parse(result.content[0].text);
-		assert.equal(parsed[0]._id, EMAIL_FIXTURE._id);
+		assert.equal(parsed[0].id, EMAIL_FIXTURE._id);
+		assert.equal(parsed[0].message_id, undefined);
 	});
 
 	it('search_emails passes optional per_page and requests searchable body fields for excerpts', async () => {

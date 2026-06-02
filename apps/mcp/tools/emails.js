@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { mcpJson } from './output.js';
 import { slimSearchResults } from './search-results.js';
 
 const MCP_EMAIL_SEARCH_EXCLUDE_FIELDS = 'embedding';
@@ -26,7 +27,7 @@ export function emailTools(api, defaultProjectId) {
 				if (args.raw_email) payload.raw_email = args.raw_email;
 				if (args.parsed_email) payload.parsed_email = args.parsed_email;
 				const { email } = await api.post('/emails', payload);
-				return { content: [{ type: 'text', text: JSON.stringify(email, null, 2) }] };
+				return mcpJson(email);
 			},
 		},
 
@@ -38,7 +39,7 @@ export function emailTools(api, defaultProjectId) {
 			},
 			handler: async (args) => {
 				const { email } = await api.get(`/emails/${args.id}`);
-				return { content: [{ type: 'text', text: JSON.stringify(email, null, 2), cache_control: { type: 'ephemeral' } }] };
+				return mcpJson(email, { ephemeral: true });
 			},
 		},
 
@@ -56,7 +57,7 @@ export function emailTools(api, defaultProjectId) {
 				if (args.page) params.set('page', args.page);
 				if (args.limit) params.set('limit', args.limit);
 				const { emails } = await api.get(`/emails?${params}`);
-				return { content: [{ type: 'text', text: JSON.stringify(emails, null, 2), cache_control: { type: 'ephemeral' } }] };
+				return mcpJson(emails, { ephemeral: true });
 			},
 		},
 
@@ -75,7 +76,7 @@ export function emailTools(api, defaultProjectId) {
 						exclude_fields: MCP_EMAIL_SEARCH_EXCLUDE_FIELDS,
 					},
 				});
-				return { content: [{ type: 'text', text: JSON.stringify(slimSearchResults(results, { type: 'emails' }), null, 2), cache_control: { type: 'ephemeral' } }] };
+				return mcpJson(slimSearchResults(results, { type: 'emails' }), { ephemeral: true });
 			},
 		},
 
@@ -87,7 +88,7 @@ export function emailTools(api, defaultProjectId) {
 			},
 			handler: async (args) => {
 				const { thread } = await api.get(`/emails/${args.id}/thread`);
-				return { content: [{ type: 'text', text: JSON.stringify(thread, null, 2), cache_control: { type: 'ephemeral' } }] };
+				return mcpJson(thread, { ephemeral: true });
 			},
 		},
 

@@ -97,7 +97,8 @@ describe('MCP Tools — Memory', () => {
         assert.equal(api.lastCall.method, 'GET');
         assert.ok(api.lastCall.path.includes(FIXTURES.memory._id));
         const parsed = JSON.parse(result.content[0].text);
-        assert.equal(parsed._id, FIXTURES.memory._id);
+        assert.equal(parsed.id, FIXTURES.memory._id);
+        assert.equal(parsed.host_id, undefined);
     });
 
     it('update_memory — calls PUT /memories/:id, excludes id from body', async () => {

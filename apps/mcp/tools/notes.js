@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { mcpJson } from './output.js';
 import { slimSearchResults } from './search-results.js';
 
 const MCP_NOTES_SEARCH_EXCLUDE_FIELDS = 'embedding';
@@ -24,7 +25,7 @@ export function noteTools(api, defaultProjectId) {
       handler: async (args) => {
         const { project_id, ...rest } = args;
         const { note } = await api.post('/notes', { ...rest, project: project_id || defaultProjectId });
-        return { content: [{ type: 'text', text: JSON.stringify(note, null, 2) }] };
+        return mcpJson(note);
       },
     },
 
@@ -36,7 +37,7 @@ export function noteTools(api, defaultProjectId) {
       },
       handler: async (args) => {
         const { note } = await api.get(`/notes/${args.id}`);
-        return { content: [{ type: 'text', text: JSON.stringify(note, null, 2), cache_control: { type: 'ephemeral' } }] };
+        return mcpJson(note, { ephemeral: true });
       },
     },
 
@@ -53,7 +54,7 @@ export function noteTools(api, defaultProjectId) {
       handler: async (args) => {
         const { id, ...data } = args;
         const { note } = await api.put(`/notes/${id}`, data);
-        return { content: [{ type: 'text', text: JSON.stringify(note, null, 2) }] };
+        return mcpJson(note);
       },
     },
 
@@ -83,7 +84,7 @@ export function noteTools(api, defaultProjectId) {
         if (args.page) params.set('page', args.page);
         if (args.limit) params.set('limit', args.limit);
         const { notes } = await api.get(`/notes?${params}`);
-        return { content: [{ type: 'text', text: JSON.stringify(notes, null, 2), cache_control: { type: 'ephemeral' } }] };
+        return mcpJson(notes, { ephemeral: true });
       },
     },
 
@@ -104,7 +105,7 @@ export function noteTools(api, defaultProjectId) {
             exclude_fields: MCP_NOTES_SEARCH_EXCLUDE_FIELDS,
           },
         });
-        return { content: [{ type: 'text', text: JSON.stringify(slimSearchResults(results, { type: 'notes' }), null, 2), cache_control: { type: 'ephemeral' } }] };
+        return mcpJson(slimSearchResults(results, { type: 'notes' }), { ephemeral: true });
       },
     },
   };

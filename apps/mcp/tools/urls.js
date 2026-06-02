@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { mcpJson } from './output.js';
 import { slimSearchResults } from './search-results.js';
 
 const MCP_URL_SEARCH_EXCLUDE_FIELDS = 'embedding';
@@ -25,7 +26,7 @@ export function urlTools(api, defaultProjectId) {
       handler: async (args) => {
         const { project_id, ...rest } = args;
         const { url } = await api.post('/urls', { ...rest, project: project_id || defaultProjectId });
-        return { content: [{ type: 'text', text: JSON.stringify(url, null, 2) }] };
+        return mcpJson(url);
       },
     },
 
@@ -43,7 +44,7 @@ export function urlTools(api, defaultProjectId) {
         if (args.page) params.set('page', args.page);
         if (args.limit) params.set('limit', args.limit);
         const { urls } = await api.get(`/urls?${params}`);
-        return { content: [{ type: 'text', text: JSON.stringify(urls, null, 2), cache_control: { type: 'ephemeral' } }] };
+        return mcpJson(urls, { ephemeral: true });
       },
     },
 
@@ -62,7 +63,7 @@ export function urlTools(api, defaultProjectId) {
             exclude_fields: MCP_URL_SEARCH_EXCLUDE_FIELDS,
           },
         });
-        return { content: [{ type: 'text', text: JSON.stringify(slimSearchResults(results, { type: 'urls' }), null, 2), cache_control: { type: 'ephemeral' } }] };
+        return mcpJson(slimSearchResults(results, { type: 'urls' }), { ephemeral: true });
       },
     },
 
@@ -74,7 +75,7 @@ export function urlTools(api, defaultProjectId) {
       },
       handler: async (args) => {
         const { url } = await api.get(`/urls/${args.id}`);
-        return { content: [{ type: 'text', text: JSON.stringify(url, null, 2), cache_control: { type: 'ephemeral' } }] };
+        return mcpJson(url, { ephemeral: true });
       },
     },
 
@@ -90,7 +91,7 @@ export function urlTools(api, defaultProjectId) {
       handler: async (args) => {
         const { id, ...data } = args;
         const { url } = await api.put(`/urls/${id}`, data);
-        return { content: [{ type: 'text', text: JSON.stringify(url, null, 2) }] };
+        return mcpJson(url);
       },
     },
 

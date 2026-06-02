@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { mcpJson } from './output.js';
 
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
 const WRITE_INTERNAL = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
@@ -15,7 +16,7 @@ export function projectTools(api) {
       inputSchema: {},
       handler: async () => {
         const { projects } = await api.get('/projects');
-        return { content: [{ type: 'text', text: JSON.stringify(projects, null, 2), cache_control: { type: 'ephemeral' } }] };
+        return mcpJson(projects, { ephemeral: true });
       },
     },
 
@@ -27,7 +28,7 @@ export function projectTools(api) {
       },
       handler: async (args) => {
         const { project } = await api.get(`/projects/${args.id}`);
-        return { content: [{ type: 'text', text: JSON.stringify(project, null, 2) }] };
+        return mcpJson(project);
       },
     },
 
@@ -40,7 +41,7 @@ export function projectTools(api) {
       },
       handler: async (args) => {
         const { project } = await api.post('/projects', args);
-        return { content: [{ type: 'text', text: JSON.stringify(project, null, 2) }] };
+        return mcpJson(project);
       },
     },
 
@@ -55,7 +56,7 @@ export function projectTools(api) {
       handler: async (args) => {
         const { id, ...data } = args;
         const { project } = await api.put(`/projects/${id}`, data);
-        return { content: [{ type: 'text', text: JSON.stringify(project, null, 2) }] };
+        return mcpJson(project);
       },
     },
 
@@ -77,7 +78,7 @@ export function projectTools(api) {
       inputSchema: {},
       handler: async () => {
         const counts = await api.get('/counts');
-        return { content: [{ type: 'text', text: JSON.stringify(counts, null, 2), cache_control: { type: 'ephemeral' } }] };
+        return mcpJson(counts, { ephemeral: true });
       },
     },
   };

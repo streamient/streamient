@@ -89,7 +89,8 @@ describe('MCP Tools — URLs', () => {
         assert.equal(api.lastCall.method, 'GET');
         assert.ok(api.lastCall.path.includes(FIXTURES.url._id));
         const parsed = JSON.parse(result.content[0].text);
-        assert.equal(parsed._id, FIXTURES.url._id);
+        assert.equal(parsed.id, FIXTURES.url._id);
+        assert.equal(parsed.host_id, undefined);
     });
 
     it('update_url — calls PUT /urls/:id, excludes id from body', async () => {
