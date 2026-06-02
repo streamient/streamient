@@ -1,5 +1,9 @@
 import { z } from 'zod';
 
+const READ_ONLY = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
+const WRITE_INTERNAL = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
+const OVERWRITE_INTERNAL = { readOnlyHint: false, destructiveHint: true, openWorldHint: false };
+
 /**
  * MCP tool definitions: Projects
  */
@@ -7,6 +11,7 @@ export function projectTools(api) {
   return {
     list_projects: {
       description: 'List all projects',
+      annotations: READ_ONLY,
       inputSchema: {},
       handler: async () => {
         const { projects } = await api.get('/projects');
@@ -16,6 +21,7 @@ export function projectTools(api) {
 
     get_project: {
       description: 'Get a project by ID',
+      annotations: READ_ONLY,
       inputSchema: {
         id: z.string().describe('Project ID'),
       },
@@ -27,6 +33,7 @@ export function projectTools(api) {
 
     create_project: {
       description: 'Create a new project',
+      annotations: WRITE_INTERNAL,
       inputSchema: {
         name: z.string().describe('Project name'),
         color: z.string().optional().describe('Project color (hex code)'),
@@ -39,6 +46,7 @@ export function projectTools(api) {
 
     update_project: {
       description: 'Update a project',
+      annotations: OVERWRITE_INTERNAL,
       inputSchema: {
         id: z.string().describe('Project ID'),
         name: z.string().optional().describe('Project name'),
@@ -53,6 +61,7 @@ export function projectTools(api) {
 
     delete_project: {
       description: 'Delete a project by ID (cannot delete the default project)',
+      annotations: OVERWRITE_INTERNAL,
       inputSchema: {
         id: z.string().describe('Project ID'),
       },
@@ -64,6 +73,7 @@ export function projectTools(api) {
 
     get_project_counts: {
       description: 'Get per-project document counts (notes, memories, URLs)',
+      annotations: READ_ONLY,
       inputSchema: {},
       handler: async () => {
         const counts = await api.get('/counts');

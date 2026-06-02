@@ -2,6 +2,9 @@ import { z } from 'zod';
 import { slimSearchResults } from './search-results.js';
 
 const MCP_NOTES_SEARCH_EXCLUDE_FIELDS = 'embedding';
+const READ_ONLY = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
+const WRITE_INTERNAL = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
+const OVERWRITE_INTERNAL = { readOnlyHint: false, destructiveHint: true, openWorldHint: false };
 
 /**
  * MCP tool definitions: Notes
@@ -10,6 +13,7 @@ export function noteTools(api, defaultProjectId) {
   return {
     create_note: {
       description: 'Create a new note in a project',
+      annotations: WRITE_INTERNAL,
       inputSchema: {
         title: z.string().describe('Note title'),
         content: z.string().optional().describe('Note content (HTML)'),
@@ -26,6 +30,7 @@ export function noteTools(api, defaultProjectId) {
 
     read_note: {
       description: 'Read a note by ID',
+      annotations: READ_ONLY,
       inputSchema: {
         id: z.string().describe('Note ID'),
       },
@@ -37,6 +42,7 @@ export function noteTools(api, defaultProjectId) {
 
     update_note: {
       description: 'Update a note',
+      annotations: OVERWRITE_INTERNAL,
       inputSchema: {
         id: z.string().describe('Note ID'),
         title: z.string().optional(),
@@ -53,6 +59,7 @@ export function noteTools(api, defaultProjectId) {
 
     delete_note: {
       description: 'Delete a note by ID',
+      annotations: OVERWRITE_INTERNAL,
       inputSchema: {
         id: z.string().describe('Note ID'),
       },
@@ -64,6 +71,7 @@ export function noteTools(api, defaultProjectId) {
 
     list_notes: {
       description: 'List notes, optionally filtered by project',
+      annotations: READ_ONLY,
       inputSchema: {
         project_id: z.string().optional().describe('Project ID filter'),
         page: z.number().optional(),
@@ -81,6 +89,7 @@ export function noteTools(api, defaultProjectId) {
 
     search_notes: {
       description: 'Search notes using semantic/text search. Use only for specs, docs, ADRs, structured write-ups, or when search_knowledge results point to notes. Use per_page: 3 for first focused retrieval. Omit project_id to search across all projects.',
+      annotations: READ_ONLY,
       inputSchema: {
         query: z.string().describe('Search query'),
         project_id: z.string().optional().describe('Filter results to a specific project (optional; omit to search all projects)'),

@@ -34,7 +34,7 @@ export function buildMcpServer(api) {
     };
 
     for (const [name, tool] of Object.entries(allTools)) {
-        server.tool(name, tool.description, tool.inputSchema, tool.handler);
+        server.tool(name, tool.description, tool.inputSchema, tool.annotations, tool.handler);
     }
 
     return server;

@@ -70,5 +70,14 @@ describe('MCP Server — Streamable HTTP transport', () => {
                 assert.equal(tool.inputSchema.type, 'object', `tool ${tool.name} inputSchema.type should be "object"`);
             }
         });
+
+        it('every tool should include Apps SDK safety annotations', async () => {
+            const { tools } = await client.listTools();
+            for (const tool of tools) {
+                assert.equal(typeof tool.annotations?.readOnlyHint, 'boolean', `tool ${tool.name} missing readOnlyHint`);
+                assert.equal(typeof tool.annotations?.destructiveHint, 'boolean', `tool ${tool.name} missing destructiveHint`);
+                assert.equal(typeof tool.annotations?.openWorldHint, 'boolean', `tool ${tool.name} missing openWorldHint`);
+            }
+        });
     });
 });

@@ -1,5 +1,9 @@
 import { z } from 'zod';
 
+const READ_ONLY = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
+const REACHES_GIT = { readOnlyHint: false, destructiveHint: false, openWorldHint: true };
+const OVERWRITE_INTERNAL = { readOnlyHint: false, destructiveHint: true, openWorldHint: false };
+
 /**
  * MCP tool definitions: Git Sync
  */
@@ -7,6 +11,7 @@ export function gitSyncTools(api, defaultProjectId) {
 	return {
 		list_git_repos: {
 			description: 'List git repos configured for a project',
+			annotations: READ_ONLY,
 			inputSchema: {
 				project_id: z.string().optional().describe('Project ID (defaults to the default project)'),
 			},
@@ -19,6 +24,7 @@ export function gitSyncTools(api, defaultProjectId) {
 
 		add_git_repo: {
 			description: 'Add a git repository to sync with a project. Imports markdown files as notes/memories. Defaults to read-only (never writes back to the repo).',
+			annotations: REACHES_GIT,
 			inputSchema: {
 				repo_url: z.string().describe('HTTPS git repo URL'),
 				name: z.string().optional().describe('Friendly label for this repo'),
@@ -43,6 +49,7 @@ export function gitSyncTools(api, defaultProjectId) {
 
 		update_git_repo: {
 			description: 'Update settings of a configured git repo',
+			annotations: OVERWRITE_INTERNAL,
 			inputSchema: {
 				id: z.string().describe('Git repo ID'),
 				name: z.string().optional(),
@@ -68,6 +75,7 @@ export function gitSyncTools(api, defaultProjectId) {
 
 		remove_git_repo: {
 			description: 'Remove a git repo configuration and its local working copy',
+			annotations: OVERWRITE_INTERNAL,
 			inputSchema: {
 				id: z.string().describe('Git repo ID'),
 			},
@@ -79,6 +87,7 @@ export function gitSyncTools(api, defaultProjectId) {
 
 		trigger_git_sync: {
 			description: 'Manually trigger a sync for a git repo (pull from git; push to git only in read/write mode)',
+			annotations: REACHES_GIT,
 			inputSchema: {
 				id: z.string().describe('Git repo ID'),
 			},
@@ -90,6 +99,7 @@ export function gitSyncTools(api, defaultProjectId) {
 
 		git_sync_status: {
 			description: 'Get the current sync status of a git repo',
+			annotations: READ_ONLY,
 			inputSchema: {
 				id: z.string().describe('Git repo ID'),
 			},

@@ -2,6 +2,10 @@ import { z } from 'zod';
 import { slimSearchResults } from './search-results.js';
 
 const MCP_URL_SEARCH_EXCLUDE_FIELDS = 'embedding';
+const READ_ONLY = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
+const WRITE_INTERNAL = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
+const OVERWRITE_INTERNAL = { readOnlyHint: false, destructiveHint: true, openWorldHint: false };
+const FETCH_EXTERNAL = { readOnlyHint: false, destructiveHint: false, openWorldHint: true };
 
 /**
  * MCP tool definitions: URLs
@@ -10,6 +14,7 @@ export function urlTools(api, defaultProjectId) {
   return {
     save_url: {
       description: 'Save a URL — extracts content automatically. Set crawl_enabled to true for full-site crawling.',
+      annotations: FETCH_EXTERNAL,
       inputSchema: {
         url: z.string().describe('The URL to save'),
         title: z.string().optional().describe('Optional custom title'),
@@ -26,6 +31,7 @@ export function urlTools(api, defaultProjectId) {
 
     list_urls: {
       description: 'List saved URLs, optionally filtered by project',
+      annotations: READ_ONLY,
       inputSchema: {
         project_id: z.string().optional().describe('Project ID filter'),
         page: z.number().optional(),
@@ -43,6 +49,7 @@ export function urlTools(api, defaultProjectId) {
 
     search_urls: {
       description: 'Search saved URLs using semantic/text search',
+      annotations: READ_ONLY,
       inputSchema: {
         query: z.string().describe('Search query'),
         per_page: z.number().optional().describe('Results to return (recommended 3 for first retrieval)'),
@@ -61,6 +68,7 @@ export function urlTools(api, defaultProjectId) {
 
     read_url: {
       description: 'Read a saved URL by ID',
+      annotations: READ_ONLY,
       inputSchema: {
         id: z.string().describe('URL ID'),
       },
@@ -72,6 +80,7 @@ export function urlTools(api, defaultProjectId) {
 
     update_url: {
       description: 'Update a saved URL',
+      annotations: OVERWRITE_INTERNAL,
       inputSchema: {
         id: z.string().describe('URL ID'),
         title: z.string().optional(),
@@ -87,6 +96,7 @@ export function urlTools(api, defaultProjectId) {
 
     delete_url: {
       description: 'Delete a saved URL by ID',
+      annotations: OVERWRITE_INTERNAL,
       inputSchema: {
         id: z.string().describe('URL ID'),
       },

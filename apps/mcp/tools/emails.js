@@ -2,6 +2,9 @@ import { z } from 'zod';
 import { slimSearchResults } from './search-results.js';
 
 const MCP_EMAIL_SEARCH_EXCLUDE_FIELDS = 'embedding';
+const READ_ONLY = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
+const WRITE_INTERNAL = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
+const OVERWRITE_INTERNAL = { readOnlyHint: false, destructiveHint: true, openWorldHint: false };
 
 /**
  * MCP tool definitions: Emails
@@ -10,6 +13,7 @@ export function emailTools(api, defaultProjectId) {
 	return {
 		ingest_email: {
 			description: 'Ingest an email into the knowledge base (raw RFC822 or parsed payload)',
+			annotations: WRITE_INTERNAL,
 			inputSchema: {
 				project_id: z.string().optional().describe('Project ID (defaults to the default project)'),
 				raw_email: z.string().optional().describe('Raw RFC822 email content'),
@@ -28,6 +32,7 @@ export function emailTools(api, defaultProjectId) {
 
 		read_email: {
 			description: 'Read an email by ID',
+			annotations: READ_ONLY,
 			inputSchema: {
 				id: z.string().describe('Email ID'),
 			},
@@ -39,6 +44,7 @@ export function emailTools(api, defaultProjectId) {
 
 		list_emails: {
 			description: 'List emails, optionally filtered by project',
+			annotations: READ_ONLY,
 			inputSchema: {
 				project_id: z.string().optional().describe('Project ID filter'),
 				page: z.number().optional(),
@@ -56,6 +62,7 @@ export function emailTools(api, defaultProjectId) {
 
 		search_emails: {
 			description: 'Search emails using semantic/text search',
+			annotations: READ_ONLY,
 			inputSchema: {
 				query: z.string().describe('Search query'),
 				per_page: z.number().optional().describe('Results to return (recommended 3 for first retrieval)'),
@@ -74,6 +81,7 @@ export function emailTools(api, defaultProjectId) {
 
 		get_email_thread: {
 			description: 'Get the message thread linked by message_id/references',
+			annotations: READ_ONLY,
 			inputSchema: {
 				id: z.string().describe('Email ID'),
 			},
@@ -85,6 +93,7 @@ export function emailTools(api, defaultProjectId) {
 
 		delete_email: {
 			description: 'Delete an email by ID',
+			annotations: OVERWRITE_INTERNAL,
 			inputSchema: {
 				id: z.string().describe('Email ID'),
 			},

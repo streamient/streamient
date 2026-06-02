@@ -169,7 +169,7 @@ async function createServer(apiAuth, { projectId, oauthClientId, cacheKey } = {}
         throw err;
       }
     };
-    server.tool(name, tool.description, tool.inputSchema, wrappedHandler);
+    server.tool(name, tool.description, tool.inputSchema, tool.annotations, wrappedHandler);
   }
 
   return { server, bootstrapMs, bootstrapCacheHit: cacheHit };
