@@ -391,7 +391,6 @@
 		setText('oauth-resource-metadata', oauth.resource_metadata_url);
 		setText('oauth-auth-metadata', oauth.authorization_server_metadata_url);
 		renderOauthRegistrationMethods(oauth.client_registration || {});
-		renderOauthChatGptGuide(oauth);
 	}
 
 	function renderOauthRegistrationMethods(clientRegistration) {
@@ -400,22 +399,13 @@
 
 		var items = [];
 		if (clientRegistration.pre_registration_supported) {
-			items.push({
-				label: 'Pre-registration',
-				description: 'Create the OAuth client in Kumbukum first, then paste its client ID and optional secret into the external tool.',
-			});
+			items.push('Pre-registration');
 		}
 		if (clientRegistration.client_id_metadata_document_supported) {
-			items.push({
-				label: 'Client ID Metadata Documents',
-				description: 'Only use this if the client explicitly authenticates with a client metadata document URL as its client ID.',
-			});
+			items.push('Client ID Metadata Document');
 		}
 		if (clientRegistration.dynamic_registration_supported) {
-			items.push({
-				label: 'Dynamic Client Registration',
-				description: 'The client can register itself automatically with Kumbukum using the registration endpoint.',
-			});
+			items.push('Dynamic Client Registration');
 		}
 
 		if (!items.length) {
@@ -423,45 +413,9 @@
 			return;
 		}
 
-		badges.innerHTML = '<ul class="mb-0 ps-3">' + items.map(function (item) {
-			return '<li><strong>' + escapeHtml(item.label) + ':</strong> ' + escapeHtml(item.description) + '</li>';
-		}).join('') + '</ul>';
-	}
-
-	function renderOauthChatGptGuide(oauth) {
-		var container = document.getElementById('oauth-chatgpt-fields');
-		if (!container) return;
-
-		var issuer = oauth.issuer || '';
-		var authUrl = oauth.authorization_endpoint || '';
-		var tokenUrl = oauth.token_endpoint || '';
-		var registrationUrl = oauth.registration_endpoint || '';
-		var resource = oauth.mcp_base_url || oauth.mcp_endpoint || '';
-		var mcpEndpoint = oauth.mcp_endpoint || '';
-
-		container.innerHTML = ''
-			+ '<p class="small text-muted mb-3">If ChatGPT discovers OAuth automatically, you usually only need the MCP Server URL. The fields below are for manual entry when the connector asks for them.</p>'
-			+ '<div class="table-responsive">'
-			+ '<table class="table table-sm align-middle mb-3">'
-			+ '<thead><tr><th>ChatGPT field</th><th>What to put there</th></tr></thead>'
-			+ '<tbody>'
-			+ '<tr><td>MCP Server URL</td><td><code>' + escapeHtml(mcpEndpoint) + '</code></td></tr>'
-			+ '<tr><td>Registration method</td><td>User-Defined OAuth Client for manual setup, or Dynamic Client Registration if ChatGPT enables DCR.</td></tr>'
-			+ '<tr><td>Auth URL</td><td><code>' + escapeHtml(authUrl) + '</code></td></tr>'
-			+ '<tr><td>Token URL</td><td><code>' + escapeHtml(tokenUrl) + '</code></td></tr>'
-			+ '<tr><td>Registration URL</td><td><code>' + escapeHtml(registrationUrl) + '</code><div class="small text-muted">Only needed for Dynamic Client Registration.</div></td></tr>'
-			+ '<tr><td>Authorization server base</td><td><code>' + escapeHtml(issuer) + '</code></td></tr>'
-			+ '<tr><td>Resource</td><td><code>' + escapeHtml(resource) + '</code></td></tr>'
-			+ '<tr><td>OIDC</td><td>Leave disabled unless the client explicitly requires domain-claim OIDC. Kumbukum MCP auth does not need it.</td></tr>'
-			+ '</tbody>'
-			+ '</table>'
-			+ '</div>'
-			+ '<ul class="small text-muted ps-3 mb-0">'
-			+ '<li><strong>Callback URL:</strong> copy the callback URL shown by ChatGPT into Kumbukum\'s <em>Redirect URIs</em> field when creating a pre-registered OAuth client.</li>'
-			+ '<li><strong>OAuth Client ID:</strong> use the client ID from the Kumbukum OAuth client you create here.</li>'
-			+ '<li><strong>OAuth Client Secret:</strong> only fill this if you created a confidential client with <code>client_secret_post</code>. Leave it blank for public PKCE clients.</li>'
-			+ '<li><strong>Token endpoint auth method:</strong> use <code>none</code> for public PKCE clients or <code>client_secret_post</code> for confidential clients.</li>'
-			+ '</ul>';
+		badges.innerHTML = '<div class="d-flex flex-wrap gap-2">' + items.map(function (item) {
+			return '<span class="badge text-bg-secondary">' + escapeHtml(item) + '</span>';
+		}).join('') + '</div>';
 	}
 
 	function setText(id, value) {

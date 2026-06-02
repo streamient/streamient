@@ -25,34 +25,32 @@ block settings
 					h5.card-title
 						!= icon('shieldCheck', 'me-2')
 						| OAuth & Connected Apps
-					p.text-muted.mb-4 Standard OAuth 2.1 authorization for the HTTP MCP transport. StdIO continues to use environment-provided access tokens.
+					p.text-muted.mb-3 OAuth lets MCP clients connect to Kumbukum with your approval. Most clients only need the MCP endpoint; discovery handles the auth details.
+					.alert.alert-secondary.small.mb-4
+						span Paste the MCP endpoint into your client. Use the setup guide for ChatGPT/OpenAI fields, app submission, and manual OAuth values.
+						a.ms-1(href='/docs/mcp/setup#chatgpt-openai-connector' target='_blank' rel='noopener') Open setup guide
 
 					.row.g-3.mb-4
-						.col-md-6
-							.small.text-muted.mb-1 Issuer
-							code.small#oauth-issuer Loading…
-						.col-md-6
+						.col-12
 							.small.text-muted.mb-1 MCP Endpoint
 							code.small#oauth-mcp-endpoint Loading…
-					.row.g-3.mb-4
-						.col-md-6
-							.small.text-muted.mb-1 Resource Metadata
-							code.small#oauth-resource-metadata Loading…
-						.col-md-6
-							.small.text-muted.mb-1 Authorization Server Metadata
-							code.small#oauth-auth-metadata Loading…
 
-					h6.mb-2 Supported client registration methods
+					h6.mb-2 Supported registration methods
 					#oauth-registration-badges.small.text-muted.mb-3 Loading…
-					.alert.alert-secondary.small.mb-4
-						strong These are supported client capabilities, not buttons.
-						|  Use the method your MCP client asks for.
-						a.ms-1(href='/docs/mcp/setup#chatgpt-openai-connector' target='_blank' rel='noopener') Open the setup guide
 
 					details.mb-4
-						summary.fw-semibold ChatGPT / OpenAI connector field guide
-						.pt-3#oauth-chatgpt-fields
-							.small.text-muted Loading field mapping…
+						summary.fw-semibold Advanced OAuth metadata
+						.pt-3
+							.row.g-3
+								.col-md-6
+									.small.text-muted.mb-1 Issuer
+									code.small#oauth-issuer Loading…
+								.col-md-6
+									.small.text-muted.mb-1 Resource Metadata
+									code.small#oauth-resource-metadata Loading…
+								.col-md-6
+									.small.text-muted.mb-1 Authorization Server Metadata
+									code.small#oauth-auth-metadata Loading…
 
 					h6.mb-3 Authorized Apps
 					#oauth-consents-list
