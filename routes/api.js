@@ -37,7 +37,7 @@ import * as oauthService from '../services/oauth_service.js';
 import * as teamService from '../services/team_service.js';
 import * as byoAiService from '../services/byo_ai_service.js';
 import { createChatLimiter } from '../middleware/rate_limit.js';
-import { hasProductAccess, hasProFeatureAccess } from '../services/subscription_access_service.js';
+import { getBillingUserForHost, hasProductAccess, hasProFeatureAccess } from '../services/subscription_access_service.js';
 import { decorateEmailForClient } from '../modules/email_display.js';
 import config from '../config.js';
 import crypto from 'node:crypto';
@@ -53,9 +53,9 @@ router.use(requireAuth, requireTenant);
 if (is_hosted) {
 	router.use(async (req, res, next) => {
 		try {
-			const user = await User.findById(req.userId).select('subscription_status trial_source trial_ends_at');
-			req.billingUser = user;
-			if (hasProductAccess(user)) return next();
+			const billingUser = await getBillingUserForHost(req.host_id, req.userId);
+			req.billingUser = billingUser;
+			if (hasProductAccess(billingUser)) return next();
 			return res.status(402).json({
 				error: 'Subscription required',
 				redirect_to: '/settings/subscription',

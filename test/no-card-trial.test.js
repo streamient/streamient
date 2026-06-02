@@ -7,7 +7,7 @@ import { BILLING_SUBSCRIPTION_URL, buildCheckoutSessionParams, buildPortalSessio
 import { formatSignupNotificationDate } from '../services/email_service.js';
 import { runEmailRetentionCleanup, runTrialLifecycle } from '../modules/scheduler.js';
 import { deleteTenantData, getTenantTypesenseCollectionNames } from '../services/account_cleanup_service.js';
-import { formatTrialEndsIn, hasProductAccess, hasProFeatureAccess } from '../services/subscription_access_service.js';
+import { formatTrialEndsIn, hasProductAccess, hasProFeatureAccess, pickBillingUser } from '../services/subscription_access_service.js';
 
 describe('no-card trial signup and billing helpers', () => {
 	it('builds hosted no-card trial fields from configured trial days', () => {
@@ -257,6 +257,14 @@ describe('subscription product access', () => {
 		assert.equal(hasProFeatureAccess(expiredTrialUser, 'free', true, now), false);
 		assert.equal(hasProFeatureAccess({ subscription_status: 'active' }, 'starter', true, now), false);
 		assert.equal(hasProFeatureAccess(null, 'free', false, now), true);
+	});
+
+	it('uses the tenant owner as the billing user when a member is signed in', () => {
+		const member = { _id: 'member-id', subscription_status: 'incomplete' };
+		const owner = { _id: 'owner-id', subscription_status: 'active' };
+
+		assert.equal(pickBillingUser(member, owner), owner);
+		assert.equal(hasProductAccess(pickBillingUser(member, owner)), true);
 	});
 
 	it('formats trial end text as days remaining', () => {

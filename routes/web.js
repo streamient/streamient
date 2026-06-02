@@ -6,7 +6,7 @@ import { EmailIdentity } from '../model/email_identity.js';
 import { listProjects, getProject, getProjectCounts } from '../services/project_service.js';
 import { listGitRepos } from '../services/git_sync_service.js';
 import { listEmailIdentities } from '../services/email_identity_service.js';
-import { formatTrialEndsIn, hasProductAccess, hasProFeatureAccess } from '../services/subscription_access_service.js';
+import { formatTrialEndsIn, getBillingUserForHost, hasProductAccess, hasProFeatureAccess } from '../services/subscription_access_service.js';
 import config from '../config.js';
 import { createLogger } from '../modules/logger.js';
 
@@ -67,15 +67,17 @@ async function renderUsageSettings(req, res, view) {
 
 // Inject user + sidebar data into all views
 router.use(async (req, res, next) => {
-	const [user, projects, tenant] = await Promise.all([
+	const [user, projects, tenant, billingUser] = await Promise.all([
 		User.findById(req.userId),
 		listProjects(req.host_id),
 		Tenant.findOne({ host_id: req.host_id }).select('plan').lean(),
+		getBillingUserForHost(req.host_id, req.userId),
 	]);
 	const activeTenant = (req.accessibleTenants || []).find((item) => item.tenantId === req.tenantId) || null;
 	const plan = tenant?.plan || 'free';
-	const proOnlyFeatureEnabled = hasProFeatureAccess(user, plan, is_hosted);
+	const proOnlyFeatureEnabled = hasProFeatureAccess(billingUser, plan, is_hosted);
 	res.locals.user = user;
+	res.locals.billing_user = billingUser;
 	res.locals.projects = projects;
 	res.locals.plan = plan;
 	res.locals.member_role = req.memberRole;
@@ -91,8 +93,8 @@ router.use(async (req, res, next) => {
 	res.locals.impersonating = req.session.impersonating || false;
 	res.locals.impersonatingName = req.session.impersonatingName || '';
 	res.locals.is_hosted = is_hosted;
-	res.locals.is_trialing = is_hosted && user?.subscription_status === 'trialing' && user?.trial_source === 'no_card' && hasProductAccess(user);
-	res.locals.trial_ends_text = res.locals.is_trialing ? formatTrialEndsIn(user) : '';
+	res.locals.is_trialing = is_hosted && billingUser?.subscription_status === 'trialing' && billingUser?.trial_source === 'no_card' && hasProductAccess(billingUser);
+	res.locals.trial_ends_text = res.locals.is_trialing ? formatTrialEndsIn(billingUser) : '';
 	res.locals.hide_chat_sidebar = req.path === '/settings' || req.path.startsWith('/settings/');
 	next();
 });
@@ -101,13 +103,13 @@ router.use(async (req, res, next) => {
 // Users without an active/trialing subscription get redirected to checkout.
 if (is_hosted) {
 	router.use((req, res, next) => {
-		const user = res.locals.user;
-		if (!user) return next();
+		const billingUser = res.locals.billing_user;
+		if (!billingUser) return next();
 
 		// Settings/subscription page is always accessible so users can manage billing
 		if (req.path.startsWith('/settings/subscription')) return next();
 
-		if (hasProductAccess(user)) return next();
+		if (hasProductAccess(billingUser)) return next();
 
 		// Everything else — redirect to checkout
 		return res.redirect('/billing/checkout');
@@ -169,7 +171,7 @@ router.get('/ajax/project-list', async (req, res) => {
 		Tenant.findOne({ host_id: req.host_id }).select('plan').lean(),
 	]);
 	const plan = tenant?.plan || 'free';
-	const emailFeatureEnabled = hasProFeatureAccess(res.locals.user, plan, is_hosted);
+	const emailFeatureEnabled = hasProFeatureAccess(res.locals.billing_user, plan, is_hosted);
 	res.render('ajax/project_list', { projects, counts, activeProjectId: req.query.active || '', emailFeatureEnabled, is_hosted });
 });
 
@@ -182,7 +184,7 @@ router.get('/ajax/project-overview/:id', async (req, res) => {
 		]);
 		if (!project) return res.status(404).send('');
 		const plan = tenant?.plan || 'free';
-		const proOnlyFeatureEnabled = hasProFeatureAccess(res.locals.user, plan, is_hosted);
+		const proOnlyFeatureEnabled = hasProFeatureAccess(res.locals.billing_user, plan, is_hosted);
 		const gitSyncEnabled = proOnlyFeatureEnabled;
 		const emailFeatureEnabled = proOnlyFeatureEnabled;
 		const emailForwardDomain = String(config.emailForwardDomain || '').trim().replace(/^@+/, '');
@@ -206,7 +208,7 @@ router.get('/ajax/project-settings/:id', requireRestrictedSettingsAccess, async 
 		if (!project) return res.status(404).send('<div class="alert alert-danger mb-0">Project not found.</div>');
 
 		const plan = tenant?.plan || 'free';
-		const proOnlyFeatureEnabled = hasProFeatureAccess(res.locals.user, plan, is_hosted);
+		const proOnlyFeatureEnabled = hasProFeatureAccess(res.locals.billing_user, plan, is_hosted);
 		const emailForwardDomain = String(config.emailForwardDomain || '').trim().replace(/^@+/, '');
 		const [gitRepos, emailIdentities] = await Promise.all([
 			proOnlyFeatureEnabled ? listGitRepos(req.host_id, req.params.id).catch(() => []) : [],

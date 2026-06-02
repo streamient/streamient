@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { requireTenant } from '../modules/tenancy.js';
-import { User } from '../model/user.js';
 import { BILLING_SUBSCRIPTION_URL, applySubscriptionToUser, createCheckoutSession, createPortalSession, handleWebhook, resolveCheckoutPlan, resolveCheckoutPriceId } from '../services/billing_service.js';
+import { getBillingUserForHost } from '../services/subscription_access_service.js';
 import express from 'express';
 import { createLogger } from '../modules/logger.js';
 
@@ -32,11 +32,11 @@ router.post(
 
 router.get('/billing/checkout', requireAuth, requireTenant, async (req, res) => {
     try {
-        const user = await User.findById(req.userId).select('+stripe_customer_id');
-        if (!user) return res.redirect('/login');
+        const billingUser = await getBillingUserForHost(req.host_id, req.userId);
+        if (!billingUser) return res.redirect('/login');
 
         // Paid or Stripe-trialing users already have a subscription.
-        if (user.subscription_status === 'active' || (user.subscription_status === 'trialing' && user.trial_source !== 'no_card')) {
+        if (billingUser.subscription_status === 'active' || (billingUser.subscription_status === 'trialing' && billingUser.trial_source !== 'no_card')) {
             return res.redirect('/dashboard');
         }
 
@@ -48,7 +48,7 @@ router.get('/billing/checkout', requireAuth, requireTenant, async (req, res) => 
             });
         }
 
-        const checkoutUrl = await createCheckoutSession(user, plan);
+        const checkoutUrl = await createCheckoutSession(billingUser, plan);
         res.redirect(checkoutUrl);
     } catch (err) {
         log.error({ err, user_id: req.userId }, 'Checkout error');
@@ -62,14 +62,14 @@ router.get('/billing/checkout', requireAuth, requireTenant, async (req, res) => 
 router.get('/billing/success', requireAuth, requireTenant, async (req, res) => {
     // Stripe redirects here after successful checkout.
     // First check if webhook already updated the status.
-    const user = await User.findById(req.userId).select('+stripe_customer_id');
-    if (user && (user.subscription_status === 'active' || (user.subscription_status === 'trialing' && user.trial_source !== 'no_card'))) {
+    const billingUser = await getBillingUserForHost(req.host_id, req.userId);
+    if (billingUser && (billingUser.subscription_status === 'active' || (billingUser.subscription_status === 'trialing' && billingUser.trial_source !== 'no_card'))) {
         return res.redirect('/dashboard');
     }
 
     // Webhook may not have arrived yet (especially in dev) — retrieve session directly from Stripe.
     const sessionId = req.query.session_id;
-    if (sessionId && user) {
+    if (sessionId && billingUser) {
         try {
             const { getStripe } = await import('../modules/stripe.js');
             const stripe = getStripe();
@@ -77,7 +77,7 @@ router.get('/billing/success', requireAuth, requireTenant, async (req, res) => {
 
             if (session.subscription) {
                 const subscription = await stripe.subscriptions.retrieve(session.subscription);
-                await applySubscriptionToUser(user._id, subscription, session.customer);
+                await applySubscriptionToUser(billingUser._id, subscription, session.customer);
                 return res.redirect('/dashboard');
             }
         } catch (err) {
@@ -95,10 +95,10 @@ router.get('/billing/cancel', requireAuth, requireTenant, async (req, res) => {
 
 router.get('/billing/portal', requireAuth, requireTenant, async (req, res) => {
     try {
-        const user = await User.findById(req.userId).select('+stripe_customer_id');
-        if (!user) return res.redirect('/login');
+        const billingUser = await getBillingUserForHost(req.host_id, req.userId);
+        if (!billingUser) return res.redirect('/login');
 
-        const portalUrl = await createPortalSession(user);
+        const portalUrl = await createPortalSession(billingUser);
         res.redirect(portalUrl);
     } catch (err) {
         log.error({ err, user_id: req.userId }, 'Portal error');

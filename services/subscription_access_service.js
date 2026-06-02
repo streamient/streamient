@@ -1,4 +1,22 @@
+import { User } from '../model/user.js';
+import { Tenant } from '../modules/tenancy.js';
+
 const DAY_MS = 24 * 60 * 60 * 1000;
+const BILLING_USER_FIELDS = '+stripe_customer_id subscription_status trial_source trial_ends_at host_id tenant email name';
+
+export function pickBillingUser(currentUser, tenantOwnerUser) {
+	return tenantOwnerUser || currentUser || null;
+}
+
+export async function getBillingUserForHost(host_id, currentUserId = null) {
+	const tenant = await Tenant.findOne({ host_id }).select('owner').lean();
+	const [currentUser, tenantOwnerUser] = await Promise.all([
+		currentUserId ? User.findById(currentUserId).select(BILLING_USER_FIELDS) : null,
+		tenant?.owner ? User.findById(tenant.owner).select(BILLING_USER_FIELDS) : null,
+	]);
+
+	return pickBillingUser(currentUser, tenantOwnerUser);
+}
 
 export function hasProductAccess(user, now = new Date()) {
 	if (!user) return false;
