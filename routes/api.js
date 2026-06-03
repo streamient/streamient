@@ -604,6 +604,18 @@ router.put('/emails/:id', requireEmailFeatureAccess, async (req, res) => {
 	res.json({ email });
 });
 
+router.delete('/emails/spam', requireEmailFeatureAccess, async (req, res) => {
+	try {
+		if (req.query.confirm !== 'true') return res.status(400).json({ error: 'confirm=true required' });
+
+		const result = await emailIngestService.emptySpam(req.host_id, auditCtx(req));
+		res.json({ message: `Spam emptied, ${result.deleted} emails deleted`, deleted: result.deleted });
+	} catch (err) {
+		log.error({ err }, 'Empty spam error');
+		res.status(500).json({ error: 'Empty spam failed' });
+	}
+});
+
 router.post('/emails/:id/reset-triage', requireEmailFeatureAccess, async (req, res) => {
 	const email = await emailIngestService.resetEmailTriage(req.host_id, req.params.id, auditCtx(req));
 	if (!email) return res.status(404).json({ error: 'Email not found' });

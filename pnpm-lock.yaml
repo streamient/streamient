@@ -142,11 +142,11 @@ importers:
         specifier: ^10.0.1
         version: 10.0.1
       cytoscape:
-        specifier: ^3.33.4
-        version: 3.33.4
+        specifier: ^3.34.0
+        version: 3.34.0
       cytoscape-fcose:
         specifier: ^2.2.0
-        version: 2.2.0(cytoscape@3.33.4)
+        version: 2.2.0(cytoscape@3.34.0)
       express:
         specifier: ^5.2.1
         version: 5.2.1
@@ -1978,11 +1978,11 @@ packages:
   '@swc/helpers@0.5.23':
     resolution: {integrity: sha512-5lSsMOTXURePglDfvuAQUqkGek9Hg2kksOYay2m0+XR++b2NWYL/4sWyuvVBIs8oKnJaxkdi9whaL/sqN13afw==}
 
-  '@tanstack/virtual-core@3.16.1':
-    resolution: {integrity: sha512-br4gmJ3eI2IXth0fAAVWNdi/Iqb5ZDIUG9409Q17qnXegeHHc9vPEeMsSwpGf29GqayfmqFPtv9S4rxcZOub3Q==}
+  '@tanstack/virtual-core@3.17.0':
+    resolution: {integrity: sha512-gOxY/hFkPh/XQYhnThBHzkbkX3Ed+z/iushyz+R+JAr213aXxUDgQoTgTdrDpBSRsjFM73P/KfUyWmaF9WHMkQ==}
 
-  '@tanstack/vue-virtual@3.13.27':
-    resolution: {integrity: sha512-zSFeq8LBs1xEn84+nhu1N4EALPxTLxn0C1hsKTAfmAIgzyPK4RmtupHFNBxx+e5/3Oub2pLmwWjcf9Jmo//Mgg==}
+  '@tanstack/vue-virtual@3.13.28':
+    resolution: {integrity: sha512-A+jWpXtMpWXKhGLKQrXeC9mk1VgYeMWSJ+o0CTCEi+HLYMSQFdVmPG9lJz7d4XJyIkc5xVwZU9QY67QpScqnxA==}
     peerDependencies:
       vue: ^2.7.0 || ^3.0.0
 
@@ -2498,16 +2498,16 @@ packages:
     resolution: {integrity: sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA==}
     engines: {node: 18 || 20 || >=22}
 
-  bare-events@2.8.3:
-    resolution: {integrity: sha512-HdUm8EMQBLaJvGUdidNNbqpA1kYkwNcb+MYxkxCLAPJGQzlv9J0C24h8V65Z4c5GLd/JEALDvpFCQgpLJqc0zw==}
+  bare-events@2.9.1:
+    resolution: {integrity: sha512-Z0oHEHAFDZkffN8Qc39zNZjQlMDkPJRyyyZieU1VH7u8c5S+qHZ2S8ixdKIAxEjfHO7FJxXmJWgteOghVanIsg==}
     peerDependencies:
       bare-abort-controller: '*'
     peerDependenciesMeta:
       bare-abort-controller:
         optional: true
 
-  bare-fs@4.7.1:
-    resolution: {integrity: sha512-WDRsyVN52eAx/lBamKD6uyw8H4228h/x0sGGGegOamM2cd7Pag88GfMQalobXI+HaEUxpCkbKQUDOQqt9wawRw==}
+  bare-fs@4.7.2:
+    resolution: {integrity: sha512-aTvMFUWkBmjzKtEQMDGGDNF8bkfpD5N1b/FCwt7A3wrU4t1o/e/85Wzkluh6JlODCjqVESYCkQCdTXqZ9G7VFg==}
     engines: {bare: '>=1.16.0'}
     peerDependencies:
       bare-buffer: '*'
@@ -2871,8 +2871,8 @@ packages:
     peerDependencies:
       cytoscape: ^3.2.0
 
-  cytoscape@3.33.4:
-    resolution: {integrity: sha512-HIN5Pmd9MrX9BkV7tDwnOcEJCSFvCpc8X97h3f508J6I5FsqAY65wKOCvgH2CuP42CaahWaz4tuh32SOOIH7ww==}
+  cytoscape@3.34.0:
+    resolution: {integrity: sha512-62rNSrioXw93uliKFBwjukeQyeWwH2PqDrTac31r2P6464u3AUvTk0xS4LVvT251g7IgkFunrI48ZEZGjywSOg==}
     engines: {node: '>=0.10'}
 
   data-uri-to-buffer@4.0.1:
@@ -2971,8 +2971,8 @@ packages:
   devlop@1.1.0:
     resolution: {integrity: sha512-RWmIqhcFf1lRYBvNmr7qTNuyCt/7/ns2jbpp1+PalgE/rDQcBT0fioSMUpJ93irlUhC5hrg4cYqe6U+0ImW0rA==}
 
-  devtools-protocol@0.0.1638949:
-    resolution: {integrity: sha512-mXwg4Fqnv0WR4iuAT/gYUmctNkjILwXFHyZ+m7Ty1dfr0ezZt2U3gnrrJTfRobJTHoXf+IbuFvFITzLrLFjwJA==}
+  devtools-protocol@0.0.1639953:
+    resolution: {integrity: sha512-/jrluypqTz4R7mm7mip7rbbtVfhwUvJIkDwNY4FWrVAAPV2756oeIxoSAB2SmcwJ9tarIJWRAeZKoxZxJheCDw==}
 
   dezalgo@1.0.4:
     resolution: {integrity: sha512-rXSP0bf+5n0Qonsb+SVVfNfIsimO4HEtmnIpPHY8Q1UCzKlQrDMfdobr8nJOOsRgWCyMRqeSBQzmWUMq7zvVig==}
@@ -3020,8 +3020,8 @@ packages:
   ee-first@1.1.1:
     resolution: {integrity: sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow==}
 
-  electron-to-chromium@1.5.364:
-    resolution: {integrity: sha512-G/dYE3+AYhyHwzTwg8UbnXf7zqMERYh7l2jJ3QujhFsH8agSYwtnGAR2aZ7f0AakIKJXd5En/Hre4igIUrdlYw==}
+  electron-to-chromium@1.5.366:
+    resolution: {integrity: sha512-OlRuhb688YTCzzU3gXPLn6nGyd+F+53INE1qaKKlu6kETErE8FYsyDh0XqXEU+uBRn0MpCzz2vfNwORhkap8qg==}
 
   emoji-regex-xs@1.0.0:
     resolution: {integrity: sha512-LRlerrMYoIDrT6jgpeZ2YYl/L8EulRTt5hQcYjy5AInh7HWXKimpqx68aknBFpGL2+/IcogTcaydJEgaTmOpDg==}
@@ -5586,7 +5586,7 @@ snapshots:
       '@crawlee/types': 3.16.0
       '@crawlee/utils': 3.16.0
       cheerio: 1.0.0-rc.12
-      devtools-protocol: 0.0.1638949
+      devtools-protocol: 0.0.1639953
       jquery: 3.7.1
       ow: 0.28.2
       tslib: 2.8.1
@@ -7141,11 +7141,11 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  '@tanstack/virtual-core@3.16.1': {}
+  '@tanstack/virtual-core@3.17.0': {}
 
-  '@tanstack/vue-virtual@3.13.27(vue@3.5.35)':
+  '@tanstack/vue-virtual@3.13.28(vue@3.5.35)':
     dependencies:
-      '@tanstack/virtual-core': 3.16.1
+      '@tanstack/virtual-core': 3.17.0
       vue: 3.5.35
 
   '@tiptap/core@3.24.0(@tiptap/pm@3.24.0)':
@@ -7703,13 +7703,13 @@ snapshots:
 
   balanced-match@4.0.4: {}
 
-  bare-events@2.8.3: {}
+  bare-events@2.9.1: {}
 
-  bare-fs@4.7.1:
+  bare-fs@4.7.2:
     dependencies:
-      bare-events: 2.8.3
+      bare-events: 2.9.1
       bare-path: 3.0.1
-      bare-stream: 2.13.1(bare-events@2.8.3)
+      bare-stream: 2.13.1(bare-events@2.9.1)
       bare-url: 2.4.3
       fast-fifo: 1.3.2
     transitivePeerDependencies:
@@ -7722,12 +7722,12 @@ snapshots:
     dependencies:
       bare-os: 3.9.1
 
-  bare-stream@2.13.1(bare-events@2.8.3):
+  bare-stream@2.13.1(bare-events@2.9.1):
     dependencies:
       streamx: 2.26.0
       teex: 1.0.1
     optionalDependencies:
-      bare-events: 2.8.3
+      bare-events: 2.9.1
     transitivePeerDependencies:
       - react-native-b4a
 
@@ -7795,7 +7795,7 @@ snapshots:
     dependencies:
       baseline-browser-mapping: 2.10.33
       caniuse-lite: 1.0.30001793
-      electron-to-chromium: 1.5.364
+      electron-to-chromium: 1.5.366
       node-releases: 2.0.47
       update-browserslist-db: 1.2.3(browserslist@4.28.2)
 
@@ -8080,12 +8080,12 @@ snapshots:
 
   csv-stringify@6.7.0: {}
 
-  cytoscape-fcose@2.2.0(cytoscape@3.33.4):
+  cytoscape-fcose@2.2.0(cytoscape@3.34.0):
     dependencies:
       cose-base: 2.2.0
-      cytoscape: 3.33.4
+      cytoscape: 3.34.0
 
-  cytoscape@3.33.4: {}
+  cytoscape@3.34.0: {}
 
   data-uri-to-buffer@4.0.1: {}
 
@@ -8148,7 +8148,7 @@ snapshots:
     dependencies:
       dequal: 2.0.3
 
-  devtools-protocol@0.0.1638949: {}
+  devtools-protocol@0.0.1639953: {}
 
   dezalgo@1.0.4:
     dependencies:
@@ -8203,7 +8203,7 @@ snapshots:
 
   ee-first@1.1.1: {}
 
-  electron-to-chromium@1.5.364: {}
+  electron-to-chromium@1.5.366: {}
 
   emoji-regex-xs@1.0.0: {}
 
@@ -8347,7 +8347,7 @@ snapshots:
 
   events-universal@1.0.1:
     dependencies:
-      bare-events: 2.8.3
+      bare-events: 2.9.1
     transitivePeerDependencies:
       - bare-abort-controller
 
@@ -9904,7 +9904,7 @@ snapshots:
       '@floating-ui/vue': 1.1.11(vue@3.5.35)
       '@internationalized/date': 3.12.2
       '@internationalized/number': 3.6.7
-      '@tanstack/vue-virtual': 3.13.27(vue@3.5.35)
+      '@tanstack/vue-virtual': 3.13.28(vue@3.5.35)
       '@vueuse/core': 14.3.0(vue@3.5.35)
       '@vueuse/shared': 14.3.0(vue@3.5.35)
       aria-hidden: 1.2.6
@@ -10341,7 +10341,7 @@ snapshots:
   tar-stream@3.2.0:
     dependencies:
       b4a: 1.8.1
-      bare-fs: 4.7.1
+      bare-fs: 4.7.2
       fast-fifo: 1.3.2
       streamx: 2.26.0
     transitivePeerDependencies:

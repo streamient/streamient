@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailIds, listEmailLabels, parseTriageResult, triageInboxEmails, startEmailTriageRun, getEmailTriageRun, backfillEmailTriageState, askEmailAi, askEmailListAi, buildEmailAiTypesenseFilter, buildTriageContext, parseEmailAiQuery, resetEmailTriage, updateEmail, parseEmailReplySuggestionsResult, suggestEmailReplies, suggestFromEmailAddresses, matchesEmailFilter } from '../services/email_ingest_service.js';
+import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailIds, listEmailLabels, parseTriageResult, triageInboxEmails, startEmailTriageRun, getEmailTriageRun, backfillEmailTriageState, askEmailAi, askEmailListAi, buildEmailAiTypesenseFilter, buildTriageContext, parseEmailAiQuery, resetEmailTriage, updateEmail, emptySpam, parseEmailReplySuggestionsResult, suggestEmailReplies, suggestFromEmailAddresses, matchesEmailFilter } from '../services/email_ingest_service.js';
 import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
 import { EmailLabel } from '../model/email_label.js';
@@ -1157,9 +1157,9 @@ describe('Email ingest service', () => {
 		}
 	});
 
-	it('resets email triage state back to untriaged inbox', async () => {
-		const emailId = { toString: () => 'email-reset-1' };
-		let updateQuery = null;
+		it('resets email triage state back to untriaged inbox', async () => {
+			const emailId = { toString: () => 'email-reset-1' };
+			let updateQuery = null;
 		let updatePayload = null;
 		let draftQuery = null;
 		let linkQuery = null;
@@ -1199,11 +1199,75 @@ describe('Email ingest service', () => {
 		} finally {
 			Email.findOneAndUpdate = originalFindOneAndUpdate;
 			EmailDraft.updateMany = originalDraftUpdateMany;
-			GraphLink.deleteMany = originalGraphDeleteMany;
-		}
-	});
+				GraphLink.deleteMany = originalGraphDeleteMany;
+			}
+		});
 
-		it('normalizes AI triage JSON to supported structured fields', () => {
+		it('permanently empties tenant spam emails and cleans related indexes', async () => {
+			const originalEmailFind = Email.find;
+			const originalEmailDeleteMany = Email.deleteMany;
+			const originalGraphDeleteMany = GraphLink.deleteMany;
+			const spamDocs = [
+				{ _id: { toString: () => 'spam-1' } },
+				{ _id: { toString: () => 'spam-2' } },
+			];
+			let findQuery = null;
+			let selectFields = null;
+			let deleteQuery = null;
+			const removedIndexDocs = [];
+			const indexUpdates = [];
+			const graphQueries = [];
+
+			Email.find = (query) => {
+				findQuery = query;
+				return {
+					select: (fields) => {
+						selectFields = fields;
+						return {
+							lean: async () => spamDocs,
+						};
+					},
+				};
+			};
+			Email.deleteMany = async (query) => {
+				deleteQuery = query;
+				return { deletedCount: 2 };
+			};
+			GraphLink.deleteMany = async (query) => {
+				graphQueries.push(query);
+				return { deletedCount: 1 };
+			};
+
+			try {
+				const result = await emptySpam('host-1', {
+					removeEmailIndexFn: async (hostId, type, id) => removedIndexDocs.push({ hostId, type, id }),
+					updateEmailIndexStateFn: async (query, update, options) => indexUpdates.push({ query, update, options }),
+				});
+
+				assert.deepEqual(result, { deleted: 2 });
+				assert.deepEqual(findQuery, { host_id: 'host-1', mailbox: 'spam', in_trash: { $ne: true } });
+				assert.equal(selectFields, '_id');
+				assert.deepEqual(deleteQuery, { _id: { $in: ['spam-1', 'spam-2'] }, host_id: 'host-1', mailbox: 'spam', in_trash: { $ne: true } });
+				assert.deepEqual(removedIndexDocs, [
+					{ hostId: 'host-1', type: 'emails', id: 'spam-1' },
+					{ hostId: 'host-1', type: 'emails', id: 'spam-2' },
+				]);
+				assert.deepEqual(indexUpdates.map((call) => call.query), [
+					{ _id: 'spam-1', host_id: 'host-1' },
+					{ _id: 'spam-2', host_id: 'host-1' },
+				]);
+				assert.deepEqual(graphQueries, [
+					{ host_id: 'host-1', $or: [{ source_id: 'spam-1' }, { target_id: 'spam-1' }] },
+					{ host_id: 'host-1', $or: [{ source_id: 'spam-2' }, { target_id: 'spam-2' }] },
+				]);
+			} finally {
+				Email.find = originalEmailFind;
+				Email.deleteMany = originalEmailDeleteMany;
+				GraphLink.deleteMany = originalGraphDeleteMany;
+			}
+		});
+
+			it('normalizes AI triage JSON to supported structured fields', () => {
 			const triage = parseTriageResult('```json\n{"primary_action":"reply required","labels":["Reply Required","unknown"],"summary":"Needs reply","reason":"Customer asked a question","confidence":1.2,"action_points":[{"text":"Reply with setup details","type":"Reply"}],"related_context":[{"item_type":"note","item_id":"note-1","title":"Setup"}],"draft_reply":{"to":["sender@example.com"],"subject":"Re: Question","body_text":"Thanks"}}\n```');
 
 			assert.equal(triage.primary_action, 'reply-required');

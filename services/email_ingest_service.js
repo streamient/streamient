@@ -1018,6 +1018,30 @@ export async function deleteEmail(host_id, emailId, ctx = {}) {
 	return email;
 }
 
+export async function emptySpam(host_id, ctx = {}) {
+	const query = { host_id, mailbox: 'spam', in_trash: { $ne: true } };
+	const emails = await Email.find(query).select('_id').lean();
+	const ids = emails.map((email) => email._id?.toString ? email._id.toString() : String(email._id || '')).filter(Boolean);
+
+	if (!ids.length) return { deleted: 0 };
+
+	const result = await Email.deleteMany({ _id: { $in: ids }, host_id, mailbox: 'spam', in_trash: { $ne: true } });
+	const deleted = result?.deletedCount ?? ids.length;
+
+	await Promise.all(ids.map(async (id) => {
+		await Promise.all([
+			removeEmailFromIndexNow(host_id, id, { removeFn: ctx.removeEmailIndexFn, updateFn: ctx.updateEmailIndexStateFn }),
+			removeLinksForItem(host_id, id).catch((err) => log.error({ err, host_id, email_id: id }, 'Remove links error')),
+		]);
+		emitToTenant(host_id, 'email:deleted', { _id: id });
+	}));
+	emitToTenant(host_id, 'counts:refresh');
+	invalidateGraphCache(host_id).catch(() => {});
+	if (ctx.user_id) audit.log({ action: 'delete', resource: 'email', resource_id: 'spam', host_id, details: { bulk: true, mailbox: 'spam', deleted }, ...ctx });
+
+	return { deleted };
+}
+
 export async function searchEmails(host_id, query, options = {}) {
 	return searchCollection(host_id, 'emails', query, {
 		queryBy: 'embedding',

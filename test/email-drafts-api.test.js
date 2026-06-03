@@ -12,6 +12,8 @@ import { EmailLabel } from '../model/email_label.js';
 import { EmailTriageRun } from '../model/email_triage_run.js';
 import { EmailIdentity } from '../model/email_identity.js';
 import { EmailInternalNote } from '../model/email_internal_note.js';
+import { GraphLink } from '../model/graph_link.js';
+import { AuditLog } from '../model/audit_log.js';
 
 async function createServer() {
 	const { default: apiRoutes } = await import(`../routes/api.js?email_drafts_test=${Date.now()}_${Math.random()}`);
@@ -50,9 +52,13 @@ describe('Email draft API', () => {
 	const originalUserFindByIdAndUpdate = User.findByIdAndUpdate;
 	const originalTenantMemberFind = TenantMember.find;
 	const originalTenantMemberFindOneAndUpdate = TenantMember.findOneAndUpdate;
-	const originalEmailFind = Email.find;
-	const originalEmailFindOne = Email.findOne;
-	const originalEmailCountDocuments = Email.countDocuments;
+		const originalEmailFind = Email.find;
+		const originalEmailFindOne = Email.findOne;
+		const originalEmailDeleteMany = Email.deleteMany;
+		const originalEmailUpdateOne = Email.updateOne;
+		const originalEmailCountDocuments = Email.countDocuments;
+		const originalGraphDeleteMany = GraphLink.deleteMany;
+		const originalAuditCreate = AuditLog.create;
 	const originalLabelBulkWrite = EmailLabel.bulkWrite;
 	const originalLabelFind = EmailLabel.find;
 	const originalRunCreate = EmailTriageRun.create;
@@ -110,9 +116,13 @@ describe('Email draft API', () => {
 		User.findByIdAndUpdate = originalUserFindByIdAndUpdate;
 		TenantMember.find = originalTenantMemberFind;
 		TenantMember.findOneAndUpdate = originalTenantMemberFindOneAndUpdate;
-		Email.find = originalEmailFind;
-		Email.findOne = originalEmailFindOne;
-		Email.countDocuments = originalEmailCountDocuments;
+			Email.find = originalEmailFind;
+			Email.findOne = originalEmailFindOne;
+			Email.deleteMany = originalEmailDeleteMany;
+			Email.updateOne = originalEmailUpdateOne;
+			Email.countDocuments = originalEmailCountDocuments;
+			GraphLink.deleteMany = originalGraphDeleteMany;
+			AuditLog.create = originalAuditCreate;
 		EmailLabel.bulkWrite = originalLabelBulkWrite;
 		EmailLabel.find = originalLabelFind;
 		EmailTriageRun.create = originalRunCreate;
@@ -200,9 +210,9 @@ describe('Email draft API', () => {
 		}
 	});
 
-	it('rejects invalid manual draft recipients', async () => {
-		EmailDraft.findOne = () => ({
-			lean: async () => ({ _id: '507f1f77bcf86cd799439099', project: 'project-1', status: 'draft' }),
+		it('rejects invalid manual draft recipients', async () => {
+			EmailDraft.findOne = () => ({
+				lean: async () => ({ _id: '507f1f77bcf86cd799439099', project: 'project-1', status: 'draft' }),
 		});
 		EmailDraft.findOneAndUpdate = () => {
 			throw new Error('should not update invalid recipients');
@@ -219,12 +229,83 @@ describe('Email draft API', () => {
 			assert.equal(response.status, 400);
 			assert.match(json.error, /to contains invalid email address/);
 		} finally {
-			await new Promise((resolve) => server.close(resolve));
-		}
-	});
+				await new Promise((resolve) => server.close(resolve));
+			}
+		});
 
-	it('normalizes Tagify recipient objects in draft updates', async () => {
-		let updatePayload = null;
+		it('empties spam only after explicit confirmation', async () => {
+			const spamDocs = [
+				{ _id: { toString: () => 'spam-1' } },
+				{ _id: { toString: () => 'spam-2' } },
+			];
+			let findQuery = null;
+			let deleteQuery = null;
+			const indexUpdates = [];
+			const graphQueries = [];
+			const auditLogs = [];
+
+			Email.find = (query) => {
+				findQuery = query;
+				return {
+					select: (fields) => {
+						assert.equal(fields, '_id');
+						return {
+							lean: async () => spamDocs,
+						};
+					},
+				};
+			};
+			Email.deleteMany = async (query) => {
+				deleteQuery = query;
+				return { deletedCount: 2 };
+			};
+			Email.updateOne = async (query, update, options) => {
+				indexUpdates.push({ query, update, options });
+				return { modifiedCount: 0 };
+			};
+			GraphLink.deleteMany = async (query) => {
+				graphQueries.push(query);
+				return { deletedCount: 1 };
+			};
+			AuditLog.create = async (payload) => {
+				auditLogs.push(payload);
+				return payload;
+			};
+
+			const server = await createServer();
+			try {
+				const rejectedResponse = await request(server, 'DELETE', '/emails/spam');
+				const rejectedJson = await readJson(rejectedResponse);
+
+				assert.equal(rejectedResponse.status, 400);
+				assert.equal(rejectedJson.error, 'confirm=true required');
+				assert.equal(findQuery, null);
+
+				const response = await request(server, 'DELETE', '/emails/spam?confirm=true');
+				const json = await readJson(response);
+
+				assert.equal(response.status, 200);
+				assert.equal(json.deleted, 2);
+				assert.equal(json.message, 'Spam emptied, 2 emails deleted');
+				assert.deepEqual(findQuery, { host_id: 'host-1', mailbox: 'spam', in_trash: { $ne: true } });
+				assert.deepEqual(deleteQuery, { _id: { $in: ['spam-1', 'spam-2'] }, host_id: 'host-1', mailbox: 'spam', in_trash: { $ne: true } });
+				assert.deepEqual(indexUpdates.map((call) => call.query), [
+					{ _id: 'spam-1', host_id: 'host-1' },
+					{ _id: 'spam-2', host_id: 'host-1' },
+				]);
+				assert.deepEqual(graphQueries, [
+					{ host_id: 'host-1', $or: [{ source_id: 'spam-1' }, { target_id: 'spam-1' }] },
+					{ host_id: 'host-1', $or: [{ source_id: 'spam-2' }, { target_id: 'spam-2' }] },
+				]);
+				assert.equal(auditLogs[0].details.mailbox, 'spam');
+				assert.equal(auditLogs[0].details.deleted, 2);
+			} finally {
+				await new Promise((resolve) => server.close(resolve));
+			}
+		});
+
+		it('normalizes Tagify recipient objects in draft updates', async () => {
+			let updatePayload = null;
 		EmailDraft.findOne = () => ({
 			lean: async () => ({ _id: '507f1f77bcf86cd799439099', project: 'project-1', status: 'draft' }),
 		});

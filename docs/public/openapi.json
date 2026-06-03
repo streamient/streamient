@@ -3600,6 +3600,58 @@
         }
       }
     },
+    "/emails/spam": {
+      "delete": {
+        "tags": [
+          "Emails"
+        ],
+        "summary": "Permanently delete all spam emails",
+        "description": "Permanently deletes all non-trash spam emails for the current tenant. Requires confirm=true.",
+        "parameters": [
+          {
+            "name": "confirm",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "deleted": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing confirmation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/emails/{id}": {
       "get": {
         "tags": [

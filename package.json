@@ -85,7 +85,7 @@
     "cookie-parser": "^1.4.7",
     "crawlee": "^3.16.0",
     "croner": "^10.0.1",
-    "cytoscape": "^3.33.4",
+    "cytoscape": "^3.34.0",
     "cytoscape-fcose": "^2.2.0",
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.2",

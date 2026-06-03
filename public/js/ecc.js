@@ -16,6 +16,8 @@
 	var trashBtn;
 	var emptyTrashBtn;
 	var trashToolbar;
+	var emptySpamBtn;
+	var spamToolbar;
 	var resetTriageBtn;
 	var viewHeader;
 	var listWrap;
@@ -1299,6 +1301,7 @@
 			internalNotesEl?.classList.add('d-none');
 			viewHeader?.classList.remove('d-none');
 			trashToolbar?.classList.toggle('d-none', !(activeMailbox === 'trash' && !activeLabel));
+			spamToolbar?.classList.toggle('d-none', !(activeMailbox === 'spam' && !activeLabel));
 			listWrap?.classList.remove('d-none');
 			detailEl?.classList.add('d-none');
 			updateActionBar();
@@ -1320,6 +1323,7 @@
 			detailActive = true;
 			viewHeader?.classList.add('d-none');
 			trashToolbar?.classList.add('d-none');
+			spamToolbar?.classList.add('d-none');
 			listWrap?.classList.add('d-none');
 			detailEl?.classList.remove('d-none');
 			updateActionBar();
@@ -2950,6 +2954,8 @@
 		trashBtn = document.getElementById('ecc-trash-btn');
 		emptyTrashBtn = document.getElementById('ecc-empty-trash-btn');
 		trashToolbar = document.getElementById('ecc-trash-toolbar');
+		emptySpamBtn = document.getElementById('ecc-empty-spam-btn');
+		spamToolbar = document.getElementById('ecc-spam-toolbar');
 		resetTriageBtn = document.getElementById('ecc-reset-triage-btn');
 		viewHeader = document.getElementById('ecc-view-header');
 		listWrap = document.getElementById('ecc-list-wrap');
@@ -3027,6 +3033,17 @@
 				showError(err.message || 'Failed to empty trash');
 			}
 		});
+		emptySpamBtn?.addEventListener('click', async function () {
+			var confirmed = await confirmAction('Empty Spam', 'All emails in spam will be permanently deleted. This cannot be undone.');
+			if (!confirmed) return;
+			try {
+				await api('DELETE', '/emails/spam?confirm=true');
+				showSuccess('Spam emptied');
+				await loadAll();
+			} catch (err) {
+				showError(err.message || 'Failed to empty spam');
+			}
+		});
 		resetTriageBtn?.addEventListener('click', resetSelectedTriage);
 		openEmailBtn?.addEventListener('click', openSelectedEmail);
 		detailBackBtn?.addEventListener('click', backToListView);
@@ -3075,6 +3092,8 @@
 		trashBtn = null;
 		emptyTrashBtn = null;
 		trashToolbar = null;
+		emptySpamBtn = null;
+		spamToolbar = null;
 		resetTriageBtn = null;
 		listWrap = null;
 		detailEl = null;

@@ -78,6 +78,13 @@ else
 				button.btn.btn-outline-danger.btn-sm#ecc-empty-trash-btn(type="button")
 					!= icon('delete', 'me-1')
 					| Empty Trash
+			.d-flex.justify-content-between.align-items-center.mb-2.d-none#ecc-spam-toolbar
+				.spam-hint.text-muted.small
+					!= icon('info', 'me-1')
+					span Items in spam are automatically deleted after 30 days.
+				button.btn.btn-outline-danger.btn-sm#ecc-empty-spam-btn(type="button")
+					!= icon('delete', 'me-1')
+					span Empty Spam
 			#ecc-list-wrap
 				#ecc-list.list-group
 			#ecc-detail.d-none
