@@ -463,6 +463,12 @@ router.get('/emails/triage-status', requireEmailFeatureAccess, async (req, res) 
 	res.json({ statuses });
 });
 
+router.get('/emails/triage-runs/:run_id', requireEmailFeatureAccess, async (req, res) => {
+	const run = await emailIngestService.getEmailTriageRun(req.host_id, req.params.run_id);
+	if (!run) return res.status(404).json({ error: 'Triage run not found' });
+	res.json({ run });
+});
+
 router.get('/emails/from-addresses', requireEmailFeatureAccess, async (req, res) => {
 	try {
 		const result = await emailIngestService.suggestFromEmailAddresses(req.host_id, {
@@ -617,16 +623,18 @@ router.post('/emails/search', requireEmailFeatureAccess, async (req, res) => {
 
 router.post('/emails/triage-inbox', requireEmailFeatureAccess, async (req, res) => {
 	try {
-		const result = await emailIngestService.triageInboxEmails(req.host_id, req.userId, {
+		const run = await emailIngestService.startEmailTriageRun(req.host_id, req.userId, {
 			project: req.body?.project,
 			limit: req.body?.limit,
 			run_id: req.body?.run_id,
+			tenant_id: req.tenantId,
+			member_role: req.memberRole,
 			ctx: auditCtx(req),
 		});
-		res.json(result);
+		res.status(202).json({ run_id: run.run_id, status: run.status, total: run.total, run });
 	} catch (err) {
-		log.error({ err, host_id: req.host_id }, 'Email inbox triage error');
-		res.status(400).json({ error: err.message || 'Inbox triage failed' });
+		log.error({ err, host_id: req.host_id, user_id: req.userId, tenant_id: req.tenantId, member_role: req.memberRole, run_id: req.body?.run_id || '' }, 'Email inbox triage start error');
+		res.status(400).json({ error: err.message || 'Inbox triage failed', run_id: req.body?.run_id || '' });
 	}
 });
 

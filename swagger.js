@@ -374,6 +374,40 @@ const swaggerSpec = {
 	                    draft: { $ref: '#/components/schemas/EmailDraft' },
 	                },
 	            },
+	            EmailTriageRun: {
+	                type: 'object',
+	                properties: {
+	                    run_id: { type: 'string' },
+	                    host_id: { type: 'string' },
+	                    user_id: { type: 'string' },
+	                    tenant_id: { type: 'string' },
+	                    member_role: { type: 'string' },
+	                    project: { type: 'string' },
+	                    limit: { type: 'integer' },
+	                    status: { type: 'string', enum: ['queued', 'running', 'completed', 'failed'] },
+	                    total: { type: 'integer' },
+	                    processed: { type: 'integer' },
+	                    triaged: { type: 'integer' },
+	                    drafted: { type: 'integer' },
+	                    linked: { type: 'integer' },
+	                    moved: { type: 'integer' },
+	                    errors: {
+	                        type: 'array',
+	                        items: {
+	                            type: 'object',
+	                            properties: {
+	                                email_id: { type: 'string' },
+	                                error: { type: 'string' },
+	                            },
+	                        },
+	                    },
+	                    last_error: { type: 'string' },
+	                    started_at: { type: 'string', format: 'date-time', nullable: true },
+	                    completed_at: { type: 'string', format: 'date-time', nullable: true },
+	                    createdAt: { type: 'string', format: 'date-time', nullable: true },
+	                    updatedAt: { type: 'string', format: 'date-time', nullable: true },
+	                },
+	            },
             EmailLabel: {
                 type: 'object',
                 properties: {
@@ -1159,6 +1193,20 @@ const swaggerSpec = {
                 },
             },
         },
+        '/emails/triage-runs/{run_id}': {
+            get: {
+                tags: ['Emails'],
+                summary: 'Get inbox triage run status',
+                description: 'Returns the persisted status for an asynchronous inbox triage run. Use this endpoint as a polling fallback when socket progress events are missed.',
+                parameters: [
+                    { name: 'run_id', in: 'path', required: true, schema: { type: 'string' } },
+                ],
+                responses: {
+                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { run: { $ref: '#/components/schemas/EmailTriageRun' } } } } } },
+                    404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+                },
+            },
+        },
 	        '/emails/{id}/triage-status': {
 	            get: {
 	                tags: ['Emails'],
@@ -1520,7 +1568,7 @@ const swaggerSpec = {
             post: {
                 tags: ['Emails'],
                 summary: 'Run AI triage over untriaged inbox emails',
-                description: 'Runs AI triage over inbox emails. For classification and generated draft replies, Kumbukum context is searched in each email project first, then across all projects only when no usable project records are found.',
+                description: 'Queues asynchronous AI triage over inbox emails and returns a run_id immediately. Track progress with email-triage:run-updated socket events or GET /emails/triage-runs/{run_id}. For classification and generated draft replies, Kumbukum context is searched in each email project first, then across all projects only when no usable project records are found.',
                 requestBody: {
                     required: false,
                     content: {
@@ -1537,43 +1585,19 @@ const swaggerSpec = {
                     },
                 },
                 responses: {
-                    200: {
-                        description: 'Triage result',
+                    202: {
+                        description: 'Triage run queued',
                         content: {
                             'application/json': {
                                 schema: {
                                     type: 'object',
                                     properties: {
-	                                        processed: { type: 'integer' },
-	                                        run_id: { type: 'string' },
-	                                        triaged: { type: 'integer' },
-	                                        drafted: { type: 'integer' },
-	                                        linked: { type: 'integer' },
-	                                        moved: { type: 'integer' },
-	                                        errors: {
-	                                            type: 'array',
-	                                            items: {
-	                                                type: 'object',
-	                                                properties: {
-	                                                    email_id: { type: 'string' },
-	                                                    error: { type: 'string' },
-	                                                },
-	                                            },
-	                                        },
-	                                        results: {
-	                                            type: 'array',
-	                                            items: {
-	                                                type: 'object',
-	                                                properties: {
-	                                                    email_id: { type: 'string' },
-	                                                    action: { type: 'string' },
-	                                                    summary: { type: 'string' },
-	                                                    mailbox: { type: 'string' },
-	                                                },
-	                                            },
-	                                        },
+                                        run_id: { type: 'string' },
+                                        status: { type: 'string', enum: ['queued', 'running'] },
+                                        total: { type: 'integer' },
+                                        run: { $ref: '#/components/schemas/EmailTriageRun' },
 	                                    },
-	                                },
+                                },
                             },
                         },
                     },

@@ -973,6 +973,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 				loadTrashCount();
 			});
 		}
+		socket.on('email-triage:run-updated', (data) => {
+			window.dispatchEvent(new CustomEvent('email-triage:run-updated', { detail: data || {} }));
+		});
 	}
 
 	// ── Same-tab CRUD: refresh counts immediately when items change via modals / batch ──

@@ -9,6 +9,7 @@ import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
 import { EmailIdentity } from '../model/email_identity.js';
 import { EmailLabel } from '../model/email_label.js';
+import { EmailTriageRun } from '../model/email_triage_run.js';
 import { GraphLink } from '../model/graph_link.js';
 import { extractText } from './import_service.js';
 import { detectFileType } from '../modules/file_detect.js';
@@ -43,6 +44,7 @@ const MAILBOX_ACTIONS = ['none', 'keep-inbox', 'archive', 'spam'];
 const TRIAGE_STATUSES = ['pending', 'complete', 'failed'];
 const TRIAGE_STATUS_INCLUDES = ['email', 'draft'];
 const LINKABLE_CONTEXT_TYPES = ['notes', 'memory', 'urls', 'emails'];
+const TRIAGE_RUN_EVENT = 'email-triage:run-updated';
 const DEFAULT_EMAIL_TRIAGE_INSTRUCTIONS = [
 	'Classify email by the next operational action.',
 	'Use reply-required when a human should answer the sender.',
@@ -707,6 +709,47 @@ function stringifyObjectId(value) {
 	return value.toString ? value.toString() : String(value);
 }
 
+function formatEmailTriageRun(run) {
+	if (!run) return null;
+	return {
+		run_id: run.run_id || '',
+		host_id: run.host_id || '',
+		user_id: run.user_id || '',
+		tenant_id: run.tenant_id || '',
+		member_role: run.member_role || '',
+		project: run.project || '',
+		limit: run.limit || 0,
+		status: run.status || 'queued',
+		total: run.total || 0,
+		processed: run.processed || 0,
+		triaged: run.triaged || 0,
+		drafted: run.drafted || 0,
+		linked: run.linked || 0,
+		moved: run.moved || 0,
+		errors: run.errors || [],
+		last_error: run.last_error || '',
+		started_at: run.started_at || null,
+		completed_at: run.completed_at || null,
+		createdAt: run.createdAt || null,
+		updatedAt: run.updatedAt || null,
+	};
+}
+
+function emitEmailTriageRun(host_id, run) {
+	const formatted = formatEmailTriageRun(run);
+	if (formatted) emitToTenant(host_id, TRIAGE_RUN_EVENT, formatted);
+	return formatted;
+}
+
+async function updateEmailTriageRun(host_id, runId, update) {
+	const run = await EmailTriageRun.findOneAndUpdate(
+		{ host_id, run_id: runId },
+		update,
+		{ returnDocument: 'after' },
+	);
+	return emitEmailTriageRun(host_id, run);
+}
+
 function formatEmailTriageStatus(email, { includeEmail = false, draft = undefined } = {}) {
 	const status = {
 		email_id: stringifyObjectId(email._id),
@@ -803,6 +846,11 @@ export async function getEmailTriageStatus(host_id, emailId, { include } = {}) {
 	if (!email) return null;
 	const statuses = await formatEmailTriageStatuses(host_id, [email], include);
 	return statuses[0];
+}
+
+export async function getEmailTriageRun(host_id, runId) {
+	const run = await EmailTriageRun.findOne({ host_id, run_id: String(runId || '') }).lean();
+	return formatEmailTriageRun(run);
 }
 
 export async function listEmailLabels(host_id, filters = {}) {
@@ -1995,6 +2043,108 @@ async function upsertTriageDraft(host_id, userId, email, triage) {
 	);
 }
 
+async function runQueuedEmailTriage(host_id, userId, runId, options = {}) {
+	await updateEmailTriageRun(host_id, runId, {
+		$set: {
+			status: 'running',
+			started_at: new Date(),
+			last_error: '',
+		},
+	});
+	log.info({ host_id, user_id: userId, run_id: runId, project: options.project || '', limit: options.limit }, 'Email inbox triage run started');
+
+	try {
+		const result = await triageInboxEmails(host_id, userId, {
+			...options,
+			run_id: runId,
+			onProgress: async (progress) => {
+				await updateEmailTriageRun(host_id, runId, {
+					$set: {
+						status: 'running',
+						total: progress.total,
+						processed: progress.processed,
+						triaged: progress.triaged,
+						drafted: progress.drafted,
+						linked: progress.linked,
+						moved: progress.moved,
+						errors: progress.errors,
+					},
+				});
+			},
+		});
+		await updateEmailTriageRun(host_id, runId, {
+			$set: {
+				status: 'completed',
+				total: result.processed,
+				processed: result.processed,
+				triaged: result.triaged,
+				drafted: result.drafted,
+				linked: result.linked,
+				moved: result.moved,
+				errors: result.errors,
+				completed_at: new Date(),
+				last_error: '',
+			},
+		});
+		log.info({ host_id, user_id: userId, run_id: runId, processed: result.processed, triaged: result.triaged, errors: result.errors.length }, 'Email inbox triage run completed');
+	} catch (err) {
+		await updateEmailTriageRun(host_id, runId, {
+			$set: {
+				status: 'failed',
+				last_error: err.message || String(err),
+				completed_at: new Date(),
+			},
+		}).catch(() => {});
+		log.error({ err, host_id, user_id: userId, run_id: runId }, 'Email inbox triage run failed');
+	}
+}
+
+export async function startEmailTriageRun(host_id, userId, options = {}) {
+	const limit = Math.min(parseInt(options.limit, 10) || 25, 100);
+	const projectId = options.project || null;
+	const runId = String(options.run_id || '').trim() || crypto.randomUUID();
+	const query = buildEmailListQuery(host_id, projectId, { mailbox: 'inbox', triaged: false });
+	const total = Math.min(await Email.countDocuments(query), limit);
+	const run = await EmailTriageRun.create({
+		run_id: runId,
+		host_id,
+		user_id: userId ? String(userId) : '',
+		tenant_id: options.tenant_id ? String(options.tenant_id) : '',
+		member_role: options.member_role ? String(options.member_role) : '',
+		project: projectId ? String(projectId) : '',
+		limit,
+		status: 'queued',
+		total,
+		processed: 0,
+		triaged: 0,
+		drafted: 0,
+		linked: 0,
+		moved: 0,
+		errors: [],
+	});
+	const formatted = emitEmailTriageRun(host_id, run);
+	log.info({ host_id, user_id: userId, run_id: runId, project: projectId || '', limit, total, member_role: options.member_role || '' }, 'Email inbox triage run queued');
+
+	setImmediate(() => {
+		runQueuedEmailTriage(host_id, userId, runId, {
+			project: projectId,
+			limit,
+			ctx: options.ctx,
+			skipSideEffects: options.skipSideEffects,
+			completionFn: options.completionFn,
+			searchKnowledgeFn: options.searchKnowledgeFn,
+			getThreadFn: options.getThreadFn,
+			getConnectionsFn: options.getConnectionsFn,
+			indexEmailFn: options.indexEmailFn,
+			updateEmailIndexStateFn: options.updateEmailIndexStateFn,
+		}).catch((err) => {
+			log.error({ err, host_id, user_id: userId, run_id: runId }, 'Email inbox triage background dispatch failed');
+		});
+	});
+
+	return formatted;
+}
+
 export async function triageInboxEmails(host_id, userId, options = {}) {
 	await ensureDefaultEmailLabels(host_id);
 	const limit = Math.min(parseInt(options.limit, 10) || 25, 100);
@@ -2014,6 +2164,24 @@ export async function triageInboxEmails(host_id, userId, options = {}) {
 	let drafted = 0;
 	let linked = 0;
 	let moved = 0;
+
+	async function notifyProgress() {
+		if (typeof options.onProgress !== 'function') return;
+		try {
+			await options.onProgress({
+				run_id: runId,
+				total: emails.length,
+				processed: results.length + errors.length,
+				triaged: results.length,
+				drafted,
+				linked,
+				moved,
+				errors,
+			});
+		} catch (err) {
+			log.warn({ err, host_id, run_id: runId }, 'Email triage progress callback failed');
+		}
+	}
 
 	for (const email of emails) {
 		try {
@@ -2105,6 +2273,7 @@ export async function triageInboxEmails(host_id, userId, options = {}) {
 			}
 			errors.push({ email_id: email._id.toString(), error: err.message });
 		}
+		await notifyProgress();
 	}
 
 	if (results.length && !options.skipSideEffects) invalidateGraphCache(host_id).catch(() => {});

@@ -57,7 +57,7 @@ Manual runs open a non‑dismissable progress modal in the ECC that updates in r
 - A progress bar
 - The first error encountered (if any)
 
-The modal uses the `run_id` from the API response and listens for `email:updated` socket events with that same `run_id` to update counts incrementally — so even very long runs show motion as each email finishes.
+The modal uses the `run_id` from the API response and listens for `email-triage:run-updated` plus matching `email:updated` socket events. It also polls the run endpoint as a fallback, so long AI batches keep reporting progress even if the original request or socket drops.
 
 ## System labels
 

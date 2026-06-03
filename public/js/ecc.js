@@ -76,6 +76,9 @@
 	var windowListeners = [];
 	var triageRunId = '';
 	var triageProgress = null;
+	var triagePollTimer = null;
+	var triageProgressWaitTimer = null;
+	var triageBtnOriginalHtml = '';
 	var INTERNAL_NOTE_PREVIEW_LIMIT = 150;
 	var REPLY_SUGGESTIONS_AUTO_CLOSE_MS = 45000;
 	var MAILBOX_ACTIONS = [
@@ -2744,12 +2747,18 @@
 				triageModalProgress.setAttribute('aria-valuenow', String(pct));
 			}
 			if (triageModalStatus) {
-				triageModalStatus.textContent = triageProgress.running ? 'Processing inbox' : 'Triage complete';
+				var statusText = 'Processing inbox';
+				if (triageProgress.status === 'queued') statusText = 'Queued';
+				if (triageProgress.waiting && triageProgress.running) statusText = 'Waiting for server updates';
+				if (triageProgress.status === 'failed') statusText = 'Triage failed';
+				if (triageProgress.status === 'completed') statusText = 'Triage complete';
+				triageModalStatus.textContent = statusText;
 			}
 			if (triageModalDetail) {
+				var runText = triageRunId ? ' Run: ' + triageRunId : '';
 				triageModalDetail.textContent = triageProgress.running
-					? triageProgress.processed + ' of ' + total + ' processed.'
-					: triageProgress.triaged + ' triaged, ' + triageProgress.errors + ' errors.';
+					? triageProgress.processed + ' of ' + total + ' processed.' + runText
+					: triageProgress.triaged + ' triaged, ' + triageProgress.errors + ' errors.' + runText;
 			}
 			if (triageSpinner) triageSpinner.classList.toggle('d-none', !triageProgress.running);
 			if (triageModalClose) triageModalClose.disabled = triageProgress.running;
@@ -2764,11 +2773,95 @@
 				errors: 0,
 				seen: new Set(),
 				running: true,
+				status: 'queued',
+				waiting: false,
+				finished: false,
+				runDriven: false,
 			};
 			renderTriageProgress();
 			if (!triageModalEl) return;
 			const { Modal } = await import('/static/js/vendor.js');
 			Modal.getOrCreateInstance(triageModalEl).show();
+		}
+
+		function stopTriageRunPolling() {
+			if (triagePollTimer) clearInterval(triagePollTimer);
+			triagePollTimer = null;
+			if (triageProgressWaitTimer) clearTimeout(triageProgressWaitTimer);
+			triageProgressWaitTimer = null;
+		}
+
+		function normalizeTriageRun(payload) {
+			return payload?.run || payload || null;
+		}
+
+		function applyTriageRunProgress(payload) {
+			var run = normalizeTriageRun(payload);
+			if (!run || !triageProgress || !triageRunId || run.run_id !== triageRunId) return null;
+			triageProgress.total = run.total || triageProgress.total || 0;
+			if ((run.processed || 0) > triageProgress.processed) triageProgress.runDriven = true;
+			triageProgress.processed = Math.max(triageProgress.processed, run.processed || 0);
+			triageProgress.triaged = Math.max(triageProgress.triaged, run.triaged || 0);
+			triageProgress.errors = Math.max(triageProgress.errors, (run.errors || []).length);
+			triageProgress.status = run.status || triageProgress.status || 'running';
+			triageProgress.running = ['queued', 'running'].includes(triageProgress.status);
+			if (triageProgress.processed > 0 || !triageProgress.running) triageProgress.waiting = false;
+			renderTriageProgress();
+			return run;
+		}
+
+		async function finishTriageRun(run) {
+			if (!triageProgress || triageProgress.finished) return;
+			triageProgress.finished = true;
+			triageProgress.running = false;
+			triageProgress.status = run?.status || triageProgress.status || 'completed';
+			stopTriageRunPolling();
+			renderTriageProgress();
+			if (triageBtn) {
+				triageBtn.disabled = false;
+				if (triageBtnOriginalHtml) triageBtn.innerHTML = triageBtnOriginalHtml;
+			}
+			activeMailbox = 'inbox';
+			activeLabel = '';
+			pendingEmailId = '';
+			writeUrlState('');
+			await loadAll();
+			if (triageProgress.status === 'failed') {
+				showError(run?.last_error || 'Inbox triage failed. Run: ' + triageRunId);
+				return;
+			}
+			var errorCount = (run?.errors || []).length;
+			if ((run?.processed || 0) > 0 && !(run?.triaged || 0) && errorCount) {
+				showError((run.errors[0] || {}).error || 'Inbox triage failed. Run: ' + triageRunId);
+			} else {
+				showSuccess('Triaged ' + (run?.triaged || 0) + ' email' + (run?.triaged === 1 ? '' : 's'));
+				setTimeout(hideTriageModal, 900);
+			}
+		}
+
+		async function pollTriageRun(runId) {
+			try {
+				var result = await api('GET', '/emails/triage-runs/' + encodeURIComponent(runId));
+				var run = applyTriageRunProgress(result);
+				if (run && ['completed', 'failed'].includes(run.status)) await finishTriageRun(run);
+			} catch (err) {
+				if (triageProgress && triageProgress.running) {
+					triageProgress.waiting = true;
+					renderTriageProgress();
+				}
+			}
+		}
+
+		function startTriageRunPolling(runId) {
+			stopTriageRunPolling();
+			triageProgressWaitTimer = setTimeout(() => {
+				if (!triageProgress || !triageProgress.running || triageProgress.processed > 0) return;
+				triageProgress.waiting = true;
+				renderTriageProgress();
+			}, 8000);
+			triagePollTimer = setInterval(() => {
+				pollTriageRun(runId);
+			}, 2500);
 		}
 
 		function completeTriageProgress(result) {
@@ -2790,20 +2883,29 @@
 		function updateTriageProgressFromEmail(email) {
 			if (!triageProgress || !triageRunId || !email || email.triage_run_id !== triageRunId) return;
 			if (!['complete', 'failed'].includes(email.triage_status)) return;
+			if (triageProgress.runDriven) return;
 			var id = emailId(email);
 			if (!id || triageProgress.seen.has(id)) return;
 			triageProgress.seen.add(id);
 			triageProgress.processed += 1;
 			if (email.triage_status === 'complete') triageProgress.triaged += 1;
 			if (email.triage_status === 'failed') triageProgress.errors += 1;
+			triageProgress.waiting = false;
 			if (triageProgress.processed > triageProgress.total) triageProgress.total = triageProgress.processed;
 			renderTriageProgress();
+		}
+
+		function handleTriageRunEvent(event) {
+			var run = applyTriageRunProgress(event.detail || {});
+			if (run && ['completed', 'failed'].includes(run.status)) {
+				finishTriageRun(run).catch((err) => showError(err.message || 'Inbox triage failed'));
+			}
 		}
 
 		async function triageInbox() {
 			if (!triageBtn) return;
 			triageBtn.disabled = true;
-			var original = triageBtn.innerHTML;
+			triageBtnOriginalHtml = triageBtn.innerHTML;
 			triageBtn.innerHTML = kkIcon('sync', 'me-1') + 'Triaging...';
 			var runId = newRunId();
 			try {
@@ -2811,29 +2913,20 @@
 				var payload = { run_id: runId };
 				if (selectedProject) payload.project = selectedProject;
 				var result = await api('POST', '/emails/triage-inbox', payload);
-				completeTriageProgress(result);
-				activeMailbox = 'inbox';
-				activeLabel = '';
-				pendingEmailId = '';
-				writeUrlState('');
-				await loadAll();
-				if ((result.processed || 0) > 0 && !(result.triaged || 0) && (result.errors || []).length) {
-					showError((result.errors[0] || {}).error || 'Inbox triage failed');
-				} else {
-					showSuccess('Triaged ' + (result.triaged || 0) + ' email' + (result.triaged === 1 ? '' : 's'));
-					setTimeout(hideTriageModal, 900);
-				}
+				var run = applyTriageRunProgress(result);
+				startTriageRunPolling(runId);
+				if (run && ['completed', 'failed'].includes(run.status)) await finishTriageRun(run);
 			} catch (err) {
 				if (triageProgress) {
 					triageProgress.running = false;
+					triageProgress.status = 'failed';
 					renderTriageProgress();
 				}
 				showError(err.message);
-			} finally {
 				triageBtn.disabled = false;
-				triageBtn.innerHTML = original;
+				triageBtn.innerHTML = triageBtnOriginalHtml;
 			}
-	}
+		}
 
 	function onModalDeleted(e) {
 		if (e.detail?.type === 'emails') loadAll();
@@ -2940,6 +3033,7 @@
 		addWindowListener('item-modal-deleted', onModalDeleted);
 		addWindowListener('email:created', handleEmailSocketEvent);
 		addWindowListener('email:updated', handleEmailSocketEvent);
+		addWindowListener('email-triage:run-updated', handleTriageRunEvent);
 		addWindowListener('email:deleted', handleEmailDeleted);
 		addWindowListener('email-draft:created', handleDraftSocketEvent);
 		addWindowListener('email-draft:updated', handleDraftSocketEvent);
@@ -2956,6 +3050,7 @@
 	}
 
 	function unmount() {
+		stopTriageRunPolling();
 		for (var i = 0; i < windowListeners.length; i++) {
 			window.removeEventListener(windowListeners[i][0], windowListeners[i][1]);
 		}

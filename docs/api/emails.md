@@ -154,4 +154,29 @@ Body:
 
 Use the returned `run_id`, `email_id`, or original `message_id` with the triage status endpoints to poll completion from external systems.
 
+Response is `202 Accepted` and returns immediately:
+
+```json
+{
+	"run_id": "client-run-id",
+	"status": "queued",
+	"total": 24,
+	"run": {
+		"run_id": "client-run-id",
+		"status": "queued",
+		"processed": 0,
+		"triaged": 0,
+		"errors": []
+	}
+}
+```
+
+Poll run progress:
+
+```http
+GET /api/v1/emails/triage-runs/client-run-id
+```
+
+The run status is one of `queued`, `running`, `completed`, or `failed`. The UI also receives `email-triage:run-updated` socket events for live progress.
+
 Triage-generated classifications and reply drafts use the same project-first context rule: search records in the email's project first, then retry across all projects only when no usable project context is found.

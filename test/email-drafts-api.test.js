@@ -5,8 +5,11 @@ import express from 'express';
 import config from '../config.js';
 import { User } from '../model/user.js';
 import { TenantMember } from '../model/tenant_member.js';
+import { Tenant } from '../modules/tenancy.js';
 import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
+import { EmailLabel } from '../model/email_label.js';
+import { EmailTriageRun } from '../model/email_triage_run.js';
 import { EmailIdentity } from '../model/email_identity.js';
 import { EmailInternalNote } from '../model/email_internal_note.js';
 
@@ -49,6 +52,13 @@ describe('Email draft API', () => {
 	const originalTenantMemberFindOneAndUpdate = TenantMember.findOneAndUpdate;
 	const originalEmailFind = Email.find;
 	const originalEmailFindOne = Email.findOne;
+	const originalEmailCountDocuments = Email.countDocuments;
+	const originalLabelBulkWrite = EmailLabel.bulkWrite;
+	const originalLabelFind = EmailLabel.find;
+	const originalRunCreate = EmailTriageRun.create;
+	const originalRunFindOne = EmailTriageRun.findOne;
+	const originalRunFindOneAndUpdate = EmailTriageRun.findOneAndUpdate;
+	const originalTenantFindOne = Tenant.findOne;
 	const originalDraftFind = EmailDraft.find;
 	const originalDraftFindOne = EmailDraft.findOne;
 	const originalDraftFindOneAndUpdate = EmailDraft.findOneAndUpdate;
@@ -102,6 +112,13 @@ describe('Email draft API', () => {
 		TenantMember.findOneAndUpdate = originalTenantMemberFindOneAndUpdate;
 		Email.find = originalEmailFind;
 		Email.findOne = originalEmailFindOne;
+		Email.countDocuments = originalEmailCountDocuments;
+		EmailLabel.bulkWrite = originalLabelBulkWrite;
+		EmailLabel.find = originalLabelFind;
+		EmailTriageRun.create = originalRunCreate;
+		EmailTriageRun.findOne = originalRunFindOne;
+		EmailTriageRun.findOneAndUpdate = originalRunFindOneAndUpdate;
+		Tenant.findOne = originalTenantFindOne;
 		EmailDraft.find = originalDraftFind;
 		EmailDraft.findOne = originalDraftFindOne;
 		EmailDraft.findOneAndUpdate = originalDraftFindOneAndUpdate;
@@ -857,6 +874,85 @@ describe('Email draft API', () => {
 			assert.equal(singleJson.status.triage_primary_action, 'reply-required');
 			assert.equal(singleJson.status.email, undefined);
 			assert.equal(singleJson.status.draft._id, 'draft-1');
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
+	it('queues inbox triage asynchronously for account members and exposes run status', async () => {
+		let currentRun = null;
+		Email.countDocuments = async (query) => {
+			assert.equal(query.host_id, 'host-1');
+			assert.equal(query.mailbox, 'inbox');
+			assert.equal(query.triaged, false);
+			return 24;
+		};
+		EmailTriageRun.create = async (doc) => {
+			currentRun = { ...doc, createdAt: new Date(), updatedAt: new Date() };
+			return currentRun;
+		};
+		EmailTriageRun.findOne = () => ({
+			lean: async () => currentRun,
+		});
+		EmailTriageRun.findOneAndUpdate = async (query, update) => {
+			assert.equal(query.host_id, 'host-1');
+			assert.equal(query.run_id, 'api-run-1');
+			currentRun = { ...currentRun, ...update.$set, updatedAt: new Date() };
+			return currentRun;
+		};
+		EmailLabel.bulkWrite = async () => ({});
+		EmailLabel.find = () => ({
+			sort: () => ({
+				lean: async () => [],
+			}),
+		});
+		Email.find = () => ({
+			sort: () => ({
+				limit: () => ({
+					lean: async () => [],
+				}),
+			}),
+		});
+		Tenant.findOne = () => ({
+			select: () => ({
+				lean: async () => ({ settings: { ai_instructions: {} } }),
+			}),
+		});
+		TenantMember.find = () => ({
+			populate: () => ({
+				lean: async () => [{
+					_id: { toString: () => 'membership-1' },
+					role: 'member',
+					tenant: {
+						_id: { toString: () => '507f1f77bcf86cd799439012' },
+						host_id: 'host-1',
+						name: 'Test Account',
+						is_active: true,
+					},
+				}],
+			}),
+		});
+
+		const server = await createServer();
+		try {
+			const response = await request(server, 'POST', '/emails/triage-inbox', { run_id: 'api-run-1', limit: 25 });
+			const json = await readJson(response);
+
+			assert.equal(response.status, 202);
+			assert.equal(json.run_id, 'api-run-1');
+			assert.equal(json.status, 'queued');
+			assert.equal(json.total, 24);
+			assert.equal(json.run.member_role, 'member');
+
+			await new Promise((resolve) => setImmediate(resolve));
+			await new Promise((resolve) => setImmediate(resolve));
+
+			const statusResponse = await request(server, 'GET', '/emails/triage-runs/api-run-1');
+			const statusJson = await readJson(statusResponse);
+
+			assert.equal(statusResponse.status, 200);
+			assert.equal(statusJson.run.status, 'completed');
+			assert.equal(statusJson.run.processed, 0);
 		} finally {
 			await new Promise((resolve) => server.close(resolve));
 		}

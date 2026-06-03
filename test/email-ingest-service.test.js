@@ -1,10 +1,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailIds, listEmailLabels, parseTriageResult, triageInboxEmails, backfillEmailTriageState, askEmailAi, askEmailListAi, buildEmailAiTypesenseFilter, buildTriageContext, parseEmailAiQuery, resetEmailTriage, updateEmail, parseEmailReplySuggestionsResult, suggestEmailReplies, suggestFromEmailAddresses, matchesEmailFilter } from '../services/email_ingest_service.js';
+import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailIds, listEmailLabels, parseTriageResult, triageInboxEmails, startEmailTriageRun, getEmailTriageRun, backfillEmailTriageState, askEmailAi, askEmailListAi, buildEmailAiTypesenseFilter, buildTriageContext, parseEmailAiQuery, resetEmailTriage, updateEmail, parseEmailReplySuggestionsResult, suggestEmailReplies, suggestFromEmailAddresses, matchesEmailFilter } from '../services/email_ingest_service.js';
 import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
 import { EmailLabel } from '../model/email_label.js';
+import { EmailTriageRun } from '../model/email_triage_run.js';
 import { GraphLink } from '../model/graph_link.js';
 import { Tenant } from '../modules/tenancy.js';
 import { toTypesenseDoc } from '../modules/typesense.js';
@@ -1465,6 +1466,140 @@ describe('Email ingest service', () => {
 					EmailLabel.find = originalLabelFind;
 					Email.find = originalEmailFind;
 					Email.findOneAndUpdate = originalFindOneAndUpdate;
+					Tenant.findOne = originalTenantFindOne;
+				}
+			});
+
+			it('reports inbox triage progress after each processed email', async () => {
+				const originalBulkWrite = EmailLabel.bulkWrite;
+				const originalLabelFind = EmailLabel.find;
+				const originalEmailFind = Email.find;
+				const originalFindOneAndUpdate = Email.findOneAndUpdate;
+				const originalTenantFindOne = Tenant.findOne;
+				const progress = [];
+
+				EmailLabel.bulkWrite = async () => ({});
+				EmailLabel.find = () => ({
+					sort: () => ({
+						lean: async () => [],
+					}),
+				});
+				Email.find = () => ({
+					sort: () => ({
+						limit: () => ({
+							lean: async () => [
+								{ _id: { toString: () => 'email-1' }, subject: 'First', from: ['a@example.com'], to: ['team@example.com'], text_content: 'A', labels: [], mailbox: 'inbox', project: 'project-1', owner: userId },
+								{ _id: { toString: () => 'email-2' }, subject: 'Second', from: ['b@example.com'], to: ['team@example.com'], text_content: 'B', labels: [], mailbox: 'inbox', project: 'project-1', owner: userId },
+							],
+						}),
+					}),
+				});
+				Email.findOneAndUpdate = async (query, update) => ({ _id: query._id, labels: [], mailbox: 'archived', ...update.$set });
+				Tenant.findOne = () => ({
+					select: () => ({
+						lean: async () => ({ settings: { ai_instructions: {} } }),
+					}),
+				});
+
+				try {
+					const result = await triageInboxEmails('host-1', userId, {
+						run_id: 'progress-run-1',
+						skipSideEffects: true,
+						searchKnowledgeFn: async () => ({}),
+						getThreadFn: async () => [],
+						getConnectionsFn: async () => ({ links: [], tag_connections: [] }),
+						completionFn: async () => '{"primary_action":"no-action","labels":["no-action"],"summary":"FYI","reason":"No action","confidence":0.8,"action_points":[],"related_context":[],"mailbox_action":"archive"}',
+						onProgress: async (state) => {
+							progress.push({ processed: state.processed, triaged: state.triaged, errors: state.errors.length, total: state.total });
+						},
+					});
+
+					assert.equal(result.processed, 2);
+					assert.deepEqual(progress, [
+						{ processed: 1, triaged: 1, errors: 0, total: 2 },
+						{ processed: 2, triaged: 2, errors: 0, total: 2 },
+					]);
+				} finally {
+					EmailLabel.bulkWrite = originalBulkWrite;
+					EmailLabel.find = originalLabelFind;
+					Email.find = originalEmailFind;
+					Email.findOneAndUpdate = originalFindOneAndUpdate;
+					Tenant.findOne = originalTenantFindOne;
+				}
+			});
+
+			it('starts and reads persisted async inbox triage runs', async () => {
+				const originalCountDocuments = Email.countDocuments;
+				const originalEmailFind = Email.find;
+				const originalBulkWrite = EmailLabel.bulkWrite;
+				const originalLabelFind = EmailLabel.find;
+				const originalRunCreate = EmailTriageRun.create;
+				const originalRunFindOne = EmailTriageRun.findOne;
+				const originalRunFindOneAndUpdate = EmailTriageRun.findOneAndUpdate;
+				const originalTenantFindOne = Tenant.findOne;
+				const updates = [];
+				let currentRun = null;
+
+				Email.countDocuments = async () => 24;
+				Email.find = () => ({
+					sort: () => ({
+						limit: () => ({
+							lean: async () => [],
+						}),
+					}),
+				});
+				EmailLabel.bulkWrite = async () => ({});
+				EmailLabel.find = () => ({
+					sort: () => ({
+						lean: async () => [],
+					}),
+				});
+				Tenant.findOne = () => ({
+					select: () => ({
+						lean: async () => ({ settings: { ai_instructions: {} } }),
+					}),
+				});
+				EmailTriageRun.create = async (doc) => {
+					currentRun = { ...doc, createdAt: new Date(), updatedAt: new Date() };
+					return currentRun;
+				};
+				EmailTriageRun.findOne = () => ({
+					lean: async () => currentRun,
+				});
+				EmailTriageRun.findOneAndUpdate = async (query, update) => {
+					assert.equal(query.run_id, 'async-run-1');
+					currentRun = { ...currentRun, ...update.$set, updatedAt: new Date() };
+					updates.push(currentRun.status);
+					return currentRun;
+				};
+
+				try {
+					const queued = await startEmailTriageRun('host-1', userId, {
+						run_id: 'async-run-1',
+						limit: 25,
+						member_role: 'member',
+						tenant_id: 'tenant-1',
+						skipSideEffects: true,
+					});
+					assert.equal(queued.status, 'queued');
+					assert.equal(queued.total, 24);
+					assert.equal(queued.member_role, 'member');
+
+					await new Promise((resolve) => setImmediate(resolve));
+					await new Promise((resolve) => setImmediate(resolve));
+
+					const stored = await getEmailTriageRun('host-1', 'async-run-1');
+					assert.equal(stored.status, 'completed');
+					assert.equal(stored.processed, 0);
+					assert.deepEqual(updates, ['running', 'completed']);
+				} finally {
+					Email.countDocuments = originalCountDocuments;
+					Email.find = originalEmailFind;
+					EmailLabel.bulkWrite = originalBulkWrite;
+					EmailLabel.find = originalLabelFind;
+					EmailTriageRun.create = originalRunCreate;
+					EmailTriageRun.findOne = originalRunFindOne;
+					EmailTriageRun.findOneAndUpdate = originalRunFindOneAndUpdate;
 					Tenant.findOne = originalTenantFindOne;
 				}
 			});
