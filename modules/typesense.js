@@ -756,6 +756,85 @@ export async function searchAll(host_id, query, options = {}) {
 	return merged;
 }
 
+const QUICK_SEARCH_FIELDS = {
+	notes: {
+		query_by: 'title,text_content,tags',
+		include_fields: 'id,source_id,title,text_content,tags,project_id,created_at,updated_at',
+		highlight_fields: 'title,text_content,tags',
+	},
+	memory: {
+		query_by: 'title,content,source,tags',
+		include_fields: 'id,source_id,title,content,source,tags,project_id,created_at,updated_at',
+		highlight_fields: 'title,content,source,tags',
+	},
+	urls: {
+		query_by: 'title,url,description,text_content',
+		include_fields: 'id,source_id,title,url,description,text_content,project_id,created_at,updated_at',
+		highlight_fields: 'title,url,description,text_content',
+	},
+	emails: {
+		query_by: 'subject,from,to,cc,bcc,from_emails,to_emails,cc_emails,bcc_emails,participant_emails,text_content,attachment_text_content,triage_summary,triage_action_points',
+		include_fields: 'id,source_id,subject,from,to,cc,bcc,mailbox,labels,triaged,triage_summary,triage_primary_action,text_content,attachment_text_content,project_id,created_at,updated_at',
+		highlight_fields: 'subject,from,to,cc,bcc,from_emails,to_emails,cc_emails,bcc_emails,participant_emails,text_content,attachment_text_content,triage_summary,triage_action_points',
+	},
+	pages: {
+		query_by: 'title,url,text_content',
+		include_fields: 'id,source_id,title,url,parent_url_id,text_content,project_id,crawled_at',
+		highlight_fields: 'title,url,text_content',
+	},
+};
+
+/**
+ * Fast lexical multi-search for the authenticated app command palette.
+ * This intentionally avoids embedding search and conversational AI so short
+ * keyword queries such as email subjects return immediately with highlights.
+ */
+export async function quickSearch(host_id, query, options = {}) {
+	const ts = getTypesenseClient();
+	const includeEmails = options.includeEmails !== false;
+	const types = includeEmails ? ['notes', 'memory', 'urls', 'emails', 'pages'] : ['notes', 'memory', 'urls', 'pages'];
+	const perPage = Math.min(Math.max(parseInt(options.perPage, 10) || 6, 1), 20);
+	const q = String(query || '').trim();
+	if (!q) return {};
+
+	const searches = types.map((type) => {
+		const fields = QUICK_SEARCH_FIELDS[type];
+		const filters = [];
+		if (options.projectId) filters.push(`project_id:=${exactFilterValue(options.projectId)}`);
+		if (type === 'emails') filters.push('in_trash:=false');
+		return {
+			collection: `${type}_${host_id}`,
+			q,
+			query_by: fields.query_by,
+			prefix: true,
+			per_page: perPage * (_chunk_fields[type] ? 3 : 1),
+			include_fields: includeSourceIdField(fields.include_fields),
+			highlight_fields: fields.highlight_fields,
+			highlight_start_tag: '__kk_hl_start__',
+			highlight_end_tag: '__kk_hl_end__',
+			exclude_fields: _ts_exlude_default,
+			sort_by: type === 'pages' ? '_text_match:desc,crawled_at:desc' : '_text_match:desc,updated_at:desc',
+			...(filters.length ? { filter_by: filters.join(' && ') } : {}),
+		};
+	});
+
+	const results = await withTypesenseResilience(
+		`quick search host ${host_id}`,
+		() => ts.multiSearch.perform({ searches }, {}),
+		{
+			fallback: {
+				results: types.map(() => ({ hits: [], found: 0, out_of: 0, page: 1 })),
+			},
+		},
+	);
+
+	const merged = {};
+	types.forEach((type, i) => {
+		merged[type] = dedupeHitsBySourceId(results.results?.[i], perPage) || { hits: [], found: 0, out_of: 0, page: 1 };
+	});
+	return merged;
+}
+
 /**
  * Get document counts for each collection type for a host.
  * Uses Typesense collection stats.

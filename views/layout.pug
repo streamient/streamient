@@ -42,7 +42,13 @@ html(lang="en")
 						a.kk-navbtn(href="/dashboard" class={active: page !== 'graph' && page !== 'ecc'}) Projects
 						a.kk-navbtn(href="/graph" class={active: page === 'graph'}) Graph
 						a.kk-navbtn(href="/ecc" class={active: page === 'ecc'}) Email
-					.ms-auto.d-flex.align-items-center
+					.ms-auto.d-flex.align-items-center.kk-navbar-actions
+						.kk-global-search
+							button.kk-global-search-trigger#kk-global-search-trigger(type="button" aria-haspopup="dialog" aria-controls="kk-search-palette")
+								!= icon('search', 'kk-global-search-icon')
+								span.kk-global-search-text Type
+								kbd /
+								span.kk-global-search-text to search
 						if user
 							if is_trialing
 								a.btn.btn-warning.btn-sm.me-3(href="/settings/subscription" style="padding-top:0.45rem;padding-bottom:0.45rem;")
@@ -113,6 +119,25 @@ html(lang="en")
 					aside.col-md-3.p-3.border-start#chat-sidebar
 						block chat
 							include includes/chat_sidebar
+
+		#kk-search-backdrop.kk-search-backdrop.d-none
+		#kk-search-palette.kk-search-palette.d-none(role="dialog" aria-modal="true" aria-labelledby="kk-search-title")
+			.kk-search-dialog
+				.kk-search-input-row
+					!= icon('search', 'kk-search-input-icon')
+					label.visually-hidden(for="kk-search-input") Search
+					input.form-control.form-control-sm#kk-search-input(type="search" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="kk-search-help")
+					kbd Esc
+				#kk-search-help.kk-search-help Search everything
+				#kk-search-results.kk-search-results(role="listbox" aria-label="Search results")
+				.kk-search-footer
+					span
+						kbd Up
+						kbd Down
+						span Navigate
+					span
+						kbd Enter
+						span Open
 
 		//- Universal modal for viewing/editing/creating items
 		.modal.fade#chat-result-modal(tabindex="-1" aria-hidden="true")
@@ -338,6 +363,7 @@ html(lang="en")
 		script(src=`/static/v-${v}/js/email_iframe_renderer.js`)
 		script(src=`/static/v-${v}/js/chat.js`)
 		script(src=`/static/v-${v}/js/app.js`)
+		script(src=`/static/v-${v}/js/search_palette.js`)
 		script(src=`/static/v-${v}/js/notes.js`)
 		script(src=`/static/v-${v}/js/memories.js`)
 		script(src=`/static/v-${v}/js/urls.js`)

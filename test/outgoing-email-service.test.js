@@ -31,6 +31,11 @@ describe('Outgoing email service', () => {
 		originals.queueRemoveJob = MongoQueue.removeJob;
 		originals.createTransport = nodemailer.createTransport;
 		originals.smtpServers = config.smtp.servers;
+		originals.smtpHost = config.smtp.host;
+		originals.smtpPort = config.smtp.port;
+		originals.smtpUser = config.smtp.user;
+		originals.smtpPass = config.smtp.pass;
+		originals.smtpFrom = config.smtp.from;
 	});
 
 	afterEach(() => {
@@ -47,6 +52,11 @@ describe('Outgoing email service', () => {
 		MongoQueue.removeJob = originals.queueRemoveJob;
 		nodemailer.createTransport = originals.createTransport;
 		config.smtp.servers = originals.smtpServers;
+		config.smtp.host = originals.smtpHost;
+		config.smtp.port = originals.smtpPort;
+		config.smtp.user = originals.smtpUser;
+		config.smtp.pass = originals.smtpPass;
+		config.smtp.from = originals.smtpFrom;
 	});
 
 	it('queues a draft with a 10 second delayed job', async () => {
@@ -296,6 +306,11 @@ describe('Outgoing email service', () => {
 
 	it('fails to send when use_system_smtp is set but no system SMTP is configured', async () => {
 		config.smtp.servers = [];
+		config.smtp.host = '';
+		config.smtp.port = 587;
+		config.smtp.user = '';
+		config.smtp.pass = '';
+		config.smtp.from = '';
 		let errorSaved = null;
 		const outgoing = {
 			_id: 'outgoing-3',

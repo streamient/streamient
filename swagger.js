@@ -1892,6 +1892,66 @@ const swaggerSpec = {
                 },
             },
         },
+        '/search/quick': {
+            post: {
+                tags: ['Search'],
+                summary: 'Fast lexical search for the top search palette',
+                description: 'Searches notes, memories, URLs, pages, and emails when email access is enabled. Returns normalized records with safe highlight segments and client open targets.',
+                requestBody: {
+                    required: true,
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    query: { type: 'string' },
+                                    project_id: { type: 'string', description: 'Filter by project (optional)' },
+                                    per_page: { type: 'integer', description: 'Results per collection before final merge' },
+                                    limit: { type: 'integer', description: 'Maximum normalized results to return' },
+                                },
+                                required: ['query'],
+                            },
+                        },
+                    },
+                },
+                responses: {
+                    200: {
+                        description: 'OK',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        query: { type: 'string' },
+                                        found: { type: 'integer' },
+                                        results: {
+                                            type: 'array',
+                                            items: {
+                                                type: 'object',
+                                                properties: {
+                                                    id: { type: 'string' },
+                                                    type: { type: 'string', enum: ['notes', 'memory', 'urls', 'emails', 'pages'] },
+                                                    title: { type: 'string' },
+                                                    subtitle: { type: 'string' },
+                                                    excerpt: { type: 'string' },
+                                                    highlight_field: { type: 'string' },
+                                                    highlight_segments: { type: 'array', items: { type: 'object', properties: { text: { type: 'string' }, highlighted: { type: 'boolean' } } } },
+                                                    project_id: { type: 'string' },
+                                                    updated_at: { type: 'integer', nullable: true },
+                                                    open_target: { type: 'object' },
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                    400: { description: 'Invalid request', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+                    500: { description: 'Search failed', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+                },
+            },
+        },
 
         // ---- Resolve ----
         '/resolve': {

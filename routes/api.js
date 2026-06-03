@@ -16,6 +16,7 @@ import * as emailIngestService from '../services/email_ingest_service.js';
 import * as emailInternalNoteService from '../services/email_internal_note_service.js';
 import * as outgoingEmailService from '../services/outgoing_email_service.js';
 import { searchKnowledge, aiChatSearch, processChat, processChatStream } from '../services/ai_chat_service.js';
+import { quickSearchKnowledge } from '../services/quick_search_service.js';
 import { listConversations, getConversationMessages, deleteConversation } from '../modules/typesense.js';
 import * as trashService from '../services/trash_service.js';
 import { crawlSite } from '../modules/crawler.js';
@@ -1111,6 +1112,25 @@ router.put('/settings/byo-ai', requireRestrictedSettingsAccess, requireByoAiAcce
 });
 
 // ---- Search / Knowledge ----
+
+router.post('/search/quick', async (req, res) => {
+	try {
+		const query = String(req.body.query || '').trim();
+		if (!query) return res.status(400).json({ error: 'query required' });
+		const emailEnabled = await getEmailFeatureAccess(req.host_id, req.billingUser);
+		const result = await quickSearchKnowledge(req.host_id, query, {
+			projectId: req.body.project_id,
+			includeEmails: emailEnabled,
+			perPage: req.body.per_page,
+			limit: req.body.limit,
+			emailOpenMode: emailEnabled ? 'ecc' : 'modal',
+		});
+		res.json({ query, ...result });
+	} catch (err) {
+		log.error({ err, host_id: req.host_id }, 'Quick search error');
+		res.status(500).json({ error: 'Search failed' });
+	}
+});
 
 router.post('/search/knowledge', async (req, res) => {
 	const emailEnabled = await getEmailFeatureAccess(req.host_id, req.billingUser);

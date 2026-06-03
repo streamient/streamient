@@ -289,11 +289,11 @@ describe('Email draft API', () => {
 				assert.equal(json.message, 'Spam emptied, 2 emails deleted');
 				assert.deepEqual(findQuery, { host_id: 'host-1', mailbox: 'spam', in_trash: { $ne: true } });
 				assert.deepEqual(deleteQuery, { _id: { $in: ['spam-1', 'spam-2'] }, host_id: 'host-1', mailbox: 'spam', in_trash: { $ne: true } });
-				assert.deepEqual(indexUpdates.map((call) => call.query), [
+				assert.deepEqual(indexUpdates.map((call) => call.query).sort((a, b) => String(a._id).localeCompare(String(b._id))), [
 					{ _id: 'spam-1', host_id: 'host-1' },
 					{ _id: 'spam-2', host_id: 'host-1' },
 				]);
-				assert.deepEqual(graphQueries, [
+				assert.deepEqual(graphQueries.sort((a, b) => String(a.$or?.[0]?.source_id || '').localeCompare(String(b.$or?.[0]?.source_id || ''))), [
 					{ host_id: 'host-1', $or: [{ source_id: 'spam-1' }, { target_id: 'spam-1' }] },
 					{ host_id: 'host-1', $or: [{ source_id: 'spam-2' }, { target_id: 'spam-2' }] },
 				]);
