@@ -612,8 +612,8 @@ small,
 	--tag-bg: rgba(var(--bs-primary-rgb), 0.12);
 	--tag-hover: rgba(var(--bs-primary-rgb), 0.18);
 	--tag-pad: 0.08rem 0.35rem;
-	--tag-text-color: #fff;
-	--tag-remove-btn-color: #fff;
+	--tag-text-color: var(--bs-body-color);
+	--tag-remove-btn-color: var(--bs-body-color);
 	--tag-remove-bg: transparent;
 	--tag-remove-btn-bg--hover: rgba(var(--bs-danger-rgb), 0.16);
 }
@@ -645,7 +645,7 @@ small,
 }
 
 .ecc-recipient-control .tagify__tag__removeBtn {
-	color: #fff;
+	color: var(--tag-remove-btn-color);
 	width: 0.85rem;
 	height: 0.85rem;
 	margin-inline: auto 0.2rem;
