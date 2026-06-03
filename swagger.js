@@ -30,6 +30,10 @@ const swaggerSpec = {
                     _id: { type: 'string' },
                     name: { type: 'string' },
                     color: { type: 'string' },
+                    email_filter: {
+                        type: 'string',
+                        description: 'Incoming email trash filter rules. Supports sender address/domain/local-part rules and subject rules like `subject: failed login` or `subject contains: status update`.',
+                    },
                     host_id: { type: 'string' },
                 },
             },
@@ -651,7 +655,7 @@ const swaggerSpec = {
                 parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
                 requestBody: {
                     required: true,
-                    content: { 'application/json': { schema: { type: 'object', properties: { name: { type: 'string' }, color: { type: 'string' } } } } },
+                    content: { 'application/json': { schema: { type: 'object', properties: { name: { type: 'string' }, color: { type: 'string' }, email_filter: { type: 'string', description: 'Incoming email trash filter rules. Supports sender address/domain/local-part rules and subject rules like `subject: failed login` or `subject contains: status update`.' } } } } },
                 },
                 responses: {
                     200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { project: { $ref: '#/components/schemas/Project' } } } } } },

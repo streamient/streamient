@@ -216,6 +216,43 @@ describe('Email forwarding import route', () => {
 		}
 	});
 
+	it('trashes forwarded email when subject matches the project email filter', async () => {
+		Project.findOne = () => ({
+			lean: async () => ({
+				_id: projectId,
+				owner: '507f1f77bcf86cd799439012',
+				host_id: 'host-1',
+				is_active: true,
+				email_filter: 'subject contains: status message',
+			}),
+		});
+		let createdPayload = null;
+		Email.create = async (payload) => {
+			createdPayload = payload;
+			return { _id: { toString: () => emailIds[0] }, ...payload };
+		};
+
+		const server = createServer();
+		try {
+			const response = await request(server, JSON.stringify({
+				message_id: '<filtered-subject-1@example.com>',
+				from: 'Monitor <monitor@example.com>',
+				to: `${projectId}@email.kumbukum.com`,
+				subject: 'Daily status message',
+				text: 'Body',
+			}));
+			const json = await response.json();
+
+			assert.equal(response.status, 200);
+			assert.deepEqual(json, { accepted: true, email_id: emailIds[0] });
+			assert.equal(createdPayload.in_trash, true);
+			assert.ok(createdPayload.trashed_at instanceof Date);
+			assert.equal(createdPayload.triaged, false);
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
 	it('does not trash forwarded email when sender does not match the project email filter', async () => {
 		Project.findOne = () => ({
 			lean: async () => ({

@@ -159,7 +159,10 @@ router.post('/email', raw({ type: () => true, limit: '25mb' }), async (req, res)
 		return res.json({ accepted: false });
 	}
 
-	const filtered = emailIngestService.matchesEmailFilter(project.email_filter, normalized.from);
+	const filtered = emailIngestService.matchesEmailFilter(project.email_filter, {
+		from: normalized.from,
+		subject: normalized.subject,
+	});
 
 	try {
 		const email = await emailIngestService.ingestForwardedEmail(project.owner, project.host_id, {

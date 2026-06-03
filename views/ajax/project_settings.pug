@@ -117,7 +117,7 @@
 							data-bwignore="true"
 							data-form-type="other"
 						)= project.email_filter
-						.form-text.mt-2 Matching emails are moved to trash and skip triage. Enter rules separated by new lines or commas — use a full address (name@example.com) for an exact sender, a domain (example.com or @example.com) for a whole domain, or a local part (noreply@) to match that name on any domain.
+						.form-text.mt-2 Matching emails are moved to trash and skip triage. Enter rules separated by new lines or commas — use a full address (name@example.com), domain (example.com or @example.com), local part (noreply@), or subject rule (subject: failed login or subject contains: status update).
 						.d-flex.justify-content-end.mt-2
 							button.btn.btn-primary.btn-sm(type="submit")
 								!= icon('check', 'me-1')

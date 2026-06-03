@@ -30,6 +30,11 @@ describe('Email ingest service', () => {
 		assert.equal(matchesEmailFilter('noreply@*', ['noreply@other.org']), true);
 		assert.equal(matchesEmailFilter('noreply@', ['no-reply@anywhere.com']), false);
 		assert.equal(matchesEmailFilter('noreply@', ['hello@noreply.com']), false);
+
+		assert.equal(matchesEmailFilter('subject: Kumbukum signup', { from: ['friend@good.com'], subject: 'Kumbukum signup: test@example.com' }), true);
+		assert.equal(matchesEmailFilter('subject contains: status update', { from: ['friend@good.com'], subject: 'Weekly STATUS update' }), true);
+		assert.equal(matchesEmailFilter('subject: failed login', { from: ['friend@good.com'], subject: 'Successful login' }), false);
+		assert.equal(matchesEmailFilter('subject:', { from: ['friend@good.com'], subject: 'subject only' }), false);
 	});
 
 	it('normalizes parsed payload fields', async () => {

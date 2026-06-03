@@ -378,6 +378,17 @@ export async function parseEmailInput(data) {
 	};
 }
 
+function normalizeEmailFilterInput(input) {
+	if (Array.isArray(input)) return { from: input, subject: '' };
+	if (input && typeof input === 'object') {
+		return {
+			from: Array.isArray(input.from) ? input.from : [input.from].filter(Boolean),
+			subject: String(input.subject || ''),
+		};
+	}
+	return { from: [], subject: '' };
+}
+
 export function matchesEmailFilter(filterText, fromAddresses = []) {
 	const rules = String(filterText || '')
 		.split(/[\n,]/)
@@ -385,12 +396,25 @@ export function matchesEmailFilter(filterText, fromAddresses = []) {
 		.filter(Boolean);
 	if (!rules.length) return false;
 
+	const input = normalizeEmailFilterInput(fromAddresses);
+	const subject = input.subject.trim().toLowerCase();
 	const exact = new Set();
 	const domains = new Set();
 	const localParts = new Set();
+	const subjectParts = [];
 	for (const rawRule of rules) {
+		const subjectContainsMatch = rawRule.match(/^subject\s+contains\s*:\s*(.+)$/);
+		const subjectMatch = rawRule.match(/^subject\s*:\s*(.+)$/);
+		if (subjectContainsMatch || subjectMatch) {
+			const value = String(subjectContainsMatch?.[1] || subjectMatch?.[1] || '').trim();
+			if (value) subjectParts.push(value);
+			continue;
+		}
+
 		const rule = rawRule.replace(/\*+$/, ''); // allow trailing wildcard, e.g. "noreply@*"
-		if (rule.endsWith('@')) {
+		if (!rule) {
+			continue;
+		} else if (rule.endsWith('@')) {
 			localParts.add(rule.slice(0, -1)); // local-part only, any domain (e.g. "noreply@")
 		} else if (rule.includes('@') && !rule.startsWith('@')) {
 			exact.add(rule);
@@ -399,7 +423,9 @@ export function matchesEmailFilter(filterText, fromAddresses = []) {
 		}
 	}
 
-	return (fromAddresses || []).some((addr) => {
+	if (subject && subjectParts.some((part) => subject.includes(part))) return true;
+
+	return (input.from || []).some((addr) => {
 		const value = String(addr || '').trim().toLowerCase();
 		if (!value) return false;
 		if (exact.has(value)) return true;
