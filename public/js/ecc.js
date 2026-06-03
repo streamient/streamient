@@ -391,7 +391,7 @@
 				showDraftBtn.type = 'button';
 				replyActions.appendChild(showDraftBtn);
 			}
-			if (options?.showMove) {
+			if (options?.showActions) {
 				var moveDropdown = buildBodyMoveDropdown(email);
 				if (moveDropdown) replyActions.appendChild(moveDropdown);
 				var trashBtn = buildBodyTrashButton(email);
@@ -2079,7 +2079,7 @@
 			var item = document.createElement('div');
 			item.className = 'list-group-item ecc-detail-message';
 			var dateText = formatDateTime(email.createdAt || email.updatedAt);
-			var isSelected = Boolean(options?.hideRepeatedHeader);
+			var isSelected = Boolean(options?.isSelected);
 			if (!isSelected) {
 				var header = document.createElement('div');
 				header.className = 'd-flex align-items-start gap-3 mb-3';
@@ -2093,7 +2093,7 @@
 				item.appendChild(header);
 			}
 
-			item.appendChild(renderEmailBody(email, { showMove: isSelected }));
+			item.appendChild(renderEmailBody(email, { showActions: Boolean(options?.showActions) }));
 			return item;
 		}
 
@@ -2119,8 +2119,10 @@
 			var selectedId = emailId(selected);
 			messages.forEach(function (message) {
 				var messageId = emailId(message);
+				var isSelectedMessage = (selectedId && messageId && selectedId === messageId) || message === selected;
 				group.appendChild(renderThreadMessage(message, {
-					hideRepeatedHeader: Boolean(selectedId && messageId && selectedId === messageId),
+					isSelected: isSelectedMessage,
+					showActions: isSelectedMessage,
 				}));
 			});
 			detailThreadEl.appendChild(group);

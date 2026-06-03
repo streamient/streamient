@@ -20,4 +20,14 @@ describe('ECC Email AI prompt buttons', () => {
 		assert.ok(eccJs.includes('summary.groups'));
 		assert.ok(eccJs.includes('summary.next_steps'));
 	});
+
+	it('keeps ECC detail action buttons scoped to the selected message', () => {
+		const eccJs = fs.readFileSync(new URL('../public/js/ecc.js', import.meta.url), 'utf8');
+
+		assert.ok(eccJs.includes('if (options?.showActions)'));
+		assert.ok(eccJs.includes('var isSelected = Boolean(options?.isSelected);'));
+		assert.ok(eccJs.includes('var isSelectedMessage = (selectedId && messageId && selectedId === messageId) || message === selected;'));
+		assert.ok(eccJs.includes('showActions: isSelectedMessage'));
+		assert.ok(!eccJs.includes('showMove: isSelected'));
+	});
 });
