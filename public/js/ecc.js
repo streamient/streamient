@@ -90,6 +90,16 @@
 		{ slug: 'spam', name: 'Spam', icon: 'warning' },
 	];
 	var SYSTEM_TRIAGE_LABELS = ['reply-required', 'human-do', 'waiting', 'no-action', 'triaged', 'spam'];
+	// Triage status labels shown (and removable) in the email detail. Mirrors the
+	// default labels in services/email_ingest_service.js (excludes the hidden
+	// "triaged"/Done flag). Order matches the left-nav label order.
+	var EMAIL_STATUS_LABELS = [
+		{ slug: 'reply-required', name: 'Review', color: '#dc3545' },
+		{ slug: 'human-do', name: 'Human Do', color: '#fd7e14' },
+		{ slug: 'waiting', name: 'Waiting', color: '#0d6efd' },
+		{ slug: 'spam', name: 'Spam', color: '#212529' },
+		{ slug: 'no-action', name: 'No action', color: '#6c757d' },
+	];
 	var DRAFT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 	var EMAIL_PAGE_SIZE = 50;
 	var emailPage = 1;
@@ -435,6 +445,13 @@
 			header.appendChild(replyActions);
 			header.appendChild(controls);
 			wrapper.appendChild(header);
+
+			if (options?.showActions) {
+				var statusRow = document.createElement('div');
+				statusRow.className = 'ecc-email-status mb-2';
+				fillStatusBadges(statusRow, email);
+				wrapper.appendChild(statusRow);
+			}
 
 			var replyWrap = document.createElement('div');
 			replyWrap.className = 'ecc-inline-reply-wrap d-none mb-3';
@@ -797,6 +814,15 @@
 		});
 		wrap.appendChild(btn);
 		wrap.appendChild(menu);
+		// Use Popper's fixed strategy so the menu escapes the scrollable/overflow-hidden
+		// detail container — otherwise it gets clipped when the email body is short or empty.
+		if (window.BsDropdown) {
+			try {
+				window.BsDropdown.getOrCreateInstance(btn, { popperConfig: { strategy: 'fixed' } });
+			} catch (err) {
+				// Fall back to Bootstrap's default data-api init.
+			}
+		}
 		return wrap;
 	}
 
@@ -812,6 +838,61 @@
 			trashCurrentEmail();
 		});
 		return btn;
+	}
+
+	// Render the email's current triage status as removable badges into `container`.
+	// Shows which label/status the email sits in and lets the user clear it once dealt with.
+	function fillStatusBadges(container, email) {
+		if (!container) return;
+		replaceChildren(container);
+		var slugs = (email?.labels) || [];
+		var shown = EMAIL_STATUS_LABELS.filter(function (def) { return slugs.includes(def.slug); });
+		if (!shown.length) {
+			container.classList.add('d-none');
+			return;
+		}
+		container.classList.remove('d-none');
+		shown.forEach(function (def) {
+			var badge = document.createElement('span');
+			badge.className = 'badge ecc-email-status-badge d-inline-flex align-items-center me-2 mb-1';
+			var dot = document.createElement('span');
+			dot.className = 'ecc-label-dot me-2';
+			dot.style.background = def.color;
+			badge.appendChild(dot);
+			badge.appendChild(document.createTextNode(def.name));
+			var remove = document.createElement('button');
+			remove.type = 'button';
+			remove.className = 'ecc-status-remove ms-1';
+			remove.title = 'Remove ' + def.name + ' label';
+			remove.setAttribute('aria-label', 'Remove ' + def.name + ' label');
+			remove.innerHTML = kkIcon('close');
+			remove.addEventListener('click', function () {
+				removeEmailLabel(email, def.slug, container);
+			});
+			badge.appendChild(remove);
+			container.appendChild(badge);
+		});
+	}
+
+	async function removeEmailLabel(email, slug, container) {
+		if (!email?._id) return;
+		var remaining = (email.labels || []).filter(function (item) { return item !== slug; });
+		try {
+			await api('PUT', '/emails/' + email._id, { labels: remaining });
+			email.labels = remaining;
+			if (selectedEmail && emailId(selectedEmail) === emailId(email)) selectedEmail.labels = remaining;
+			showSuccess('Label removed');
+			loadLabels().catch(function () {});
+			// Removing the label that scopes the current view drops the email from it.
+			if (activeLabel && slug === activeLabel) {
+				removeEmailFromList(emailId(email));
+				backToListView();
+			} else {
+				fillStatusBadges(container, email);
+			}
+		} catch (err) {
+			showError(err.message || 'Failed to remove label');
+		}
 	}
 
 	async function moveCurrentEmail(mailbox) {

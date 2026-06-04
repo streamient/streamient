@@ -59,11 +59,12 @@ Swal.fire = (...args) => {
 	return originalSwalFire(...args);
 };
 
-// Make SweetAlert2 + JSURL + FilePond + Tagify + marked + Bootstrap Modal available globally for non-module scripts
-import { Modal as BsModal } from 'bootstrap';
+// Make SweetAlert2 + JSURL + FilePond + Tagify + marked + Bootstrap Modal/Dropdown available globally for non-module scripts
+import { Modal as BsModal, Dropdown as BsDropdown } from 'bootstrap';
 window.Swal = Swal;
 window.JSURL = JSURL;
 window.FilePond = FilePond;
 window.Tagify = Tagify;
 window.marked = marked;
 window.BsModal = BsModal;
+window.BsDropdown = BsDropdown;

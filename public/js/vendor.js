@@ -21411,6 +21411,7 @@ window.FilePond = FilePond;
 window.Tagify = tt;
 window.marked = g3;
 window.BsModal = Modal;
+window.BsDropdown = Dropdown;
 var export_Huebee = import_huebee.default;
 var export_Swal = import_sweetalert2.default;
 export {
