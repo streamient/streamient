@@ -182,6 +182,8 @@ const swaggerSpec = {
                     message_id: { type: 'string' },
                     references: { type: 'array', items: { type: 'string' } },
                     in_reply_to: { type: 'string' },
+                    thread_identifiers: { type: 'array', items: { type: 'string' }, description: 'Canonical message identifiers for the connected email thread when included by realtime/update responses.' },
+                    thread_source_ids: { type: 'array', items: { type: 'string' }, description: 'Email document IDs in the connected thread when included by realtime/update responses.' },
                     from: { type: 'array', items: { type: 'string' } },
                     to: { type: 'array', items: { type: 'string' } },
                     cc: { type: 'array', items: { type: 'string' } },

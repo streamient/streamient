@@ -12,6 +12,7 @@ import { emitToTenant } from '../modules/socket.js';
 import { invalidateGraphCache } from './graph_service.js';
 import { indexEmailNow } from './email_index_service.js';
 import { createSystemTransport } from './email_service.js';
+import { buildEmailRealtimePayload, emitEmailCreatedOrUpdated } from './email_ingest_service.js';
 import * as audit from './audit_service.js';
 import { createLogger } from '../modules/logger.js';
 
@@ -243,7 +244,7 @@ async function markSourceEmailHandled(outgoing, options = {}) {
 		indexFn: options.indexEmailFn,
 		updateFn: options.updateEmailIndexStateFn,
 	});
-	emitToTenant(outgoing.host_id, 'email:updated', sourceEmail);
+	await emitEmailCreatedOrUpdated(outgoing.host_id, 'email:updated', sourceEmail);
 	return sourceEmail;
 }
 
@@ -316,9 +317,11 @@ export async function processOutgoingEmail(outgoingId, options = {}) {
 			updateFn: options.updateEmailIndexStateFn,
 		});
 		invalidateGraphCache(outgoing.host_id).catch(() => {});
-		emitToTenant(outgoing.host_id, 'email:created', sentEmail);
+		const sentEmailPayload = await buildEmailRealtimePayload(outgoing.host_id, sentEmail);
+		const sourceEmailPayload = sourceEmail ? await buildEmailRealtimePayload(outgoing.host_id, sourceEmail) : null;
+		emitToTenant(outgoing.host_id, 'email:created', sentEmailPayload);
 		emitDraft(outgoing.host_id, 'email-draft:updated', draft);
-		emitOutgoing(outgoing.host_id, 'outgoing-email:sent', outgoing, { email: sentEmail, draft, source_email: sourceEmail });
+		emitOutgoing(outgoing.host_id, 'outgoing-email:sent', outgoing, { email: sentEmailPayload, draft, source_email: sourceEmailPayload });
 		emitToTenant(outgoing.host_id, 'counts:refresh');
 		log.info({ host_id: outgoing.host_id, outgoing_id: outgoing._id.toString(), message_id: outgoing.message_id, duration_ms: Date.now() - sendStartedAt }, 'Outgoing email sent');
 		return { outgoing_email: publicOutgoing(outgoing), email: sentEmail };

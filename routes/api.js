@@ -602,7 +602,7 @@ router.post('/emails/ai', requireEmailFeatureAccess, async (req, res) => {
 router.put('/emails/:id', requireEmailFeatureAccess, async (req, res) => {
 	const email = await emailIngestService.updateEmail(req.host_id, req.params.id, req.body, auditCtx(req));
 	if (!email) return res.status(404).json({ error: 'Email not found' });
-	res.json({ email });
+	res.json({ email: await emailIngestService.buildEmailRealtimePayload(req.host_id, email) });
 });
 
 router.delete('/emails/spam', requireEmailFeatureAccess, async (req, res) => {
@@ -620,7 +620,7 @@ router.delete('/emails/spam', requireEmailFeatureAccess, async (req, res) => {
 router.post('/emails/:id/reset-triage', requireEmailFeatureAccess, async (req, res) => {
 	const email = await emailIngestService.resetEmailTriage(req.host_id, req.params.id, auditCtx(req));
 	if (!email) return res.status(404).json({ error: 'Email not found' });
-	res.json({ email });
+	res.json({ email: await emailIngestService.buildEmailRealtimePayload(req.host_id, email) });
 });
 
 router.delete('/emails/:id', requireEmailFeatureAccess, async (req, res) => {

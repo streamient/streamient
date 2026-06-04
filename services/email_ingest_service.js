@@ -499,9 +499,43 @@ async function createEmailThreadLinks(email, userId, host_id, options = {}) {
 	if (created && !options.skipSideEffects) invalidateGraphCache(host_id).catch(() => {});
 }
 
-function emitEmailCreatedOrUpdated(host_id, event, email) {
-	emitToTenant(host_id, event, email);
+function emailPayloadObject(email) {
+	if (!email) return {};
+	return typeof email.toObject === 'function' ? email.toObject() : { ...email };
+}
+
+export async function buildEmailRealtimePayload(host_id, email, options = {}) {
+	const payload = emailPayloadObject(email);
+	const thread = Array.isArray(options.thread) ? options.thread : [];
+	let threadDocs = thread.length ? thread : [];
+
+	if (!threadDocs.length && payload._id && Email.db?.readyState === 1) {
+		threadDocs = await getEmailThread(host_id, payload._id, { order: 'desc' }).catch(() => []);
+	}
+	if (!threadDocs.length) threadDocs = [payload];
+
+	const threadIdentifiers = [];
+	const threadSourceIds = [];
+	for (const item of threadDocs) {
+		for (const id of emailThreadIdentifiers(item)) {
+			if (id && !threadIdentifiers.includes(id)) threadIdentifiers.push(id);
+		}
+		const sourceId = stringifyObjectId(item._id);
+		if (sourceId && !threadSourceIds.includes(sourceId)) threadSourceIds.push(sourceId);
+	}
+
+	return {
+		...payload,
+		thread_identifiers: threadIdentifiers,
+		thread_source_ids: threadSourceIds,
+	};
+}
+
+export async function emitEmailCreatedOrUpdated(host_id, event, email, options = {}) {
+	const payload = await buildEmailRealtimePayload(host_id, email, options);
+	emitToTenant(host_id, event, payload);
 	emitToTenant(host_id, 'counts:refresh');
+	return payload;
 }
 
 export async function maybeAutoTriageIncomingEmail(host_id, userId, email, options = {}) {
@@ -575,7 +609,7 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 	await createEmailThreadLinks(email, userId, host_id, { skipSideEffects: ctx.skipSideEffects });
 	if (!ctx.skipSideEffects) {
 		if (!email.in_trash) await indexEmailNow(host_id, email, { indexFn: ctx.indexEmailFn, updateFn: ctx.updateEmailIndexStateFn });
-		emitEmailCreatedOrUpdated(host_id, created ? 'email:created' : 'email:updated', email);
+		await emitEmailCreatedOrUpdated(host_id, created ? 'email:created' : 'email:updated', email);
 		invalidateGraphCache(host_id).catch(() => {});
 		audit.log({ action: 'create', resource: 'email', resource_id: email._id.toString(), user_id: userId, host_id, ...ctx });
 	}
@@ -984,9 +1018,11 @@ export async function updateEmail(host_id, emailId, data, ctx = {}) {
 	);
 
 	if (email) {
-		if (!ctx.skipSideEffects) await indexEmailNow(host_id, email, { indexFn: ctx.indexEmailFn, updateFn: ctx.updateEmailIndexStateFn });
-		emitToTenant(host_id, 'email:updated', email);
-		invalidateGraphCache(host_id).catch(() => {});
+		if (!ctx.skipSideEffects) {
+			await indexEmailNow(host_id, email, { indexFn: ctx.indexEmailFn, updateFn: ctx.updateEmailIndexStateFn });
+			await emitEmailCreatedOrUpdated(host_id, 'email:updated', email);
+			invalidateGraphCache(host_id).catch(() => {});
+		}
 		if (ctx.user_id) {
 			const details = audit.diffSnapshot(before, email);
 			audit.log({ action: 'update', resource: 'email', resource_id: emailId, host_id, details, ...ctx });
@@ -1033,10 +1069,11 @@ export async function resetEmailTriage(host_id, emailId, ctx = {}) {
 			),
 			GraphLink.deleteMany({ host_id, source_id: email._id, source_type: 'emails', label: 'triage-context' }),
 		]);
-		if (!ctx.skipSideEffects) await indexEmailNow(host_id, email, { indexFn: ctx.indexEmailFn, updateFn: ctx.updateEmailIndexStateFn });
-		emitToTenant(host_id, 'email:updated', email);
-		emitToTenant(host_id, 'counts:refresh');
-		invalidateGraphCache(host_id).catch(() => {});
+		if (!ctx.skipSideEffects) {
+			await indexEmailNow(host_id, email, { indexFn: ctx.indexEmailFn, updateFn: ctx.updateEmailIndexStateFn });
+			await emitEmailCreatedOrUpdated(host_id, 'email:updated', email);
+			invalidateGraphCache(host_id).catch(() => {});
+		}
 		if (ctx.user_id) {
 			const details = audit.diffSnapshot(before, email);
 			audit.log({ action: 'update', resource: 'email', resource_id: emailId, host_id, details: { ...details, reset_triage: true }, ...ctx });
@@ -2310,7 +2347,7 @@ export async function triageInboxEmails(host_id, userId, options = {}) {
 				if ((email.mailbox || 'inbox') !== updated.mailbox) moved += 1;
 				if (!options.skipSideEffects) {
 					await indexEmailNow(host_id, updated, { indexFn: options.indexEmailFn, updateFn: options.updateEmailIndexStateFn });
-					emitToTenant(host_id, 'email:updated', updated);
+					await emitEmailCreatedOrUpdated(host_id, 'email:updated', updated);
 				}
 				results.push({
 					email_id: email._id.toString(),
@@ -2338,7 +2375,7 @@ export async function triageInboxEmails(host_id, userId, options = {}) {
 			).catch(() => null);
 			if (failed && !options.skipSideEffects) {
 				await indexEmailNow(host_id, failed, { indexFn: options.indexEmailFn, updateFn: options.updateEmailIndexStateFn });
-				emitToTenant(host_id, 'email:updated', failed);
+				await emitEmailCreatedOrUpdated(host_id, 'email:updated', failed);
 			}
 			errors.push({ email_id: email._id.toString(), error: err.message });
 		}

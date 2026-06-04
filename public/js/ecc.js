@@ -144,6 +144,7 @@
 				var id = normalizeMessageId(value);
 				if (id && !ids.includes(id)) ids.push(id);
 			};
+			(email?.thread_identifiers || []).forEach(add);
 			add(email?.message_id);
 			(email?.references || []).forEach(add);
 			add(email?.in_reply_to);
@@ -2580,12 +2581,15 @@
 					items: ids.map(function (id) { return { type: 'emails', id: id }; }),
 				});
 			}
-			await Promise.all(ids.map(function (id) {
+			var results = await Promise.all(ids.map(function (id) {
 				return api('PUT', '/emails/' + id, { mailbox: mailbox });
 			}));
 			showSuccess(ids.length + ' moved to ' + target.name);
 			clearSelection();
-			await loadAll();
+			results.forEach(function (result) {
+				applyEmailSocketUpdate(result?.email || result);
+			});
+			await loadLabels();
 		} catch (err) {
 			showError(err.message || 'Failed to move emails');
 		}
@@ -2604,7 +2608,8 @@
 			await api('POST', '/batch/delete', { type: 'emails', ids: ids });
 			showSuccess(ids.length + ' moved to trash');
 			clearSelection();
-			await loadAll();
+			ids.forEach(removeEmailFromList);
+			await loadLabels();
 		} catch (err) {
 			showError(err.message || 'Failed to move emails to trash');
 		}
@@ -2637,14 +2642,15 @@
 		var confirmed = await confirmAction('Reset Triage', ids.length + ' email(s) will move to inbox and lose all triage labels.');
 		if (!confirmed) return;
 		try {
-			await Promise.all(ids.map(function (id) {
+			var results = await Promise.all(ids.map(function (id) {
 				return api('POST', '/emails/' + id + '/reset-triage', {});
 			}));
 			showSuccess(ids.length + ' reset to inbox');
 			clearSelection();
-			activeMailbox = 'inbox';
-			activeLabel = '';
-			await loadAll();
+			results.forEach(function (result) {
+				applyEmailSocketUpdate(result?.email || result);
+			});
+			await loadLabels();
 		} catch (err) {
 			showError(err.message || 'Failed to reset triage');
 		}
@@ -2776,7 +2782,10 @@
 			}
 			var incomingThreadIds = emailThreadIds(email);
 			listEl.querySelectorAll('.ecc-email-item').forEach(function (item) {
-				if (item.dataset.id !== id && threadIdsOverlap(incomingThreadIds, listItemThreadIds(item))) item.remove();
+				if (item.dataset.id !== id && threadIdsOverlap(incomingThreadIds, listItemThreadIds(item))) {
+					selectedIds.delete(item.dataset.id || '');
+					item.remove();
+				}
 			});
 			var wrapper = document.createElement('div');
 			wrapper.innerHTML = renderEmailItemHtml(email);

@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailIds, listEmailLabels, parseTriageResult, triageInboxEmails, startEmailTriageRun, getEmailTriageRun, backfillEmailTriageState, askEmailAi, askEmailListAi, buildEmailAiTypesenseFilter, buildTriageContext, parseEmailAiQuery, resetEmailTriage, updateEmail, emptySpam, parseEmailReplySuggestionsResult, suggestEmailReplies, suggestFromEmailAddresses, matchesEmailFilter } from '../services/email_ingest_service.js';
+import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailIds, listEmailLabels, parseTriageResult, triageInboxEmails, startEmailTriageRun, getEmailTriageRun, backfillEmailTriageState, askEmailAi, askEmailListAi, buildEmailAiTypesenseFilter, buildTriageContext, parseEmailAiQuery, resetEmailTriage, updateEmail, emptySpam, parseEmailReplySuggestionsResult, suggestEmailReplies, suggestFromEmailAddresses, matchesEmailFilter, buildEmailRealtimePayload } from '../services/email_ingest_service.js';
 import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
 import { EmailLabel } from '../model/email_label.js';
@@ -1077,6 +1077,30 @@ describe('Email ingest service', () => {
 		} finally {
 			Email.find = originalFind;
 		}
+	});
+
+	it('builds realtime payloads with full thread identifiers and source ids', async () => {
+		const older = {
+			_id: 'email-older',
+			message_id: 'older@example.com',
+			in_reply_to: 'root@example.com',
+			references: ['root@example.com'],
+		};
+		const newest = {
+			_id: 'email-newest',
+			message_id: 'newest@example.com',
+			in_reply_to: 'older@example.com',
+			references: ['root@example.com', 'older@example.com'],
+		};
+
+		const payload = await buildEmailRealtimePayload('host-1', newest, { thread: [newest, older] });
+
+		assert.deepEqual(payload.thread_source_ids, ['email-newest', 'email-older']);
+		assert.deepEqual(payload.thread_identifiers, [
+			'newest@example.com',
+			'root@example.com',
+			'older@example.com',
+		]);
 	});
 
 	it('listEmailIds returns id strings for the current view filters', async () => {

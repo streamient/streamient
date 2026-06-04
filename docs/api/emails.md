@@ -37,7 +37,7 @@ PUT /api/v1/emails/:id/internal-notes/:noteId
 DELETE /api/v1/emails/:id/internal-notes/:noteId
 ```
 
-Email read responses include sanitized `html_content`, `html_content_has_remote_images`, and `excerpt`. The excerpt is derived from visible HTML when available and strips parser control lines such as reply-above markers. Mailbox lists, selection IDs, and mailbox/label counts return one latest email per connected `message_id` / `references` / `in_reply_to` thread.
+Email read responses include sanitized `html_content`, `html_content_has_remote_images`, and `excerpt`. The excerpt is derived from visible HTML when available and strips parser control lines such as reply-above markers. Mailbox lists, selection IDs, and mailbox/label counts return one latest email per connected `message_id` / `references` / `in_reply_to` thread. Realtime and update responses can include `thread_identifiers` and `thread_source_ids` for client-side thread reconciliation.
 
 Public forwarding through `POST /import/email` accepts project mail at `PROJECT_ID@EMAIL_FORWARD_DOMAIN`. When that project address appears in the parsed `bcc` field and the sender matches a configured project outbound email identity, Kumbukum stores the message as a `sent` + triaged thread reply instead of Inbox mail. BCC copies from unknown senders stay normal inbound mail.
 
