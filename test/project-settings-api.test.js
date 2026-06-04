@@ -7,6 +7,7 @@ import { User } from '../model/user.js';
 import { Tenant } from '../modules/tenancy.js';
 import { TenantMember } from '../model/tenant_member.js';
 import { Project } from '../model/project.js';
+import { Email } from '../model/email.js';
 import { EmailIdentity } from '../model/email_identity.js';
 import { GitRepo } from '../model/git_repo.js';
 import { AuditLog } from '../model/audit_log.js';
@@ -50,7 +51,7 @@ function projectQuery(project) {
 	return {
 		lean: async () => project,
 		select: () => ({
-			lean: async () => project ? { _id: project._id } : null,
+			lean: async () => project,
 		}),
 		then(resolve, reject) {
 			return Promise.resolve(project).then(resolve, reject);
@@ -98,6 +99,8 @@ describe('Project settings API', () => {
 	const originalTenantMemberFindOneAndUpdate = TenantMember.findOneAndUpdate;
 	const originalProjectFindOne = Project.findOne;
 	const originalProjectFindOneAndUpdate = Project.findOneAndUpdate;
+	const originalEmailFind = Email.find;
+	const originalEmailUpdateMany = Email.updateMany;
 	const originalEmailIdentityFind = EmailIdentity.find;
 	const originalEmailIdentityFindOne = EmailIdentity.findOne;
 	const originalEmailIdentityCreate = EmailIdentity.create;
@@ -130,6 +133,7 @@ describe('Project settings API', () => {
 				owner: '507f1f77bcf86cd799439011',
 				name: 'Project One',
 				color: '#123456',
+				email_filter: 'noisy.com',
 			}),
 		];
 		identities = [];
@@ -207,6 +211,12 @@ describe('Project settings API', () => {
 			if (index === -1) return null;
 			return identities.splice(index, 1)[0];
 		};
+		Email.find = () => ({
+			select: () => ({
+				lean: async () => [],
+			}),
+		});
+		Email.updateMany = async () => ({ modifiedCount: 0 });
 		GitRepo.find = () => ({
 			sort: () => ({
 				lean: async () => [],
@@ -227,6 +237,8 @@ describe('Project settings API', () => {
 		TenantMember.findOneAndUpdate = originalTenantMemberFindOneAndUpdate;
 		Project.findOne = originalProjectFindOne;
 		Project.findOneAndUpdate = originalProjectFindOneAndUpdate;
+		Email.find = originalEmailFind;
+		Email.updateMany = originalEmailUpdateMany;
 		EmailIdentity.find = originalEmailIdentityFind;
 		EmailIdentity.findOne = originalEmailIdentityFindOne;
 		EmailIdentity.create = originalEmailIdentityCreate;
@@ -325,6 +337,7 @@ describe('Project settings API', () => {
 		try {
 			const settingsResponse = await request(server, 'GET', '/projects/project-1/settings');
 			const projectUpdateResponse = await request(server, 'PUT', '/projects/project-1', { name: 'Nope', color: '#000000' });
+			const applyFilterResponse = await request(server, 'POST', '/projects/project-1/email-filter/apply', {});
 			const identityResponse = await request(server, 'POST', '/projects/project-1/email-identities', {
 				email: 'support@example.com',
 				smtp: { host: 'smtp.example.com', port: 587 },
@@ -333,8 +346,25 @@ describe('Project settings API', () => {
 
 			assert.equal(settingsResponse.status, 403);
 			assert.equal(projectUpdateResponse.status, 403);
+			assert.equal(applyFilterResponse.status, 403);
 			assert.equal(identityResponse.status, 403);
 			assert.equal(gitResponse.status, 403);
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
+	it('lets project admins apply saved email filters to the project inbox', async () => {
+		const server = await createServer();
+		try {
+			const response = await request(server, 'POST', '/projects/project-1/email-filter/apply', {});
+			const json = await response.json();
+
+			assert.equal(response.status, 200);
+			assert.equal(json.result.project, 'project-1');
+			assert.equal(json.result.filter_configured, true);
+			assert.equal(json.result.processed, 0);
+			assert.equal(json.result.moved, 0);
 		} finally {
 			await new Promise((resolve) => server.close(resolve));
 		}

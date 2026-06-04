@@ -39,6 +39,10 @@
           "color": {
             "type": "string"
           },
+          "email_filter": {
+            "type": "string",
+            "description": "Project email filter rules. Matching incoming and applied inbox emails are moved to trash and skip triage."
+          },
           "host_id": {
             "type": "string"
           }
@@ -1839,6 +1843,9 @@
                   },
                   "color": {
                     "type": "string"
+                  },
+                  "email_filter": {
+                    "type": "string"
                   }
                 }
               }
@@ -1916,6 +1923,96 @@
           },
           "404": {
             "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{id}/email-filter/apply": {
+      "post": {
+        "tags": [
+          "Projects",
+          "Emails"
+        ],
+        "summary": "Apply project email filters to ECC inbox",
+        "description": "Runs the project's saved email filter rules against untriaged inbox emails in that project. Matching emails are moved to trash and skip triage. Requires project settings access and email feature access.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Filters applied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "project": {
+                          "type": "string"
+                        },
+                        "filter_configured": {
+                          "type": "boolean"
+                        },
+                        "processed": {
+                          "type": "integer"
+                        },
+                        "matched": {
+                          "type": "integer"
+                        },
+                        "moved": {
+                          "type": "integer"
+                        },
+                        "email_ids": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Apply failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Project settings or email feature access required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Project not found",
             "content": {
               "application/json": {
                 "schema": {

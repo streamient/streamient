@@ -118,10 +118,33 @@
 							data-form-type="other"
 						)= project.email_filter
 						.form-text.mt-2 Matching emails are moved to trash and skip triage. Enter rules separated by new lines or commas — use a full address (name@example.com), domain (example.com or @example.com), local part (noreply@), or subject rule (subject: failed login or subject contains: status update).
-						.d-flex.justify-content-end.mt-2
+						.d-flex.justify-content-between.align-items-center.mt-2
+							button.btn.btn-outline-secondary.btn-sm#project-email-filter-apply-btn(type="button")
+								!= icon('sync', 'me-1')
+								span Apply filters now
 							button.btn.btn-primary.btn-sm(type="submit")
 								!= icon('check', 'me-1')
 								span Save filter
+					.modal.fade#project-email-filter-apply-modal(tabindex="-1" aria-labelledby="project-email-filter-apply-modal-title" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false")
+						.modal-dialog.modal-dialog-centered.modal-sm
+							.modal-content
+								.modal-header
+									h5.modal-title#project-email-filter-apply-modal-title Apply filters
+								.modal-body
+									.d-flex.align-items-center.mb-3
+										.spinner-border.spinner-border-sm.text-primary.me-3#project-email-filter-apply-spinner(role="status" aria-hidden="true")
+										div
+											.fw-semibold#project-email-filter-apply-status Applying filters
+											.text-muted.small#project-email-filter-apply-detail Checking ECC inbox.
+									.row.g-3.text-center
+										.col
+											.h6.mb-1#project-email-filter-apply-processed 0
+											.small.text-muted Checked
+										.col
+											.h6.mb-1#project-email-filter-apply-moved 0
+											.small.text-muted Moved
+								.modal-footer
+									button.btn.btn-secondary.btn-sm#project-email-filter-apply-close(type="button" data-bs-dismiss="modal" disabled) Close
 
 				.mb-4
 					.d-flex.justify-content-between.align-items-center.mb-3

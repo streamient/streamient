@@ -166,6 +166,17 @@ router.put('/projects/:id', requireProjectSettingsAccess, async (req, res) => {
 	res.json({ project });
 });
 
+router.post('/projects/:id/email-filter/apply', requireProjectSettingsAccess, requireEmailFeatureAccess, async (req, res) => {
+	try {
+		const result = await emailIngestService.applyProjectEmailFilterToInbox(req.host_id, req.params.id, auditCtx(req));
+		if (!result) return res.status(404).json({ error: 'Project not found' });
+		res.json({ result });
+	} catch (err) {
+		log.error({ err, host_id: req.host_id, project_id: req.params.id }, 'Project email filter apply error');
+		res.status(400).json({ error: err.message || 'Email filter apply failed' });
+	}
+});
+
 router.delete('/projects/:id', requireProjectSettingsAccess, async (req, res) => {
 	try {
 		const project = await projectService.deleteProject(req.host_id, req.params.id, auditCtx(req));

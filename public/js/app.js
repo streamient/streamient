@@ -561,6 +561,77 @@ function bindProjectSettingsModal(projectId, activeTab) {
 		}
 	});
 
+	var applyEmailFilterBtn = bodyEl.querySelector('#project-email-filter-apply-btn');
+	var applyEmailFilterModalEl = bodyEl.querySelector('#project-email-filter-apply-modal');
+	var applyEmailFilterStatus = bodyEl.querySelector('#project-email-filter-apply-status');
+	var applyEmailFilterDetail = bodyEl.querySelector('#project-email-filter-apply-detail');
+	var applyEmailFilterSpinner = bodyEl.querySelector('#project-email-filter-apply-spinner');
+	var applyEmailFilterProcessed = bodyEl.querySelector('#project-email-filter-apply-processed');
+	var applyEmailFilterMoved = bodyEl.querySelector('#project-email-filter-apply-moved');
+	var applyEmailFilterClose = bodyEl.querySelector('#project-email-filter-apply-close');
+
+	function renderEmailFilterApplyModal(state) {
+		if (applyEmailFilterStatus) applyEmailFilterStatus.textContent = state.status || 'Applying filters';
+		if (applyEmailFilterDetail) applyEmailFilterDetail.textContent = state.detail || '';
+		if (applyEmailFilterProcessed) applyEmailFilterProcessed.textContent = state.processed || 0;
+		if (applyEmailFilterMoved) applyEmailFilterMoved.textContent = state.moved || 0;
+		if (applyEmailFilterSpinner) applyEmailFilterSpinner.classList.toggle('d-none', !state.running);
+		if (applyEmailFilterClose) applyEmailFilterClose.disabled = Boolean(state.running);
+	}
+
+	applyEmailFilterBtn?.addEventListener('click', async function () {
+		var email_filter = bodyEl.querySelector('#project-settings-email-filter')?.value || '';
+		var originalHtml = applyEmailFilterBtn.innerHTML;
+		applyEmailFilterBtn.disabled = true;
+		applyEmailFilterBtn.innerHTML = kkIcon('sync', 'me-1') + 'Applying...';
+		renderEmailFilterApplyModal({
+			status: 'Saving filter',
+			detail: 'Preparing ECC inbox scan.',
+			processed: 0,
+			moved: 0,
+			running: true,
+		});
+		try {
+			if (applyEmailFilterModalEl) {
+				var Modal = await ensureBootstrapModal();
+				Modal.getOrCreateInstance(applyEmailFilterModalEl).show();
+			}
+			await api('PUT', `/projects/${projectId}`, { email_filter });
+			renderEmailFilterApplyModal({
+				status: 'Applying filters',
+				detail: 'Checking ECC inbox.',
+				processed: 0,
+				moved: 0,
+				running: true,
+			});
+			var response = await api('POST', `/projects/${projectId}/email-filter/apply`, {});
+			var result = response.result || {};
+			var configured = result.filter_configured !== false;
+			renderEmailFilterApplyModal({
+				status: configured ? 'Filters applied' : 'No filters configured',
+				detail: configured ? 'Matching emails moved to trash.' : 'Add and save at least one filter rule.',
+				processed: result.processed || 0,
+				moved: result.moved || 0,
+				running: false,
+			});
+			refreshCounts();
+			loadTrashCount();
+			showSuccess('Moved ' + (result.moved || 0) + ' email' + (result.moved === 1 ? '' : 's'));
+		} catch (err) {
+			renderEmailFilterApplyModal({
+				status: 'Apply failed',
+				detail: err.message || 'Email filter apply failed',
+				processed: 0,
+				moved: 0,
+				running: false,
+			});
+			showError(err.message);
+		} finally {
+			applyEmailFilterBtn.disabled = false;
+			applyEmailFilterBtn.innerHTML = originalHtml;
+		}
+	});
+
 	var copyForwardingEmailBtn = bodyEl.querySelector('#project-settings-copy-forwarding-email');
 	copyForwardingEmailBtn?.addEventListener('click', async function () {
 		var value = copyForwardingEmailBtn.dataset.copyValue || bodyEl.querySelector('#project-settings-forwarding-email')?.value || '';

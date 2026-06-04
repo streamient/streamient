@@ -405,6 +405,14 @@ body.kk-template1 #projectSettingsModal .modal-body {
 	color: var(--text) !important;
 }
 
+body.kk-template1 #projectSettingsModal #project-email-filter-apply-modal .modal-content {
+	min-height: 0;
+}
+
+body.kk-template1 #projectSettingsModal #project-email-filter-apply-modal .modal-body {
+	min-height: 0;
+}
+
 body.kk-template1 #settingsModal .card,
 body.kk-template1 #settingsModal .list-group-item,
 body.kk-template1 #settingsModal .modal-body .border,

@@ -11,6 +11,7 @@ import { EmailIdentity } from '../model/email_identity.js';
 import { EmailLabel } from '../model/email_label.js';
 import { EmailTriageRun } from '../model/email_triage_run.js';
 import { GraphLink } from '../model/graph_link.js';
+import { Project } from '../model/project.js';
 import { extractText } from './import_service.js';
 import { detectFileType } from '../modules/file_detect.js';
 import { searchCollection, searchAll } from '../modules/typesense.js';
@@ -435,6 +436,95 @@ export function matchesEmailFilter(filterText, fromAddresses = []) {
 		if (local && localParts.has(local)) return true;
 		return domain && domains.has(domain);
 	});
+}
+
+export async function applyProjectEmailFilterToInbox(host_id, projectId, ctx = {}) {
+	const project = await Project.findOne({ _id: projectId, host_id }).select('_id email_filter').lean();
+	if (!project) return null;
+
+	const filterText = String(project.email_filter || '').trim();
+	if (!filterText) {
+		return {
+			project: stringifyObjectId(project._id),
+			filter_configured: false,
+			processed: 0,
+			matched: 0,
+			moved: 0,
+			email_ids: [],
+		};
+	}
+
+	const candidates = await Email.find({
+		host_id,
+		project: projectId,
+		in_trash: { $ne: true },
+		mailbox: 'inbox',
+		triaged: false,
+	}).select('_id from subject').lean();
+	const matched = candidates.filter((email) => matchesEmailFilter(filterText, {
+		from: email.from || [],
+		subject: email.subject || '',
+	}));
+	const ids = matched.map((email) => stringifyObjectId(email._id)).filter(Boolean);
+
+	if (!ids.length) {
+		return {
+			project: stringifyObjectId(project._id),
+			filter_configured: true,
+			processed: candidates.length,
+			matched: 0,
+			moved: 0,
+			email_ids: [],
+		};
+	}
+
+	const result = await Email.updateMany(
+		{
+			_id: { $in: ids },
+			host_id,
+			project: projectId,
+			in_trash: { $ne: true },
+			mailbox: 'inbox',
+			triaged: false,
+		},
+		{
+			$set: {
+				in_trash: true,
+				trashed_at: new Date(),
+				is_indexed: false,
+			},
+		},
+	);
+	const moved = result?.modifiedCount ?? result?.nModified ?? ids.length;
+
+	if (!ctx.skipSideEffects) {
+		await Promise.all(ids.map(async (id) => {
+			await removeEmailFromIndexNow(host_id, id, { removeFn: ctx.removeEmailIndexFn, updateFn: ctx.updateEmailIndexStateFn });
+			removeLinksForItem(host_id, id).catch((err) => log.error({ err, host_id, email_id: id }, 'Remove links error'));
+			emitToTenant(host_id, 'email:deleted', { _id: id });
+		}));
+		emitToTenant(host_id, 'counts:refresh');
+		invalidateGraphCache(host_id).catch(() => {});
+		if (ctx.user_id) {
+			audit.log({
+				action: 'update',
+				resource: 'email',
+				resource_id: 'project-email-filter',
+				host_id,
+				details: { project: stringifyObjectId(project._id), processed: candidates.length, matched: ids.length, moved },
+				...ctx,
+			});
+		}
+	}
+
+	return {
+		project: stringifyObjectId(project._id),
+		filter_configured: true,
+		processed: candidates.length,
+		matched: ids.length,
+		moved,
+		email_ids: ids,
+	};
 }
 
 export function parseForwardedEmailInput(data) {

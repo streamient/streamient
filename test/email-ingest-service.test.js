@@ -1,12 +1,13 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailIds, listEmailLabels, parseTriageResult, triageInboxEmails, startEmailTriageRun, getEmailTriageRun, backfillEmailTriageState, askEmailAi, askEmailListAi, buildEmailAiTypesenseFilter, buildTriageContext, parseEmailAiQuery, resetEmailTriage, updateEmail, emptySpam, parseEmailReplySuggestionsResult, suggestEmailReplies, suggestFromEmailAddresses, matchesEmailFilter, buildEmailRealtimePayload } from '../services/email_ingest_service.js';
+import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailIds, listEmailLabels, parseTriageResult, triageInboxEmails, startEmailTriageRun, getEmailTriageRun, backfillEmailTriageState, askEmailAi, askEmailListAi, buildEmailAiTypesenseFilter, buildTriageContext, parseEmailAiQuery, resetEmailTriage, updateEmail, emptySpam, parseEmailReplySuggestionsResult, suggestEmailReplies, suggestFromEmailAddresses, matchesEmailFilter, applyProjectEmailFilterToInbox, buildEmailRealtimePayload } from '../services/email_ingest_service.js';
 import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
 import { EmailLabel } from '../model/email_label.js';
 import { EmailTriageRun } from '../model/email_triage_run.js';
 import { GraphLink } from '../model/graph_link.js';
+import { Project } from '../model/project.js';
 import { Tenant } from '../modules/tenancy.js';
 import { toTypesenseDoc } from '../modules/typesense.js';
 
@@ -35,6 +36,57 @@ describe('Email ingest service', () => {
 		assert.equal(matchesEmailFilter('subject contains: status update', { from: ['friend@good.com'], subject: 'Weekly STATUS update' }), true);
 		assert.equal(matchesEmailFilter('subject: failed login', { from: ['friend@good.com'], subject: 'Successful login' }), false);
 		assert.equal(matchesEmailFilter('subject:', { from: ['friend@good.com'], subject: 'subject only' }), false);
+	});
+
+	it('applies project email filters to untriaged project inbox emails', async () => {
+		const originalProjectFindOne = Project.findOne;
+		const originalEmailFind = Email.find;
+		const originalEmailUpdateMany = Email.updateMany;
+		let updateQuery = null;
+		let updatePayload = null;
+
+		Project.findOne = () => ({
+			select: () => ({
+				lean: async () => ({
+					_id: 'project-1',
+					email_filter: 'noisy.com\nsubject contains: deploy failed',
+				}),
+			}),
+		});
+		Email.find = () => ({
+			select: () => ({
+				lean: async () => [
+					{ _id: { toString: () => 'email-1' }, from: ['hello@noisy.com'], subject: 'Newsletter' },
+					{ _id: { toString: () => 'email-2' }, from: ['ops@example.com'], subject: 'Deploy failed overnight' },
+					{ _id: { toString: () => 'email-3' }, from: ['friend@example.com'], subject: 'Hello' },
+				],
+			}),
+		});
+		Email.updateMany = async (query, update) => {
+			updateQuery = query;
+			updatePayload = update.$set;
+			return { modifiedCount: 2 };
+		};
+
+		try {
+			const result = await applyProjectEmailFilterToInbox('host-1', 'project-1', { skipSideEffects: true });
+
+			assert.equal(result.processed, 3);
+			assert.equal(result.matched, 2);
+			assert.equal(result.moved, 2);
+			assert.deepEqual(result.email_ids, ['email-1', 'email-2']);
+			assert.deepEqual(updateQuery._id.$in, ['email-1', 'email-2']);
+			assert.equal(updateQuery.host_id, 'host-1');
+			assert.equal(updateQuery.project, 'project-1');
+			assert.equal(updateQuery.mailbox, 'inbox');
+			assert.equal(updateQuery.triaged, false);
+			assert.equal(updatePayload.in_trash, true);
+			assert.ok(updatePayload.trashed_at instanceof Date);
+		} finally {
+			Project.findOne = originalProjectFindOne;
+			Email.find = originalEmailFind;
+			Email.updateMany = originalEmailUpdateMany;
+		}
 	});
 
 	it('normalizes parsed payload fields', async () => {
