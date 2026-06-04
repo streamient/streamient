@@ -27,7 +27,11 @@
           "body{padding:16px;overflow-wrap:anywhere;}",
           "img{max-width:100%;height:auto;}",
           "table{max-width:100%;}",
-          "a{color:#0d6efd;}"
+          "a{color:#0d6efd;}",
+          "blockquote,.gmail_quote,.yahoo_quoted{border-left:4px solid #4aa3df!important;padding-left:16px!important;margin-left:0!important;background:#f8f9fa!important;color:#5f6872!important;}",
+          ".kk-email-quote-toggle{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:18px;margin:10px 0 6px;padding:0 8px;border:0;border-radius:5px;background:#e9ecef;color:#495057;font:700 14px/1 Arial,sans-serif;cursor:pointer;}",
+          ".kk-email-quote-toggle:hover,.kk-email-quote-toggle:focus{background:#dee2e6;outline:0;}",
+          ".kk-email-quote-collapse[hidden]{display:none!important;}"
         ].join("");
       }
       return [
@@ -40,6 +44,9 @@
         "a,a span{color:var(--kk-email-link)!important;}",
         "hr{border-color:var(--kk-email-border)!important;background:var(--kk-email-border)!important;color:var(--kk-email-border)!important;}",
         "blockquote,.gmail_quote,.yahoo_quoted{border-left:4px solid #4aa3df!important;padding-left:16px!important;margin-left:0!important;background:rgba(255,255,255,.035)!important;color:var(--kk-email-muted)!important;}",
+        ".kk-email-quote-toggle{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:18px;margin:10px 0 6px;padding:0 8px;border:0;border-radius:5px;background:#343a40;color:#d3d9e2;font:700 14px/1 Arial,sans-serif;cursor:pointer;}",
+        ".kk-email-quote-toggle:hover,.kk-email-quote-toggle:focus{background:#454d57;outline:0;}",
+        ".kk-email-quote-collapse[hidden]{display:none!important;}",
         '[bgcolor="#ffffff"],[bgcolor="#fff"],[bgcolor="white"],[style*="background:#fff"],[style*="background: #fff"],[style*="background-color:#fff"],[style*="background-color: #fff"],[style*="background:#ffffff"],[style*="background: #ffffff"],[style*="background-color:#ffffff"],[style*="background-color: #ffffff"]{background-color:var(--kk-email-surface)!important;}'
       ].join("");
     }
@@ -102,7 +109,8 @@
       var theme = normalizeTheme(options?.theme || defaultTheme());
       var childScriptUrl = staticScriptUrl("iframe_resizer_child.js");
       var darkModeScriptUrl = staticScriptUrl("email_dark_mode_child.js");
-      var scripts = theme === "dark" ? '<script src="' + escapeHtml(darkModeScriptUrl) + '"><\/script><script async src="' + escapeHtml(childScriptUrl) + '"><\/script>' : '<script async src="' + escapeHtml(childScriptUrl) + '"><\/script>';
+      var quoteCollapseScriptUrl = staticScriptUrl("email_quote_collapse_child.js");
+      var scripts = theme === "dark" ? '<script src="' + escapeHtml(darkModeScriptUrl) + '"><\/script><script src="' + escapeHtml(quoteCollapseScriptUrl) + '"><\/script><script async src="' + escapeHtml(childScriptUrl) + '"><\/script>' : '<script src="' + escapeHtml(quoteCollapseScriptUrl) + '"><\/script><script async src="' + escapeHtml(childScriptUrl) + '"><\/script>';
       var csp = [
         "default-src 'none'",
         "img-src data: cid:" + (loadRemoteImages ? " http: https:" : ""),

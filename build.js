@@ -102,6 +102,18 @@ await build({
 console.log('Email dark mode child built → public/js/email_dark_mode_child.js');
 
 await build({
+	entryPoints: ['src/email_quote_collapse_child.js'],
+	bundle: true,
+	outfile: 'public/js/email_quote_collapse_child.js',
+	format: 'iife',
+	platform: 'browser',
+	target: ['es2020'],
+	minify: isProd,
+	sourcemap: false,
+});
+console.log('Email quote collapse child built → public/js/email_quote_collapse_child.js');
+
+await build({
 	entryPoints: ['src/email_iframe_renderer.js'],
 	bundle: true,
 	outfile: 'public/js/email_iframe_renderer.js',
