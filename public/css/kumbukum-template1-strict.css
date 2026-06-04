@@ -1078,6 +1078,21 @@ body.kk-template1 .text-bg-secondary {
   color: var(--muted-6) !important;
 }
 
+[data-theme="dark"] body.kk-template1.kk-ecc-page .ecc-email-label,
+[data-theme="dark"] body.kk-template1.kk-ecc-page .ecc-email-status-badge {
+  background: var(--panel-elev) !important;
+  border-color: var(--line-btn) !important;
+  color: var(--text-bright-4) !important;
+}
+
+[data-theme="dark"] body.kk-template1.kk-ecc-page .ecc-status-remove {
+  color: var(--muted-2);
+}
+
+[data-theme="dark"] body.kk-template1.kk-ecc-page .ecc-status-remove:hover {
+  color: var(--text-strong);
+}
+
 /* ── Badges ── */
 body.kk-template1 .badge.bg-warning {
   background: var(--warning-bg) !important;

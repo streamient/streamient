@@ -12169,7 +12169,7 @@ function keydownHandler(bindings) {
   };
 }
 
-// node_modules/.pnpm/@tiptap+core@3.24.0_@tiptap+pm@3.24.0/node_modules/@tiptap/core/dist/index.js
+// node_modules/.pnpm/@tiptap+core@3.25.0_@tiptap+pm@3.25.0/node_modules/@tiptap/core/dist/index.js
 var __defProp = Object.defineProperty;
 var __export = (target, all) => {
   for (var name in all)
@@ -14653,15 +14653,22 @@ var undoInputRule = () => ({ state, dispatch }) => {
   }
   return false;
 };
-var unsetAllMarks = () => ({ tr: tr2, dispatch }) => {
+var unsetAllMarks = (options = {}) => ({ tr: tr2, dispatch, editor }) => {
+  const { ignoreClearable = false } = options;
   const { selection } = tr2;
   const { empty: empty2, ranges } = selection;
   if (empty2) {
     return true;
   }
+  const { nonClearableMarks } = editor.extensionManager;
   if (dispatch) {
+    const clearableMarkTypes = Object.values(editor.schema.marks).filter(
+      (markType) => ignoreClearable || !nonClearableMarks.includes(markType.name)
+    );
     ranges.forEach((range) => {
-      tr2.removeMark(range.$from.pos, range.$to.pos);
+      for (const markType of clearableMarkTypes) {
+        tr2.removeMark(range.$from.pos, range.$to.pos, markType);
+      }
     });
   }
   return true;
@@ -15400,6 +15407,7 @@ function pasteRulesPlugin(props) {
 var ExtensionManager = class {
   constructor(extensions, editor) {
     this.splittableMarks = [];
+    this.nonClearableMarks = [];
     this.editor = editor;
     this.baseExtensions = extensions;
     this.extensions = resolveExtensions(extensions);
@@ -15711,7 +15719,7 @@ var ExtensionManager = class {
       extensions.map((extension) => [extension.name, extension.storage])
     );
     extensions.forEach((extension) => {
-      var _a;
+      var _a, _b;
       const context = {
         name: extension.name,
         options: extension.options,
@@ -15723,6 +15731,12 @@ var ExtensionManager = class {
         const keepOnSplit = (_a = callOrReturn(getExtensionField(extension, "keepOnSplit", context))) != null ? _a : true;
         if (keepOnSplit) {
           this.splittableMarks.push(extension.name);
+        }
+        const clearable = (_b = callOrReturn(
+          getExtensionField(extension, "clearable", context)
+        )) != null ? _b : true;
+        if (!clearable) {
+          this.nonClearableMarks.push(extension.name);
         }
       }
       const onBeforeCreate = getExtensionField(
@@ -15826,15 +15840,16 @@ var ClipboardTextSerializer = Extension.create({
             const { editor } = this;
             const { state, schema } = editor;
             const { doc: doc3, selection } = state;
-            const { ranges } = selection;
-            const from2 = Math.min(...ranges.map((range2) => range2.$from.pos));
-            const to = Math.max(...ranges.map((range2) => range2.$to.pos));
             const textSerializers = getTextSerializersFromSchema(schema);
-            const range = { from: from2, to };
-            return getTextBetween(doc3, range, {
-              ...this.options.blockSeparator !== void 0 ? { blockSeparator: this.options.blockSeparator } : {},
+            const { blockSeparator } = this.options;
+            const options = {
+              ...blockSeparator !== void 0 ? { blockSeparator } : {},
               textSerializers
-            });
+            };
+            const sortedRanges = [...selection.ranges].sort((a, b) => a.$from.pos - b.$from.pos);
+            return sortedRanges.map(
+              ({ $from, $to }) => getTextBetween(doc3, { from: $from.pos, to: $to.pos }, options)
+            ).join(blockSeparator != null ? blockSeparator : "\n\n");
           }
         }
       })
@@ -17262,6 +17277,7 @@ var ResizableNodeView = class {
     this.node = options.node;
     this.editor = options.editor;
     this.element = options.element;
+    this.element.draggable = false;
     this.contentElement = options.contentElement;
     this.getPos = options.getPos;
     this.onResize = options.onResize;
@@ -18305,7 +18321,7 @@ function markPasteRule(config) {
   });
 }
 
-// node_modules/.pnpm/@tiptap+core@3.24.0_@tiptap+pm@3.24.0/node_modules/@tiptap/core/dist/jsx-runtime/jsx-runtime.js
+// node_modules/.pnpm/@tiptap+core@3.25.0_@tiptap+pm@3.25.0/node_modules/@tiptap/core/dist/jsx-runtime/jsx-runtime.js
 var h = (tag, attributes) => {
   if (tag === "slot") {
     return 0;
@@ -18322,7 +18338,7 @@ var h = (tag, attributes) => {
   return [tag, rest, children];
 };
 
-// node_modules/.pnpm/@tiptap+extension-blockquote@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0_/node_modules/@tiptap/extension-blockquote/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-blockquote@3.25.0_@tiptap+core@3.25.0_@tiptap+pm@3.25.0_/node_modules/@tiptap/extension-blockquote/dist/index.js
 var inputRegex = /^\s*>\s$/;
 var Blockquote = Node3.create({
   name: "blockquote",
@@ -18395,7 +18411,7 @@ ${prefix}
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-bold@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0_/node_modules/@tiptap/extension-bold/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-bold@3.25.0_@tiptap+core@3.25.0_@tiptap+pm@3.25.0_/node_modules/@tiptap/extension-bold/dist/index.js
 var starInputRegex = /(?:^|\s)(\*\*(?!\s+\*\*)((?:[^*]+))\*\*(?!\s+\*\*))$/;
 var starPasteRegex = /(?:^|\s)(\*\*(?!\s+\*\*)((?:[^*]+))\*\*(?!\s+\*\*))/g;
 var underscoreInputRegex = /(?:^|\s)(__(?!\s+__)((?:[^_]+))__(?!\s+__))$/;
@@ -18487,9 +18503,37 @@ var Bold = Mark2.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-code@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0_/node_modules/@tiptap/extension-code/dist/index.js
-var inputRegex2 = /(^|[^`])`([^`]+)`(?!`)$/;
-var pasteRegex = /(^|[^`])`([^`]+)`(?!`)/g;
+// node_modules/.pnpm/@tiptap+extension-code@3.25.0_@tiptap+core@3.25.0_@tiptap+pm@3.25.0_/node_modules/@tiptap/extension-code/dist/index.js
+var inputRegexMatch = (text) => {
+  const match = /`([^`]+)`(?!`)$/.exec(text);
+  if (!match) {
+    return null;
+  }
+  if (match.index > 0 && text[match.index - 1] === "`") {
+    return null;
+  }
+  return {
+    index: match.index,
+    text: match[0],
+    replaceWith: match[1]
+  };
+};
+var pasteRegexMatch = (text) => {
+  const regex = /`([^`]+)`(?!`)/g;
+  const matches2 = [];
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > 0 && text[match.index - 1] === "`") {
+      continue;
+    }
+    matches2.push({
+      index: match.index,
+      text: match[0],
+      replaceWith: match[1]
+    });
+  }
+  return matches2;
+};
 var Code = Mark2.create({
   name: "code",
   addOptions() {
@@ -18537,7 +18581,7 @@ var Code = Mark2.create({
   addInputRules() {
     return [
       markInputRule({
-        find: inputRegex2,
+        find: inputRegexMatch,
         type: this.type
       })
     ];
@@ -18545,14 +18589,14 @@ var Code = Mark2.create({
   addPasteRules() {
     return [
       markPasteRule({
-        find: pasteRegex,
+        find: pasteRegexMatch,
         type: this.type
       })
     ];
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-code-block@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0__@tiptap+pm@3.24.0/node_modules/@tiptap/extension-code-block/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-code-block@3.25.0_@tiptap+core@3.25.0_@tiptap+pm@3.25.0__@tiptap+pm@3.25.0/node_modules/@tiptap/extension-code-block/dist/index.js
 var DEFAULT_TAB_SIZE = 4;
 var backtickInputRegex = /^```([a-z]+)?[\s\n]$/;
 var tildeInputRegex = /^~~~([a-z]+)?[\s\n]$/;
@@ -18866,7 +18910,7 @@ var CodeBlock = Node3.create({
 });
 var index_default = CodeBlock;
 
-// node_modules/.pnpm/@tiptap+extension-document@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0_/node_modules/@tiptap/extension-document/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-document@3.25.0_@tiptap+core@3.25.0_@tiptap+pm@3.25.0_/node_modules/@tiptap/extension-document/dist/index.js
 var Document = Node3.create({
   name: "doc",
   topNode: true,
@@ -18879,7 +18923,7 @@ var Document = Node3.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-hard-break@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0_/node_modules/@tiptap/extension-hard-break/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-hard-break@3.25.0_@tiptap+core@3.25.0_@tiptap+pm@3.25.0_/node_modules/@tiptap/extension-hard-break/dist/index.js
 var HardBreak = Node3.create({
   name: "hardBreak",
   markdownTokenName: "br",
@@ -18944,7 +18988,7 @@ var HardBreak = Node3.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-heading@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0_/node_modules/@tiptap/extension-heading/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-heading@3.25.0_@tiptap+core@3.25.0_@tiptap+pm@3.25.0_/node_modules/@tiptap/extension-heading/dist/index.js
 var Heading = Node3.create({
   name: "heading",
   addOptions() {
@@ -19029,7 +19073,7 @@ var Heading = Node3.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-horizontal-rule@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0__@tiptap+pm@3.24.0/node_modules/@tiptap/extension-horizontal-rule/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-horizontal-rule@3.25.0_@tiptap+core@3.25.0_@tiptap+pm@3.25.0__@tiptap+pm@3.25.0/node_modules/@tiptap/extension-horizontal-rule/dist/index.js
 var HorizontalRule = Node3.create({
   name: "horizontalRule",
   addOptions() {
@@ -19106,7 +19150,7 @@ var HorizontalRule = Node3.create({
 });
 var index_default2 = HorizontalRule;
 
-// node_modules/.pnpm/@tiptap+extension-italic@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0_/node_modules/@tiptap/extension-italic/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-italic@3.25.0_@tiptap+core@3.25.0_@tiptap+pm@3.25.0_/node_modules/@tiptap/extension-italic/dist/index.js
 var starInputRegex2 = /(?:^|\s)(\*(?!\s+\*)((?:[^*]+))\*(?!\s+\*))$/;
 var starPasteRegex2 = /(?:^|\s)(\*(?!\s+\*)((?:[^*]+))\*(?!\s+\*))/g;
 var underscoreInputRegex2 = /(?:^|\s)(_(?!\s+_)((?:[^_]+))_(?!\s+_))$/;
@@ -20344,7 +20388,7 @@ function find(str, type = null, opts = null) {
   return filtered;
 }
 
-// node_modules/.pnpm/@tiptap+extension-link@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0__@tiptap+pm@3.24.0/node_modules/@tiptap/extension-link/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-link@3.25.0_@tiptap+core@3.25.0_@tiptap+pm@3.25.0__@tiptap+pm@3.25.0/node_modules/@tiptap/extension-link/dist/index.js
 var UNICODE_WHITESPACE_PATTERN = "[\0- \xA0\u1680\u180E\u2000-\u2029\u205F\u3000]";
 var UNICODE_WHITESPACE_REGEX = new RegExp(UNICODE_WHITESPACE_PATTERN);
 var UNICODE_WHITESPACE_REGEX_END = new RegExp(`${UNICODE_WHITESPACE_PATTERN}$`);
@@ -20787,7 +20831,7 @@ var Link = Mark2.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-list@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0__@tiptap+pm@3.24.0/node_modules/@tiptap/extension-list/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-list@3.25.0_@tiptap+core@3.25.0_@tiptap+pm@3.25.0__@tiptap+pm@3.25.0/node_modules/@tiptap/extension-list/dist/index.js
 var __defProp2 = Object.defineProperty;
 var __export2 = (target, all) => {
   for (var name in all)
@@ -20870,6 +20914,99 @@ var BulletList = Node3.create({
     return [inputRule];
   }
 });
+var getBranchingNestedListAtCursor = (state, itemName, wrapperNames) => {
+  const { selection } = state;
+  if (!selection.empty) {
+    return null;
+  }
+  const { $from } = selection;
+  if (!$from.parent.isTextblock) {
+    return null;
+  }
+  if ($from.parentOffset !== $from.parent.content.size) {
+    return null;
+  }
+  let listItemDepth = -1;
+  for (let depth = $from.depth; depth > 0; depth -= 1) {
+    if ($from.node(depth).type.name === itemName) {
+      listItemDepth = depth;
+      break;
+    }
+  }
+  if (listItemDepth < 0) {
+    return null;
+  }
+  const listItem = $from.node(listItemDepth);
+  const indexInListItem = $from.index(listItemDepth);
+  if (indexInListItem + 1 >= listItem.childCount) {
+    return null;
+  }
+  const nextChild = listItem.child(indexInListItem + 1);
+  if (!wrapperNames.includes(nextChild.type.name)) {
+    return null;
+  }
+  const itemType = state.schema.nodes[itemName];
+  let hasBranching = false;
+  nextChild.forEach((child) => {
+    if (child.type === itemType && child.childCount > 1) {
+      hasBranching = true;
+    }
+  });
+  if (!hasBranching) {
+    return null;
+  }
+  const nodeAfter = state.doc.resolve($from.after()).nodeAfter;
+  if (!nodeAfter || !wrapperNames.includes(nodeAfter.type.name)) {
+    return null;
+  }
+  const items = [];
+  nodeAfter.forEach((child) => {
+    items.push(child);
+  });
+  if (items.length === 0) {
+    return null;
+  }
+  return {
+    listItemDepth,
+    nestedList: nodeAfter,
+    nestedListPos: $from.after(),
+    insertPos: $from.after(listItemDepth),
+    items
+  };
+};
+var hoistBranchingNestedList = (state, dispatch, itemName, wrapperNames) => {
+  const context = getBranchingNestedListAtCursor(state, itemName, wrapperNames);
+  if (!context) {
+    return false;
+  }
+  const { selection } = state;
+  const { nestedList, nestedListPos, insertPos, items } = context;
+  const tr2 = state.tr;
+  tr2.delete(nestedListPos, nestedListPos + nestedList.nodeSize);
+  const mappedInsertPos = tr2.mapping.map(insertPos);
+  tr2.insert(mappedInsertPos, Fragment.from(items));
+  tr2.setSelection(selection.map(tr2.doc, tr2.mapping));
+  if (dispatch) {
+    dispatch(tr2);
+  }
+  return true;
+};
+var handleDeleteBranchingNestedList = (editor, itemName, wrapperNames) => {
+  return hoistBranchingNestedList(editor.state, editor.view.dispatch, itemName, wrapperNames);
+};
+var createBranchingListDeleteKeymap = (itemName, wrapperNames) => {
+  return Extension.create({
+    name: `${itemName}BranchingDeleteKeymap`,
+    priority: 101,
+    addKeyboardShortcuts() {
+      const handleDelete2 = () => handleDeleteBranchingNestedList(this.editor, itemName, wrapperNames);
+      return {
+        Delete: handleDelete2,
+        "Mod-Delete": handleDelete2
+      };
+    }
+  });
+};
 function isSameLineOrderedListToken(token) {
   var _a, _b;
   const nestedToken = (_a = token.tokens) == null ? void 0 : _a[0];
@@ -20984,6 +21121,14 @@ var ListItem = Node3.create({
       ctx
     );
   },
+  addExtensions() {
+    return [
+      createBranchingListDeleteKeymap(this.name, [
+        this.options.bulletListTypeName,
+        this.options.orderedListTypeName
+      ])
+    ];
+  },
   addKeyboardShortcuts() {
     return {
       Enter: () => this.editor.commands.splitListItem(this.name),
@@ -21043,31 +21188,6 @@ var hasListBefore = (editorState, name, parentListTypes) => {
   }
   return true;
 };
-var hasListItemBefore = (typeOrName, state) => {
-  var _a;
-  const { $anchor } = state.selection;
-  const $targetPos = state.doc.resolve($anchor.pos - 2);
-  if ($targetPos.index() === 0) {
-    return false;
-  }
-  if (((_a = $targetPos.nodeBefore) == null ? void 0 : _a.type.name) !== typeOrName) {
-    return false;
-  }
-  return true;
-};
-var listItemHasSubList = (typeOrName, state, node) => {
-  if (!node) {
-    return false;
-  }
-  const nodeType = getNodeType(typeOrName, state.schema);
-  let hasSubList = false;
-  node.descendants((child) => {
-    if (child.type === nodeType) {
-      hasSubList = true;
-    }
-  });
-  return hasSubList;
-};
 var handleBackspace = (editor, name, parentListTypes) => {
   if (editor.commands.undoInputRule()) {
     return true;
@@ -21096,16 +21216,6 @@ var handleBackspace = (editor, name, parentListTypes) => {
   }
   if (!isAtStartOfNode(editor.state)) {
     return false;
-  }
-  const listItemPos = findListItemPos(name, editor.state);
-  if (!listItemPos) {
-    return false;
-  }
-  const $prev = editor.state.doc.resolve(listItemPos.$pos.pos - 2);
-  const prevNode = $prev.node(listItemPos.depth);
-  const previousListItemHasSubList = listItemHasSubList(name, editor.state, prevNode);
-  if (hasListItemBefore(name, editor.state) && !previousListItemHasSubList) {
-    return editor.commands.joinItemBackward();
   }
   return editor.chain().liftListItem(name).run();
 };
@@ -21162,6 +21272,31 @@ var hasListItemAfter = (typeOrName, state) => {
     return false;
   }
   return true;
+};
+var hasListItemBefore = (typeOrName, state) => {
+  var _a;
+  const { $anchor } = state.selection;
+  const $targetPos = state.doc.resolve($anchor.pos - 2);
+  if ($targetPos.index() === 0) {
+    return false;
+  }
+  if (((_a = $targetPos.nodeBefore) == null ? void 0 : _a.type.name) !== typeOrName) {
+    return false;
+  }
+  return true;
+};
+var listItemHasSubList = (typeOrName, state, node) => {
+  if (!node) {
+    return false;
+  }
+  const nodeType = getNodeType(typeOrName, state.schema);
+  let hasSubList = false;
+  node.descendants((child) => {
+    if (child.type === nodeType) {
+      hasSubList = true;
+    }
+  });
+  return hasSubList;
 };
 var ListKeymap = Extension.create({
   name: "listKeymap",
@@ -21538,7 +21673,7 @@ var OrderedList = Node3.create({
     return [inputRule];
   }
 });
-var inputRegex3 = /^\s*(\[([( |x])?\])\s$/;
+var inputRegex2 = /^\s*(\[([( |x])?\])\s$/;
 var TaskItem = Node3.create({
   name: "taskItem",
   addOptions() {
@@ -21616,6 +21751,12 @@ var TaskItem = Node3.create({
     const checkedChar = ((_a = node.attrs) == null ? void 0 : _a.checked) ? "x" : " ";
     const prefix = `- [${checkedChar}] `;
     return renderNestedMarkdownContent(node, h2, prefix);
+  },
+  addExtensions() {
+    if (!this.options.nested) {
+      return [];
+    }
+    return [createBranchingListDeleteKeymap(this.name, [this.options.taskListTypeName])];
   },
   addKeyboardShortcuts() {
     const shortcuts = {
@@ -21725,7 +21866,7 @@ var TaskItem = Node3.create({
   addInputRules() {
     return [
       wrappingInputRule({
-        find: inputRegex3,
+        find: inputRegex2,
         type: this.type,
         getAttributes: (match) => ({
           checked: match[match.length - 1] === "x"
@@ -21891,7 +22032,7 @@ var ListKit = Extension.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-paragraph@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0_/node_modules/@tiptap/extension-paragraph/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-paragraph@3.25.0_@tiptap+core@3.25.0_@tiptap+pm@3.25.0_/node_modules/@tiptap/extension-paragraph/dist/index.js
 var EMPTY_PARAGRAPH_MARKDOWN = "&nbsp;";
 var NBSP_CHAR = "\xA0";
 var Paragraph = Node3.create({
@@ -21949,9 +22090,9 @@ var Paragraph = Node3.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-strike@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0_/node_modules/@tiptap/extension-strike/dist/index.js
-var inputRegex4 = /(?:^|\s)(~~(?!\s+~~)((?:[^~]+))~~(?!\s+~~))$/;
-var pasteRegex2 = /(?:^|\s)(~~(?!\s+~~)((?:[^~]+))~~(?!\s+~~))/g;
+// node_modules/.pnpm/@tiptap+extension-strike@3.25.0_@tiptap+core@3.25.0_@tiptap+pm@3.25.0_/node_modules/@tiptap/extension-strike/dist/index.js
+var inputRegex3 = /(?:^|\s)(~~(?!\s+~~)((?:[^~]+))~~(?!\s+~~))$/;
+var pasteRegex = /(?:^|\s)(~~(?!\s+~~)((?:[^~]+))~~(?!\s+~~))/g;
 var Strike = Mark2.create({
   name: "strike",
   addOptions() {
@@ -22008,7 +22149,7 @@ var Strike = Mark2.create({
   addInputRules() {
     return [
       markInputRule({
-        find: inputRegex4,
+        find: inputRegex3,
         type: this.type
       })
     ];
@@ -22016,14 +22157,14 @@ var Strike = Mark2.create({
   addPasteRules() {
     return [
       markPasteRule({
-        find: pasteRegex2,
+        find: pasteRegex,
         type: this.type
       })
     ];
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-text@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0_/node_modules/@tiptap/extension-text/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-text@3.25.0_@tiptap+core@3.25.0_@tiptap+pm@3.25.0_/node_modules/@tiptap/extension-text/dist/index.js
 var Text2 = Node3.create({
   name: "text",
   group: "inline",
@@ -22036,7 +22177,7 @@ var Text2 = Node3.create({
   renderMarkdown: (node) => node.text || ""
 });
 
-// node_modules/.pnpm/@tiptap+extension-underline@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0_/node_modules/@tiptap/extension-underline/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-underline@3.25.0_@tiptap+core@3.25.0_@tiptap+pm@3.25.0_/node_modules/@tiptap/extension-underline/dist/index.js
 var Underline = Mark2.create({
   name: "underline",
   addOptions() {
@@ -22990,7 +23131,7 @@ var redo = buildCommand(true, true);
 var undoNoScroll = buildCommand(false, false);
 var redoNoScroll = buildCommand(true, false);
 
-// node_modules/.pnpm/@tiptap+extensions@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0__@tiptap+pm@3.24.0/node_modules/@tiptap/extensions/dist/index.js
+// node_modules/.pnpm/@tiptap+extensions@3.25.0_@tiptap+core@3.25.0_@tiptap+pm@3.25.0__@tiptap+pm@3.25.0/node_modules/@tiptap/extensions/dist/index.js
 var CharacterCount = Extension.create({
   name: "characterCount",
   addOptions() {
@@ -23206,6 +23347,9 @@ function createPlaceholderDecoration(options) {
     }) : placeholder
   });
 }
+function resolveEmptyNodeClass(emptyNodeClass, props) {
+  return typeof emptyNodeClass === "function" ? emptyNodeClass(props) : emptyNodeClass;
+}
 function buildPlaceholderDecorations({
   editor,
   options,
@@ -23221,10 +23365,6 @@ function buildPlaceholderDecorations({
   const { anchor } = selection;
   const decorations = [];
   const isEmptyDoc = editor.isEmpty;
-  const classes = {
-    emptyEditor: options.emptyEditorClass,
-    emptyNode: options.emptyNodeClass
-  };
   const useResolvedPath = options.showOnlyCurrent && !options.includeChildren;
   if (useResolvedPath) {
     const resolved = doc3.resolve(anchor);
@@ -23239,7 +23379,15 @@ function buildPlaceholderDecorations({
           dataAttribute,
           hasAnchor,
           placeholder: options.placeholder,
-          classes,
+          classes: {
+            emptyEditor: options.emptyEditorClass,
+            emptyNode: resolveEmptyNodeClass(options.emptyNodeClass, {
+              editor,
+              node,
+              pos: nodeStart,
+              hasAnchor
+            })
+          },
           node,
           pos: nodeStart
         })
@@ -23263,7 +23411,15 @@ function buildPlaceholderDecorations({
             dataAttribute,
             hasAnchor,
             placeholder: options.placeholder,
-            classes,
+            classes: {
+              emptyEditor: options.emptyEditorClass,
+              emptyNode: resolveEmptyNodeClass(options.emptyNodeClass, {
+                editor,
+                node,
+                pos,
+                hasAnchor
+              })
+            },
             node,
             pos
           })
@@ -23548,7 +23704,7 @@ var UndoRedo = Extension.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+starter-kit@3.24.0/node_modules/@tiptap/starter-kit/dist/index.js
+// node_modules/.pnpm/@tiptap+starter-kit@3.25.0/node_modules/@tiptap/starter-kit/dist/index.js
 var StarterKit = Extension.create({
   name: "starterKit",
   addExtensions() {
@@ -23625,17 +23781,17 @@ var StarterKit = Extension.create({
 });
 var index_default3 = StarterKit;
 
-// node_modules/.pnpm/@tiptap+extension-placeholder@3.24.0_@tiptap+extensions@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0__@tiptap+pm@3.24.0_/node_modules/@tiptap/extension-placeholder/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-placeholder@3.25.0_@tiptap+extensions@3.25.0_@tiptap+core@3.25.0_@tiptap+pm@3.25.0__@tiptap+pm@3.25.0_/node_modules/@tiptap/extension-placeholder/dist/index.js
 var index_default4 = Placeholder;
 
-// node_modules/.pnpm/@tiptap+extension-task-list@3.24.0_@tiptap+extension-list@3.24.0_@tiptap+core@3.24.0_@t_509e6bc88266616e437a8debc435c053/node_modules/@tiptap/extension-task-list/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-task-list@3.25.0_@tiptap+extension-list@3.25.0_@tiptap+core@3.25.0_@t_621ef39202903e64d82a072560431341/node_modules/@tiptap/extension-task-list/dist/index.js
 var index_default5 = TaskList;
 
-// node_modules/.pnpm/@tiptap+extension-task-item@3.24.0_@tiptap+extension-list@3.24.0_@tiptap+core@3.24.0_@t_b4050e11811e9a6f4abb7e5f646f8b27/node_modules/@tiptap/extension-task-item/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-task-item@3.25.0_@tiptap+extension-list@3.25.0_@tiptap+core@3.25.0_@t_bc4b27f01f80de8ecbad7e1c568e2892/node_modules/@tiptap/extension-task-item/dist/index.js
 var index_default6 = TaskItem;
 
-// node_modules/.pnpm/@tiptap+extension-image@3.24.0_@tiptap+core@3.24.0_@tiptap+pm@3.24.0_/node_modules/@tiptap/extension-image/dist/index.js
-var inputRegex5 = /(?:^|\s)(!\[(.+|:?)]\((\S+)(?:(?:\s+)["'](\S+)["'])?\))$/;
+// node_modules/.pnpm/@tiptap+extension-image@3.25.0_@tiptap+core@3.25.0_@tiptap+pm@3.25.0_/node_modules/@tiptap/extension-image/dist/index.js
+var inputRegex4 = /(?:^|\s)(!\[(.+|:?)]\((\S+)(?:(?:\s+)["'](\S+)["'])?\))$/;
 var Image = Node3.create({
   name: "image",
   addOptions() {
@@ -23703,7 +23859,9 @@ var Image = Node3.create({
     const { directions, minWidth, minHeight, alwaysPreserveAspectRatio } = this.options.resize;
     return ({ node, getPos, HTMLAttributes, editor }) => {
       const el = document.createElement("img");
-      Object.entries(HTMLAttributes).forEach(([key, value]) => {
+      el.draggable = false;
+      const mergedAttributes = mergeAttributes(this.options.HTMLAttributes, HTMLAttributes);
+      Object.entries(mergedAttributes).forEach(([key, value]) => {
         if (value != null) {
           switch (key) {
             case "width":
@@ -23715,7 +23873,9 @@ var Image = Node3.create({
           }
         }
       });
-      el.src = HTMLAttributes.src;
+      if (mergedAttributes.src !== null) {
+        el.src = mergedAttributes.src;
+      }
       const nodeView = new ResizableNodeView({
         element: el,
         editor,
@@ -23773,7 +23933,7 @@ var Image = Node3.create({
   addInputRules() {
     return [
       nodeInputRule({
-        find: inputRegex5,
+        find: inputRegex4,
         type: this.type,
         getAttributes: (match) => {
           const [, , alt, src, title] = match;
