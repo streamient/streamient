@@ -26,6 +26,7 @@
 	var detailTitle;
 	var detailSubtitle;
 	var detailDate;
+	var detailMailboxStatus;
 	var detailDraftEl;
 	var detailThreadEl;
 	var internalNotesEl;
@@ -523,10 +524,25 @@
 			return wrapper;
 		}
 
-		function normalizeEccMailbox(value) {
-			var mailbox = String(value || '').trim();
-			return ['inbox', 'archived', 'sent', 'spam', 'drafts', 'trash'].includes(mailbox) ? mailbox : 'inbox';
-		}
+	function normalizeEccMailbox(value) {
+		var mailbox = String(value || '').trim();
+		return ['inbox', 'archived', 'sent', 'spam', 'drafts', 'trash'].includes(mailbox) ? mailbox : 'inbox';
+	}
+
+	function mailboxStatusName(email) {
+		if (!email) return '';
+		if (email.in_trash === true) return 'Trash';
+		var mailbox = normalizeEccMailbox(email.mailbox || 'inbox');
+		var action = MAILBOX_ACTIONS.find(function (item) { return item.slug === mailbox; });
+		return action?.name || mailbox.charAt(0).toUpperCase() + mailbox.slice(1);
+	}
+
+	function setDetailMailboxStatus(email) {
+		if (!detailMailboxStatus) return;
+		var status = activeLabel ? mailboxStatusName(email) : '';
+		detailMailboxStatus.textContent = status;
+		detailMailboxStatus.classList.toggle('d-none', !status);
+	}
 
 		function readUrlState() {
 			var params = new URLSearchParams(window.location.search);
@@ -1422,6 +1438,7 @@
 			if (detailTitle) detailTitle.textContent = 'Loading email';
 			if (detailSubtitle) detailSubtitle.textContent = emailId || '';
 			if (detailDate) detailDate.textContent = '';
+			setDetailMailboxStatus(null);
 			if (detailDraftEl) {
 				replaceChildren(detailDraftEl);
 				detailDraftEl.appendChild(textNode('div', 'text-muted small', 'Loading draft.'));
@@ -1467,6 +1484,7 @@
 			if (detailTitle) detailTitle.textContent = 'Email detail';
 			if (detailSubtitle) detailSubtitle.textContent = 'Unable to load email.';
 			if (detailDate) detailDate.textContent = '';
+			setDetailMailboxStatus(null);
 			if (detailDraftEl) replaceChildren(detailDraftEl);
 			if (detailThreadEl) {
 				replaceChildren(detailThreadEl);
@@ -2195,6 +2213,7 @@
 					: 'No email found.';
 			}
 			if (detailDate) detailDate.textContent = selected ? formatDateTime(selected.createdAt || selected.updatedAt) : '';
+			setDetailMailboxStatus(selected);
 			renderDraftDetail(draft || null);
 			if (!detailThreadEl) return;
 			replaceChildren(detailThreadEl);
@@ -3066,6 +3085,7 @@
 		detailTitle = document.getElementById('ecc-detail-title');
 		detailSubtitle = document.getElementById('ecc-detail-subtitle');
 		detailDate = document.getElementById('ecc-detail-date');
+		detailMailboxStatus = document.getElementById('ecc-detail-mailbox-status');
 		detailDraftEl = document.getElementById('ecc-detail-draft');
 		detailThreadEl = document.getElementById('ecc-detail-thread');
 		internalNotesEl = document.getElementById('ecc-internal-notes');
@@ -3203,6 +3223,7 @@
 		detailTitle = null;
 		detailSubtitle = null;
 		detailDate = null;
+		detailMailboxStatus = null;
 		detailDraftEl = null;
 		detailThreadEl = null;
 		internalNotesEl = null;

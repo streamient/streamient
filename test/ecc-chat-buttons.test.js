@@ -30,4 +30,13 @@ describe('ECC Email AI prompt buttons', () => {
 		assert.ok(eccJs.includes('showActions: isSelectedMessage'));
 		assert.ok(!eccJs.includes('showMove: isSelected'));
 	});
+
+	it('shows selected email mailbox status only while viewing a label list', () => {
+		const eccPug = fs.readFileSync(new URL('../views/ajax/section/ecc.pug', import.meta.url), 'utf8');
+		const eccJs = fs.readFileSync(new URL('../public/js/ecc.js', import.meta.url), 'utf8');
+
+		assert.ok(eccPug.includes('span.badge.text-bg-secondary.me-3.d-none#ecc-detail-mailbox-status'));
+		assert.ok(eccJs.includes('var status = activeLabel ? mailboxStatusName(email) : \'\';'));
+		assert.ok(eccJs.includes('detailMailboxStatus.classList.toggle(\'d-none\', !status);'));
+	});
 });
