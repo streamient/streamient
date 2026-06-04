@@ -28,11 +28,11 @@ x-env: &env
   EMAIL_TRIAGE_MODEL_PROVIDER: openai
   OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
   GOOGLE_API_KEY: "${GOOGLE_API_KEY:-}"
-  APP_URL: http://localhost:3000
-  MCP_BASE_URL: http://localhost:3002
+  APP_URL: http://k.lan:3000
+  MCP_BASE_URL: http://mcp.k.lan:3002
   WS_URL: ""
   EMAIL_FORWARD_DOMAIN: "email.kumbukum.com"
-  API_BASE_URL: http://app:3000
+  API_BASE_URL: http://kumbukum-app-1:3000
   SCREENSHOT_URL: ${DEV_SCREENSHOT_URL:-http://screenshot:3000}
   SCREENSHOT_SECRET: "${SCREENSHOT_SECRET:-change-me-screenshot-secret}" # openssl rand -hex 32
   SYSADMIN_EMAIL: "sysadmin@localhost"
@@ -101,7 +101,7 @@ services:
       service: base
     command: ["npm", "run", "dev"]
     ports:
-      - "3000:3000"
+      - 3000
     environment:
       <<: *env
     dns:
