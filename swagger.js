@@ -1305,6 +1305,7 @@ const swaggerSpec = {
             put: {
                 tags: ['Emails'],
                 summary: 'Update an email',
+	                description: 'When mailbox is updated, related non-sent, non-trash inbound thread emails are moved to the same mailbox.',
                 parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
 	                requestBody: {
 	                    required: true,

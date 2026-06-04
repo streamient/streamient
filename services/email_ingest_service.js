@@ -978,6 +978,38 @@ export async function getEmail(host_id, emailId) {
 	return Email.findOne({ _id: emailId, host_id });
 }
 
+async function updateRelatedThreadMailboxes(host_id, emailId, mailbox, selectedEmail) {
+	const thread = await getEmailThread(host_id, emailId, { order: 'desc' });
+	const selectedId = stringifyObjectId(selectedEmail?._id || emailId);
+	const updatedById = new Map();
+	const changedEmails = selectedEmail ? [selectedEmail] : [];
+	if (selectedEmail) updatedById.set(selectedId, selectedEmail);
+	const related = thread.filter((email) => {
+		const id = stringifyObjectId(email._id);
+		if (!id || id === selectedId) return false;
+		if (email.in_trash === true) return false;
+		if ((email.mailbox || 'inbox') === 'sent') return false;
+		return (email.mailbox || 'inbox') !== mailbox;
+	});
+
+	for (const email of related) {
+		const updated = await Email.findOneAndUpdate(
+			{ _id: email._id, host_id, in_trash: { $ne: true }, mailbox: { $ne: 'sent' } },
+			{ $set: { mailbox, is_indexed: false } },
+			{ returnDocument: 'after' },
+		);
+		if (updated) {
+			updatedById.set(stringifyObjectId(updated._id), updated);
+			changedEmails.push(updated);
+		}
+	}
+
+	return {
+		thread: thread.map((email) => updatedById.get(stringifyObjectId(email._id)) || email),
+		changedEmails,
+	};
+}
+
 export async function updateEmail(host_id, emailId, data, ctx = {}) {
 	const update = {};
 	if (data.subject !== undefined) update.subject = data.subject;
@@ -1010,7 +1042,10 @@ export async function updateEmail(host_id, emailId, data, ctx = {}) {
 	if (data.triage_error !== undefined) update.triage_error = String(data.triage_error || '');
 	update.is_indexed = false;
 
-	const before = ctx.user_id ? await Email.findOne({ _id: emailId, host_id }).lean() : null;
+	const hasMailboxUpdate = data.mailbox !== undefined;
+	const before = (ctx.user_id || hasMailboxUpdate) ? await Email.findOne({ _id: emailId, host_id }).lean() : null;
+	if (hasMailboxUpdate && (before?.mailbox || 'inbox') === 'sent') delete update.mailbox;
+	const shouldUpdateThreadMailbox = update.mailbox !== undefined;
 	const email = await Email.findOneAndUpdate(
 		{ _id: emailId, host_id },
 		{ $set: update },
@@ -1018,9 +1053,14 @@ export async function updateEmail(host_id, emailId, data, ctx = {}) {
 	);
 
 	if (email) {
+		const threadUpdate = shouldUpdateThreadMailbox ? await updateRelatedThreadMailboxes(host_id, emailId, update.mailbox, email) : null;
+		const changedEmails = threadUpdate?.changedEmails || [email];
+
 		if (!ctx.skipSideEffects) {
-			await indexEmailNow(host_id, email, { indexFn: ctx.indexEmailFn, updateFn: ctx.updateEmailIndexStateFn });
-			await emitEmailCreatedOrUpdated(host_id, 'email:updated', email);
+			for (const changedEmail of changedEmails) {
+				await indexEmailNow(host_id, changedEmail, { indexFn: ctx.indexEmailFn, updateFn: ctx.updateEmailIndexStateFn });
+			}
+			await emitEmailCreatedOrUpdated(host_id, 'email:updated', email, threadUpdate ? { thread: threadUpdate.thread } : {});
 			invalidateGraphCache(host_id).catch(() => {});
 		}
 		if (ctx.user_id) {

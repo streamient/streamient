@@ -1103,6 +1103,136 @@ describe('Email ingest service', () => {
 		]);
 	});
 
+	it('archives related inbound thread emails and keeps sent replies in Sent', async () => {
+		const originalFindOne = Email.findOne;
+		const originalFind = Email.find;
+		const originalFindOneAndUpdate = Email.findOneAndUpdate;
+		const docs = [
+			{
+				_id: 'inbox-newest',
+				host_id: 'host-1',
+				project: 'project-1',
+				message_id: 'newest@example.com',
+				in_reply_to: 'older@example.com',
+				references: ['root@example.com', 'older@example.com'],
+				mailbox: 'inbox',
+				in_trash: false,
+				updatedAt: '2026-06-04T12:00:00.000Z',
+			},
+			{
+				_id: 'inbox-older',
+				host_id: 'host-1',
+				project: 'project-1',
+				message_id: 'older@example.com',
+				in_reply_to: 'root@example.com',
+				references: ['root@example.com'],
+				mailbox: 'inbox',
+				in_trash: false,
+				updatedAt: '2026-06-04T11:00:00.000Z',
+			},
+			{
+				_id: 'sent-reply',
+				host_id: 'host-1',
+				project: 'project-1',
+				message_id: 'sent@example.com',
+				in_reply_to: 'newest@example.com',
+				references: ['root@example.com', 'older@example.com', 'newest@example.com'],
+				mailbox: 'sent',
+				in_trash: false,
+				updatedAt: '2026-06-04T12:30:00.000Z',
+			},
+			{
+				_id: 'other-inbox',
+				host_id: 'host-1',
+				project: 'project-1',
+				message_id: 'other@example.com',
+				in_reply_to: '',
+				references: [],
+				mailbox: 'inbox',
+				in_trash: false,
+				updatedAt: '2026-06-04T10:00:00.000Z',
+			},
+		];
+		const indexedIds = [];
+
+		function clone(doc) {
+			return doc ? { ...doc, references: [...(doc.references || [])] } : null;
+		}
+
+		function matchesThreadQuery(doc, query) {
+			if (query.host_id && doc.host_id !== query.host_id) return false;
+			if (query.in_trash?.$ne === true && doc.in_trash === true) return false;
+			const conditions = query.$or || [];
+			return conditions.some((condition) => {
+				if (condition.message_id) return doc.message_id === condition.message_id;
+				if (condition.references) return (doc.references || []).includes(condition.references);
+				if (condition.in_reply_to) return doc.in_reply_to === condition.in_reply_to;
+				return false;
+			});
+		}
+
+		function matchesListQuery(doc, query) {
+			if (query.host_id && doc.host_id !== query.host_id) return false;
+			if (query.project && doc.project !== query.project) return false;
+			if (query.in_trash === false && doc.in_trash !== false) return false;
+			if (query.mailbox && doc.mailbox !== query.mailbox) return false;
+			return true;
+		}
+
+		Email.findOne = (query) => ({
+			lean: async () => clone(docs.find((doc) => doc._id === query._id && doc.host_id === query.host_id && doc.in_trash !== true)),
+		});
+		Email.find = (query) => {
+			const rows = query.$or
+				? docs.filter((doc) => matchesThreadQuery(doc, query))
+				: docs.filter((doc) => matchesListQuery(doc, query));
+			return {
+				lean: async () => rows.map(clone),
+				sort: () => ({
+					lean: async () => rows.map(clone),
+				}),
+			};
+		};
+		Email.findOneAndUpdate = async (query, update) => {
+			const doc = docs.find((item) => item._id === query._id && item.host_id === query.host_id);
+			if (!doc) return null;
+			if (query.in_trash?.$ne === true && doc.in_trash === true) return null;
+			if (query.mailbox?.$ne && doc.mailbox === query.mailbox.$ne) return null;
+			Object.assign(doc, update.$set || {});
+			return clone(doc);
+		};
+
+		try {
+			const updated = await updateEmail('host-1', 'inbox-newest', { mailbox: 'archived' }, {
+				indexEmailFn: async (hostId, type, email) => {
+					indexedIds.push(email._id);
+				},
+				updateEmailIndexStateFn: async () => {},
+			});
+
+			assert.equal(updated.mailbox, 'archived');
+			assert.equal(docs.find((doc) => doc._id === 'inbox-newest').mailbox, 'archived');
+			assert.equal(docs.find((doc) => doc._id === 'inbox-older').mailbox, 'archived');
+			assert.equal(docs.find((doc) => doc._id === 'sent-reply').mailbox, 'sent');
+			assert.deepEqual(indexedIds.sort(), ['inbox-newest', 'inbox-older']);
+
+			const inbox = await listEmails('host-1', 'project-1', { mailbox: 'inbox' });
+			assert.deepEqual(inbox.map((email) => email._id), ['other-inbox']);
+
+			const payload = await buildEmailRealtimePayload('host-1', updated, {
+				thread: docs.filter((doc) => doc._id !== 'other-inbox'),
+			});
+			assert.deepEqual(payload.thread_source_ids, ['inbox-newest', 'inbox-older', 'sent-reply']);
+
+			await updateEmail('host-1', 'sent-reply', { mailbox: 'archived' }, { skipSideEffects: true });
+			assert.equal(docs.find((doc) => doc._id === 'sent-reply').mailbox, 'sent');
+		} finally {
+			Email.findOne = originalFindOne;
+			Email.find = originalFind;
+			Email.findOneAndUpdate = originalFindOneAndUpdate;
+		}
+	});
+
 	it('listEmailIds returns id strings for the current view filters', async () => {
 		let findQuery = null;
 		const originalFind = Email.find;
