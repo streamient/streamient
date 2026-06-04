@@ -124,17 +124,24 @@
 			return String(email?._id || email?.id || '');
 		}
 
-		function emailThreadKey(email) {
-			var firstReference = (email?.references || []).find(function (ref) {
-				return String(ref || '').trim();
-			});
+		function emailThreadIds(email) {
 			var normalizeMessageId = function (value) {
 				return String(value || '').trim().replace(/^<+|>+$/g, '').toLowerCase();
 			};
-			return normalizeMessageId(firstReference)
-				|| normalizeMessageId(email?.in_reply_to)
-				|| normalizeMessageId(email?.message_id)
-				|| emailId(email);
+			var ids = [];
+			var add = function (value) {
+				var id = normalizeMessageId(value);
+				if (id && !ids.includes(id)) ids.push(id);
+			};
+			add(email?.message_id);
+			(email?.references || []).forEach(add);
+			add(email?.in_reply_to);
+			if (!ids.length) ids.push(emailId(email));
+			return ids.filter(Boolean);
+		}
+
+		function emailThreadKey(email) {
+			return emailThreadIds(email)[0] || emailId(email);
 		}
 
 		function latestReplyTargetFromThread(thread, fallbackEmail) {
@@ -2236,7 +2243,7 @@
 			var actionPoints = (email.triage_action_points || []).slice(0, 2).map(function (item) {
 				return item.text;
 			}).filter(Boolean).join(' - ');
-			return '<div class="list-group-item list-group-item-action ecc-email-item" role="button" tabindex="0" data-id="' + escapeHtml(emailId(email)) + '" data-thread-key="' + escapeHtml(emailThreadKey(email)) + '">'
+			return '<div class="list-group-item list-group-item-action ecc-email-item" role="button" tabindex="0" data-id="' + escapeHtml(emailId(email)) + '" data-thread-key="' + escapeHtml(emailThreadKey(email)) + '" data-thread-ids="' + escapeHtml(emailThreadIds(email).join(' ')) + '">'
 				+ '<div class="d-flex justify-content-between align-items-start gap-3 min-w-0">'
 				+ '<div class="form-check ecc-email-select-wrap">'
 				+ '<input class="form-check-input ecc-email-select" type="checkbox" value="' + escapeHtml(emailId(email)) + '" aria-label="Select email">'
@@ -2630,6 +2637,20 @@
 			}
 		}
 
+		function listItemThreadIds(item) {
+			return String(item?.dataset?.threadIds || item?.dataset?.threadKey || '')
+				.split(/\s+/)
+				.map(function (id) { return id.trim().toLowerCase(); })
+				.filter(Boolean);
+		}
+
+		function threadIdsOverlap(a, b) {
+			var left = new Set(a || []);
+			return (b || []).some(function (id) {
+				return left.has(id);
+			});
+		}
+
 		function applyEmailSocketUpdate(email) {
 			if (!listEl || !email) return;
 			if (activeMailbox === 'drafts') {
@@ -2653,12 +2674,10 @@
 				}
 				return;
 			}
-			if (activeMailbox === 'sent') {
-				var threadKey = emailThreadKey(email);
-				listEl.querySelectorAll('.ecc-email-item[data-thread-key="' + CSS.escape(threadKey) + '"]').forEach(function (item) {
-					if (item.dataset.id !== id) item.remove();
-				});
-			}
+			var incomingThreadIds = emailThreadIds(email);
+			listEl.querySelectorAll('.ecc-email-item').forEach(function (item) {
+				if (item.dataset.id !== id && threadIdsOverlap(incomingThreadIds, listItemThreadIds(item))) item.remove();
+			});
 			var wrapper = document.createElement('div');
 			wrapper.innerHTML = renderEmailItemHtml(email);
 			var item = wrapper.firstElementChild;

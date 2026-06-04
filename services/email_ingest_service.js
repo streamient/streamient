@@ -651,32 +651,60 @@ function buildEmailListQuery(host_id, projectId, filters = {}) {
 	return query;
 }
 
-function emailThreadKey(email = {}) {
-	const firstReference = Array.isArray(email.references) ? email.references.find((ref) => canonicalMessageId(ref)) : '';
-	return canonicalMessageId(firstReference)
-		|| canonicalMessageId(email.in_reply_to)
-		|| canonicalMessageId(email.message_id)
-		|| String(email._id || email.id || '');
-}
-
 function emailSortTime(email = {}) {
 	const value = email.updatedAt || email.createdAt;
 	const time = value ? new Date(value).getTime() : 0;
 	return Number.isFinite(time) ? time : 0;
 }
 
-function collapseEmailsByThread(emails = []) {
-	const byThread = new Map();
-	for (const email of emails) {
-		const key = emailThreadKey(email);
-		const existing = byThread.get(key);
-		if (!existing || emailSortTime(email) > emailSortTime(existing)) byThread.set(key, email);
-	}
-	return [...byThread.values()].sort((a, b) => emailSortTime(b) - emailSortTime(a));
+function emailThreadIdentifiers(email = {}) {
+	const ids = [];
+	const add = (value) => {
+		const id = canonicalMessageId(value);
+		if (id && !ids.includes(id)) ids.push(id);
+	};
+	add(email.message_id);
+	for (const ref of email.references || []) add(ref);
+	add(email.in_reply_to);
+	if (!ids.length) ids.push(String(email._id || email.id || ''));
+	return ids.filter(Boolean);
 }
 
-async function countSentEmailThreads(host_id, projectId) {
-	const query = buildEmailListQuery(host_id, projectId, { mailbox: 'sent' });
+function collapseEmailsByThread(emails = []) {
+	const byIdentifier = new Map();
+	const groups = [];
+
+	for (const email of emails) {
+		const identifiers = emailThreadIdentifiers(email);
+		const matchedGroups = [...new Set(identifiers.map((id) => byIdentifier.get(id)).filter((group) => group))];
+		let group;
+		if (!matchedGroups.length) {
+			group = { identifiers: new Set(), email };
+			groups.push(group);
+		} else {
+			group = matchedGroups[0];
+			for (const merged of matchedGroups.slice(1)) {
+				if (merged === group) continue;
+				for (const id of merged.identifiers) {
+					group.identifiers.add(id);
+					byIdentifier.set(id, group);
+				}
+				if (emailSortTime(merged.email) > emailSortTime(group.email)) group.email = merged.email;
+				const index = groups.indexOf(merged);
+				if (index !== -1) groups.splice(index, 1);
+			}
+			if (emailSortTime(email) > emailSortTime(group.email)) group.email = email;
+		}
+		for (const id of identifiers) {
+			group.identifiers.add(id);
+			byIdentifier.set(id, group);
+		}
+	}
+
+	return groups.map((group) => group.email).sort((a, b) => emailSortTime(b) - emailSortTime(a));
+}
+
+async function countEmailThreadsByQuery(query) {
 	const emails = await Email.find(query).select('_id message_id references in_reply_to updatedAt createdAt').lean();
 	return collapseEmailsByThread(emails).length;
 }
@@ -686,28 +714,19 @@ export async function listEmails(host_id, projectId, { page = 1, limit = 50, mai
 	const safePage = Math.max(1, parseInt(page, 10) || 1);
 	const safeLimit = Math.max(1, parseInt(limit, 10) || 50);
 
-	if (mailbox === 'sent' && !label) {
-		const emails = await Email.find(query)
-			.sort({ updatedAt: -1 })
-			.lean();
-		return collapseEmailsByThread(emails).slice((safePage - 1) * safeLimit, safePage * safeLimit);
-	}
-	return Email.find(query)
+	const emails = await Email.find(query)
 		.sort({ updatedAt: -1 })
-		.skip((safePage - 1) * safeLimit)
-		.limit(safeLimit);
+		.lean();
+	return collapseEmailsByThread(emails).slice((safePage - 1) * safeLimit, safePage * safeLimit);
 }
 
 export async function listEmailIds(host_id, projectId, { mailbox, label, triaged } = {}) {
 	const query = buildEmailListQuery(host_id, projectId, { mailbox, label, triaged });
-	if (mailbox === 'sent' && !label) {
-		const emails = await Email.find(query)
-			.select('_id message_id references in_reply_to updatedAt createdAt')
-			.lean();
-		return collapseEmailsByThread(emails).map((email) => email._id.toString());
-	}
-	const docs = await Email.find(query).select('_id').sort({ updatedAt: -1 }).lean();
-	return docs.map((doc) => doc._id.toString());
+	const emails = await Email.find(query)
+		.select('_id message_id references in_reply_to updatedAt createdAt')
+		.sort({ updatedAt: -1 })
+		.lean();
+	return collapseEmailsByThread(emails).map((email) => email._id.toString());
 }
 
 function applyTriageStatusFilters(query, filters = {}) {
@@ -887,16 +906,16 @@ export async function listEmailLabels(host_id, filters = {}) {
 
 	const [mailboxCounts, labelCounts] = await Promise.all([
 		Promise.all([
-			Email.countDocuments(buildEmailListQuery(host_id, projectId, { mailbox: 'inbox', triaged: false })),
-			Email.countDocuments(buildEmailListQuery(host_id, projectId, { mailbox: 'archived' })),
-			countSentEmailThreads(host_id, projectId),
-			Email.countDocuments(buildEmailListQuery(host_id, projectId, { mailbox: 'spam' })),
+			countEmailThreadsByQuery(buildEmailListQuery(host_id, projectId, { mailbox: 'inbox', triaged: false })),
+			countEmailThreadsByQuery(buildEmailListQuery(host_id, projectId, { mailbox: 'archived' })),
+			countEmailThreadsByQuery(buildEmailListQuery(host_id, projectId, { mailbox: 'sent' })),
+			countEmailThreadsByQuery(buildEmailListQuery(host_id, projectId, { mailbox: 'spam' })),
 			EmailDraft.countDocuments({ host_id, status: { $nin: ['discarded', 'ready'] }, ...(projectId ? { project: projectId } : {}) }),
-			Email.countDocuments({ host_id, in_trash: true, ...(projectId ? { project: projectId } : {}) }),
+			countEmailThreadsByQuery({ host_id, in_trash: true, ...(projectId ? { project: projectId } : {}) }),
 		]),
 		Promise.all(visibleLabels.map(async (label) => ({
 			slug: label.slug,
-			count: await Email.countDocuments({ ...baseQuery, labels: label.slug }),
+			count: await countEmailThreadsByQuery({ ...baseQuery, labels: label.slug }),
 		}))),
 	]);
 

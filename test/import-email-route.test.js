@@ -6,6 +6,7 @@ import config from '../config.js';
 import importRoutes from '../routes/import.js';
 import { Project } from '../model/project.js';
 import { Email } from '../model/email.js';
+import { EmailIdentity } from '../model/email_identity.js';
 import { AuditLog } from '../model/audit_log.js';
 import { Tenant } from '../modules/tenancy.js';
 
@@ -37,6 +38,7 @@ describe('Email forwarding import route', () => {
 	const originalEmailCreate = Email.create;
 	const originalEmailFind = Email.find;
 	const originalEmailUpdateOne = Email.updateOne;
+	const originalEmailIdentityFindOne = EmailIdentity.findOne;
 	const originalTenantFindOne = Tenant.findOne;
 	const originalAuditLogCreate = AuditLog.create;
 
@@ -61,6 +63,11 @@ describe('Email forwarding import route', () => {
 			}),
 		});
 		Email.updateOne = async () => ({ modifiedCount: 1 });
+		EmailIdentity.findOne = () => ({
+			select: () => ({
+				lean: async () => null,
+			}),
+		});
 		Tenant.findOne = () => ({
 			select: () => ({
 				lean: async () => ({ settings: { email: { auto_triage_incoming: false }, ai_instructions: {} } }),
@@ -76,6 +83,7 @@ describe('Email forwarding import route', () => {
 		Email.create = originalEmailCreate;
 		Email.find = originalEmailFind;
 		Email.updateOne = originalEmailUpdateOne;
+		EmailIdentity.findOne = originalEmailIdentityFindOne;
 		Tenant.findOne = originalTenantFindOne;
 		AuditLog.create = originalAuditLogCreate;
 	});
@@ -174,6 +182,98 @@ describe('Email forwarding import route', () => {
 			assert.equal(createdPayload.project, projectId);
 			assert.deepEqual(createdPayload.to, ['nitai@fastmail.com']);
 			assert.deepEqual(createdPayload.from, ['nitai@helpmonks.com']);
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
+	it('stores BCC project replies from configured identities as sent and triaged', async () => {
+		Project.findOne = () => ({
+			lean: async () => ({
+				_id: projectId,
+				owner: '507f1f77bcf86cd799439012',
+				host_id: 'host-1',
+				is_active: true,
+				email_filter: 'support@example.com',
+			}),
+		});
+		let identityQuery = null;
+		let createdPayload = null;
+		EmailIdentity.findOne = (query) => {
+			identityQuery = query;
+			return {
+				select: () => ({
+					lean: async () => ({ _id: 'identity-1' }),
+				}),
+			};
+		};
+		Email.create = async (payload) => {
+			createdPayload = payload;
+			return { _id: { toString: () => emailIds[0] }, ...payload };
+		};
+
+		const server = createServer();
+		try {
+			const response = await request(server, JSON.stringify({
+				message_id: '<bcc-reply-1@example.com>',
+				from: 'Support <support@example.com>',
+				to: 'customer@example.com',
+				bcc: `${projectId}@email.kumbukum.com`,
+				recipients: [`${projectId}@email.kumbukum.com`],
+				session: {
+					recipient: `${projectId}@email.kumbukum.com`,
+					sender: 'support@example.com',
+				},
+				subject: 'Re: Customer question',
+				text: 'Reply copy',
+			}));
+			const json = await response.json();
+
+			assert.equal(response.status, 200);
+			assert.deepEqual(json, { accepted: true, email_id: emailIds[0] });
+			assert.equal(identityQuery.host_id, 'host-1');
+			assert.equal(identityQuery.project, projectId);
+			assert.equal(identityQuery.email, 'support@example.com');
+			assert.equal(createdPayload.mailbox, 'sent');
+			assert.equal(createdPayload.triaged, true);
+			assert.ok(createdPayload.triaged_at instanceof Date);
+			assert.equal(createdPayload.in_trash, false);
+			assert.deepEqual(createdPayload.bcc, [`${projectId}@email.kumbukum.com`]);
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
+	it('keeps BCC project emails from unknown senders as inbox mail', async () => {
+		let createdPayload = null;
+		Email.create = async (payload) => {
+			createdPayload = payload;
+			return { _id: { toString: () => emailIds[1] }, ...payload };
+		};
+
+		const server = createServer();
+		try {
+			const response = await request(server, JSON.stringify({
+				message_id: '<bcc-unknown-1@example.com>',
+				from: 'Customer <customer@example.com>',
+				to: 'support@example.com',
+				bcc: `${projectId}@email.kumbukum.com`,
+				recipients: [`${projectId}@email.kumbukum.com`],
+				session: {
+					recipient: `${projectId}@email.kumbukum.com`,
+					sender: 'customer@example.com',
+				},
+				subject: 'Customer copy',
+				text: 'Inbox copy',
+			}));
+			const json = await response.json();
+
+			assert.equal(response.status, 200);
+			assert.deepEqual(json, { accepted: true, email_id: emailIds[1] });
+			assert.equal(createdPayload.mailbox, 'inbox');
+			assert.equal(createdPayload.triaged, false);
+			assert.equal(createdPayload.triaged_at, null);
+			assert.equal(createdPayload.in_trash, false);
 		} finally {
 			await new Promise((resolve) => server.close(resolve));
 		}

@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 
 import config from '../config.js';
 import { Project } from '../model/project.js';
+import { EmailIdentity } from '../model/email_identity.js';
 import { Tenant } from '../modules/tenancy.js';
 import * as emailIngestService from '../services/email_ingest_service.js';
 
@@ -115,6 +116,28 @@ function findForwardRecipient(payload, email) {
 	return { error: 'Forwarded email recipient must use EMAIL_FORWARD_DOMAIN' };
 }
 
+function projectForwardAddress(project) {
+	const forwardDomain = String(config.emailForwardDomain || '').trim().replace(/^@+/, '').toLowerCase();
+	const projectId = project?._id?.toString ? project._id.toString() : String(project?._id || '');
+	return projectId && forwardDomain ? `${projectId}@${forwardDomain}` : '';
+}
+
+async function isProjectBccReply(project, email) {
+	const forwardAddress = projectForwardAddress(project);
+	if (!forwardAddress || !(email.bcc || []).some((address) => String(address || '').trim().toLowerCase() === forwardAddress)) {
+		return false;
+	}
+
+	const sender = String((email.from || [])[0] || '').trim().toLowerCase();
+	if (!sender) return false;
+	const identity = await EmailIdentity.findOne({
+		host_id: project.host_id,
+		project: project._id,
+		email: sender,
+	}).select('_id').lean();
+	return Boolean(identity);
+}
+
 async function emailForwardingEnabled(host_id) {
 	if (!is_hosted) return true;
 	const tenant = await Tenant.findOne({ host_id }).select('plan').lean();
@@ -159,7 +182,8 @@ router.post('/email', raw({ type: () => true, limit: '25mb' }), async (req, res)
 		return res.json({ accepted: false });
 	}
 
-	const filtered = emailIngestService.matchesEmailFilter(project.email_filter, {
+	const bccReply = await isProjectBccReply(project, normalized);
+	const filtered = !bccReply && emailIngestService.matchesEmailFilter(project.email_filter, {
 		from: normalized.from,
 		subject: normalized.subject,
 	});
@@ -168,6 +192,9 @@ router.post('/email', raw({ type: () => true, limit: '25mb' }), async (req, res)
 		const email = await emailIngestService.ingestForwardedEmail(project.owner, project.host_id, {
 			...payload,
 			project: project._id,
+			mailbox: bccReply ? 'sent' : 'inbox',
+			triaged: bccReply ? true : payload.triaged,
+			triaged_at: bccReply ? new Date() : payload.triaged_at,
 			in_trash: filtered,
 			trashed_at: filtered ? new Date() : null,
 		}, {

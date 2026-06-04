@@ -952,9 +952,7 @@ describe('Email ingest service', () => {
 			findQuery = query;
 			return {
 				sort: () => ({
-					skip: () => ({
-						limit: async () => [],
-					}),
+					lean: async () => [],
 				}),
 			};
 		};
@@ -1021,6 +1019,66 @@ describe('Email ingest service', () => {
 		}
 	});
 
+	it('collapses inbox emails by connected references and keeps the newest reply', async () => {
+		let findQuery = null;
+		const originalFind = Email.find;
+		const older = {
+			_id: 'razuna-older',
+			message_id: 'ca+_bd1j0hd@mail.gmail.com',
+			in_reply_to: '010f019e72570468@example.com',
+			references: [
+				'6a192ccd@helpmonks.com',
+				'cahtbx1pphf9kqsxf6@mail.gmail.com',
+				'010f019e72570468@example.com',
+			],
+			mailbox: 'inbox',
+			updatedAt: '2026-06-01T09:03:43.447Z',
+		};
+		const newest = {
+			_id: 'razuna-newest',
+			message_id: 'ca+_bd1hcdomgmve@mail.gmail.com',
+			in_reply_to: '0101019e802efd12@example.com',
+			references: [
+				'6a1cb80d@helpmonks.com',
+				'6a19f60b@helpmonks.com',
+				'ca+_bd1j0hd@mail.gmail.com',
+				'6a192ccd@helpmonks.com',
+				'cahtbx1pphf9kqsxf6@mail.gmail.com',
+				'0101019e802efd12@example.com',
+			],
+			mailbox: 'inbox',
+			updatedAt: '2026-06-02T04:18:51.137Z',
+		};
+		const unrelated = {
+			_id: 'other-thread',
+			message_id: 'other@example.com',
+			in_reply_to: '',
+			references: [],
+			mailbox: 'inbox',
+			updatedAt: '2026-06-01T10:00:00.000Z',
+		};
+
+		Email.find = (query) => {
+			findQuery = query;
+			return {
+				sort: () => ({
+					lean: async () => [newest, unrelated, older],
+				}),
+			};
+		};
+
+		try {
+			const emails = await listEmails('host-1', 'project-1', { mailbox: 'inbox' });
+
+			assert.equal(findQuery.host_id, 'host-1');
+			assert.equal(findQuery.project, 'project-1');
+			assert.equal(findQuery.mailbox, 'inbox');
+			assert.deepEqual(emails.map((email) => email._id), ['razuna-newest', 'other-thread']);
+		} finally {
+			Email.find = originalFind;
+		}
+	});
+
 	it('listEmailIds returns id strings for the current view filters', async () => {
 		let findQuery = null;
 		const originalFind = Email.find;
@@ -1057,13 +1115,37 @@ describe('Email ingest service', () => {
 
 		Email.find = () => ({
 			select: () => ({
-				lean: async () => [sentNewest, sentOlder, sentOther],
+				sort: () => ({
+					lean: async () => [sentNewest, sentOlder, sentOther],
+				}),
 			}),
 		});
 
 		try {
 			const ids = await listEmailIds('host-1', 'project-1', { mailbox: 'sent' });
 			assert.deepEqual(ids, ['sent-newest', 'sent-other']);
+		} finally {
+			Email.find = originalFind;
+		}
+	});
+
+	it('listEmailIds collapses inbox threads to the newest message id', async () => {
+		const originalFind = Email.find;
+		const inboxOlder = { _id: 'inbox-older', message_id: 'older@example.com', in_reply_to: 'root@example.com', references: ['root@example.com'], updatedAt: '2026-01-01T10:00:00.000Z' };
+		const inboxNewest = { _id: 'inbox-newest', message_id: 'newest@example.com', in_reply_to: 'older@example.com', references: ['root@example.com', 'older@example.com'], updatedAt: '2026-01-01T11:00:00.000Z' };
+		const inboxOther = { _id: 'inbox-other', message_id: 'other@example.com', in_reply_to: '', references: [], updatedAt: '2026-01-01T09:00:00.000Z' };
+
+		Email.find = () => ({
+			select: () => ({
+				sort: () => ({
+					lean: async () => [inboxNewest, inboxOlder, inboxOther],
+				}),
+			}),
+		});
+
+		try {
+			const ids = await listEmailIds('host-1', 'project-1', { mailbox: 'inbox' });
+			assert.deepEqual(ids, ['inbox-newest', 'inbox-other']);
 		} finally {
 			Email.find = originalFind;
 		}
@@ -1116,6 +1198,43 @@ describe('Email ingest service', () => {
 			EmailLabel.bulkWrite = originalBulkWrite;
 			EmailLabel.find = originalLabelFind;
 			Email.countDocuments = originalEmailCountDocuments;
+			Email.find = originalEmailFind;
+			EmailDraft.countDocuments = originalDraftCountDocuments;
+		}
+	});
+
+	it('counts mailbox threads with collapse for archived messages', async () => {
+		const originalBulkWrite = EmailLabel.bulkWrite;
+		const originalLabelFind = EmailLabel.find;
+		const originalEmailFind = Email.find;
+		const originalDraftCountDocuments = EmailDraft.countDocuments;
+
+		EmailLabel.bulkWrite = async () => ({});
+		EmailLabel.find = () => ({
+			sort: () => ({
+				lean: async () => [],
+			}),
+		});
+		Email.find = (query) => ({
+			select: () => ({
+				lean: async () => {
+					if (query.mailbox !== 'archived') return [];
+					return [
+						{ _id: 'archived-1', message_id: 'archived-1@example.com', in_reply_to: 'root@example.com', references: ['root@example.com'], updatedAt: '2026-01-01T10:00:00.000Z' },
+						{ _id: 'archived-2', message_id: 'archived-2@example.com', in_reply_to: 'archived-1@example.com', references: ['root@example.com', 'archived-1@example.com'], updatedAt: '2026-01-01T11:00:00.000Z' },
+						{ _id: 'archived-3', message_id: 'archived-3@example.com', in_reply_to: '', references: [], updatedAt: '2026-01-01T09:00:00.000Z' },
+					];
+				},
+			}),
+		});
+		EmailDraft.countDocuments = async () => 0;
+
+		try {
+			const result = await listEmailLabels('host-1');
+			assert.equal(result.mailboxes.find((mailbox) => mailbox.slug === 'archived').count, 2);
+		} finally {
+			EmailLabel.bulkWrite = originalBulkWrite;
+			EmailLabel.find = originalLabelFind;
 			Email.find = originalEmailFind;
 			EmailDraft.countDocuments = originalDraftCountDocuments;
 		}

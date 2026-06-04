@@ -37,7 +37,9 @@ PUT /api/v1/emails/:id/internal-notes/:noteId
 DELETE /api/v1/emails/:id/internal-notes/:noteId
 ```
 
-Email read responses include sanitized `html_content`, `html_content_has_remote_images`, and `excerpt`. The excerpt is derived from visible HTML when available and strips parser control lines such as reply-above markers. `GET /api/v1/emails?mailbox=sent` returns one latest sent email per thread, and Sent counts use the same thread-collapsed behavior.
+Email read responses include sanitized `html_content`, `html_content_has_remote_images`, and `excerpt`. The excerpt is derived from visible HTML when available and strips parser control lines such as reply-above markers. Mailbox lists, selection IDs, and mailbox/label counts return one latest email per connected `message_id` / `references` / `in_reply_to` thread.
+
+Public forwarding through `POST /import/email` accepts project mail at `PROJECT_ID@EMAIL_FORWARD_DOMAIN`. When that project address appears in the parsed `bcc` field and the sender matches a configured project outbound email identity, Kumbukum stores the message as a `sent` + triaged thread reply instead of Inbox mail. BCC copies from unknown senders stay normal inbound mail.
 
 Internal notes are private team notes for the email thread. They are stored separately from email drafts and are never included in outbound email content. Notes can be threaded with `parent_note`, edited by tenant team members, and deleted only when they have no replies.
 
