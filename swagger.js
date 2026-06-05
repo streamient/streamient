@@ -573,7 +573,7 @@ const swaggerSpec = {
             post: {
                 tags: ['Import'],
                 summary: 'Import a forwarded email',
-                description: 'Root-level public forwarding endpoint, not under /api/v1. The recipient must be PROJECT_ID@EMAIL_FORWARD_DOMAIN. Plain text is imported when present; HTML-only email is stripped to text. Attachments are ignored. If the parsed BCC contains the project forwarding address and the sender matches a configured outbound email identity for the project, the email is stored as a sent, triaged thread reply instead of Inbox mail.',
+                description: 'Root-level public forwarding endpoint, not under /api/v1. The recipient must be PROJECT_ID@EMAIL_FORWARD_DOMAIN. Plain text is imported when present; HTML-only email is stripped to text. Attachments are ignored. If the hidden delivery recipient or parsed BCC contains the project forwarding address and the sender matches a configured outbound email identity for the project, the email is stored as a sent, triaged thread reply instead of Inbox mail.',
                 security: [],
                 servers: [{ url: '/', description: 'Root application endpoint' }],
                 requestBody: {
@@ -585,7 +585,7 @@ const swaggerSpec = {
                                 properties: {
                                     to: { type: 'string', description: 'Forwarding recipient, PROJECT_ID@EMAIL_FORWARD_DOMAIN' },
                                     from: { type: 'string', description: 'Original sender address' },
-                                    bcc: { type: 'string', description: 'When this contains PROJECT_ID@EMAIL_FORWARD_DOMAIN and from matches a project identity, the message is captured as a sent reply' },
+                                    bcc: { type: 'string', description: 'When this contains PROJECT_ID@EMAIL_FORWARD_DOMAIN, or the project address is the hidden delivery recipient, and from matches a project identity, the message is captured as a sent reply' },
                                     subject: { type: 'string' },
                                     text: { type: 'string', description: 'Plain text email body' },
                                     message_id: { type: 'string' },

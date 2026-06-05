@@ -88,29 +88,31 @@ function findForwardRecipient(payload, email) {
 
 	const parsed = payload?.parsed_email || payload?.mailparser || payload || {};
 	const candidates = [
-		parsed.recipients,
-		parsed.recipient,
-		parsed.rcpt_to,
-		parsed.rcptTo,
-		parsed.session?.recipient,
-		parsed.session?.recipients,
-		parsed.envelope?.to,
-		parsed.envelope?.recipient,
-		parsed.envelope?.rcpt_to,
-		parsed.envelope?.rcptTo,
-		getHeaderValues(parsed.headers, 'x-original-to'),
-		getHeaderValues(parsed.headerLines, 'x-original-to'),
-		email.to,
+		{ source: 'recipients', value: parsed.recipients },
+		{ source: 'recipient', value: parsed.recipient },
+		{ source: 'rcpt_to', value: parsed.rcpt_to },
+		{ source: 'rcptTo', value: parsed.rcptTo },
+		{ source: 'session.recipient', value: parsed.session?.recipient },
+		{ source: 'session.recipients', value: parsed.session?.recipients },
+		{ source: 'envelope.to', value: parsed.envelope?.to },
+		{ source: 'envelope.recipient', value: parsed.envelope?.recipient },
+		{ source: 'envelope.rcpt_to', value: parsed.envelope?.rcpt_to },
+		{ source: 'envelope.rcptTo', value: parsed.envelope?.rcptTo },
+		{ source: 'x-original-to', value: getHeaderValues(parsed.headers, 'x-original-to') },
+		{ source: 'x-original-to', value: getHeaderValues(parsed.headerLines, 'x-original-to') },
+		{ source: 'to', value: email.to },
 	];
 
-	for (const address of candidates.flatMap((candidate) => extractEmailAddresses(candidate))) {
-		const value = firstValue(address).trim().toLowerCase();
-		const atIndex = value.lastIndexOf('@');
-		if (atIndex === -1) continue;
+	for (const candidate of candidates) {
+		for (const address of extractEmailAddresses(candidate.value)) {
+			const value = firstValue(address).trim().toLowerCase();
+			const atIndex = value.lastIndexOf('@');
+			if (atIndex === -1) continue;
 
-		const localPart = value.slice(0, atIndex);
-		const domain = value.slice(atIndex + 1);
-		if (domain === forwardDomain) return { localPart, address: value };
+			const localPart = value.slice(0, atIndex);
+			const domain = value.slice(atIndex + 1);
+			if (domain === forwardDomain) return { localPart, address: value, source: candidate.source };
+		}
 	}
 
 	return { error: 'Forwarded email recipient must use EMAIL_FORWARD_DOMAIN' };
@@ -122,11 +124,24 @@ function projectForwardAddress(project) {
 	return projectId && forwardDomain ? `${projectId}@${forwardDomain}` : '';
 }
 
-async function isProjectBccReply(project, email) {
+function hasAddress(addresses, address) {
+	const normalized = String(address || '').trim().toLowerCase();
+	if (!normalized) return false;
+	return (addresses || []).some((item) => String(item || '').trim().toLowerCase() === normalized);
+}
+
+async function isProjectBccReply(project, email, recipient) {
 	const forwardAddress = projectForwardAddress(project);
-	if (!forwardAddress || !(email.bcc || []).some((address) => String(address || '').trim().toLowerCase() === forwardAddress)) {
+	if (!forwardAddress) {
 		return false;
 	}
+
+	const deliveredToProject = String(recipient?.address || '').trim().toLowerCase() === forwardAddress || hasAddress(email.bcc, forwardAddress);
+	if (!deliveredToProject) return false;
+
+	const visibleProjectRecipient = hasAddress(email.to, forwardAddress) || hasAddress(email.cc, forwardAddress);
+	const hiddenProjectRecipient = hasAddress(email.bcc, forwardAddress) || !visibleProjectRecipient;
+	if (!hiddenProjectRecipient) return false;
 
 	const sender = String((email.from || [])[0] || '').trim().toLowerCase();
 	if (!sender) return false;
@@ -182,7 +197,7 @@ router.post('/email', raw({ type: () => true, limit: '25mb' }), async (req, res)
 		return res.json({ accepted: false });
 	}
 
-	const bccReply = await isProjectBccReply(project, normalized);
+	const bccReply = await isProjectBccReply(project, normalized, recipient);
 	const filtered = !bccReply && emailIngestService.matchesEmailFilter(project.email_filter, {
 		from: normalized.from,
 		subject: normalized.subject,

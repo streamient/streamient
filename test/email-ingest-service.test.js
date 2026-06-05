@@ -1,15 +1,17 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailIds, listEmailLabels, parseTriageResult, triageInboxEmails, startEmailTriageRun, getEmailTriageRun, backfillEmailTriageState, askEmailAi, askEmailListAi, buildEmailAiTypesenseFilter, buildTriageContext, parseEmailAiQuery, resetEmailTriage, updateEmail, emptySpam, parseEmailReplySuggestionsResult, suggestEmailReplies, suggestFromEmailAddresses, matchesEmailFilter, applyProjectEmailFilterToInbox, buildEmailRealtimePayload } from '../services/email_ingest_service.js';
+import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailIds, listEmailLabels, parseTriageResult, triageInboxEmails, startEmailTriageRun, getEmailTriageRun, backfillEmailTriageState, backfillForwardedSentReplies, askEmailAi, askEmailListAi, buildEmailAiTypesenseFilter, buildTriageContext, parseEmailAiQuery, resetEmailTriage, updateEmail, emptySpam, parseEmailReplySuggestionsResult, suggestEmailReplies, suggestFromEmailAddresses, matchesEmailFilter, applyProjectEmailFilterToInbox, buildEmailRealtimePayload } from '../services/email_ingest_service.js';
 import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
+import { EmailIdentity } from '../model/email_identity.js';
 import { EmailLabel } from '../model/email_label.js';
 import { EmailTriageRun } from '../model/email_triage_run.js';
 import { GraphLink } from '../model/graph_link.js';
 import { Project } from '../model/project.js';
 import { Tenant } from '../modules/tenancy.js';
 import { toTypesenseDoc } from '../modules/typesense.js';
+import config from '../config.js';
 
 describe('Email ingest service', () => {
 	const userId = '507f1f77bcf86cd799439012';
@@ -1483,6 +1485,60 @@ describe('Email ingest service', () => {
 				options: { timestamps: false },
 			});
 		} finally {
+			Email.updateMany = originalUpdateMany;
+		}
+	});
+
+	it('backfills forwarded sent replies from configured identities', async () => {
+		const originalIdentityFind = EmailIdentity.find;
+		const originalUpdateMany = Email.updateMany;
+		const originalEmailForwardDomain = config.emailForwardDomain;
+		let updateQuery = null;
+		let updatePayload = null;
+		let updateOptions = null;
+
+		config.emailForwardDomain = 'email.kumbukum.com';
+		EmailIdentity.find = () => ({
+			select: () => ({
+				lean: async () => [
+					{
+						host_id: 'host-1',
+						project: { toString: () => '507f1f77bcf86cd799439011' },
+						email: 'Support@Example.com',
+					},
+				],
+			}),
+		});
+		Email.updateMany = async (query, update, options) => {
+			updateQuery = query;
+			updatePayload = update.$set;
+			updateOptions = options;
+			return { modifiedCount: 2 };
+		};
+
+		try {
+			const result = await backfillForwardedSentReplies();
+
+			assert.equal(result.sent_replies, 2);
+			assert.equal(updateQuery.host_id, 'host-1');
+			assert.equal(updateQuery.source, 'emailforwarding');
+			assert.equal(updateQuery.from, 'support@example.com');
+			assert.equal(updateQuery.mailbox, 'inbox');
+			assert.equal(updateQuery.triaged, false);
+			assert.equal(updateQuery.to.$ne, '507f1f77bcf86cd799439011@email.kumbukum.com');
+			assert.equal(updateQuery.cc.$ne, '507f1f77bcf86cd799439011@email.kumbukum.com');
+			assert.deepEqual(updateQuery.$or, [
+				{ in_reply_to: { $type: 'string', $ne: '' } },
+				{ references: { $exists: true, $not: { $size: 0 } } },
+			]);
+			assert.equal(updatePayload.mailbox, 'sent');
+			assert.equal(updatePayload.triaged, true);
+			assert.ok(updatePayload.triaged_at instanceof Date);
+			assert.equal(updatePayload.is_indexed, false);
+			assert.deepEqual(updateOptions, { timestamps: false });
+		} finally {
+			config.emailForwardDomain = originalEmailForwardDomain;
+			EmailIdentity.find = originalIdentityFind;
 			Email.updateMany = originalUpdateMany;
 		}
 	});

@@ -23,6 +23,7 @@ import { getAiInstructions, getEmailSettings } from './byo_ai_service.js';
 import { sanitizeEmailHtml } from '../modules/email_html_sanitizer.js';
 import { indexEmailNow, removeEmailFromIndexNow } from './email_index_service.js';
 import { createLogger } from '../modules/logger.js';
+import config from '../config.js';
 
 const log = createLogger('email-ingest');
 
@@ -1887,6 +1888,53 @@ export async function backfillEmailTriageState() {
 		triaged_true: triagedTrueResult?.modifiedCount || 0,
 		triaged_false: triagedFalseResult?.modifiedCount || 0,
 	};
+}
+
+export async function backfillForwardedSentReplies() {
+	const forwardDomain = String(config.emailForwardDomain || '').trim().replace(/^@+/, '').toLowerCase();
+	if (!forwardDomain) return { sent_replies: 0 };
+
+	const identities = await EmailIdentity.find({}).select('host_id project email').lean();
+	let modified = 0;
+	const now = new Date();
+
+	for (const identity of identities) {
+		const projectId = identity.project?.toString ? identity.project.toString() : String(identity.project || '');
+		const emailAddress = String(identity.email || '').trim().toLowerCase();
+		if (!projectId || !emailAddress) continue;
+
+		const forwardAddress = `${projectId}@${forwardDomain}`;
+		const result = await Email.updateMany(
+			{
+				host_id: identity.host_id,
+				project: identity.project,
+				source: 'emailforwarding',
+				from: emailAddress,
+				mailbox: 'inbox',
+				triaged: false,
+				in_trash: { $ne: true },
+				to: { $ne: forwardAddress },
+				cc: { $ne: forwardAddress },
+				$or: [
+					{ in_reply_to: { $type: 'string', $ne: '' } },
+					{ references: { $exists: true, $not: { $size: 0 } } },
+				],
+			},
+			{
+				$set: {
+					mailbox: 'sent',
+					triaged: true,
+					triaged_at: now,
+					is_indexed: false,
+				},
+			},
+			{ timestamps: false },
+		);
+		modified += result?.modifiedCount || 0;
+	}
+
+	if (modified > 0) log.info({ updates: modified }, 'Forwarded sent replies backfilled');
+	return { sent_replies: modified };
 }
 
 function extractJsonObject(text) {

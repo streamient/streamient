@@ -41,7 +41,7 @@
           },
           "email_filter": {
             "type": "string",
-            "description": "Project email filter rules. Matching incoming and applied inbox emails are moved to trash and skip triage."
+            "description": "Incoming email trash filter rules. Supports sender address/domain/local-part rules and subject rules like `subject: failed login` or `subject contains: status update`."
           },
           "host_id": {
             "type": "string"
@@ -432,6 +432,20 @@
           },
           "in_reply_to": {
             "type": "string"
+          },
+          "thread_identifiers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Canonical message identifiers for the connected email thread when included by realtime/update responses."
+          },
+          "thread_source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Email document IDs in the connected thread when included by realtime/update responses."
           },
           "from": {
             "type": "array",
@@ -1589,7 +1603,7 @@
           "Import"
         ],
         "summary": "Import a forwarded email",
-        "description": "Root-level public forwarding endpoint, not under /api/v1. The recipient must be PROJECT_ID@EMAIL_FORWARD_DOMAIN. Plain text is imported when present; HTML-only email is stripped to text. Attachments are ignored.",
+        "description": "Root-level public forwarding endpoint, not under /api/v1. The recipient must be PROJECT_ID@EMAIL_FORWARD_DOMAIN. Plain text is imported when present; HTML-only email is stripped to text. Attachments are ignored. If the hidden delivery recipient or parsed BCC contains the project forwarding address and the sender matches a configured outbound email identity for the project, the email is stored as a sent, triaged thread reply instead of Inbox mail.",
         "security": [],
         "servers": [
           {
@@ -1611,6 +1625,10 @@
                   "from": {
                     "type": "string",
                     "description": "Original sender address"
+                  },
+                  "bcc": {
+                    "type": "string",
+                    "description": "When this contains PROJECT_ID@EMAIL_FORWARD_DOMAIN, or the project address is the hidden delivery recipient, and from matches a project identity, the message is captured as a sent reply"
                   },
                   "subject": {
                     "type": "string"
@@ -1845,7 +1863,8 @@
                     "type": "string"
                   },
                   "email_filter": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Incoming email trash filter rules. Supports sender address/domain/local-part rules and subject rules like `subject: failed login` or `subject contains: status update`."
                   }
                 }
               }
@@ -1923,96 +1942,6 @@
           },
           "404": {
             "description": "Not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/projects/{id}/email-filter/apply": {
-      "post": {
-        "tags": [
-          "Projects",
-          "Emails"
-        ],
-        "summary": "Apply project email filters to ECC inbox",
-        "description": "Runs the project's saved email filter rules against untriaged inbox emails in that project. Matching emails are moved to trash and skip triage. Requires project settings access and email feature access.",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Filters applied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "result": {
-                      "type": "object",
-                      "properties": {
-                        "project": {
-                          "type": "string"
-                        },
-                        "filter_configured": {
-                          "type": "boolean"
-                        },
-                        "processed": {
-                          "type": "integer"
-                        },
-                        "matched": {
-                          "type": "integer"
-                        },
-                        "moved": {
-                          "type": "integer"
-                        },
-                        "email_ids": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Apply failed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Project settings or email feature access required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Project not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -3233,7 +3162,7 @@
           "Emails"
         ],
         "summary": "List emails",
-        "description": "Sent mailbox results are collapsed to one latest sent email per thread.",
+        "description": "Mailbox results are collapsed to one latest email per connected message-id/references/in-reply-to thread.",
         "parameters": [
           {
             "$ref": "#/components/parameters/page"
@@ -3798,6 +3727,7 @@
           "Emails"
         ],
         "summary": "Update an email",
+        "description": "When mailbox is updated, related non-sent, non-trash inbound thread emails are moved to the same mailbox.",
         "parameters": [
           {
             "name": "id",
@@ -6034,6 +5964,142 @@
                       "type": "object"
                     }
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/search/quick": {
+      "post": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "Fast lexical search for the top search palette",
+        "description": "Searches notes, memories, URLs, pages, and emails when email access is enabled. Returns normalized records with safe highlight segments and client open targets.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "query": {
+                    "type": "string"
+                  },
+                  "project_id": {
+                    "type": "string",
+                    "description": "Filter by project (optional)"
+                  },
+                  "per_page": {
+                    "type": "integer",
+                    "description": "Results per collection before final merge"
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "description": "Maximum normalized results to return"
+                  }
+                },
+                "required": [
+                  "query"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "query": {
+                      "type": "string"
+                    },
+                    "found": {
+                      "type": "integer"
+                    },
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "notes",
+                              "memory",
+                              "urls",
+                              "emails",
+                              "pages"
+                            ]
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "subtitle": {
+                            "type": "string"
+                          },
+                          "excerpt": {
+                            "type": "string"
+                          },
+                          "highlight_field": {
+                            "type": "string"
+                          },
+                          "highlight_segments": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "text": {
+                                  "type": "string"
+                                },
+                                "highlighted": {
+                                  "type": "boolean"
+                                }
+                              }
+                            }
+                          },
+                          "project_id": {
+                            "type": "string"
+                          },
+                          "updated_at": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "open_target": {
+                            "type": "object"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Search failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
