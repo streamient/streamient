@@ -29,7 +29,7 @@ x-env: &env
   OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
   GOOGLE_API_KEY: "${GOOGLE_API_KEY:-}"
   APP_URL: http://k.lan:3000
-  MCP_BASE_URL: http://mcp.k.lan:3002
+  MCP_BASE_URL: http://mcp.k.lan
   WS_URL: ""
   EMAIL_FORWARD_DOMAIN: "email.kumbukum.com"
   API_BASE_URL: http://kumbukum-app-1:3000
@@ -131,7 +131,7 @@ services:
     working_dir: /opt/kumbukum/apps/mcp
     command: ["npm", "run", "start"]
     ports:
-      - "3002:3002"
+      - 3002
     environment:
       <<: *env
       KUMBUKUM_APP: mcp

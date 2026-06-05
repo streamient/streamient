@@ -433,6 +433,49 @@ describe('Email forwarding import route', () => {
 		}
 	});
 
+	it('moves forwarded email to spam when subject matches the account spam guard', async () => {
+		Tenant.findOne = () => ({
+			select: () => ({
+				lean: async () => ({
+					settings: {
+						email: {
+							auto_triage_incoming: true,
+							spam_guard: 'subject contains: guarded offer',
+						},
+						ai_instructions: {},
+					},
+				}),
+			}),
+		});
+		let createdPayload = null;
+		Email.create = async (payload) => {
+			createdPayload = payload;
+			return { _id: { toString: () => emailIds[0] }, ...payload };
+		};
+
+		const server = createServer();
+		try {
+			const response = await request(server, JSON.stringify({
+				message_id: '<guarded-forwarded-1@example.com>',
+				from: 'Marketer <marketer@example.com>',
+				to: `${projectId}@email.kumbukum.com`,
+				subject: 'Guarded offer',
+				text: 'Body',
+			}));
+			const json = await response.json();
+
+			assert.equal(response.status, 200);
+			assert.deepEqual(json, { accepted: true, email_id: emailIds[0] });
+			assert.equal(createdPayload.mailbox, 'spam');
+			assert.equal(createdPayload.in_trash, false);
+			assert.equal(createdPayload.triaged, true);
+			assert.equal(createdPayload.triage_primary_action, 'spam');
+			assert.equal(createdPayload.triage_status, 'complete');
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
 	it('does not trash forwarded email when sender does not match the project email filter', async () => {
 		Project.findOne = () => ({
 			lean: async () => ({

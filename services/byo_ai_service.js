@@ -5,7 +5,7 @@ import { encrypt, decrypt } from '../modules/encryption.js';
 export const BYO_AI_SCOPES = ['global', 'email'];
 export const BYO_AI_PROVIDERS = ['openai', 'gemini'];
 export const AI_INSTRUCTION_SCOPES = ['global', 'email', 'email_triage'];
-export const EMAIL_SETTING_FIELDS = ['auto_triage_incoming', 'send_draft_emails_automatically'];
+export const EMAIL_SETTING_FIELDS = ['auto_triage_incoming', 'send_draft_emails_automatically', 'spam_guard'];
 
 const PROVIDER_FIELDS = {
 	openai: 'openai_api_key',
@@ -51,6 +51,7 @@ export function summarizeEmailSettings(tenant) {
 	return {
 		auto_triage_incoming: Boolean(tenant?.settings?.email?.auto_triage_incoming),
 		send_draft_emails_automatically: Boolean(tenant?.settings?.email?.send_draft_emails_automatically),
+		spam_guard: tenant?.settings?.email?.spam_guard || '',
 	};
 }
 
@@ -142,6 +143,13 @@ export async function updateByoAiSettings(hostId, payload = {}) {
 				throw new Error(`Unknown email setting: ${key}`);
 			}
 			const value = payload.email_settings[key];
+			if (key === 'spam_guard') {
+				if (typeof value !== 'string') {
+					throw new Error(`${key} must be a string`);
+				}
+				update[`settings.email.${key}`] = value.trim();
+				continue;
+			}
 			if (typeof value !== 'boolean') {
 				throw new Error(`${key} must be a boolean`);
 			}

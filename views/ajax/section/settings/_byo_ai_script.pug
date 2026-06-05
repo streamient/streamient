@@ -28,6 +28,9 @@ script.
 			form.querySelectorAll('[data-email-setting]').forEach(function(el) {
 				el.checked = !!settings?.email_settings?.[el.dataset.emailSetting];
 			});
+			form.querySelectorAll('[data-email-setting-text]').forEach(function(el) {
+				el.value = settings?.email_settings?.[el.dataset.emailSettingText] || '';
+			});
 		}
 
 		async function loadSettings() {
@@ -59,6 +62,9 @@ script.
 			var emailSettingsPayload = {};
 			form.querySelectorAll('[data-email-setting]').forEach(function(input) {
 				emailSettingsPayload[input.dataset.emailSetting] = input.checked;
+			});
+			form.querySelectorAll('[data-email-setting-text]').forEach(function(input) {
+				emailSettingsPayload[input.dataset.emailSettingText] = input.value.trim();
 			});
 			if (Object.keys(emailSettingsPayload).length > 0) payload.email_settings = emailSettingsPayload;
 

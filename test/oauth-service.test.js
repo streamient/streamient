@@ -6,7 +6,7 @@ import pug from 'pug';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 
 import { authenticateClientForToken, mapDynamicRegistrationClientResponse, parseAuthorizationRequest, validateAuthorizationRequest } from '../services/oauth_service.js';
-import { getOauthIssuer, signMcpAccessToken, verifyMcpAccessToken } from '../modules/oauth.js';
+import { getMcpAppEndpointUrl, getMcpEndpointUrl, getOauthIssuer, signMcpAccessToken, verifyMcpAccessToken } from '../modules/oauth.js';
 
 const oauthAuthorizeViewPath = fileURLToPath(new URL('../views/auth/oauth_authorize.pug', import.meta.url));
 const clientAssertionType = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer';
@@ -74,13 +74,13 @@ describe('oauth helpers', () => {
 			state: 'abc123',
 			code_challenge: 'challenge',
 			code_challenge_method: 'S256',
-			resource: 'http://localhost:3002/mcp',
+			resource: getMcpEndpointUrl(),
 		});
 
 		assert.equal(parsed.client_id, 'https://example.com/oauth/client.json');
 		assert.equal(parsed.redirect_uri, 'http://127.0.0.1:3000/callback');
 		assert.deepEqual(parsed.scopes, ['mcp:read', 'mcp:write']);
-		assert.equal(parsed.resource, 'http://localhost:3002/mcp');
+		assert.equal(parsed.resource, getMcpEndpointUrl());
 	});
 
 	it('parses a valid authorization request for the MCP app-profile resource', () => {
@@ -92,11 +92,11 @@ describe('oauth helpers', () => {
 			state: 'abc123',
 			code_challenge: 'challenge',
 			code_challenge_method: 'S256',
-			resource: 'http://localhost:3002/mcp/app',
+			resource: getMcpAppEndpointUrl(),
 		});
 
 		assert.deepEqual(parsed.scopes, ['mcp:email', 'mcp:read']);
-		assert.equal(parsed.resource, 'http://localhost:3002/mcp/app');
+		assert.equal(parsed.resource, getMcpAppEndpointUrl());
 	});
 
 	it('rejects authorization requests for unknown resources', () => {
@@ -120,7 +120,7 @@ describe('oauth helpers', () => {
 			response_type: 'code',
 			code_challenge: 'challenge',
 			code_challenge_method: 'S256',
-			resource: 'http://localhost:3002/mcp',
+			resource: getMcpEndpointUrl(),
 		});
 
 		assert.equal(parsed.redirect_uri, 'com.raycast-x:/oauth/callback');
@@ -134,7 +134,7 @@ describe('oauth helpers', () => {
 				response_type: 'code',
 				code_challenge: 'challenge',
 				code_challenge_method: 'S256',
-				resource: 'http://localhost:3002/mcp',
+				resource: getMcpEndpointUrl(),
 			}),
 			(err) => err.oauthError === 'invalid_redirect_uri',
 		);
@@ -147,7 +147,7 @@ describe('oauth helpers', () => {
 			host_id: 'host-1',
 			clientId: 'client-1',
 			scopes: ['mcp:read'],
-			audience: 'http://localhost:3002/mcp',
+			audience: getMcpEndpointUrl(),
 		});
 
 		const payload = verifyMcpAccessToken(token);
@@ -155,7 +155,7 @@ describe('oauth helpers', () => {
 		assert.equal(payload.tenantId, 'tenant-1');
 		assert.equal(payload.host_id, 'host-1');
 		assert.equal(payload.client_id, 'client-1');
-		assert.equal(payload.aud, 'http://localhost:3002/mcp');
+		assert.equal(payload.aud, getMcpEndpointUrl());
 	});
 
 	it('signs and verifies MCP access tokens for the app-profile audience', () => {
@@ -165,12 +165,12 @@ describe('oauth helpers', () => {
 			host_id: 'host-1',
 			clientId: 'client-1',
 			scopes: ['mcp:read'],
-			audience: 'http://localhost:3002/mcp/app',
+			audience: getMcpAppEndpointUrl(),
 		});
 
 		const payload = verifyMcpAccessToken(token);
 		assert.equal(payload.sub, 'user-1');
-		assert.equal(payload.aud, 'http://localhost:3002/mcp/app');
+		assert.equal(payload.aud, getMcpAppEndpointUrl());
 	});
 
 	it('accepts metadata clients that list extra grant types when authorization_code is supported', async () => {
@@ -191,7 +191,7 @@ describe('oauth helpers', () => {
 				response_type: 'code',
 				code_challenge: 'challenge',
 				code_challenge_method: 'S256',
-				resource: 'http://localhost:3002/mcp',
+				resource: getMcpEndpointUrl(),
 			}, { host_id: 'host-1' });
 
 			assert.deepEqual(parsed.client.grant_types, ['authorization_code', 'refresh_token']);
@@ -211,7 +211,7 @@ describe('oauth helpers', () => {
 				response_type: 'code',
 				code_challenge: 'challenge',
 				code_challenge_method: 'S256',
-				resource: 'http://localhost:3002/mcp',
+				resource: getMcpEndpointUrl(),
 			}, { host_id: 'host-1' });
 
 			assert.equal(parsed.client.token_endpoint_auth_method, 'private_key_jwt');
@@ -307,7 +307,7 @@ describe('oauth helpers', () => {
 					response_type: 'code',
 					code_challenge: 'challenge',
 					code_challenge_method: 'S256',
-					resource: 'http://localhost:3002/mcp',
+					resource: getMcpEndpointUrl(),
 				}, { host_id: 'host-1' }),
 				(err) => err.oauthError === 'invalid_client_metadata',
 			);
@@ -329,7 +329,7 @@ describe('oauth helpers', () => {
 					response_type: 'code',
 					code_challenge: 'challenge',
 					code_challenge_method: 'S256',
-					resource: 'http://localhost:3002/mcp',
+					resource: getMcpEndpointUrl(),
 				}, { host_id: 'host-1' }),
 				(err) => err.oauthError === 'invalid_client_metadata',
 			);
@@ -439,7 +439,7 @@ describe('oauth helpers', () => {
 				state: 'abc123',
 				code_challenge: 'challenge',
 				code_challenge_method: 'S256',
-				resource: 'http://localhost:3002/mcp',
+				resource: getMcpEndpointUrl(),
 			},
 			scope_details: [{ label: 'Read knowledge', description: 'List and search knowledge.' }],
 			active_tenant: { name: 'Acme Inc' },

@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailIds, listEmailLabels, parseTriageResult, triageInboxEmails, startEmailTriageRun, getEmailTriageRun, backfillEmailTriageState, backfillForwardedSentReplies, askEmailAi, askEmailListAi, buildEmailAiTypesenseFilter, buildTriageContext, parseEmailAiQuery, resetEmailTriage, updateEmail, emptySpam, parseEmailReplySuggestionsResult, suggestEmailReplies, suggestFromEmailAddresses, matchesEmailFilter, applyProjectEmailFilterToInbox, buildEmailRealtimePayload } from '../services/email_ingest_service.js';
+import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailIds, listEmailLabels, parseTriageResult, triageInboxEmails, startEmailTriageRun, getEmailTriageRun, backfillEmailTriageState, backfillForwardedSentReplies, askEmailAi, askEmailListAi, buildEmailAiTypesenseFilter, buildTriageContext, parseEmailAiQuery, resetEmailTriage, updateEmail, emptySpam, parseEmailReplySuggestionsResult, suggestEmailReplies, suggestFromEmailAddresses, matchesEmailFilter, applyProjectEmailFilterToInbox, buildEmailRealtimePayload, addSendersToSpamGuard } from '../services/email_ingest_service.js';
 import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
 import { EmailIdentity } from '../model/email_identity.js';
@@ -375,6 +375,80 @@ describe('Email ingest service', () => {
 			Email.find = originalFind;
 		}
 		});
+
+	it('moves spam guard matched ingested email to spam before auto-triage', async () => {
+		let createdPayload = null;
+		let autoTriageQueried = false;
+		const originalFindOne = Email.findOne;
+		const originalCreate = Email.create;
+		const originalFind = Email.find;
+		const originalTenantFindOne = Tenant.findOne;
+
+		Email.findOne = async () => null;
+		Email.create = async (payload) => {
+			createdPayload = payload;
+			return { _id: { toString: () => 'spam-guard-email-1' }, ...payload };
+		};
+		Email.find = () => {
+			autoTriageQueried = true;
+			return {
+				sort: () => ({
+					limit: () => ({
+						lean: async () => [],
+					}),
+				}),
+				select: () => ({
+					lean: async () => [],
+				}),
+			};
+		};
+		Tenant.findOne = () => ({
+			select: () => ({
+				lean: async () => ({
+					settings: {
+						email: {
+							auto_triage_incoming: true,
+							spam_guard: 'noreply@\nsubject contains: status update',
+						},
+						ai_instructions: {},
+					},
+				}),
+			}),
+		});
+
+		try {
+			await ingestEmail(userId, 'host-1', {
+				project: '507f1f77bcf86cd799439011',
+				parsed_email: {
+					message_id: '<spam-guard@example.com>',
+					from: 'No Reply <noreply@good.com>',
+					to: 'to@example.com',
+					subject: 'Weekly status update',
+					text: 'Guarded body',
+				},
+			}, {
+				channel: 'api',
+				awaitAutoTriage: true,
+				applySpamGuard: true,
+				indexEmailFn: async () => {},
+				updateEmailIndexStateFn: async () => {},
+			});
+
+			assert.equal(createdPayload.mailbox, 'spam');
+			assert.equal(createdPayload.triaged, true);
+			assert.equal(createdPayload.triage_primary_action, 'spam');
+			assert.equal(createdPayload.triage_mailbox_action, 'spam');
+			assert.equal(createdPayload.triage_status, 'complete');
+			assert.equal(createdPayload.in_trash, false);
+			assert.deepEqual(createdPayload.labels, ['spam', 'triaged']);
+			assert.equal(autoTriageQueried, false);
+		} finally {
+			Email.findOne = originalFindOne;
+			Email.create = originalCreate;
+			Email.find = originalFind;
+			Tenant.findOne = originalTenantFindOne;
+		}
+	});
 
 		it('auto-triages only the newly created inbox email when enabled', async () => {
 			const emailId = { toString: () => 'email-auto-1' };
@@ -1287,6 +1361,187 @@ describe('Email ingest service', () => {
 		}
 	});
 
+	it('adds sender to spam guard when manually moving inbound email to spam', async () => {
+		const originalFindOne = Email.findOne;
+		const originalFind = Email.find;
+		const originalFindOneAndUpdate = Email.findOneAndUpdate;
+		const originalTenantFindOne = Tenant.findOne;
+		const originalTenantUpdateOne = Tenant.updateOne;
+		let spamGuardUpdate = null;
+		const email = {
+			_id: { toString: () => 'manual-spam-1' },
+			host_id: 'host-1',
+			project: 'project-1',
+			message_id: 'manual-spam@example.com',
+			in_reply_to: '',
+			references: [],
+			from: ['Spammer <spam@example.com>'],
+			mailbox: 'inbox',
+			in_trash: false,
+			updatedAt: '2026-06-04T10:00:00.000Z',
+		};
+
+		Email.findOne = () => ({
+			lean: async () => ({ ...email }),
+		});
+		Email.findOneAndUpdate = async (query, update) => ({ ...email, ...update.$set });
+		Email.find = () => ({
+			lean: async () => [{ ...email, mailbox: 'spam' }],
+		});
+		Tenant.findOne = () => ({
+			select: () => ({
+				lean: async () => ({
+					settings: {
+						email: {
+							spam_guard: 'existing@example.com\nspam@example.com',
+						},
+					},
+				}),
+			}),
+		});
+		Tenant.updateOne = async (query, update) => {
+			spamGuardUpdate = { query, update };
+			return { modifiedCount: 1 };
+		};
+
+		try {
+			const updated = await updateEmail('host-1', 'manual-spam-1', { mailbox: 'spam' }, {
+				skipSideEffects: true,
+			});
+
+			assert.equal(updated.mailbox, 'spam');
+			assert.equal(spamGuardUpdate, null);
+
+			Tenant.findOne = () => ({
+				select: () => ({
+					lean: async () => ({
+						settings: {
+							email: {
+								spam_guard: 'existing@example.com',
+							},
+						},
+					}),
+				}),
+			});
+			await updateEmail('host-1', 'manual-spam-1', { mailbox: 'spam' }, {
+				skipSideEffects: true,
+			});
+
+			assert.equal(spamGuardUpdate.query.host_id, 'host-1');
+			assert.equal(spamGuardUpdate.update.$set['settings.email.spam_guard'], 'existing@example.com\nspam@example.com');
+		} finally {
+			Email.findOne = originalFindOne;
+			Email.find = originalFind;
+			Email.findOneAndUpdate = originalFindOneAndUpdate;
+			Tenant.findOne = originalTenantFindOne;
+			Tenant.updateOne = originalTenantUpdateOne;
+		}
+	});
+
+	it('keeps all spam guard sender additions during concurrent spam moves', async () => {
+		const originalTenantFindOne = Tenant.findOne;
+		const originalTenantUpdateOne = Tenant.updateOne;
+		let spamGuard = '';
+
+		Tenant.findOne = () => ({
+			select: () => ({
+				lean: async () => ({
+					settings: {
+						email: {
+							spam_guard: spamGuard,
+						},
+					},
+				}),
+			}),
+		});
+		Tenant.updateOne = async (query, update) => {
+			const expected = query?.['settings.email.spam_guard'] || '';
+			if (expected === '' && Array.isArray(query?.$or) && spamGuard !== '') return { modifiedCount: 0 };
+			if (expected !== '' && spamGuard !== expected) return { modifiedCount: 0 };
+			spamGuard = update.$set['settings.email.spam_guard'];
+			return { modifiedCount: 1 };
+		};
+
+		try {
+			await Promise.all([
+				addSendersToSpamGuard('host-1', ['alex@aviovate.cloud']),
+				addSendersToSpamGuard('host-1', ['krowe@bizhelpcentral.com']),
+				addSendersToSpamGuard('host-1', ['akash@drwebstore.com']),
+				addSendersToSpamGuard('host-1', ['ruqayyahbegam@outlook.com']),
+			]);
+
+			assert.deepEqual(spamGuard.split('\n'), [
+				'alex@aviovate.cloud',
+				'krowe@bizhelpcentral.com',
+				'akash@drwebstore.com',
+				'ruqayyahbegam@outlook.com',
+			]);
+		} finally {
+			Tenant.findOne = originalTenantFindOne;
+			Tenant.updateOne = originalTenantUpdateOne;
+		}
+	});
+
+	it('removes sender from spam guard when manually moving email out of spam', async () => {
+		const originalFindOne = Email.findOne;
+		const originalFind = Email.find;
+		const originalFindOneAndUpdate = Email.findOneAndUpdate;
+		const originalTenantFindOne = Tenant.findOne;
+		const originalTenantUpdateOne = Tenant.updateOne;
+		let spamGuardUpdate = null;
+		const email = {
+			_id: { toString: () => 'manual-not-spam-1' },
+			host_id: 'host-1',
+			project: 'project-1',
+			message_id: 'manual-not-spam@example.com',
+			in_reply_to: '',
+			references: [],
+			from: ['Spammer <spam@example.com>'],
+			mailbox: 'spam',
+			in_trash: false,
+			updatedAt: '2026-06-04T10:00:00.000Z',
+		};
+
+		Email.findOne = () => ({
+			lean: async () => ({ ...email }),
+		});
+		Email.findOneAndUpdate = async (query, update) => ({ ...email, ...update.$set });
+		Email.find = () => ({
+			lean: async () => [{ ...email, mailbox: 'archived' }],
+		});
+		Tenant.findOne = () => ({
+			select: () => ({
+				lean: async () => ({
+					settings: {
+						email: {
+							spam_guard: 'existing@example.com\nspam@example.com\nexample.com\nsubject contains: status update\nnoreply@',
+						},
+					},
+				}),
+			}),
+		});
+		Tenant.updateOne = async (query, update) => {
+			spamGuardUpdate = { query, update };
+			return { modifiedCount: 1 };
+		};
+
+		try {
+			const updated = await updateEmail('host-1', 'manual-not-spam-1', { mailbox: 'archived' }, {
+				skipSideEffects: true,
+			});
+
+			assert.equal(updated.mailbox, 'archived');
+			assert.equal(spamGuardUpdate.query.host_id, 'host-1');
+			assert.equal(spamGuardUpdate.update.$set['settings.email.spam_guard'], 'existing@example.com\nexample.com\nsubject contains: status update\nnoreply@');
+		} finally {
+			Email.findOne = originalFindOne;
+			Email.find = originalFind;
+			Email.findOneAndUpdate = originalFindOneAndUpdate;
+			Tenant.findOne = originalTenantFindOne;
+			Tenant.updateOne = originalTenantUpdateOne;
+		}
+	});
+
 	it('listEmailIds returns id strings for the current view filters', async () => {
 		let findQuery = null;
 		const originalFind = Email.find;
@@ -1845,6 +2100,81 @@ describe('Email ingest service', () => {
 				Tenant.findOne = originalTenantFindOne;
 			}
 		});
+
+			it('adds sender to spam guard when inbox triage identifies spam', async () => {
+				const emailId = { toString: () => 'email-spam-triage-1' };
+				let spamGuardUpdate = null;
+				const originalBulkWrite = EmailLabel.bulkWrite;
+				const originalLabelFind = EmailLabel.find;
+				const originalEmailFind = Email.find;
+				const originalFindOneAndUpdate = Email.findOneAndUpdate;
+				const originalTenantFindOne = Tenant.findOne;
+				const originalTenantUpdateOne = Tenant.updateOne;
+
+				EmailLabel.bulkWrite = async () => ({});
+				EmailLabel.find = () => ({
+					sort: () => ({
+						lean: async () => [],
+					}),
+				});
+				Email.find = () => ({
+					sort: () => ({
+						limit: () => ({
+							lean: async () => [{
+								_id: emailId,
+								subject: 'Cheap offer',
+								from: ['Deals <deals@spam.test>'],
+								to: ['team@example.com'],
+								text_content: 'Buy now',
+								labels: [],
+								mailbox: 'inbox',
+								project: 'project-1',
+								owner: userId,
+							}],
+						}),
+					}),
+				});
+				Email.findOneAndUpdate = async (query, update) => ({ _id: query._id, ...update.$set });
+				Tenant.findOne = () => ({
+					select: () => ({
+						lean: async () => ({
+							settings: {
+								email: {
+									spam_guard: 'existing@example.com',
+								},
+								ai_instructions: {},
+							},
+						}),
+					}),
+				});
+				Tenant.updateOne = async (query, update) => {
+					spamGuardUpdate = { query, update };
+					return { modifiedCount: 1 };
+				};
+
+				try {
+					const result = await triageInboxEmails('host-1', userId, {
+						run_id: 'client-run-spam',
+						skipSideEffects: true,
+						searchKnowledgeFn: async () => ({}),
+						getThreadFn: async () => [],
+						getConnectionsFn: async () => ({ links: [], tag_connections: [] }),
+						completionFn: async () => '{"primary_action":"spam","labels":["spam"],"summary":"Spam offer","reason":"Unwanted offer","confidence":0.9,"action_points":[],"related_context":[],"mailbox_action":"spam"}',
+					});
+
+					assert.equal(result.triaged, 1);
+					assert.equal(result.results[0].mailbox, 'spam');
+					assert.equal(spamGuardUpdate.query.host_id, 'host-1');
+					assert.equal(spamGuardUpdate.update.$set['settings.email.spam_guard'], 'existing@example.com\ndeals@spam.test');
+				} finally {
+					EmailLabel.bulkWrite = originalBulkWrite;
+					EmailLabel.find = originalLabelFind;
+					Email.find = originalEmailFind;
+					Email.findOneAndUpdate = originalFindOneAndUpdate;
+					Tenant.findOne = originalTenantFindOne;
+					Tenant.updateOne = originalTenantUpdateOne;
+				}
+			});
 
 			it('returns processed errors when all inbox triage attempts fail', async () => {
 				const emailId = { toString: () => 'email-err-1' };

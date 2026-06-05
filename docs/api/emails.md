@@ -12,6 +12,8 @@ Send either `raw_email` or a mailparser-like `parsed_email`. HTML bodies are acc
 
 Remote image URLs in stored HTML are rewritten to `data-kk-remote-src` and flagged with `html_content_has_remote_images`. Existing emails cannot be backfilled unless they are re-ingested because raw HTML was not stored before this feature.
 
+Incoming inbox mail is checked against the account spam guard before auto-triage. Matches are stored in the Spam mailbox with complete spam triage metadata and do not enter the triage queue.
+
 ```json
 {
 	"project": "optional-project-id",

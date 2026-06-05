@@ -12,6 +12,7 @@ import { EmailLabel } from '../model/email_label.js';
 import { EmailTriageRun } from '../model/email_triage_run.js';
 import { GraphLink } from '../model/graph_link.js';
 import { Project } from '../model/project.js';
+import { Tenant } from '../modules/tenancy.js';
 import { extractText } from './import_service.js';
 import { detectFileType } from '../modules/file_detect.js';
 import { searchCollection, searchAll } from '../modules/typesense.js';
@@ -439,6 +440,117 @@ export function matchesEmailFilter(filterText, fromAddresses = []) {
 	});
 }
 
+function splitEmailFilterRules(filterText) {
+	return String(filterText || '')
+		.split(/[\n,]/)
+		.map((rule) => rule.trim())
+		.filter(Boolean);
+}
+
+function buildSpamGuardCompareFilter(host_id, spamGuard) {
+	if (spamGuard) return { host_id, 'settings.email.spam_guard': spamGuard };
+	return {
+		host_id,
+		$or: [
+			{ 'settings.email.spam_guard': '' },
+			{ 'settings.email.spam_guard': { $exists: false } },
+		],
+	};
+}
+
+async function updateSpamGuardRules(host_id, transformRules, fallbackResult) {
+	for (let attempt = 0; attempt < 5; attempt += 1) {
+		const tenant = await Tenant.findOne({ host_id }).select('settings.email.spam_guard').lean();
+		const currentSpamGuard = tenant?.settings?.email?.spam_guard || '';
+		const existingRules = splitEmailFilterRules(currentSpamGuard);
+		const result = transformRules(existingRules);
+		const spamGuard = result.rules.join('\n');
+		if (spamGuard === existingRules.join('\n')) return { ...result, spam_guard: spamGuard };
+
+		const update = await Tenant.updateOne(buildSpamGuardCompareFilter(host_id, currentSpamGuard), { $set: { 'settings.email.spam_guard': spamGuard } });
+		if ((update?.modifiedCount || update?.nModified || 0) > 0) return { ...result, spam_guard: spamGuard };
+	}
+
+	const tenant = await Tenant.findOne({ host_id }).select('settings.email.spam_guard').lean();
+	return { ...fallbackResult, spam_guard: tenant?.settings?.email?.spam_guard || '' };
+}
+
+export async function addSendersToSpamGuard(host_id, fromAddresses = []) {
+	const senders = normalizeRecipientList(fromAddresses);
+	if (!senders.length) return { added: 0, spam_guard: '' };
+
+	return updateSpamGuardRules(host_id, (existingRules) => {
+		const seen = new Set(existingRules.map((rule) => rule.toLowerCase()));
+		const additions = [];
+		for (const sender of senders) {
+			const normalized = String(sender || '').trim().toLowerCase();
+			if (!normalized || seen.has(normalized)) continue;
+			seen.add(normalized);
+			additions.push(normalized);
+		}
+
+		return { rules: [...existingRules, ...additions], added: additions.length };
+	}, { added: 0 });
+}
+
+export async function removeSendersFromSpamGuard(host_id, fromAddresses = []) {
+	const senders = new Set(normalizeRecipientList(fromAddresses).map((sender) => String(sender || '').trim().toLowerCase()).filter(Boolean));
+	if (!senders.size) return { removed: 0, spam_guard: '' };
+
+	return updateSpamGuardRules(host_id, (existingRules) => {
+		const remainingRules = existingRules.filter((rule) => !senders.has(rule.toLowerCase()));
+		return { rules: remainingRules, removed: existingRules.length - remainingRules.length };
+	}, { removed: 0 });
+}
+
+async function learnSpamGuardSenders(host_id, fromAddresses, source) {
+	try {
+		return await addSendersToSpamGuard(host_id, fromAddresses);
+	} catch (err) {
+		log.warn({ err, host_id, source }, 'Spam guard sender learning failed');
+		return { added: 0, spam_guard: '' };
+	}
+}
+
+async function forgetSpamGuardSenders(host_id, fromAddresses, source) {
+	try {
+		return await removeSendersFromSpamGuard(host_id, fromAddresses);
+	} catch (err) {
+		log.warn({ err, host_id, source }, 'Spam guard sender removal failed');
+		return { removed: 0, spam_guard: '' };
+	}
+}
+
+async function applyAccountSpamGuard(host_id, normalized, data = {}) {
+	const mailbox = normalizeMailbox(data.mailbox);
+	if (mailbox !== 'inbox') return data;
+
+	const settings = await getEmailSettings(host_id);
+	if (!matchesEmailFilter(settings.spam_guard, {
+		from: normalized.from || [],
+		subject: normalized.subject || '',
+	})) {
+		return data;
+	}
+
+	const labels = [...new Set([...normalizeLabels(data.labels || []), 'spam', 'triaged'])];
+	return {
+		...data,
+		mailbox: 'spam',
+		labels,
+		triaged: true,
+		triaged_at: data.triaged_at || new Date(),
+		triage_summary: data.triage_summary || 'Matched account spam guard.',
+		triage_reason: data.triage_reason || 'Sender or subject matched account spam guard.',
+		triage_primary_action: 'spam',
+		triage_mailbox_action: 'spam',
+		triage_status: 'complete',
+		triage_error: '',
+		in_trash: false,
+		trashed_at: null,
+	};
+}
+
 export async function applyProjectEmailFilterToInbox(host_id, projectId, ctx = {}) {
 	const project = await Project.findOne({ _id: projectId, host_id }).select('_id email_filter').lean();
 	if (!project) return null;
@@ -650,29 +762,32 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 		throw new Error('Email content is empty after normalization');
 	}
 
+	const emailData = ctx.skipSideEffects && !ctx.applySpamGuard
+		? data
+		: await applyAccountSpamGuard(host_id, normalized, data);
 	const payload = {
 		...normalized,
-		source: data.source === 'emailforwarding' ? 'emailforwarding' : 'api',
-		mailbox: normalizeMailbox(data.mailbox),
-		labels: normalizeLabels(data.labels),
-		triaged: normalizeTriaged(data.triaged, Boolean(data.triaged_at)),
-			triaged_at: data.triaged_at || null,
-			triage_summary: String(data.triage_summary || ''),
-			triage_reason: String(data.triage_reason || ''),
-			triage_primary_action: normalizePrimaryAction(data.triage_primary_action),
-			triage_confidence: data.triage_confidence === undefined ? null : Number(data.triage_confidence),
-			triage_action_points: normalizeActionPoints(data.triage_action_points || []),
-			triage_related_context: normalizeRelatedContext(data.triage_related_context || []),
-			triage_mailbox_action: MAILBOX_ACTIONS.includes(data.triage_mailbox_action) ? data.triage_mailbox_action : 'none',
-			triage_status: data.triage_status || '',
-			triage_error: String(data.triage_error || ''),
-			triage_run_id: String(data.triage_run_id || ''),
-			project: data.project,
+		source: emailData.source === 'emailforwarding' ? 'emailforwarding' : 'api',
+		mailbox: normalizeMailbox(emailData.mailbox),
+		labels: normalizeLabels(emailData.labels),
+		triaged: normalizeTriaged(emailData.triaged, Boolean(emailData.triaged_at)),
+		triaged_at: emailData.triaged_at || null,
+		triage_summary: String(emailData.triage_summary || ''),
+		triage_reason: String(emailData.triage_reason || ''),
+		triage_primary_action: normalizePrimaryAction(emailData.triage_primary_action),
+		triage_confidence: emailData.triage_confidence === undefined ? null : Number(emailData.triage_confidence),
+		triage_action_points: normalizeActionPoints(emailData.triage_action_points || []),
+		triage_related_context: normalizeRelatedContext(emailData.triage_related_context || []),
+		triage_mailbox_action: MAILBOX_ACTIONS.includes(emailData.triage_mailbox_action) ? emailData.triage_mailbox_action : 'none',
+		triage_status: emailData.triage_status || '',
+		triage_error: String(emailData.triage_error || ''),
+		triage_run_id: String(emailData.triage_run_id || ''),
+		project: emailData.project,
 		owner: userId,
 		host_id,
 		is_indexed: false,
-		in_trash: Boolean(data.in_trash),
-		trashed_at: data.in_trash ? (data.trashed_at || new Date()) : null,
+		in_trash: Boolean(emailData.in_trash),
+		trashed_at: emailData.in_trash ? (emailData.trashed_at || new Date()) : null,
 	};
 
 	let email;
@@ -1144,6 +1259,12 @@ export async function updateEmail(host_id, emailId, data, ctx = {}) {
 	);
 
 	if (email) {
+		if (hasMailboxUpdate && update.mailbox === 'spam' && (before?.mailbox || 'inbox') !== 'sent') {
+			await learnSpamGuardSenders(host_id, email.from || [], 'manual-spam');
+		}
+		if (hasMailboxUpdate && update.mailbox !== undefined && update.mailbox !== 'spam' && (before?.mailbox || 'inbox') === 'spam') {
+			await forgetSpamGuardSenders(host_id, email.from || [], 'manual-not-spam');
+		}
 		const threadUpdate = shouldUpdateThreadMailbox ? await updateRelatedThreadMailboxes(host_id, emailId, update.mailbox, email) : null;
 		const changedEmails = threadUpdate?.changedEmails || [email];
 
@@ -2520,6 +2641,9 @@ export async function triageInboxEmails(host_id, userId, options = {}) {
 			);
 
 			if (updated) {
+				if (triage.primary_action === 'spam' || targetMailbox === 'spam') {
+					await learnSpamGuardSenders(host_id, email.from || [], 'triage-spam');
+				}
 				if (draft) drafted += 1;
 				if (linkedCount) linked += linkedCount;
 				if ((email.mailbox || 'inbox') !== updated.mailbox) moved += 1;

@@ -11,6 +11,19 @@ Open **Settings > Email** to configure how email automation and the email AI beh
 - **Triage incoming emails automatically** — when on, every newly ingested email is queued for AI triage as soon as it arrives. When off, you trigger triage manually from the ECC.
 - **Send draft emails automatically** — reserved for upcoming auto‑send behavior. Drafts are saved for later review today; toggling this on does not send emails yet.
 
+### Spam guard
+
+Spam guard is an account-level filter checked before AI triage. Matching incoming mail is moved to Spam, marked as triaged spam, and skipped by auto-triage.
+
+Rules can be comma-separated or one per line:
+
+- `spam@example.com` — exact sender address.
+- `example.com` or `@example.com` — sender domain.
+- `noreply@` or `noreply@*` — sender local-part on any domain.
+- `subject: failed login` or `subject contains: status update` — subject match.
+
+When you move an email to Spam manually, or AI triage classifies it as spam, Kumbukum adds the sender address to spam guard automatically.
+
 ### Custom email instructions
 
 Two free‑form text areas let you shape how the AI behaves on emails:

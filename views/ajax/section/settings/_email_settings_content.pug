@@ -15,6 +15,27 @@ form#byo-ai-form
 						label.form-check-label(for="email-send-drafts") Send draft emails automatically
 			.form-text.mt-2 Draft sending is saved for later and does not send emails yet.
 
+	.card.mb-5
+		.card-body
+			h6.mb-3 Spam guard
+			label.form-label(for="email-spam-guard") Spam guard rules
+			textarea.form-control.form-control-sm#email-spam-guard(
+				rows="5"
+				autocomplete="off"
+				autocorrect="off"
+				autocapitalize="off"
+				spellcheck="false"
+				data-email-setting-text="spam_guard"
+				data-1p-ignore="true"
+				data-op-ignore="true"
+				data-lpignore="true"
+				data-bwignore="true"
+				data-form-type="other"
+			)
+			.form-text
+				span.d-block Add one rule per line or comma separated. Matched incoming mail moves to Spam and skips triage.
+				span.d-block Examples: spam@example.com, example.com, noreply@, subject contains: status update
+
 	.card
 		.card-body
 			.row.g-4

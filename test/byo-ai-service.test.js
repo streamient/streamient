@@ -213,20 +213,24 @@ describe('BYO AI service', () => {
 		assert.deepEqual(settings.email_settings, {
 			auto_triage_incoming: false,
 			send_draft_emails_automatically: false,
+			spam_guard: '',
 		});
 
 		settings = await updateByoAiSettings('host-1', {
 			email_settings: {
 				auto_triage_incoming: true,
 				send_draft_emails_automatically: true,
+				spam_guard: 'spam@example.com\nexample.com',
 			},
 		});
 
 		assert.equal(tenant.settings.email.auto_triage_incoming, true);
 		assert.equal(tenant.settings.email.send_draft_emails_automatically, true);
+		assert.equal(tenant.settings.email.spam_guard, 'spam@example.com\nexample.com');
 		assert.deepEqual(settings.email_settings, {
 			auto_triage_incoming: true,
 			send_draft_emails_automatically: true,
+			spam_guard: 'spam@example.com\nexample.com',
 		});
 	});
 
@@ -238,6 +242,10 @@ describe('BYO AI service', () => {
 		await assert.rejects(
 			updateByoAiSettings('host-1', { email_settings: { auto_triage_incoming: 'true' } }),
 			/auto_triage_incoming must be a boolean/,
+		);
+		await assert.rejects(
+			updateByoAiSettings('host-1', { email_settings: { spam_guard: true } }),
+			/spam_guard must be a string/,
 		);
 	});
 

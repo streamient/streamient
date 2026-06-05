@@ -469,6 +469,7 @@ const swaggerSpec = {
                 properties: {
                     auto_triage_incoming: { type: 'boolean', description: 'Automatically triage newly ingested inbox emails.' },
                     send_draft_emails_automatically: { type: 'boolean', description: 'Saved preference for future automatic draft sending. No sending behavior is currently triggered.' },
+                    spam_guard: { type: 'string', description: 'Account-level incoming spam guard rules. Supports exact sender, domain, local-part, and subject rules separated by commas or new lines.' },
                 },
             },
             GitRepo: {

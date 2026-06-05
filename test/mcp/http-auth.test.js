@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { signMcpAccessToken } from '../../modules/oauth.js';
+import { getMcpEndpointUrl, signMcpAccessToken } from '../../modules/oauth.js';
 import {
 	authenticateHttpRequest,
 	buildUnauthorizedResponse,
@@ -66,7 +66,7 @@ describe('MCP HTTP auth helper', () => {
 			host_id: 'host-1',
 			clientId: 'client-1',
 			scopes: ['mcp:read'],
-			audience: 'http://localhost:3002/mcp',
+			audience: getMcpEndpointUrl(),
 		});
 		const result = authenticateHttpRequest({ headers: { authorization: `Bearer ${token}` } });
 		assert.equal(result.ok, true);
@@ -153,7 +153,7 @@ describe('MCP HTTP auth helper', () => {
 			host_id: 'host-1',
 			clientId: 'client-1',
 			scopes: ['mcp:read'],
-			audience: 'http://localhost:3002/mcp',
+			audience: getMcpEndpointUrl(),
 		});
 		const authContext = authenticateHttpRequest({ headers: { authorization: `Bearer ${token}` } });
 		const response = checkRequestScopes(authContext, {

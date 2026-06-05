@@ -196,6 +196,7 @@ describe('BYO AI API', () => {
 				email_settings: {
 					auto_triage_incoming: true,
 					send_draft_emails_automatically: true,
+					spam_guard: 'spam@example.com\nsubject contains: status update',
 				},
 			});
 			const saveJson = await saveResponse.json();
@@ -204,6 +205,7 @@ describe('BYO AI API', () => {
 			assert.deepEqual(saveJson.settings.email_settings, {
 				auto_triage_incoming: true,
 				send_draft_emails_automatically: true,
+				spam_guard: 'spam@example.com\nsubject contains: status update',
 			});
 
 			const getResponse = await request(server, 'GET', '/settings/byo-ai');
@@ -213,6 +215,7 @@ describe('BYO AI API', () => {
 			assert.deepEqual(getJson.settings.email_settings, {
 				auto_triage_incoming: true,
 				send_draft_emails_automatically: true,
+				spam_guard: 'spam@example.com\nsubject contains: status update',
 			});
 		} finally {
 			await new Promise((resolve) => server.close(resolve));
