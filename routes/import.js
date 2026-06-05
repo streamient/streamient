@@ -74,10 +74,27 @@ function getHeaderValues(headers, name) {
 	return [];
 }
 
+function getHeaderValuesFromParsed(parsed, name) {
+	return [
+		...getHeaderValues(parsed.headers, name),
+		...getHeaderValues(parsed.headerLines, name),
+	].filter(Boolean);
+}
+
+function getReceivedForValues(parsed) {
+	const receivedValues = getHeaderValuesFromParsed(parsed, 'received');
+	const addresses = [];
+	for (const value of receivedValues) {
+		const text = String(value || '');
+		const matches = text.matchAll(/\bfor\s+<?([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})>?/gi);
+		for (const match of matches) addresses.push(match[1]);
+	}
+	return addresses;
+}
+
 function normalizeForwardedPayload(payload) {
 	return {
 		...payload,
-		to: payload.to || payload.recipient || payload.rcpt_to || payload.envelope?.to || payload.envelope?.recipient || payload.session?.recipient,
 		from: payload.from || payload.sender || payload.envelope?.from || payload.envelope?.sender || payload.session?.sender,
 	};
 }
@@ -96,10 +113,17 @@ function findForwardRecipient(payload, email) {
 		{ source: 'session.recipients', value: parsed.session?.recipients },
 		{ source: 'envelope.to', value: parsed.envelope?.to },
 		{ source: 'envelope.recipient', value: parsed.envelope?.recipient },
+		{ source: 'envelope.recipients', value: parsed.envelope?.recipients },
 		{ source: 'envelope.rcpt_to', value: parsed.envelope?.rcpt_to },
 		{ source: 'envelope.rcptTo', value: parsed.envelope?.rcptTo },
-		{ source: 'x-original-to', value: getHeaderValues(parsed.headers, 'x-original-to') },
-		{ source: 'x-original-to', value: getHeaderValues(parsed.headerLines, 'x-original-to') },
+		{ source: 'receipt.recipients', value: parsed.receipt?.recipients },
+		{ source: 'originalRecipient', value: parsed.originalRecipient || parsed.OriginalRecipient },
+		{ source: 'delivered-to', value: getHeaderValuesFromParsed(parsed, 'delivered-to') },
+		{ source: 'x-original-to', value: getHeaderValuesFromParsed(parsed, 'x-original-to') },
+		{ source: 'envelope-to', value: getHeaderValuesFromParsed(parsed, 'envelope-to') },
+		{ source: 'x-envelope-to', value: getHeaderValuesFromParsed(parsed, 'x-envelope-to') },
+		{ source: 'x-forwarded-to', value: getHeaderValuesFromParsed(parsed, 'x-forwarded-to') },
+		{ source: 'received.for', value: getReceivedForValues(parsed) },
 		{ source: 'to', value: email.to },
 	];
 
@@ -118,6 +142,10 @@ function findForwardRecipient(payload, email) {
 	return { error: 'Forwarded email recipient must use EMAIL_FORWARD_DOMAIN' };
 }
 
+function isHiddenDeliveryRecipientSource(source) {
+	return source && source !== 'to';
+}
+
 function projectForwardAddress(project) {
 	const forwardDomain = String(config.emailForwardDomain || '').trim().replace(/^@+/, '').toLowerCase();
 	const projectId = project?._id?.toString ? project._id.toString() : String(project?._id || '');
@@ -130,7 +158,15 @@ function hasAddress(addresses, address) {
 	return (addresses || []).some((item) => String(item || '').trim().toLowerCase() === normalized);
 }
 
-async function isProjectBccReply(project, email, recipient) {
+function hasHeaderAddress(parsed, headerName, address) {
+	const normalized = String(address || '').trim().toLowerCase();
+	if (!normalized) return false;
+	return getHeaderValuesFromParsed(parsed, headerName)
+		.flatMap((value) => extractEmailAddresses(value))
+		.some((value) => String(value || '').trim().toLowerCase() === normalized);
+}
+
+async function isProjectBccReply(project, email, recipient, payload) {
 	const forwardAddress = projectForwardAddress(project);
 	if (!forwardAddress) {
 		return false;
@@ -139,8 +175,9 @@ async function isProjectBccReply(project, email, recipient) {
 	const deliveredToProject = String(recipient?.address || '').trim().toLowerCase() === forwardAddress || hasAddress(email.bcc, forwardAddress);
 	if (!deliveredToProject) return false;
 
-	const visibleProjectRecipient = hasAddress(email.to, forwardAddress) || hasAddress(email.cc, forwardAddress);
-	const hiddenProjectRecipient = hasAddress(email.bcc, forwardAddress) || !visibleProjectRecipient;
+	const parsed = payload?.parsed_email || payload?.mailparser || payload || {};
+	const visibleProjectRecipient = hasHeaderAddress(parsed, 'to', forwardAddress) || hasHeaderAddress(parsed, 'cc', forwardAddress) || hasAddress(email.cc, forwardAddress) || (recipient?.source === 'to' && hasAddress(email.to, forwardAddress));
+	const hiddenProjectRecipient = hasAddress(email.bcc, forwardAddress) || (isHiddenDeliveryRecipientSource(recipient?.source) && !visibleProjectRecipient);
 	if (!hiddenProjectRecipient) return false;
 
 	const sender = String((email.from || [])[0] || '').trim().toLowerCase();
@@ -197,7 +234,7 @@ router.post('/email', raw({ type: () => true, limit: '25mb' }), async (req, res)
 		return res.json({ accepted: false });
 	}
 
-	const bccReply = await isProjectBccReply(project, normalized, recipient);
+	const bccReply = await isProjectBccReply(project, normalized, recipient, payload);
 	const filtered = !bccReply && emailIngestService.matchesEmailFilter(project.email_filter, {
 		from: normalized.from,
 		subject: normalized.subject,

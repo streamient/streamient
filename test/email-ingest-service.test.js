@@ -283,7 +283,7 @@ describe('Email ingest service', () => {
 		}
 	});
 
-	it('uses Forward Email session fields when parsed address fields are absent', () => {
+	it('uses Forward Email session sender without storing envelope recipient as visible to', () => {
 		const normalized = parseForwardedEmailInput({
 			messageId: '<SessionOnly@Example.COM>',
 			session: {
@@ -296,7 +296,7 @@ describe('Email ingest service', () => {
 
 		assert.equal(normalized.message_id, 'sessiononly@example.com');
 		assert.deepEqual(normalized.from, ['sender@example.com']);
-		assert.deepEqual(normalized.to, ['507f1f77bcf86cd799439011@email.kumbukum.com']);
+		assert.deepEqual(normalized.to, []);
 		assert.equal(normalized.text_content, 'Session body');
 	});
 
@@ -1099,7 +1099,7 @@ describe('Email ingest service', () => {
 	});
 
 	it('collapses sent emails by thread and keeps the newest sent reply', async () => {
-		let findQuery = null;
+		const findQueries = [];
 		const originalFind = Email.find;
 		const sentOlder = {
 			_id: 'sent-older',
@@ -1127,7 +1127,7 @@ describe('Email ingest service', () => {
 		};
 
 		Email.find = (query) => {
-			findQuery = query;
+			findQueries.push(query);
 			return {
 				sort: () => ({
 					lean: async () => [sentNewest, sentOlder, sentOtherThread],
@@ -1138,6 +1138,7 @@ describe('Email ingest service', () => {
 		try {
 			const emails = await listEmails('host-1', 'project-1', { mailbox: 'sent' });
 
+			const findQuery = findQueries[0];
 			assert.equal(findQuery.host_id, 'host-1');
 			assert.equal(findQuery.project, 'project-1');
 			assert.equal(findQuery.mailbox, 'sent');
@@ -1148,7 +1149,7 @@ describe('Email ingest service', () => {
 	});
 
 	it('collapses inbox emails by connected references and keeps the newest reply', async () => {
-		let findQuery = null;
+		const findQueries = [];
 		const originalFind = Email.find;
 		const older = {
 			_id: 'razuna-older',
@@ -1187,7 +1188,7 @@ describe('Email ingest service', () => {
 		};
 
 		Email.find = (query) => {
-			findQuery = query;
+			findQueries.push(query);
 			return {
 				sort: () => ({
 					lean: async () => [newest, unrelated, older],
@@ -1198,10 +1199,72 @@ describe('Email ingest service', () => {
 		try {
 			const emails = await listEmails('host-1', 'project-1', { mailbox: 'inbox' });
 
+			const findQuery = findQueries[0];
 			assert.equal(findQuery.host_id, 'host-1');
 			assert.equal(findQuery.project, 'project-1');
 			assert.equal(findQuery.mailbox, 'inbox');
 			assert.deepEqual(emails.map((email) => email._id), ['razuna-newest', 'other-thread']);
+		} finally {
+			Email.find = originalFind;
+		}
+	});
+
+	it('keeps inbox row id but attaches latest sent thread display email', async () => {
+		const findQueries = [];
+		const originalFind = Email.find;
+		const inboxRoot = {
+			_id: 'inbox-root',
+			message_id: 'root@example.com',
+			in_reply_to: '',
+			references: [],
+			mailbox: 'inbox',
+			subject: 'Customer question',
+			text_content: 'Original customer question',
+			createdAt: '2026-06-04T10:00:00.000Z',
+			updatedAt: '2026-06-04T10:00:00.000Z',
+		};
+		const inboxOther = {
+			_id: 'inbox-other',
+			message_id: 'other@example.com',
+			in_reply_to: '',
+			references: [],
+			mailbox: 'inbox',
+			subject: 'Other question',
+			text_content: 'Other customer question',
+			createdAt: '2026-06-04T11:00:00.000Z',
+			updatedAt: '2026-06-04T11:00:00.000Z',
+		};
+		const sentReply = {
+			_id: 'sent-reply',
+			message_id: 'sent@example.com',
+			in_reply_to: 'root@example.com',
+			references: ['root@example.com'],
+			mailbox: 'sent',
+			subject: 'Re: Customer question',
+			text_content: 'Latest reply from support',
+			createdAt: '2026-06-05T03:18:00.000Z',
+			updatedAt: '2026-06-05T03:18:00.000Z',
+		};
+
+		Email.find = (query) => {
+			findQueries.push(query);
+			return {
+				sort: () => ({
+					lean: async () => [inboxOther, inboxRoot],
+				}),
+				lean: async () => [inboxRoot, inboxOther, sentReply],
+			};
+		};
+
+		try {
+			const emails = await listEmails('host-1', 'project-1', { mailbox: 'inbox' });
+
+			assert.equal(findQueries[0].mailbox, 'inbox');
+			assert.ok(findQueries[1].$or);
+			assert.deepEqual(emails.map((email) => email._id), ['inbox-root', 'inbox-other']);
+			assert.equal(emails[0].thread_latest._id, 'sent-reply');
+			assert.equal(emails[0].thread_latest.mailbox, 'sent');
+			assert.equal(emails[1].thread_latest._id, 'inbox-other');
 		} finally {
 			Email.find = originalFind;
 		}
@@ -1543,11 +1606,11 @@ describe('Email ingest service', () => {
 	});
 
 	it('listEmailIds returns id strings for the current view filters', async () => {
-		let findQuery = null;
+		const findQueries = [];
 		const originalFind = Email.find;
 
 		Email.find = (query) => {
-			findQuery = query;
+			findQueries.push(query);
 			return {
 				select: () => ({
 					sort: () => ({
@@ -1560,6 +1623,7 @@ describe('Email ingest service', () => {
 		try {
 			const ids = await listEmailIds('host-1', null, { mailbox: 'inbox', triaged: false });
 
+			const findQuery = findQueries[0];
 			assert.equal(findQuery.host_id, 'host-1');
 			assert.equal(findQuery.mailbox, 'inbox');
 			assert.equal(findQuery.in_trash, false);
@@ -1570,11 +1634,11 @@ describe('Email ingest service', () => {
 		}
 	});
 
-	it('listEmailIds collapses sent threads to the newest message id', async () => {
+	it('listEmailIds collapses sent threads to the newest message creation time', async () => {
 		const originalFind = Email.find;
-		const sentOlder = { _id: 'sent-older', message_id: 'sent-older@example.com', in_reply_to: 'root@example.com', references: ['root@example.com'], updatedAt: '2026-01-01T10:00:00.000Z' };
-		const sentNewest = { _id: 'sent-newest', message_id: 'sent-newest@example.com', in_reply_to: 'root@example.com', references: ['root@example.com'], updatedAt: '2026-01-01T11:00:00.000Z' };
-		const sentOther = { _id: 'sent-other', message_id: 'sent-other@example.com', in_reply_to: 'other-root@example.com', references: ['other-root@example.com'], updatedAt: '2026-01-01T09:00:00.000Z' };
+		const sentOlder = { _id: 'sent-older', message_id: 'sent-older@example.com', in_reply_to: 'root@example.com', references: ['root@example.com'], createdAt: '2026-01-01T10:00:00.000Z', updatedAt: '2026-01-01T12:00:00.000Z' };
+		const sentNewest = { _id: 'sent-newest', message_id: 'sent-newest@example.com', in_reply_to: 'root@example.com', references: ['root@example.com'], createdAt: '2026-01-01T11:00:00.000Z', updatedAt: '2026-01-01T11:00:00.000Z' };
+		const sentOther = { _id: 'sent-other', message_id: 'sent-other@example.com', in_reply_to: 'other-root@example.com', references: ['other-root@example.com'], createdAt: '2026-01-01T09:00:00.000Z', updatedAt: '2026-01-01T09:00:00.000Z' };
 
 		Email.find = () => ({
 			select: () => ({
@@ -1592,11 +1656,11 @@ describe('Email ingest service', () => {
 		}
 	});
 
-	it('listEmailIds collapses inbox threads to the newest message id', async () => {
+	it('listEmailIds collapses inbox threads to the newest message creation time', async () => {
 		const originalFind = Email.find;
-		const inboxOlder = { _id: 'inbox-older', message_id: 'older@example.com', in_reply_to: 'root@example.com', references: ['root@example.com'], updatedAt: '2026-01-01T10:00:00.000Z' };
-		const inboxNewest = { _id: 'inbox-newest', message_id: 'newest@example.com', in_reply_to: 'older@example.com', references: ['root@example.com', 'older@example.com'], updatedAt: '2026-01-01T11:00:00.000Z' };
-		const inboxOther = { _id: 'inbox-other', message_id: 'other@example.com', in_reply_to: '', references: [], updatedAt: '2026-01-01T09:00:00.000Z' };
+		const inboxOlder = { _id: 'inbox-older', message_id: 'older@example.com', in_reply_to: 'root@example.com', references: ['root@example.com'], createdAt: '2026-01-01T10:00:00.000Z', updatedAt: '2026-01-01T12:00:00.000Z' };
+		const inboxNewest = { _id: 'inbox-newest', message_id: 'newest@example.com', in_reply_to: 'older@example.com', references: ['root@example.com', 'older@example.com'], createdAt: '2026-01-01T11:00:00.000Z', updatedAt: '2026-01-01T11:00:00.000Z' };
+		const inboxOther = { _id: 'inbox-other', message_id: 'other@example.com', in_reply_to: '', references: [], createdAt: '2026-01-01T09:00:00.000Z', updatedAt: '2026-01-01T09:00:00.000Z' };
 
 		Email.find = () => ({
 			select: () => ({
@@ -1609,6 +1673,27 @@ describe('Email ingest service', () => {
 		try {
 			const ids = await listEmailIds('host-1', 'project-1', { mailbox: 'inbox' });
 			assert.deepEqual(ids, ['inbox-newest', 'inbox-other']);
+		} finally {
+			Email.find = originalFind;
+		}
+	});
+
+	it('listEmails returns the latest created thread representative for list excerpt and date', async () => {
+		const originalFind = Email.find;
+		const inboxOlder = { _id: 'inbox-older', message_id: 'older@example.com', in_reply_to: 'root@example.com', references: ['root@example.com'], text_content: 'Older body', createdAt: '2026-01-01T10:00:00.000Z', updatedAt: '2026-01-01T12:00:00.000Z' };
+		const inboxNewest = { _id: 'inbox-newest', message_id: 'newest@example.com', in_reply_to: 'older@example.com', references: ['root@example.com', 'older@example.com'], text_content: 'Newest body', createdAt: '2026-01-01T11:00:00.000Z', updatedAt: '2026-01-01T11:00:00.000Z' };
+
+		Email.find = () => ({
+			sort: () => ({
+				lean: async () => [inboxOlder, inboxNewest],
+			}),
+		});
+
+		try {
+			const emails = await listEmails('host-1', 'project-1', { mailbox: 'inbox' });
+			assert.equal(emails.length, 1);
+			assert.equal(emails[0]._id, 'inbox-newest');
+			assert.equal(emails[0].text_content, 'Newest body');
 		} finally {
 			Email.find = originalFind;
 		}

@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildEmailExcerpt, cleanEmailExcerptText, visibleTextFromEmailHtml } from '../modules/email_display.js';
+import { buildEmailExcerpt, cleanEmailExcerptText, decorateEmailForClient, visibleTextFromEmailHtml } from '../modules/email_display.js';
 
 describe('Email display helpers', () => {
 	it('removes parser control lines from text excerpts', () => {
@@ -31,5 +31,14 @@ describe('Email display helpers', () => {
 		});
 
 		assert.equal(excerpt, 'Rendered HTML body');
+	});
+
+	it('adds display_date using createdAt before updatedAt fallback', () => {
+		const created = new Date('2026-06-04T20:00:00.000Z');
+		const updated = new Date('2026-06-04T23:00:00.000Z');
+
+		assert.equal(decorateEmailForClient({ createdAt: created, updatedAt: updated }).display_date, created);
+		assert.equal(decorateEmailForClient({ updatedAt: updated }).display_date, updated);
+		assert.equal(decorateEmailForClient({}).display_date, null);
 	});
 });

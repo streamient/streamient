@@ -291,6 +291,164 @@ describe('Email forwarding import route', () => {
 		}
 	});
 
+	it('stores ForwardEmail delivery-recipient sent copies as sent when visible To is only in headers', async () => {
+		let createdPayload = null;
+		EmailIdentity.findOne = () => ({
+			select: () => ({
+				lean: async () => ({ _id: 'identity-1' }),
+			}),
+		});
+		Email.create = async (payload) => {
+			createdPayload = payload;
+			return { _id: { toString: () => emailIds[2] }, ...payload };
+		};
+
+		const server = createServer();
+		try {
+			const response = await request(server, JSON.stringify({
+				message_id: '<forwardemail-bcc-reply-1@example.com>',
+				from: 'Support <support@example.com>',
+				to: `${projectId}@email.kumbukum.com`,
+				recipient: `${projectId}@email.kumbukum.com`,
+				headers: {
+					To: 'Customer <customer@example.com>',
+				},
+				subject: 'Re: Customer question',
+				text: 'Reply copy',
+			}));
+			const json = await response.json();
+
+			assert.equal(response.status, 200);
+			assert.deepEqual(json, { accepted: true, email_id: emailIds[2] });
+			assert.equal(createdPayload.mailbox, 'sent');
+			assert.equal(createdPayload.triaged, true);
+			assert.ok(createdPayload.triaged_at instanceof Date);
+			assert.deepEqual(createdPayload.to, ['customer@example.com']);
+			assert.deepEqual(createdPayload.cc, []);
+			assert.deepEqual(createdPayload.bcc, []);
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
+	it('stores BCC project replies from common envelope recipient fields as sent and triaged', async () => {
+		const createdPayloads = [];
+		EmailIdentity.findOne = () => ({
+			select: () => ({
+				lean: async () => ({ _id: 'identity-1' }),
+			}),
+		});
+		Email.create = async (payload) => {
+			createdPayloads.push(payload);
+			return { _id: { toString: () => emailIds[0] }, ...payload };
+		};
+
+		const cases = [
+			{
+				name: 'delivered-to',
+				payload: {
+					headers: { 'Delivered-To': `${projectId}@email.kumbukum.com` },
+				},
+			},
+			{
+				name: 'envelope-to',
+				payload: {
+					headerLines: [{ key: 'Envelope-To', value: `${projectId}@email.kumbukum.com` }],
+				},
+			},
+			{
+				name: 'original-recipient',
+				payload: {
+					OriginalRecipient: `rfc822;${projectId}@email.kumbukum.com`,
+				},
+			},
+			{
+				name: 'ses-receipt',
+				payload: {
+					receipt: { recipients: [`${projectId}@email.kumbukum.com`] },
+				},
+			},
+			{
+				name: 'received-for',
+				payload: {
+					headers: [
+						{ key: 'Received', value: `from mail.example.com by mx.example.com for <${projectId}@email.kumbukum.com>; Thu, 4 Jun 2026 23:00:00 +0000` },
+					],
+				},
+			},
+		];
+
+		const server = createServer();
+		try {
+			for (const testCase of cases) {
+				const response = await request(server, JSON.stringify({
+					message_id: `<bcc-${testCase.name}@example.com>`,
+					from: 'Support <support@example.com>',
+					to: 'customer@example.com',
+					subject: 'Re: Customer question',
+					text: 'Reply copy',
+					...testCase.payload,
+				}));
+				const json = await response.json();
+
+				assert.equal(response.status, 200, testCase.name);
+				assert.deepEqual(json, { accepted: true, email_id: emailIds[0] }, testCase.name);
+			}
+
+			assert.equal(createdPayloads.length, cases.length);
+			for (const payload of createdPayloads) {
+				assert.equal(payload.mailbox, 'sent');
+				assert.equal(payload.triaged, true);
+				assert.ok(payload.triaged_at instanceof Date);
+				assert.deepEqual(payload.to, ['customer@example.com']);
+				assert.deepEqual(payload.cc, []);
+				assert.deepEqual(payload.bcc, []);
+			}
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
+	it('keeps visible CC project-address mail from configured identities as inbox mail', async () => {
+		let createdPayload = null;
+		EmailIdentity.findOne = () => ({
+			select: () => ({
+				lean: async () => ({ _id: 'identity-1' }),
+			}),
+		});
+		Email.create = async (payload) => {
+			createdPayload = payload;
+			return { _id: { toString: () => emailIds[0] }, ...payload };
+		};
+
+		const server = createServer();
+		try {
+			const response = await request(server, JSON.stringify({
+				message_id: '<visible-cc-identity-1@example.com>',
+				from: 'Support <support@example.com>',
+				to: 'customer@example.com',
+				cc: `${projectId}@email.kumbukum.com`,
+				recipients: [`${projectId}@email.kumbukum.com`],
+				session: {
+					recipient: `${projectId}@email.kumbukum.com`,
+					sender: 'support@example.com',
+				},
+				subject: 'Visible copy',
+				text: 'Visible inbound copy',
+			}));
+			const json = await response.json();
+
+			assert.equal(response.status, 200);
+			assert.deepEqual(json, { accepted: true, email_id: emailIds[0] });
+			assert.equal(createdPayload.mailbox, 'inbox');
+			assert.equal(createdPayload.triaged, false);
+			assert.equal(createdPayload.triaged_at, null);
+			assert.deepEqual(createdPayload.cc, [`${projectId}@email.kumbukum.com`]);
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
 	it('keeps direct project-address mail from configured identities as inbox mail', async () => {
 		let createdPayload = null;
 		EmailIdentity.findOne = () => ({

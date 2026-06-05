@@ -193,6 +193,8 @@ const swaggerSpec = {
                     html_content: { type: 'string', description: 'Sanitized HTML email body. Remote image URLs are stored on data-kk-remote-src until explicitly loaded by a client.' },
                     html_content_has_remote_images: { type: 'boolean' },
                     attachment_text_content: { type: 'string' },
+                    display_date: { type: 'string', format: 'date-time', nullable: true, description: 'Message display date using createdAt before updatedAt fallback.' },
+                    thread_latest: { type: 'object', nullable: true, additionalProperties: true, description: 'Newest non-trash email in this connected thread when included by list responses for display sender/date/excerpt.' },
                     source: { type: 'string', enum: ['api', 'emailforwarding'] },
 	                    mailbox: { type: 'string', enum: ['inbox', 'archived', 'sent', 'spam'] },
 	                    labels: { type: 'array', items: { type: 'string' } },
@@ -574,7 +576,7 @@ const swaggerSpec = {
             post: {
                 tags: ['Import'],
                 summary: 'Import a forwarded email',
-                description: 'Root-level public forwarding endpoint, not under /api/v1. The recipient must be PROJECT_ID@EMAIL_FORWARD_DOMAIN. Plain text is imported when present; HTML-only email is stripped to text. Attachments are ignored. If the hidden delivery recipient or parsed BCC contains the project forwarding address and the sender matches a configured outbound email identity for the project, the email is stored as a sent, triaged thread reply instead of Inbox mail.',
+                description: 'Root-level public forwarding endpoint, not under /api/v1. The recipient must be PROJECT_ID@EMAIL_FORWARD_DOMAIN and may be supplied through envelope/provider fields such as recipient, recipients, session.recipient, envelope.to, Delivered-To, X-Original-To, Envelope-To, OriginalRecipient, SES receipt.recipients, or Received for. Plain text is imported when present; HTML-only email is stripped to text. Attachments are ignored. If the hidden delivery recipient or parsed BCC contains the project forwarding address and the sender matches a configured outbound email identity for the project, the email is stored as a sent, triaged thread reply instead of Inbox mail. Visible To/Cc project-address mail stays Inbox mail.',
                 security: [],
                 servers: [{ url: '/', description: 'Root application endpoint' }],
                 requestBody: {
@@ -586,7 +588,7 @@ const swaggerSpec = {
                                 properties: {
                                     to: { type: 'string', description: 'Forwarding recipient, PROJECT_ID@EMAIL_FORWARD_DOMAIN' },
                                     from: { type: 'string', description: 'Original sender address' },
-                                    bcc: { type: 'string', description: 'When this contains PROJECT_ID@EMAIL_FORWARD_DOMAIN, or the project address is the hidden delivery recipient, and from matches a project identity, the message is captured as a sent reply' },
+                                    bcc: { type: 'string', description: 'Parsed BCC fallback. Envelope/provider recipient fields are preferred for hidden delivery detection.' },
                                     subject: { type: 'string' },
                                     text: { type: 'string', description: 'Plain text email body' },
                                     message_id: { type: 'string' },

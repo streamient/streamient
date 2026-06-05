@@ -28,6 +28,8 @@
 	var detailDate;
 	var detailMailboxStatus;
 	var detailDraftEl;
+	var detailActionsEl;
+	var detailStatusEl;
 	var detailThreadEl;
 	var internalNotesEl;
 	var aiPanel;
@@ -154,6 +156,14 @@
 
 		function emailThreadKey(email) {
 			return emailThreadIds(email)[0] || emailId(email);
+		}
+
+		function emailDisplayDate(email) {
+			return email?.display_date || email?.createdAt || email?.updatedAt || '';
+		}
+
+		function emailListDisplayEmail(email) {
+			return email?.thread_latest || email;
 		}
 
 		function latestReplyTargetFromThread(thread, fallbackEmail) {
@@ -398,24 +408,7 @@
 		function renderEmailBody(email, options) {
 			var wrapper = document.createElement('div');
 			var header = document.createElement('div');
-			header.className = 'd-flex justify-content-between align-items-center gap-3 mb-2';
-
-			var replyActions = document.createElement('div');
-			replyActions.className = 'd-flex align-items-center gap-2';
-			var replyBtn = textNode('button', 'btn btn-outline-primary btn-sm', 'Reply');
-			replyBtn.type = 'button';
-			replyActions.appendChild(replyBtn);
-			if (currentDraft?._id) {
-				var showDraftBtn = textNode('button', 'btn btn-primary btn-sm ecc-show-draft-btn', 'Show draft');
-				showDraftBtn.type = 'button';
-				replyActions.appendChild(showDraftBtn);
-			}
-			if (options?.showActions) {
-				var moveDropdown = buildBodyMoveDropdown(email);
-				if (moveDropdown) replyActions.appendChild(moveDropdown);
-				var trashBtn = buildBodyTrashButton(email);
-				if (trashBtn) replyActions.appendChild(trashBtn);
-			}
+			header.className = 'd-flex justify-content-end align-items-center gap-3 mb-2';
 
 			var controls = document.createElement('div');
 			controls.className = 'd-flex align-items-center gap-2 kk-email-body-controls ecc-email-body-controls';
@@ -444,20 +437,8 @@
 			controls.appendChild(modeGroup);
 			controls.appendChild(themeGroup);
 			controls.appendChild(loadImagesBtn);
-			header.appendChild(replyActions);
 			header.appendChild(controls);
 			wrapper.appendChild(header);
-
-			if (options?.showActions) {
-				var statusRow = document.createElement('div');
-				statusRow.className = 'ecc-email-status mb-2';
-				fillStatusBadges(statusRow, email);
-				wrapper.appendChild(statusRow);
-			}
-
-			var replyWrap = document.createElement('div');
-			replyWrap.className = 'ecc-inline-reply-wrap d-none mb-3';
-			wrapper.appendChild(replyWrap);
 
 			var bodyWrap = document.createElement('div');
 			wrapper.appendChild(bodyWrap);
@@ -514,13 +495,6 @@
 				mode = 'html';
 				render();
 			});
-			replyBtn.addEventListener('click', function () {
-				openReplyEditor(email, replyWrap);
-			});
-			showDraftBtn?.addEventListener('click', function () {
-				openReplyEditor(email, replyWrap);
-			});
-
 			render();
 			return wrapper;
 		}
@@ -1440,6 +1414,8 @@
 			if (detailSubtitle) detailSubtitle.textContent = emailId || '';
 			if (detailDate) detailDate.textContent = '';
 			setDetailMailboxStatus(null);
+			if (detailActionsEl) replaceChildren(detailActionsEl);
+			if (detailStatusEl) replaceChildren(detailStatusEl);
 			if (detailDraftEl) {
 				replaceChildren(detailDraftEl);
 				detailDraftEl.appendChild(textNode('div', 'text-muted small', 'Loading draft.'));
@@ -1486,6 +1462,8 @@
 			if (detailSubtitle) detailSubtitle.textContent = 'Unable to load email.';
 			if (detailDate) detailDate.textContent = '';
 			setDetailMailboxStatus(null);
+			if (detailActionsEl) replaceChildren(detailActionsEl);
+			if (detailStatusEl) replaceChildren(detailStatusEl);
 			if (detailDraftEl) replaceChildren(detailDraftEl);
 			if (detailThreadEl) {
 				replaceChildren(detailThreadEl);
@@ -2182,10 +2160,57 @@
 			if (identities.length > 0) startDraftAutosave(card, replyEmail);
 		}
 
+		function renderDetailActions(email) {
+			if (!detailActionsEl) return;
+			replaceChildren(detailActionsEl);
+			detailActionsEl.classList.toggle('d-none', !email?._id);
+			if (!email?._id) return;
+
+			var replyBtn = textNode('button', 'btn btn-outline-primary btn-sm', 'Reply');
+			replyBtn.type = 'button';
+			replyBtn.addEventListener('click', function () {
+				openReplyEditor(replyTargetEmail || email, detailDraftEl);
+				detailDraftEl?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+			});
+			detailActionsEl.appendChild(replyBtn);
+
+			if (currentDraft?._id) {
+				var showDraftBtn = textNode('button', 'btn btn-primary btn-sm', 'Show draft');
+				showDraftBtn.type = 'button';
+				showDraftBtn.addEventListener('click', function () {
+					detailDraftEl?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+				});
+				detailActionsEl.appendChild(showDraftBtn);
+			}
+
+			if ((email.mailbox || 'inbox') === 'sent') return;
+
+			var currentMailbox = String(email.mailbox || 'inbox');
+			[
+				{ slug: 'archived', label: 'Archive' },
+				{ slug: 'spam', label: 'Spam' },
+			].forEach(function (target) {
+				if (!email.in_trash && currentMailbox === target.slug) return;
+				var btn = textNode('button', 'btn btn-outline-secondary btn-sm', target.label);
+				btn.type = 'button';
+				btn.addEventListener('click', function () {
+					moveCurrentEmail(target.slug);
+				});
+				detailActionsEl.appendChild(btn);
+			});
+
+			if (email.in_trash !== true) {
+				var trashButton = textNode('button', 'btn btn-outline-danger btn-sm', 'Trash');
+				trashButton.type = 'button';
+				trashButton.addEventListener('click', trashCurrentEmail);
+				detailActionsEl.appendChild(trashButton);
+			}
+		}
+
 		function renderThreadMessage(email, options) {
 			var item = document.createElement('div');
 			item.className = 'list-group-item ecc-detail-message';
-			var dateText = formatDateTime(email.createdAt || email.updatedAt);
+			var dateText = formatDateTime(emailDisplayDate(email));
 			var isSelected = Boolean(options?.isSelected);
 			if (!isSelected) {
 				var header = document.createElement('div');
@@ -2193,29 +2218,31 @@
 				header.classList.add('justify-content-between');
 				var titleWrap = document.createElement('div');
 				titleWrap.className = 'min-w-0';
-				titleWrap.appendChild(textNode('h6', 'mb-1 text-truncate', email.subject || '(No subject)'));
 				titleWrap.appendChild(textNode('div', 'small text-muted text-break', listSummary(email.from, '(unknown sender)')));
 				header.appendChild(titleWrap);
 				header.appendChild(textNode('small', 'text-muted text-nowrap', dateText));
 				item.appendChild(header);
 			}
 
-			item.appendChild(renderEmailBody(email, { showActions: Boolean(options?.showActions) }));
+			item.appendChild(renderEmailBody(email));
 			return item;
 		}
 
 		function renderEmailDetail(email, thread, draft) {
 			var messages = Array.isArray(thread) ? thread : [];
 			var selected = email || messages[0] || null;
+			var displayEmail = messages[0] || selected;
 			if (detailTitle) detailTitle.textContent = selected?.subject || '(No subject)';
 			if (detailSubtitle) {
-				detailSubtitle.textContent = selected
-					? listSummary(selected.from, '(unknown sender)')
+				detailSubtitle.textContent = displayEmail
+					? listSummary(displayEmail.from, '(unknown sender)')
 					: 'No email found.';
 			}
-			if (detailDate) detailDate.textContent = selected ? formatDateTime(selected.createdAt || selected.updatedAt) : '';
+			if (detailDate) detailDate.textContent = displayEmail ? formatDateTime(emailDisplayDate(displayEmail)) : '';
 			setDetailMailboxStatus(selected);
 			renderDraftDetail(draft || null);
+			renderDetailActions(selected);
+			if (detailStatusEl) fillStatusBadges(detailStatusEl, selected);
 			if (!detailThreadEl) return;
 			replaceChildren(detailThreadEl);
 			if (!messages.length) {
@@ -2338,9 +2365,10 @@
 		}
 
 		function renderEmailItemHtml(email) {
+			var displayEmail = emailListDisplayEmail(email);
 			var subject = email.subject || '(No subject)';
-			var senders = (email.from || []).slice(0, 2).join(', ') || '(unknown sender)';
-			var body = (email.triage_summary || emailExcerpt(email) || '').slice(0, 180);
+			var senders = (displayEmail.from || []).slice(0, 2).join(', ') || '(unknown sender)';
+			var body = (displayEmail.triage_summary || emailExcerpt(displayEmail) || '').slice(0, 180);
 			var actionPoints = (email.triage_action_points || []).slice(0, 2).map(function (item) {
 				return item.text;
 			}).filter(Boolean).join(' - ');
@@ -2352,7 +2380,7 @@
 				+ '<div class="min-w-0 flex-grow-1">'
 				+ '<div class="d-flex justify-content-between align-items-center gap-2 min-w-0">'
 				+ '<span class="ecc-email-sender text-muted text-truncate">' + escapeHtml(senders) + '</span>'
-				+ '<time class="ecc-email-date text-muted text-nowrap flex-shrink-0">' + escapeHtml(formatDateTime(email.updatedAt)) + '</time>'
+				+ '<time class="ecc-email-date text-muted text-nowrap flex-shrink-0">' + escapeHtml(formatDateTime(emailDisplayDate(displayEmail))) + '</time>'
 				+ '</div>'
 				+ '<div class="fw-semibold text-truncate ecc-email-subject">' + escapeHtml(subject) + '</div>'
 				+ (body ? '<div class="ecc-email-excerpt text-muted text-truncate">' + escapeHtml(body) + '</div>' : '')
@@ -3096,6 +3124,8 @@
 		detailDate = document.getElementById('ecc-detail-date');
 		detailMailboxStatus = document.getElementById('ecc-detail-mailbox-status');
 		detailDraftEl = document.getElementById('ecc-detail-draft');
+		detailActionsEl = document.getElementById('ecc-detail-actions');
+		detailStatusEl = document.getElementById('ecc-detail-status');
 		detailThreadEl = document.getElementById('ecc-detail-thread');
 		internalNotesEl = document.getElementById('ecc-internal-notes');
 		aiPanel = document.getElementById('ecc-ai-panel');
@@ -3234,6 +3264,8 @@
 		detailDate = null;
 		detailMailboxStatus = null;
 		detailDraftEl = null;
+		detailActionsEl = null;
+		detailStatusEl = null;
 		detailThreadEl = null;
 		internalNotesEl = null;
 		aiPanel = null;

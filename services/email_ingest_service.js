@@ -651,9 +651,9 @@ export function parseForwardedEmailInput(data) {
 		references: parseReferences(parsed.references || getParsedHeaderValue(parsed, 'references')),
 		in_reply_to: canonicalMessageId(parsed.inReplyTo || parsed.in_reply_to || getParsedHeaderValue(parsed, 'in-reply-to')),
 		from: normalizeRecipientList(parsed.from || getParsedHeaderValue(parsed, 'from') || parsed.sender || parsed.session?.sender || parsed.envelope?.from || parsed.envelope?.sender),
-		to: normalizeRecipientList(parsed.to || getParsedHeaderValue(parsed, 'to') || parsed.recipients || parsed.recipient || parsed.rcpt_to || parsed.rcptTo || parsed.session?.recipient || parsed.envelope?.to || parsed.envelope?.recipient),
-		cc: normalizeRecipientList(parsed.cc || getParsedHeaderValue(parsed, 'cc')),
-		bcc: normalizeRecipientList(parsed.bcc || getParsedHeaderValue(parsed, 'bcc')),
+		to: normalizeRecipientList(getParsedHeaderValue(parsed, 'to') || parsed.to),
+		cc: normalizeRecipientList(getParsedHeaderValue(parsed, 'cc') || parsed.cc),
+		bcc: normalizeRecipientList(getParsedHeaderValue(parsed, 'bcc') || parsed.bcc),
 		subject: String(parsed.subject || getParsedHeaderValue(parsed, 'subject') || '').trim(),
 		text_content: normalizeForwardedBodyText(parsed),
 		...normalizeHtmlContent(parsed.html || parsed.html_content || parsed.body_html),
@@ -892,7 +892,7 @@ function buildEmailListQuery(host_id, projectId, filters = {}) {
 }
 
 function emailSortTime(email = {}) {
-	const value = email.updatedAt || email.createdAt;
+	const value = email.createdAt || email.updatedAt;
 	const time = value ? new Date(value).getTime() : 0;
 	return Number.isFinite(time) ? time : 0;
 }
@@ -910,7 +910,7 @@ function emailThreadIdentifiers(email = {}) {
 	return ids.filter(Boolean);
 }
 
-function collapseEmailsByThread(emails = []) {
+function groupEmailsByThread(emails = []) {
 	const byIdentifier = new Map();
 	const groups = [];
 
@@ -941,7 +941,52 @@ function collapseEmailsByThread(emails = []) {
 		}
 	}
 
-	return groups.map((group) => group.email).sort((a, b) => emailSortTime(b) - emailSortTime(a));
+	return groups;
+}
+
+function collapseEmailsByThread(emails = []) {
+	return groupEmailsByThread(emails).map((group) => group.email).sort((a, b) => emailSortTime(b) - emailSortTime(a));
+}
+
+async function attachLatestThreadEmails(host_id, projectId, emails = []) {
+	if (!emails.length) return [];
+	const identifiers = [...new Set(emails.flatMap((email) => emailThreadIdentifiers(email)))].filter(Boolean);
+	if (!identifiers.length) return emails;
+
+	const relatedFindQuery = {
+		host_id,
+		in_trash: { $ne: true },
+		$or: [
+			{ message_id: { $in: identifiers } },
+			{ references: { $in: identifiers } },
+			{ in_reply_to: { $in: identifiers } },
+		],
+	};
+	if (projectId) relatedFindQuery.project = projectId;
+	const relatedQuery = Email.find(relatedFindQuery);
+	let related = [];
+	if (typeof relatedQuery.lean === 'function') {
+		related = await relatedQuery.lean();
+	} else if (typeof relatedQuery.sort === 'function') {
+		related = await relatedQuery.sort({ updatedAt: -1 }).lean();
+	} else if (typeof relatedQuery.select === 'function') {
+		related = await relatedQuery.select('_id message_id references in_reply_to updatedAt createdAt').sort({ updatedAt: -1 }).lean();
+	}
+	const latestGroups = groupEmailsByThread([...emails, ...related]);
+	const latestByIdentifier = new Map();
+	for (const group of latestGroups) {
+		for (const identifier of group.identifiers) latestByIdentifier.set(identifier, group.email);
+	}
+
+	return emails
+		.map((email) => {
+			const latest = emailThreadIdentifiers(email)
+				.map((identifier) => latestByIdentifier.get(identifier))
+				.filter(Boolean)
+				.sort((a, b) => emailSortTime(b) - emailSortTime(a))[0] || email;
+			return { ...email, thread_latest: latest };
+		})
+		.sort((a, b) => emailSortTime(b.thread_latest || b) - emailSortTime(a.thread_latest || a));
 }
 
 async function countEmailThreadsByQuery(query) {
@@ -957,7 +1002,9 @@ export async function listEmails(host_id, projectId, { page = 1, limit = 50, mai
 	const emails = await Email.find(query)
 		.sort({ updatedAt: -1 })
 		.lean();
-	return collapseEmailsByThread(emails).slice((safePage - 1) * safeLimit, safePage * safeLimit);
+	const collapsed = collapseEmailsByThread(emails);
+	const withLatest = await attachLatestThreadEmails(host_id, projectId, collapsed);
+	return withLatest.slice((safePage - 1) * safeLimit, safePage * safeLimit);
 }
 
 export async function listEmailIds(host_id, projectId, { mailbox, label, triaged } = {}) {
@@ -966,7 +1013,9 @@ export async function listEmailIds(host_id, projectId, { mailbox, label, triaged
 		.select('_id message_id references in_reply_to updatedAt createdAt')
 		.sort({ updatedAt: -1 })
 		.lean();
-	return collapseEmailsByThread(emails).map((email) => email._id.toString());
+	const collapsed = collapseEmailsByThread(emails);
+	const withLatest = await attachLatestThreadEmails(host_id, projectId, collapsed);
+	return withLatest.map((email) => email._id.toString());
 }
 
 function applyTriageStatusFilters(query, filters = {}) {
