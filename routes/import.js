@@ -244,9 +244,10 @@ router.post('/email', raw({ type: () => true, limit: '25mb' }), async (req, res)
 		const email = await emailIngestService.ingestForwardedEmail(project.owner, project.host_id, {
 			...payload,
 			project: project._id,
-			mailbox: bccReply ? 'sent' : 'inbox',
-			triaged: bccReply ? true : payload.triaged,
-			triaged_at: bccReply ? new Date() : payload.triaged_at,
+			mailbox: bccReply ? 'archived' : 'inbox',
+			labels: bccReply ? [] : payload.labels,
+			triaged: bccReply ? false : payload.triaged,
+			triaged_at: bccReply ? null : payload.triaged_at,
 			in_trash: filtered,
 			trashed_at: filtered ? new Date() : null,
 		}, {
@@ -254,6 +255,7 @@ router.post('/email', raw({ type: () => true, limit: '25mb' }), async (req, res)
 			channel: 'emailforwarding',
 			ip: req.ip,
 			user_agent: req.headers['user-agent'],
+			archiveBccReplyThread: bccReply,
 		});
 
 		res.json({ accepted: true, email_id: email._id.toString() });

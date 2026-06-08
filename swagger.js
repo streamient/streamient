@@ -576,7 +576,7 @@ const swaggerSpec = {
             post: {
                 tags: ['Import'],
                 summary: 'Import a forwarded email',
-                description: 'Root-level public forwarding endpoint, not under /api/v1. The recipient must be PROJECT_ID@EMAIL_FORWARD_DOMAIN and may be supplied through envelope/provider fields such as recipient, recipients, session.recipient, envelope.to, Delivered-To, X-Original-To, Envelope-To, OriginalRecipient, SES receipt.recipients, or Received for. Plain text is imported when present; HTML-only email is stripped to text. Attachments are ignored. If the hidden delivery recipient or parsed BCC contains the project forwarding address and the sender matches a configured outbound email identity for the project, the email is stored as a sent, triaged thread reply instead of Inbox mail. Visible To/Cc project-address mail stays Inbox mail.',
+                description: 'Root-level public forwarding endpoint, not under /api/v1. The recipient must be PROJECT_ID@EMAIL_FORWARD_DOMAIN and may be supplied through envelope/provider fields such as recipient, recipients, session.recipient, envelope.to, Delivered-To, X-Original-To, Envelope-To, OriginalRecipient, SES receipt.recipients, or Received for. Plain text is imported when present; HTML-only email is stripped to text. Attachments are ignored. If the hidden delivery recipient or parsed BCC contains the project forwarding address and the sender matches a configured outbound email identity for the project, Kumbukum archives the answered thread, clears labels, and resets triage state. Later visible To/Cc project-address mail stays untriaged Inbox mail and reopens the conversation.',
                 security: [],
                 servers: [{ url: '/', description: 'Root application endpoint' }],
                 requestBody: {
@@ -588,7 +588,7 @@ const swaggerSpec = {
                                 properties: {
                                     to: { type: 'string', description: 'Forwarding recipient, PROJECT_ID@EMAIL_FORWARD_DOMAIN' },
                                     from: { type: 'string', description: 'Original sender address' },
-                                    bcc: { type: 'string', description: 'Parsed BCC fallback. Envelope/provider recipient fields are preferred for hidden delivery detection.' },
+                                    bcc: { type: 'string', description: 'Parsed BCC fallback. Envelope/provider recipient fields are preferred for hidden delivery detection. Configured-identity BCC replies archive/reset the answered thread.' },
                                     subject: { type: 'string' },
                                     text: { type: 'string', description: 'Plain text email body' },
                                     message_id: { type: 'string' },

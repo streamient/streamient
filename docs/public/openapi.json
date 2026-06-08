@@ -1607,7 +1607,7 @@
           "Import"
         ],
         "summary": "Import a forwarded email",
-        "description": "Root-level public forwarding endpoint, not under /api/v1. The recipient must be PROJECT_ID@EMAIL_FORWARD_DOMAIN. Plain text is imported when present; HTML-only email is stripped to text. Attachments are ignored. If the hidden delivery recipient or parsed BCC contains the project forwarding address and the sender matches a configured outbound email identity for the project, the email is stored as a sent, triaged thread reply instead of Inbox mail.",
+        "description": "Root-level public forwarding endpoint, not under /api/v1. The recipient must be PROJECT_ID@EMAIL_FORWARD_DOMAIN. Plain text is imported when present; HTML-only email is stripped to text. Attachments are ignored. If the hidden delivery recipient or parsed BCC contains the project forwarding address and the sender matches a configured outbound email identity for the project, Kumbukum archives the answered thread, clears labels, and resets triage state. Later visible To/Cc project-address mail stays untriaged Inbox mail and reopens the conversation.",
         "security": [],
         "servers": [
           {
@@ -1632,7 +1632,7 @@
                   },
                   "bcc": {
                     "type": "string",
-                    "description": "When this contains PROJECT_ID@EMAIL_FORWARD_DOMAIN, or the project address is the hidden delivery recipient, and from matches a project identity, the message is captured as a sent reply"
+                    "description": "When this contains PROJECT_ID@EMAIL_FORWARD_DOMAIN, or the project address is the hidden delivery recipient, and from matches a project identity, the answered thread is archived and reset"
                   },
                   "subject": {
                     "type": "string"

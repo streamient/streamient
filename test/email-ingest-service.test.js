@@ -1424,6 +1424,182 @@ describe('Email ingest service', () => {
 		}
 	});
 
+	it('archives and resets forwarded BCC reply threads while preserving true sent records', async () => {
+		const originalCreate = Email.create;
+		const originalFindOne = Email.findOne;
+		const originalFind = Email.find;
+		const originalFindOneAndUpdate = Email.findOneAndUpdate;
+		const originalDraftUpdateMany = EmailDraft.updateMany;
+		const originalGraphUpdateOne = GraphLink.updateOne;
+		const originalGraphDeleteMany = GraphLink.deleteMany;
+		const docs = [
+			{
+				_id: 'inbox-root',
+				host_id: 'host-1',
+				project: 'project-1',
+				source: 'emailforwarding',
+				message_id: 'root@example.com',
+				in_reply_to: '',
+				references: [],
+				mailbox: 'inbox',
+				labels: ['reply-required', 'triaged'],
+				triaged: true,
+				triaged_at: new Date('2026-06-01T10:00:00.000Z'),
+				triage_summary: 'Needs reply',
+				triage_primary_action: 'reply-required',
+				in_trash: false,
+				updatedAt: '2026-06-01T10:00:00.000Z',
+			},
+			{
+				_id: 'true-sent',
+				host_id: 'host-1',
+				project: 'project-1',
+				source: 'api',
+				message_id: 'true-sent@example.com',
+				in_reply_to: 'root@example.com',
+				references: ['root@example.com'],
+				mailbox: 'sent',
+				labels: [],
+				triaged: true,
+				in_trash: false,
+				updatedAt: '2026-06-01T10:30:00.000Z',
+			},
+			{
+				_id: 'trashed-thread',
+				host_id: 'host-1',
+				project: 'project-1',
+				source: 'emailforwarding',
+				message_id: 'trashed@example.com',
+				in_reply_to: 'root@example.com',
+				references: ['root@example.com'],
+				mailbox: 'inbox',
+				labels: ['waiting'],
+				triaged: true,
+				in_trash: true,
+				updatedAt: '2026-06-01T10:45:00.000Z',
+			},
+		];
+		const indexedIds = [];
+		let draftQuery = null;
+		let linkDeleteQuery = null;
+
+		function clone(doc) {
+			return doc ? { ...doc, references: [...(doc.references || [])], labels: [...(doc.labels || [])] } : null;
+		}
+
+		function docId(value) {
+			return value?.toString ? value.toString() : String(value || '');
+		}
+
+		function matchesThreadQuery(doc, query) {
+			if (query.host_id && doc.host_id !== query.host_id) return false;
+			if (query.in_trash?.$ne === true && doc.in_trash === true) return false;
+			if (query.message_id?.$in) return query.message_id.$in.includes(doc.message_id);
+			const conditions = query.$or || [];
+			return conditions.some((condition) => {
+				if (condition.message_id) return doc.message_id === condition.message_id;
+				if (condition.references) return (doc.references || []).includes(condition.references);
+				if (condition.in_reply_to) return doc.in_reply_to === condition.in_reply_to;
+				return false;
+			});
+		}
+
+		Email.create = async (payload) => {
+			const doc = {
+				_id: 'bcc-reply',
+				host_id: 'host-1',
+				project: 'project-1',
+				...payload,
+				updatedAt: '2026-06-01T11:00:00.000Z',
+			};
+			docs.push(doc);
+			return clone(doc);
+		};
+		Email.findOne = (query) => {
+			if (query.message_id) return Promise.resolve(null);
+			return {
+				lean: async () => clone(docs.find((doc) => docId(doc._id) === docId(query._id) && doc.host_id === query.host_id && doc.in_trash !== true)),
+			};
+		};
+		Email.find = (query) => {
+			const rows = docs.filter((doc) => matchesThreadQuery(doc, query));
+			return {
+				lean: async () => rows.map(clone),
+				select: () => ({
+					lean: async () => rows.map((doc) => ({ _id: doc._id })),
+				}),
+			};
+		};
+		Email.findOneAndUpdate = async (query, update) => {
+			const doc = docs.find((item) => docId(item._id) === docId(query._id) && item.host_id === query.host_id);
+			if (!doc) return null;
+			if (query.in_trash?.$ne === true && doc.in_trash === true) return null;
+			if (query.$or && !query.$or.some((condition) => {
+				if (condition.mailbox?.$ne) return doc.mailbox !== condition.mailbox.$ne;
+				if (condition.source) return doc.source === condition.source;
+				if (condition._id) return docId(doc._id) === docId(condition._id);
+				return false;
+			})) return null;
+			Object.assign(doc, update.$set || {});
+			return clone(doc);
+		};
+		EmailDraft.updateMany = async (query) => {
+			draftQuery = query;
+			return { modifiedCount: 1 };
+		};
+		GraphLink.updateOne = async () => ({ upsertedCount: 1 });
+		GraphLink.deleteMany = async (query) => {
+			linkDeleteQuery = query;
+			return { deletedCount: 1 };
+		};
+
+		try {
+			const result = await ingestForwardedEmail(userId, 'host-1', {
+				project: 'project-1',
+				message_id: '<bcc-reply@example.com>',
+				in_reply_to: '<root@example.com>',
+				references: ['<root@example.com>'],
+				from: 'Support <support@example.com>',
+				to: 'customer@example.com',
+				subject: 'Re: Root',
+				text: 'Handled',
+				mailbox: 'archived',
+				labels: [],
+				triaged: false,
+				triaged_at: null,
+			}, {
+				archiveBccReplyThread: true,
+				channel: 'api',
+				indexEmailFn: async (hostId, type, email) => {
+					indexedIds.push(email._id);
+				},
+				updateEmailIndexStateFn: async () => {},
+			});
+
+			assert.equal(result._id, 'bcc-reply');
+			assert.equal(result.mailbox, 'archived');
+			assert.equal(result.triaged, false);
+			assert.deepEqual(result.labels, []);
+			assert.equal(docs.find((doc) => doc._id === 'inbox-root').mailbox, 'archived');
+			assert.equal(docs.find((doc) => doc._id === 'inbox-root').triaged, false);
+			assert.deepEqual(docs.find((doc) => doc._id === 'inbox-root').labels, []);
+			assert.equal(docs.find((doc) => doc._id === 'inbox-root').triage_summary, '');
+			assert.equal(docs.find((doc) => doc._id === 'true-sent').mailbox, 'sent');
+			assert.equal(docs.find((doc) => doc._id === 'trashed-thread').mailbox, 'inbox');
+			assert.deepEqual(indexedIds.sort(), ['bcc-reply', 'inbox-root']);
+			assert.deepEqual(draftQuery.source_email.$in.sort(), ['bcc-reply', 'inbox-root']);
+			assert.deepEqual(linkDeleteQuery.source_id.$in.sort(), ['bcc-reply', 'inbox-root']);
+		} finally {
+			Email.create = originalCreate;
+			Email.findOne = originalFindOne;
+			Email.find = originalFind;
+			Email.findOneAndUpdate = originalFindOneAndUpdate;
+			EmailDraft.updateMany = originalDraftUpdateMany;
+			GraphLink.updateOne = originalGraphUpdateOne;
+			GraphLink.deleteMany = originalGraphDeleteMany;
+		}
+	});
+
 	it('adds sender to spam guard when manually moving inbound email to spam', async () => {
 		const originalFindOne = Email.findOne;
 		const originalFind = Email.find;
@@ -1829,13 +2005,36 @@ describe('Email ingest service', () => {
 		}
 	});
 
-	it('backfills forwarded sent replies from configured identities', async () => {
+	it('backfills forwarded BCC reply threads from configured identities', async () => {
 		const originalIdentityFind = EmailIdentity.find;
-		const originalUpdateMany = Email.updateMany;
+		const originalFindOne = Email.findOne;
+		const originalFind = Email.find;
+		const originalFindOneAndUpdate = Email.findOneAndUpdate;
+		const originalDraftUpdateMany = EmailDraft.updateMany;
+		const originalGraphDeleteMany = GraphLink.deleteMany;
 		const originalEmailForwardDomain = config.emailForwardDomain;
+		let candidateQuery = null;
 		let updateQuery = null;
 		let updatePayload = null;
 		let updateOptions = null;
+		const docs = [
+			{
+				_id: 'legacy-bcc',
+				host_id: 'host-1',
+				project: { toString: () => '507f1f77bcf86cd799439011' },
+				source: 'emailforwarding',
+				from: ['support@example.com'],
+				to: ['customer@example.com'],
+				cc: [],
+				message_id: 'legacy-bcc@example.com',
+				in_reply_to: 'root@example.com',
+				references: ['root@example.com'],
+				mailbox: 'sent',
+				labels: ['triaged'],
+				triaged: true,
+				in_trash: false,
+			},
+		];
 
 		config.emailForwardDomain = 'email.kumbukum.com';
 		EmailIdentity.find = () => ({
@@ -1849,37 +2048,61 @@ describe('Email ingest service', () => {
 				],
 			}),
 		});
-		Email.updateMany = async (query, update, options) => {
+		Email.findOne = (query) => ({
+			lean: async () => docs.find((doc) => doc._id === query._id && doc.host_id === query.host_id && doc.in_trash !== true) || null,
+		});
+		Email.find = (query) => {
+			if (query.source === 'emailforwarding') {
+				candidateQuery = query;
+				return {
+					select: () => ({
+						lean: async () => docs.map((doc) => ({ _id: doc._id })),
+					}),
+				};
+			}
+			return {
+				lean: async () => docs,
+			};
+		};
+		Email.findOneAndUpdate = async (query, update, options) => {
 			updateQuery = query;
 			updatePayload = update.$set;
 			updateOptions = options;
-			return { modifiedCount: 2 };
+			Object.assign(docs[0], update.$set);
+			return { ...docs[0] };
 		};
+		EmailDraft.updateMany = async () => ({ modifiedCount: 1 });
+		GraphLink.deleteMany = async () => ({ deletedCount: 1 });
 
 		try {
 			const result = await backfillForwardedSentReplies();
 
-			assert.equal(result.sent_replies, 2);
-			assert.equal(updateQuery.host_id, 'host-1');
-			assert.equal(updateQuery.source, 'emailforwarding');
-			assert.equal(updateQuery.from, 'support@example.com');
-			assert.equal(updateQuery.mailbox, 'inbox');
-			assert.equal(updateQuery.triaged, false);
-			assert.equal(updateQuery.to.$ne, '507f1f77bcf86cd799439011@email.kumbukum.com');
-			assert.equal(updateQuery.cc.$ne, '507f1f77bcf86cd799439011@email.kumbukum.com');
-			assert.deepEqual(updateQuery.$or, [
+			assert.equal(result.sent_replies, 1);
+			assert.equal(candidateQuery.host_id, 'host-1');
+			assert.equal(candidateQuery.source, 'emailforwarding');
+			assert.equal(candidateQuery.from, 'support@example.com');
+			assert.deepEqual(candidateQuery.mailbox, { $in: ['inbox', 'sent', 'archived'] });
+			assert.equal(candidateQuery.to.$ne, '507f1f77bcf86cd799439011@email.kumbukum.com');
+			assert.equal(candidateQuery.cc.$ne, '507f1f77bcf86cd799439011@email.kumbukum.com');
+			assert.deepEqual(candidateQuery.$or, [
 				{ in_reply_to: { $type: 'string', $ne: '' } },
 				{ references: { $exists: true, $not: { $size: 0 } } },
 			]);
-			assert.equal(updatePayload.mailbox, 'sent');
-			assert.equal(updatePayload.triaged, true);
-			assert.ok(updatePayload.triaged_at instanceof Date);
+			assert.equal(updateQuery._id, 'legacy-bcc');
+			assert.equal(updatePayload.mailbox, 'archived');
+			assert.deepEqual(updatePayload.labels, []);
+			assert.equal(updatePayload.triaged, false);
+			assert.equal(updatePayload.triaged_at, null);
 			assert.equal(updatePayload.is_indexed, false);
-			assert.deepEqual(updateOptions, { timestamps: false });
+			assert.equal(updateOptions.timestamps, false);
 		} finally {
 			config.emailForwardDomain = originalEmailForwardDomain;
 			EmailIdentity.find = originalIdentityFind;
-			Email.updateMany = originalUpdateMany;
+			Email.findOne = originalFindOne;
+			Email.find = originalFind;
+			Email.findOneAndUpdate = originalFindOneAndUpdate;
+			EmailDraft.updateMany = originalDraftUpdateMany;
+			GraphLink.deleteMany = originalGraphDeleteMany;
 		}
 	});
 

@@ -52,7 +52,12 @@ describe('Email forwarding import route', () => {
 				is_active: true,
 			}),
 		});
-		Email.findOne = async () => null;
+		Email.findOne = (query) => {
+			if (query.message_id) return Promise.resolve(null);
+			return {
+				lean: async () => null,
+			};
+		};
 		Email.create = async (payload) => ({
 			_id: { toString: () => emailIds[0] },
 			...payload,
@@ -187,7 +192,7 @@ describe('Email forwarding import route', () => {
 		}
 	});
 
-	it('stores BCC project replies from configured identities as sent and triaged', async () => {
+	it('archives and untriages BCC project replies from configured identities', async () => {
 		Project.findOne = () => ({
 			lean: async () => ({
 				_id: projectId,
@@ -234,9 +239,10 @@ describe('Email forwarding import route', () => {
 			assert.equal(identityQuery.host_id, 'host-1');
 			assert.equal(identityQuery.project, projectId);
 			assert.equal(identityQuery.email, 'support@example.com');
-			assert.equal(createdPayload.mailbox, 'sent');
-			assert.equal(createdPayload.triaged, true);
-			assert.ok(createdPayload.triaged_at instanceof Date);
+			assert.equal(createdPayload.mailbox, 'archived');
+			assert.deepEqual(createdPayload.labels, []);
+			assert.equal(createdPayload.triaged, false);
+			assert.equal(createdPayload.triaged_at, null);
 			assert.equal(createdPayload.in_trash, false);
 			assert.deepEqual(createdPayload.bcc, [`${projectId}@email.kumbukum.com`]);
 		} finally {
@@ -244,7 +250,7 @@ describe('Email forwarding import route', () => {
 		}
 	});
 
-	it('stores envelope-only BCC project replies from configured identities as sent and triaged', async () => {
+	it('archives and untriages envelope-only BCC project replies from configured identities', async () => {
 		let identityQuery = null;
 		let createdPayload = null;
 		EmailIdentity.findOne = (query) => {
@@ -281,9 +287,10 @@ describe('Email forwarding import route', () => {
 			assert.equal(identityQuery.host_id, 'host-1');
 			assert.equal(identityQuery.project, projectId);
 			assert.equal(identityQuery.email, 'support@example.com');
-			assert.equal(createdPayload.mailbox, 'sent');
-			assert.equal(createdPayload.triaged, true);
-			assert.ok(createdPayload.triaged_at instanceof Date);
+			assert.equal(createdPayload.mailbox, 'archived');
+			assert.deepEqual(createdPayload.labels, []);
+			assert.equal(createdPayload.triaged, false);
+			assert.equal(createdPayload.triaged_at, null);
 			assert.deepEqual(createdPayload.to, ['customer@example.com']);
 			assert.deepEqual(createdPayload.bcc, []);
 		} finally {
@@ -291,7 +298,7 @@ describe('Email forwarding import route', () => {
 		}
 	});
 
-	it('stores ForwardEmail delivery-recipient sent copies as sent when visible To is only in headers', async () => {
+	it('archives ForwardEmail delivery-recipient BCC copies when visible To is only in headers', async () => {
 		let createdPayload = null;
 		EmailIdentity.findOne = () => ({
 			select: () => ({
@@ -320,9 +327,10 @@ describe('Email forwarding import route', () => {
 
 			assert.equal(response.status, 200);
 			assert.deepEqual(json, { accepted: true, email_id: emailIds[2] });
-			assert.equal(createdPayload.mailbox, 'sent');
-			assert.equal(createdPayload.triaged, true);
-			assert.ok(createdPayload.triaged_at instanceof Date);
+			assert.equal(createdPayload.mailbox, 'archived');
+			assert.deepEqual(createdPayload.labels, []);
+			assert.equal(createdPayload.triaged, false);
+			assert.equal(createdPayload.triaged_at, null);
 			assert.deepEqual(createdPayload.to, ['customer@example.com']);
 			assert.deepEqual(createdPayload.cc, []);
 			assert.deepEqual(createdPayload.bcc, []);
@@ -331,7 +339,7 @@ describe('Email forwarding import route', () => {
 		}
 	});
 
-	it('stores BCC project replies from common envelope recipient fields as sent and triaged', async () => {
+	it('archives BCC project replies from common envelope recipient fields', async () => {
 		const createdPayloads = [];
 		EmailIdentity.findOne = () => ({
 			select: () => ({
@@ -397,9 +405,10 @@ describe('Email forwarding import route', () => {
 
 			assert.equal(createdPayloads.length, cases.length);
 			for (const payload of createdPayloads) {
-				assert.equal(payload.mailbox, 'sent');
-				assert.equal(payload.triaged, true);
-				assert.ok(payload.triaged_at instanceof Date);
+				assert.equal(payload.mailbox, 'archived');
+				assert.deepEqual(payload.labels, []);
+				assert.equal(payload.triaged, false);
+				assert.equal(payload.triaged_at, null);
 				assert.deepEqual(payload.to, ['customer@example.com']);
 				assert.deepEqual(payload.cc, []);
 				assert.deepEqual(payload.bcc, []);
@@ -444,6 +453,38 @@ describe('Email forwarding import route', () => {
 			assert.equal(createdPayload.triaged, false);
 			assert.equal(createdPayload.triaged_at, null);
 			assert.deepEqual(createdPayload.cc, [`${projectId}@email.kumbukum.com`]);
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
+	it('keeps later visible inbound replies on the same thread as untriaged inbox mail', async () => {
+		let createdPayload = null;
+		Email.create = async (payload) => {
+			createdPayload = payload;
+			return { _id: { toString: () => emailIds[0] }, ...payload };
+		};
+
+		const server = createServer();
+		try {
+			const response = await request(server, JSON.stringify({
+				message_id: '<customer-reopen-1@example.com>',
+				in_reply_to: '<bcc-reply-1@example.com>',
+				references: ['<root-question-1@example.com>', '<bcc-reply-1@example.com>'],
+				from: 'Customer <customer@example.com>',
+				to: `${projectId}@email.kumbukum.com`,
+				subject: 'Re: Customer question',
+				text: 'New customer response',
+			}));
+			const json = await response.json();
+
+			assert.equal(response.status, 200);
+			assert.deepEqual(json, { accepted: true, email_id: emailIds[0] });
+			assert.equal(createdPayload.mailbox, 'inbox');
+			assert.deepEqual(createdPayload.labels, []);
+			assert.equal(createdPayload.triaged, false);
+			assert.equal(createdPayload.triaged_at, null);
+			assert.deepEqual(createdPayload.to, [`${projectId}@email.kumbukum.com`]);
 		} finally {
 			await new Promise((resolve) => server.close(resolve));
 		}

@@ -757,6 +757,87 @@ export async function maybeAutoTriageIncomingEmail(host_id, userId, email, optio
 	});
 }
 
+function resetArchivedTriageFields() {
+	return {
+		mailbox: 'archived',
+		labels: [],
+		triaged: false,
+		triaged_at: null,
+		triage_summary: '',
+		triage_reason: '',
+		triage_primary_action: '',
+		triage_confidence: null,
+		triage_action_points: [],
+		triage_related_context: [],
+		triage_mailbox_action: 'none',
+		triage_status: '',
+		triage_error: '',
+		triage_run_id: '',
+		triage_draft_id: null,
+		in_trash: false,
+		trashed_at: null,
+		is_indexed: false,
+	};
+}
+
+function shouldArchiveBccThreadEmail(email, selectedId) {
+	if (!email || email.in_trash === true) return false;
+	const id = stringifyObjectId(email._id);
+	if (id && id === selectedId) return true;
+	return (email.mailbox || 'inbox') !== 'sent' || email.source === 'emailforwarding';
+}
+
+async function archiveBccReplyThread(host_id, selectedEmail, options = {}) {
+	const selectedId = stringifyObjectId(selectedEmail?._id);
+	if (!selectedId) return null;
+
+	const thread = await getEmailThread(host_id, selectedId, { order: 'desc' });
+	const resetFields = resetArchivedTriageFields();
+	const updatedById = new Map();
+	const changedEmails = [];
+
+	for (const email of thread) {
+		const id = stringifyObjectId(email._id);
+		if (!id || !shouldArchiveBccThreadEmail(email, selectedId)) continue;
+		const updated = await Email.findOneAndUpdate(
+			{
+				_id: email._id,
+				host_id,
+				in_trash: { $ne: true },
+				$or: [
+					{ mailbox: { $ne: 'sent' } },
+					{ source: 'emailforwarding' },
+					{ _id: selectedEmail._id },
+				],
+			},
+			{ $set: resetFields },
+			{ returnDocument: 'after', timestamps: options.timestamps !== false },
+		);
+		if (updated) {
+			updatedById.set(id, updated);
+			changedEmails.push(updated);
+		}
+	}
+
+	if (changedEmails.length) {
+		const changedIds = changedEmails.map((email) => email._id);
+		await Promise.all([
+			EmailDraft.updateMany(
+				{ host_id, source_email: { $in: changedIds }, generated_by_triage: true, status: { $ne: 'discarded' } },
+				{ $set: { status: 'discarded' } },
+			),
+			GraphLink.deleteMany({ host_id, source_id: { $in: changedIds }, source_type: 'emails', label: 'triage-context' }),
+		]);
+	}
+
+	const updatedThread = thread.map((email) => updatedById.get(stringifyObjectId(email._id)) || email);
+	return {
+		thread: updatedThread,
+		changedEmails,
+		selectedEmail: updatedById.get(selectedId) || selectedEmail,
+	};
+}
+
 async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 	if (!normalized.subject && !normalized.text_content && !normalized.html_content && !normalized.attachment_text_content) {
 		throw new Error('Email content is empty after normalization');
@@ -813,13 +894,20 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 	}
 
 	await createEmailThreadLinks(email, userId, host_id, { skipSideEffects: ctx.skipSideEffects });
+	const bccReplyThreadUpdate = ctx.archiveBccReplyThread
+		? await archiveBccReplyThread(host_id, email, { timestamps: !ctx.skipBackfillTimestamps })
+		: null;
+	if (bccReplyThreadUpdate?.selectedEmail) email = bccReplyThreadUpdate.selectedEmail;
 	if (!ctx.skipSideEffects) {
-		if (!email.in_trash) await indexEmailNow(host_id, email, { indexFn: ctx.indexEmailFn, updateFn: ctx.updateEmailIndexStateFn });
-		await emitEmailCreatedOrUpdated(host_id, created ? 'email:created' : 'email:updated', email);
+		const changedEmails = bccReplyThreadUpdate?.changedEmails || [email];
+		for (const changedEmail of changedEmails) {
+			if (!changedEmail.in_trash) await indexEmailNow(host_id, changedEmail, { indexFn: ctx.indexEmailFn, updateFn: ctx.updateEmailIndexStateFn });
+		}
+		await emitEmailCreatedOrUpdated(host_id, created ? 'email:created' : 'email:updated', email, bccReplyThreadUpdate ? { thread: bccReplyThreadUpdate.thread } : {});
 		invalidateGraphCache(host_id).catch(() => {});
 		audit.log({ action: 'create', resource: 'email', resource_id: email._id.toString(), user_id: userId, host_id, ...ctx });
 	}
-	if (created && !ctx.skipSideEffects) {
+	if (created && !ctx.skipSideEffects && !ctx.archiveBccReplyThread) {
 		const autoTriage = maybeAutoTriageIncomingEmail(host_id, userId, email, {
 			ctx,
 			triageOptions: ctx.autoTriageOptions,
@@ -2066,7 +2154,7 @@ export async function backfillForwardedSentReplies() {
 
 	const identities = await EmailIdentity.find({}).select('host_id project email').lean();
 	let modified = 0;
-	const now = new Date();
+	const seen = new Set();
 
 	for (const identity of identities) {
 		const projectId = identity.project?.toString ? identity.project.toString() : String(identity.project || '');
@@ -2074,36 +2162,37 @@ export async function backfillForwardedSentReplies() {
 		if (!projectId || !emailAddress) continue;
 
 		const forwardAddress = `${projectId}@${forwardDomain}`;
-		const result = await Email.updateMany(
+		const candidates = await Email.find(
 			{
 				host_id: identity.host_id,
 				project: identity.project,
 				source: 'emailforwarding',
 				from: emailAddress,
-				mailbox: 'inbox',
-				triaged: false,
 				in_trash: { $ne: true },
 				to: { $ne: forwardAddress },
 				cc: { $ne: forwardAddress },
+				mailbox: { $in: ['inbox', 'sent', 'archived'] },
 				$or: [
 					{ in_reply_to: { $type: 'string', $ne: '' } },
 					{ references: { $exists: true, $not: { $size: 0 } } },
 				],
 			},
-			{
-				$set: {
-					mailbox: 'sent',
-					triaged: true,
-					triaged_at: now,
-					is_indexed: false,
-				},
-			},
-			{ timestamps: false },
-		);
-		modified += result?.modifiedCount || 0;
+		).select('_id').lean();
+
+		for (const candidate of candidates) {
+			const id = stringifyObjectId(candidate._id);
+			if (!id || seen.has(id)) continue;
+			seen.add(id);
+			const result = await archiveBccReplyThread(identity.host_id, candidate, { timestamps: false });
+			for (const changedEmail of result?.changedEmails || []) {
+				const changedId = stringifyObjectId(changedEmail._id);
+				if (changedId) seen.add(changedId);
+			}
+			modified += result?.changedEmails?.length || 0;
+		}
 	}
 
-	if (modified > 0) log.info({ updates: modified }, 'Forwarded sent replies backfilled');
+	if (modified > 0) log.info({ updates: modified }, 'Forwarded BCC reply threads backfilled');
 	return { sent_replies: modified };
 }
 
