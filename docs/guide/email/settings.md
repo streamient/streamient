@@ -64,8 +64,12 @@ Identities are the "From" addresses available when composing or sending a draft 
 - **Email address** and **display name**
 - **Signature** appended to drafts
 - **SMTP** host, port, username, password, and TLS/SSL options
+- Optional **Helpmonks sync** with base URL and API key or access token
+- Optional **Fastmail sync** with JMAP API token and account ID
 
 Identities are scoped to the project, so different projects can send from different mailboxes. When you draft a reply, you pick which identity to send from; the picker only shows identities configured for that email's project.
+
+When Helpmonks sync is enabled, Kumbukum mirrors local ECC actions to Helpmonks: spam/trash moves, draft save/delete, and successful replies as read + closed conversations. When Fastmail sync is enabled, Kumbukum mirrors the same mailbox-level state through Fastmail JMAP: junk/trash moves, draft save/delete, and reply source messages marked read.
 
 If a project has no identities configured, you can still triage, draft, and review emails — you just can't send anything outbound from that project.
 

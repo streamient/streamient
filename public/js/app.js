@@ -717,10 +717,24 @@ function bindProjectEmailIdentityForm(bodyEl, projectId) {
 		field('#project-email-identity-use-system-smtp').checked = dataBool(identity?.useSystemSmtp);
 		toggleSystemSmtp();
 		field('#project-email-identity-clear-password').checked = false;
+		field('#project-email-identity-helpmonks-enabled').checked = dataBool(identity?.helpmonksEnabled);
+		field('#project-email-identity-helpmonks-base-url').value = identity?.helpmonksBaseUrl || '';
+		field('#project-email-identity-helpmonks-api-key').value = '';
+		field('#project-email-identity-clear-helpmonks-api-key').checked = false;
+		field('#project-email-identity-fastmail-enabled').checked = dataBool(identity?.fastmailEnabled);
+		field('#project-email-identity-fastmail-account-id').value = identity?.fastmailAccountId || '';
+		field('#project-email-identity-fastmail-api-token').value = '';
+		field('#project-email-identity-clear-fastmail-api-token').checked = false;
 		field('#project-email-identity-form-title').textContent = isEdit ? 'Edit outbound email address' : 'Add outbound email address';
 		var passwordConfigured = dataBool(identity?.smtpPasswordConfigured);
+		var helpmonksApiKeyConfigured = dataBool(identity?.helpmonksApiKeyConfigured);
+		var fastmailApiTokenConfigured = dataBool(identity?.fastmailApiTokenConfigured);
 		field('#project-email-identity-password-help').textContent = isEdit && passwordConfigured ? 'Leave empty to keep the stored password.' : '';
+		field('#project-email-identity-helpmonks-api-key-help').textContent = isEdit && helpmonksApiKeyConfigured ? 'Leave empty to keep the stored credential.' : '';
+		field('#project-email-identity-fastmail-api-token-help').textContent = isEdit && fastmailApiTokenConfigured ? 'Leave empty to keep the stored API token.' : '';
 		field('#project-email-identity-clear-password-wrap').classList.toggle('d-none', !isEdit || !passwordConfigured);
+		field('#project-email-identity-clear-helpmonks-api-key-wrap').classList.toggle('d-none', !isEdit || !helpmonksApiKeyConfigured);
+		field('#project-email-identity-clear-fastmail-api-token-wrap').classList.toggle('d-none', !isEdit || !fastmailApiTokenConfigured);
 		formWrap.classList.remove('d-none');
 		field('#project-email-identity-name')?.focus();
 	}
@@ -798,7 +812,19 @@ function bindProjectEmailIdentityForm(bodyEl, projectId) {
 				tls: field('#project-email-identity-smtp-tls').checked,
 				ssl: field('#project-email-identity-smtp-ssl').checked,
 			},
+			helpmonks: {
+				enabled: field('#project-email-identity-helpmonks-enabled').checked,
+				base_url: field('#project-email-identity-helpmonks-base-url').value.trim(),
+				api_key: field('#project-email-identity-helpmonks-api-key').value.trim(),
+			},
+			fastmail: {
+				enabled: field('#project-email-identity-fastmail-enabled').checked,
+				account_id: field('#project-email-identity-fastmail-account-id').value.trim(),
+				api_token: field('#project-email-identity-fastmail-api-token').value.trim(),
+			},
 			clear_auth_password: field('#project-email-identity-clear-password').checked,
+			clear_helpmonks_api_key: field('#project-email-identity-clear-helpmonks-api-key').checked,
+			clear_fastmail_api_token: field('#project-email-identity-clear-fastmail-api-token').checked,
 		};
 		try {
 			if (identityId) {

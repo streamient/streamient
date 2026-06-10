@@ -270,6 +270,16 @@ describe('Project settings API', () => {
 					tls: true,
 					ssl: true,
 				},
+				helpmonks: {
+					enabled: true,
+					base_url: 'https://helpmonks.example.com',
+					api_key: 'hm-secret',
+				},
+				fastmail: {
+					enabled: true,
+					account_id: 'fastmail-account',
+					api_token: 'fm-secret',
+				},
 			});
 			const createJson = await createResponse.json();
 
@@ -278,10 +288,21 @@ describe('Project settings API', () => {
 			assert.equal(createJson.identity.signature, 'Thanks,\nSupport');
 			assert.equal(createJson.identity.smtp.auth_password_configured, true);
 			assert.equal(createJson.identity.smtp.auth_password, undefined);
+			assert.equal(createJson.identity.helpmonks.enabled, true);
+			assert.equal(createJson.identity.helpmonks.api_key_configured, true);
+			assert.equal(createJson.identity.helpmonks.api_key, undefined);
+			assert.equal(createJson.identity.fastmail.enabled, true);
+			assert.equal(createJson.identity.fastmail.account_id, 'fastmail-account');
+			assert.equal(createJson.identity.fastmail.api_token_configured, true);
+			assert.equal(createJson.identity.fastmail.api_token, undefined);
 			assert.equal(identities[0].host_id, 'host-1');
 			assert.equal(identities[0].project, 'project-1');
 			assert.notEqual(identities[0].smtp.auth_password, 'secret-pass');
 			assert.match(identities[0].smtp.auth_password, /:/);
+			assert.notEqual(identities[0].helpmonks.api_key, 'hm-secret');
+			assert.match(identities[0].helpmonks.api_key, /:/);
+			assert.notEqual(identities[0].fastmail.api_token, 'fm-secret');
+			assert.match(identities[0].fastmail.api_token, /:/);
 
 			const duplicateResponse = await request(server, 'POST', '/projects/project-1/email-identities', {
 				name: 'Duplicate',
@@ -305,6 +326,16 @@ describe('Project settings API', () => {
 					tls: false,
 					ssl: false,
 				},
+				helpmonks: {
+					enabled: true,
+					base_url: 'https://helpmonks2.example.com',
+					api_key: '',
+				},
+				fastmail: {
+					enabled: true,
+					account_id: 'fastmail-account-2',
+					api_token: '',
+				},
 			});
 			const updateJson = await updateResponse.json();
 
@@ -312,16 +343,26 @@ describe('Project settings API', () => {
 			assert.equal(updateJson.identity.name, 'Support Updated');
 			assert.equal(updateJson.identity.signature, 'Regards,\nSupport Team');
 			assert.equal(updateJson.identity.smtp.auth_password_configured, true);
+			assert.equal(updateJson.identity.helpmonks.base_url, 'https://helpmonks2.example.com');
+			assert.equal(updateJson.identity.helpmonks.api_key_configured, true);
+			assert.equal(updateJson.identity.fastmail.account_id, 'fastmail-account-2');
+			assert.equal(updateJson.identity.fastmail.api_token_configured, true);
 			assert.equal(identities[0].smtp.auth_password, storedPassword);
 
 			const clearResponse = await request(server, 'PUT', '/email-identities/identity-1', {
 				clear_auth_password: true,
+				clear_helpmonks_api_key: true,
+				clear_fastmail_api_token: true,
 			});
 			const clearJson = await clearResponse.json();
 
 			assert.equal(clearResponse.status, 200);
 			assert.equal(clearJson.identity.smtp.auth_password_configured, false);
+			assert.equal(clearJson.identity.helpmonks.api_key_configured, false);
+			assert.equal(clearJson.identity.fastmail.api_token_configured, false);
 			assert.equal(identities[0].smtp.auth_password, '');
+			assert.equal(identities[0].helpmonks.api_key, '');
+			assert.equal(identities[0].fastmail.api_token, '');
 
 			const deleteResponse = await request(server, 'DELETE', '/email-identities/identity-1');
 			assert.equal(deleteResponse.status, 200);

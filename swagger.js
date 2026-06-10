@@ -327,6 +327,23 @@ const swaggerSpec = {
 	                            ssl: { type: 'boolean', description: 'Use Nodemailer secure for outbound sending.' },
 	                        },
 	                    },
+	                    helpmonks: {
+	                        type: 'object',
+	                        properties: {
+	                            enabled: { type: 'boolean' },
+	                            base_url: { type: 'string', format: 'uri' },
+	                            api_key_configured: { type: 'boolean', description: 'True when an encrypted Helpmonks API key or access token is stored. The secret value is never returned.' },
+	                        },
+	                    },
+	                    fastmail: {
+	                        type: 'object',
+	                        properties: {
+	                            enabled: { type: 'boolean' },
+	                            account_id: { type: 'string' },
+	                            session_url: { type: 'string', format: 'uri' },
+	                            api_token_configured: { type: 'boolean', description: 'True when an encrypted Fastmail API token is stored. The secret value is never returned.' },
+	                        },
+	                    },
 	                    createdAt: { type: 'string', format: 'date-time' },
 	                    updatedAt: { type: 'string', format: 'date-time' },
 	                },
@@ -2695,6 +2712,23 @@ const swaggerSpec = {
 	                                        },
 	                                        required: ['host', 'port'],
 	                                    },
+	                                    helpmonks: {
+	                                        type: 'object',
+	                                        properties: {
+	                                            enabled: { type: 'boolean', default: false },
+	                                            base_url: { type: 'string', format: 'uri' },
+	                                            api_key: { type: 'string', description: 'Stored encrypted and never returned.' },
+	                                        },
+	                                    },
+	                                    fastmail: {
+	                                        type: 'object',
+	                                        properties: {
+	                                            enabled: { type: 'boolean', default: false },
+	                                            account_id: { type: 'string' },
+	                                            session_url: { type: 'string', format: 'uri', default: 'https://api.fastmail.com/jmap/session' },
+	                                            api_token: { type: 'string', description: 'Stored encrypted and never returned.' },
+	                                        },
+	                                    },
 	                                },
 	                                required: ['email', 'smtp'],
 	                            },
@@ -2757,7 +2791,7 @@ const swaggerSpec = {
 	            put: {
 	                tags: ['Email Identities'],
 	                summary: 'Update one outbound email identity',
-	                description: 'Omit or send an empty smtp.auth_password to keep the existing password. Send clear_auth_password=true to remove it.',
+	                description: 'Omit or send empty secret fields to keep existing stored secrets. Send clear_auth_password, clear_helpmonks_api_key, or clear_fastmail_api_token to remove stored secrets.',
 	                parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
 	                requestBody: {
 	                    required: true,
@@ -2770,6 +2804,8 @@ const swaggerSpec = {
 	                                    email: { type: 'string', format: 'email' },
 	                                    signature: { type: 'string' },
 	                                    clear_auth_password: { type: 'boolean' },
+	                                    clear_helpmonks_api_key: { type: 'boolean' },
+	                                    clear_fastmail_api_token: { type: 'boolean' },
 	                                    smtp: {
 	                                        type: 'object',
 	                                        properties: {
@@ -2779,6 +2815,23 @@ const swaggerSpec = {
 	                                            auth_password: { type: 'string' },
 	                                            tls: { type: 'boolean' },
 	                                            ssl: { type: 'boolean' },
+	                                        },
+	                                    },
+	                                    helpmonks: {
+	                                        type: 'object',
+	                                        properties: {
+	                                            enabled: { type: 'boolean' },
+	                                            base_url: { type: 'string', format: 'uri' },
+	                                            api_key: { type: 'string' },
+	                                        },
+	                                    },
+	                                    fastmail: {
+	                                        type: 'object',
+	                                        properties: {
+	                                            enabled: { type: 'boolean' },
+	                                            account_id: { type: 'string' },
+	                                            session_url: { type: 'string', format: 'uri' },
+	                                            api_token: { type: 'string' },
 	                                        },
 	                                    },
 	                                },

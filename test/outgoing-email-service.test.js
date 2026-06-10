@@ -5,6 +5,7 @@ import nodemailer from 'nodemailer';
 import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
 import { EmailIdentity } from '../model/email_identity.js';
+import { EmailExternalSyncState } from '../model/email_external_sync_state.js';
 import { OutgoingEmail } from '../model/outgoing_email.js';
 import { MongoQueue } from '../modules/mongo_queue.js';
 import config from '../config.js';
@@ -24,6 +25,7 @@ describe('Outgoing email service', () => {
 		originals.draftFindOne = EmailDraft.findOne;
 		originals.draftFindOneAndUpdate = EmailDraft.findOneAndUpdate;
 		originals.identityFindOne = EmailIdentity.findOne;
+		originals.externalSyncFindOneAndUpdate = EmailExternalSyncState.findOneAndUpdate;
 		originals.outgoingFindOne = OutgoingEmail.findOne;
 		originals.outgoingCreate = OutgoingEmail.create;
 		originals.outgoingFindOneAndUpdate = OutgoingEmail.findOneAndUpdate;
@@ -45,6 +47,7 @@ describe('Outgoing email service', () => {
 		EmailDraft.findOne = originals.draftFindOne;
 		EmailDraft.findOneAndUpdate = originals.draftFindOneAndUpdate;
 		EmailIdentity.findOne = originals.identityFindOne;
+		EmailExternalSyncState.findOneAndUpdate = originals.externalSyncFindOneAndUpdate;
 		OutgoingEmail.findOne = originals.outgoingFindOne;
 		OutgoingEmail.create = originals.outgoingCreate;
 		OutgoingEmail.findOneAndUpdate = originals.outgoingFindOneAndUpdate;
@@ -143,6 +146,7 @@ describe('Outgoing email service', () => {
 		let mailOptions = null;
 		let createdEmail = null;
 		let sourceUpdate = null;
+		let syncJob = null;
 		const outgoing = {
 			_id: 'outgoing-1',
 			draft: 'draft-1',
@@ -171,6 +175,7 @@ describe('Outgoing email service', () => {
 			_id: 'identity-1',
 			name: 'Support',
 			email: 'support@example.com',
+			helpmonks: { enabled: true, base_url: 'https://helpmonks.example.com', api_key: 'encrypted-key' },
 			smtp: { host: 'smtp.example.com', port: 587, auth_user: '', auth_password: '', tls: true, ssl: false },
 		});
 		nodemailer.createTransport = () => ({
@@ -196,6 +201,11 @@ describe('Outgoing email service', () => {
 			};
 		};
 		EmailDraft.findOneAndUpdate = () => queryResult({ _id: 'draft-1', status: 'discarded' });
+		MongoQueue.add = async (queue, data, options) => {
+			syncJob = { queue, data, options };
+			return { _id: 'sync-job-1' };
+		};
+		EmailExternalSyncState.findOneAndUpdate = async () => ({});
 
 		const indexed = [];
 		const result = await outgoingEmailService.processOutgoingEmail('outgoing-1', {
@@ -218,6 +228,10 @@ describe('Outgoing email service', () => {
 		assert.ok(sourceUpdate.update.$set.triaged_at instanceof Date);
 		assert.equal(sourceUpdate.update.$addToSet.labels, 'triaged');
 		assert.deepEqual(indexed.map((item) => item.email._id), ['email-1', 'sent-email-1']);
+		assert.equal(syncJob.queue, 'email_action_sync');
+		assert.equal(syncJob.data.action, 'reply.sent');
+		assert.equal(syncJob.data.local_type, 'outgoing');
+		assert.equal(syncJob.data.local_id, 'outgoing-1');
 	});
 
 	it('routes an identity with use_system_smtp through the shared system SMTP transport', async () => {

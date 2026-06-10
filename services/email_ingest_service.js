@@ -23,6 +23,7 @@ import { emailAiCompletion, emailTriageCompletion } from '../modules/llm_client.
 import { getAiInstructions, getEmailSettings } from './byo_ai_service.js';
 import { sanitizeEmailHtml } from '../modules/email_html_sanitizer.js';
 import { indexEmailNow, removeEmailFromIndexNow } from './email_index_service.js';
+import { enqueueDraftSync, enqueueEmailMailboxSync } from './email_action_sync_service.js';
 import { createLogger } from '../modules/logger.js';
 import config from '../config.js';
 
@@ -1398,6 +1399,7 @@ export async function updateEmail(host_id, emailId, data, ctx = {}) {
 	if (email) {
 		if (hasMailboxUpdate && update.mailbox === 'spam' && (before?.mailbox || 'inbox') !== 'sent') {
 			await learnSpamGuardSenders(host_id, email.from || [], 'manual-spam');
+			await enqueueEmailMailboxSync(host_id, email, 'spam', ctx);
 		}
 		if (hasMailboxUpdate && update.mailbox !== undefined && update.mailbox !== 'spam' && (before?.mailbox || 'inbox') === 'spam') {
 			await forgetSpamGuardSenders(host_id, email.from || [], 'manual-not-spam');
@@ -1484,6 +1486,7 @@ export async function deleteEmail(host_id, emailId, ctx = {}) {
 		emitToTenant(host_id, 'email:deleted', { _id: emailId });
 		emitToTenant(host_id, 'counts:refresh');
 		invalidateGraphCache(host_id).catch(() => {});
+		await enqueueEmailMailboxSync(host_id, email, 'trash', ctx);
 		if (ctx.user_id) audit.log({ action: 'delete', resource: 'email', resource_id: emailId, host_id, ...ctx });
 	}
 	return email;
@@ -2105,6 +2108,7 @@ export async function useEmailReplySuggestion(host_id, emailId, data = {}, ctx =
 		const details = audit.diffSnapshot(before, draft);
 		audit.log({ action: 'update', resource: 'email_draft', resource_id: draft._id.toString(), host_id, details: { ...details, source: 'reply_suggestion' }, ...ctx });
 	}
+	await enqueueDraftSync(host_id, draft, 'draft.upsert', ctx);
 	return draft;
 }
 
@@ -2781,8 +2785,10 @@ export async function triageInboxEmails(host_id, userId, options = {}) {
 			if (updated) {
 				if (triage.primary_action === 'spam' || targetMailbox === 'spam') {
 					await learnSpamGuardSenders(host_id, email.from || [], 'triage-spam');
+					await enqueueEmailMailboxSync(host_id, updated, 'spam', options);
 				}
 				if (draft) drafted += 1;
+				if (draft) await enqueueDraftSync(host_id, draft, 'draft.upsert', options);
 				if (linkedCount) linked += linkedCount;
 				if ((email.mailbox || 'inbox') !== updated.mailbox) moved += 1;
 				if (!options.skipSideEffects) {
@@ -2893,6 +2899,7 @@ export async function updateEmailDraft(host_id, draftId, data, ctx = {}) {
 	if (draft) {
 		emitToTenant(host_id, 'email-draft:updated', draft);
 		emitToTenant(host_id, 'counts:refresh');
+		await enqueueDraftSync(host_id, draft, 'draft.upsert', ctx);
 	}
 	if (draft && ctx.user_id) {
 		const details = audit.diffSnapshot(before, draft);
@@ -2912,6 +2919,7 @@ export async function discardEmailDraft(host_id, draftId, ctx = {}) {
 	if (draft) {
 		emitToTenant(host_id, 'email-draft:updated', draft);
 		emitToTenant(host_id, 'counts:refresh');
+		await enqueueDraftSync(host_id, draft, 'draft.delete', ctx);
 	}
 	if (draft && ctx.user_id) {
 		const details = audit.diffSnapshot(before, draft);

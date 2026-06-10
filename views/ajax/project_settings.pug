@@ -170,6 +170,13 @@
 									data-smtp-password-configured=(identity.smtp.auth_password_configured ? 'true' : 'false')
 									data-smtp-tls=(identity.smtp.tls ? 'true' : 'false')
 									data-smtp-ssl=(identity.smtp.ssl ? 'true' : 'false')
+									data-helpmonks-enabled=(identity.helpmonks && identity.helpmonks.enabled ? 'true' : 'false')
+									data-helpmonks-base-url=(identity.helpmonks ? identity.helpmonks.base_url : '')
+									data-helpmonks-api-key-configured=(identity.helpmonks && identity.helpmonks.api_key_configured ? 'true' : 'false')
+									data-fastmail-enabled=(identity.fastmail && identity.fastmail.enabled ? 'true' : 'false')
+									data-fastmail-account-id=(identity.fastmail ? identity.fastmail.account_id : '')
+									data-fastmail-session-url=(identity.fastmail ? identity.fastmail.session_url : '')
+									data-fastmail-api-token-configured=(identity.fastmail && identity.fastmail.api_token_configured ? 'true' : 'false')
 								)
 									.d-flex.align-items-start
 										.flex-grow-1.min-w-0
@@ -188,6 +195,17 @@
 														span  · TLS
 													if identity.smtp.ssl
 														span  · SSL
+											.text-muted.small.text-break
+												if identity.helpmonks && identity.helpmonks.enabled
+													span Helpmonks sync
+													if identity.helpmonks.api_key_configured
+														span  · API key configured
+												if identity.fastmail && identity.fastmail.enabled
+													if identity.helpmonks && identity.helpmonks.enabled
+														span  ·
+													span Fastmail sync
+													if identity.fastmail.api_token_configured
+														span  · API token configured
 										.ms-auto.text-nowrap
 											button.btn.btn-sm.btn-outline-secondary.me-1.project-email-identity-edit(
 												type="button"
@@ -244,6 +262,38 @@
 								.form-check
 									input.form-check-input#project-email-identity-clear-password(type="checkbox")
 									label.form-check-label(for="project-email-identity-clear-password") Clear stored password
+							.col-12
+								h6.mb-2 Helpmonks sync
+								.form-check.mb-3
+									input.form-check-input#project-email-identity-helpmonks-enabled(type="checkbox")
+									label.form-check-label(for="project-email-identity-helpmonks-enabled") Sync actions to Helpmonks
+							.col-md-8
+								label.form-label(for="project-email-identity-helpmonks-base-url") Helpmonks base URL
+								input.form-control.form-control-sm#project-email-identity-helpmonks-base-url(type="url" autocomplete="off")
+							.col-md-4
+								label.form-label(for="project-email-identity-helpmonks-api-key") Helpmonks API key or access token
+								input.form-control.form-control-sm#project-email-identity-helpmonks-api-key(type="password" autocomplete="new-password")
+								.form-text#project-email-identity-helpmonks-api-key-help
+							.col-12.d-none#project-email-identity-clear-helpmonks-api-key-wrap
+								.form-check
+									input.form-check-input#project-email-identity-clear-helpmonks-api-key(type="checkbox")
+									label.form-check-label(for="project-email-identity-clear-helpmonks-api-key") Clear stored Helpmonks credential
+							.col-12
+								h6.mb-2 Fastmail sync
+								.form-check.mb-3
+									input.form-check-input#project-email-identity-fastmail-enabled(type="checkbox")
+									label.form-check-label(for="project-email-identity-fastmail-enabled") Sync actions to Fastmail
+							.col-md-6
+								label.form-label(for="project-email-identity-fastmail-account-id") Fastmail account ID
+								input.form-control.form-control-sm#project-email-identity-fastmail-account-id(type="text" autocomplete="off")
+							.col-md-6
+								label.form-label(for="project-email-identity-fastmail-api-token") Fastmail API token
+								input.form-control.form-control-sm#project-email-identity-fastmail-api-token(type="password" autocomplete="new-password")
+								.form-text#project-email-identity-fastmail-api-token-help
+							.col-12.d-none#project-email-identity-clear-fastmail-api-token-wrap
+								.form-check
+									input.form-check-input#project-email-identity-clear-fastmail-api-token(type="checkbox")
+									label.form-check-label(for="project-email-identity-clear-fastmail-api-token") Clear stored Fastmail API token
 						.d-flex.justify-content-between.align-items-center.mt-3
 							button.btn.btn-secondary.btn-sm#project-email-identity-cancel(type="button") Cancel
 							button.btn.btn-primary.btn-sm(type="submit")

@@ -408,7 +408,16 @@
 		function renderEmailBody(email, options) {
 			var wrapper = document.createElement('div');
 			var header = document.createElement('div');
-			header.className = 'd-flex justify-content-end align-items-center gap-3 mb-2';
+			header.className = 'd-flex justify-content-between align-items-center gap-3 mb-2';
+
+			var bodyActions = document.createElement('div');
+			bodyActions.className = 'd-flex align-items-center gap-2';
+			if (options?.showActions) {
+				var moveDropdown = buildBodyMoveDropdown(email);
+				if (moveDropdown) bodyActions.appendChild(moveDropdown);
+				var trashButton = buildBodyTrashButton(email);
+				if (trashButton) bodyActions.appendChild(trashButton);
+			}
 
 			var controls = document.createElement('div');
 			controls.className = 'd-flex align-items-center gap-2 kk-email-body-controls ecc-email-body-controls';
@@ -437,8 +446,16 @@
 			controls.appendChild(modeGroup);
 			controls.appendChild(themeGroup);
 			controls.appendChild(loadImagesBtn);
+			header.appendChild(bodyActions);
 			header.appendChild(controls);
 			wrapper.appendChild(header);
+
+			if (options?.showActions) {
+				var statusRow = document.createElement('div');
+				statusRow.className = 'ecc-email-status mb-2';
+				fillStatusBadges(statusRow, email);
+				wrapper.appendChild(statusRow);
+			}
 
 			var bodyWrap = document.createElement('div');
 			wrapper.appendChild(bodyWrap);
@@ -2224,7 +2241,7 @@
 				item.appendChild(header);
 			}
 
-			item.appendChild(renderEmailBody(email));
+			item.appendChild(renderEmailBody(email, { showActions: Boolean(options?.showActions) }));
 			return item;
 		}
 

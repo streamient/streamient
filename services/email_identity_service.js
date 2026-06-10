@@ -17,6 +17,16 @@ function normalizeBoolean(value) {
 	return value === true;
 }
 
+function normalizeUrl(value) {
+	const url = normalizeString(value);
+	if (!url) return '';
+	try {
+		return new URL(url).toString().replace(/\/+$/g, '');
+	} catch {
+		throw new Error('Valid URL is required');
+	}
+}
+
 function normalizePort(value) {
 	const port = parseInt(value, 10);
 	if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -46,6 +56,17 @@ function publicIdentity(identity) {
 			tls: Boolean(obj.smtp?.tls),
 			ssl: Boolean(obj.smtp?.ssl),
 		},
+		helpmonks: {
+			enabled: Boolean(obj.helpmonks?.enabled),
+			base_url: obj.helpmonks?.base_url || '',
+			api_key_configured: Boolean(obj.helpmonks?.api_key),
+		},
+		fastmail: {
+			enabled: Boolean(obj.fastmail?.enabled),
+			account_id: obj.fastmail?.account_id || '',
+			session_url: obj.fastmail?.session_url || 'https://api.fastmail.com/jmap/session',
+			api_token_configured: Boolean(obj.fastmail?.api_token),
+		},
 	};
 }
 
@@ -55,9 +76,16 @@ function createPayload(userId, hostId, projectId, data = {}) {
 	const smtp = data.smtp || {};
 	const host = normalizeString(smtp.host);
 	const useSystem = normalizeBoolean(data.use_system_smtp);
+	const helpmonks = data.helpmonks || {};
+	const fastmail = data.fastmail || {};
+	const helpmonksEnabled = normalizeBoolean(helpmonks.enabled);
+	const fastmailEnabled = normalizeBoolean(fastmail.enabled);
 
 	if (!email || !EMAIL_RE.test(email)) throw new Error('Valid email is required');
 	if (!useSystem && !host) throw new Error('SMTP host is required');
+	if (helpmonksEnabled && !normalizeString(helpmonks.base_url)) throw new Error('Helpmonks base URL is required');
+	if (helpmonksEnabled && !normalizeString(helpmonks.api_key)) throw new Error('Helpmonks API key or access token is required');
+	if (fastmailEnabled && !normalizeString(fastmail.api_token)) throw new Error('Fastmail API token is required');
 
 	return {
 		project: projectId,
@@ -74,6 +102,17 @@ function createPayload(userId, hostId, projectId, data = {}) {
 			auth_password: normalizeString(smtp.auth_password) ? encrypt(normalizeString(smtp.auth_password)) : '',
 			tls: normalizeBoolean(smtp.tls),
 			ssl: normalizeBoolean(smtp.ssl),
+		},
+		helpmonks: {
+			enabled: helpmonksEnabled,
+			base_url: normalizeUrl(helpmonks.base_url),
+			api_key: normalizeString(helpmonks.api_key) ? encrypt(normalizeString(helpmonks.api_key)) : '',
+		},
+		fastmail: {
+			enabled: fastmailEnabled,
+			api_token: normalizeString(fastmail.api_token) ? encrypt(normalizeString(fastmail.api_token)) : '',
+			account_id: normalizeString(fastmail.account_id),
+			session_url: normalizeUrl(fastmail.session_url || 'https://api.fastmail.com/jmap/session'),
 		},
 	};
 }
@@ -107,6 +146,27 @@ function updatePayload(data = {}) {
 	} else if (smtp.auth_password !== undefined) {
 		const password = normalizeString(smtp.auth_password);
 		if (password) update['smtp.auth_password'] = encrypt(password);
+	}
+
+	const helpmonks = data.helpmonks || {};
+	if (helpmonks.enabled !== undefined) update['helpmonks.enabled'] = normalizeBoolean(helpmonks.enabled);
+	if (helpmonks.base_url !== undefined) update['helpmonks.base_url'] = normalizeUrl(helpmonks.base_url);
+	if (data.clear_helpmonks_api_key === true) {
+		update['helpmonks.api_key'] = '';
+	} else if (helpmonks.api_key !== undefined) {
+		const apiKey = normalizeString(helpmonks.api_key);
+		if (apiKey) update['helpmonks.api_key'] = encrypt(apiKey);
+	}
+
+	const fastmail = data.fastmail || {};
+	if (fastmail.enabled !== undefined) update['fastmail.enabled'] = normalizeBoolean(fastmail.enabled);
+	if (fastmail.account_id !== undefined) update['fastmail.account_id'] = normalizeString(fastmail.account_id);
+	if (fastmail.session_url !== undefined) update['fastmail.session_url'] = normalizeUrl(fastmail.session_url || 'https://api.fastmail.com/jmap/session');
+	if (data.clear_fastmail_api_token === true) {
+		update['fastmail.api_token'] = '';
+	} else if (fastmail.api_token !== undefined) {
+		const apiToken = normalizeString(fastmail.api_token);
+		if (apiToken) update['fastmail.api_token'] = encrypt(apiToken);
 	}
 
 	return update;

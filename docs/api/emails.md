@@ -90,6 +90,8 @@ Draft deletion uses `DELETE /api/v1/email-drafts/:id` and marks the draft as `di
 
 Compose clients can load safe outbound identity data with `GET /api/v1/projects/:id/email-identities/compose`. Recipient autocomplete can call `GET /api/v1/emails/from-addresses?q=partial&project=PROJECT_ID&limit=10`; it searches sender addresses in the project first, then falls back tenant-wide when no project results are found.
 
+Outbound identity settings can include masked external sync config. Helpmonks accepts `helpmonks.enabled`, `helpmonks.base_url`, and `helpmonks.api_key`; the secret may be a Helpmonks API key or access token. Fastmail accepts `fastmail.enabled`, `fastmail.account_id`, `fastmail.session_url`, and `fastmail.api_token`. Secret values are encrypted and returned only as `api_key_configured` / `api_token_configured`; use clear flags to remove stored values.
+
 ## Triage status
 
 Use triage status endpoints when an external system only needs classification state, routing action, and optional embedded message/draft data.

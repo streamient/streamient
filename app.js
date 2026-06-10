@@ -238,7 +238,9 @@ async function start() {
 
 	if (SERVER_MODE === 'email-worker') {
 		const { startOutgoingEmailWorker } = await import('./services/outgoing_email_service.js');
+		const { startEmailActionSyncWorker } = await import('./services/email_action_sync_service.js');
 		await startOutgoingEmailWorker();
+		await startEmailActionSyncWorker();
 		log.info({ env: config.env }, 'Kumbukum email worker running');
 		return;
 	}

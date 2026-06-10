@@ -17,6 +17,17 @@ const emailIdentitySchema = new mongoose.Schema(
 			tls: { type: Boolean, default: false },
 			ssl: { type: Boolean, default: false },
 		},
+		helpmonks: {
+			enabled: { type: Boolean, default: false },
+			base_url: { type: String, trim: true, default: '' },
+			api_key: { type: String, default: '' },
+		},
+		fastmail: {
+			enabled: { type: Boolean, default: false },
+			api_token: { type: String, default: '' },
+			account_id: { type: String, trim: true, default: '' },
+			session_url: { type: String, trim: true, default: 'https://api.fastmail.com/jmap/session' },
+		},
 	},
 	{ timestamps: true },
 );

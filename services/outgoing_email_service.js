@@ -12,6 +12,7 @@ import { emitToTenant } from '../modules/socket.js';
 import { invalidateGraphCache } from './graph_service.js';
 import { indexEmailNow } from './email_index_service.js';
 import { createSystemTransport } from './email_service.js';
+import { enqueueReplySentSync } from './email_action_sync_service.js';
 import { buildEmailRealtimePayload, emitEmailCreatedOrUpdated } from './email_ingest_service.js';
 import * as audit from './audit_service.js';
 import { createLogger } from '../modules/logger.js';
@@ -323,6 +324,7 @@ export async function processOutgoingEmail(outgoingId, options = {}) {
 		emitDraft(outgoing.host_id, 'email-draft:updated', draft);
 		emitOutgoing(outgoing.host_id, 'outgoing-email:sent', outgoing, { email: sentEmailPayload, draft, source_email: sourceEmailPayload });
 		emitToTenant(outgoing.host_id, 'counts:refresh');
+		await enqueueReplySentSync(outgoing.host_id, outgoing, options);
 		log.info({ host_id: outgoing.host_id, outgoing_id: outgoing._id.toString(), message_id: outgoing.message_id, duration_ms: Date.now() - sendStartedAt }, 'Outgoing email sent');
 		return { outgoing_email: publicOutgoing(outgoing), email: sentEmail };
 	} catch (err) {
