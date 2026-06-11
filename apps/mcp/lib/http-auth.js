@@ -1,11 +1,13 @@
 import {
 	buildBearerChallenge,
+	getDefaultScopesForRequestPath,
 	getRequestMcpResourceUrls,
 	getRequestProtectedResourceMetadataUrl,
 	getProtectedResourceMetadataUrl,
 	getRequiredScopesForTool,
 	hasRequiredScopes,
 	MCP_BASELINE_SCOPES,
+	MCP_DEFAULT_SCOPES,
 	signMcpBridgeToken,
 	verifyMcpAccessToken,
 } from '../../../modules/oauth.js';
@@ -48,26 +50,26 @@ export function getRequiredScopesForRequestBody(body) {
 	return getRequiredScopesForTool(toolName);
 }
 
-export function buildUnauthorizedResponse(resourceMetadataUrl = getProtectedResourceMetadataUrl()) {
+export function buildUnauthorizedResponse(resourceMetadataUrl = getProtectedResourceMetadataUrl(), scopes = MCP_DEFAULT_SCOPES) {
 	return {
 		status: 401,
 		headers: {
 			'WWW-Authenticate': buildBearerChallenge({
 				resourceMetadataUrl,
-				scopes: MCP_BASELINE_SCOPES,
+				scopes,
 			}),
 		},
 		body: { error: 'Authentication required' },
 	};
 }
 
-export function buildInvalidTokenResponse(resourceMetadataUrl = getProtectedResourceMetadataUrl()) {
+export function buildInvalidTokenResponse(resourceMetadataUrl = getProtectedResourceMetadataUrl(), scopes = MCP_DEFAULT_SCOPES) {
 	return {
 		status: 401,
 		headers: {
 			'WWW-Authenticate': buildBearerChallenge({
 				resourceMetadataUrl,
-				scopes: MCP_BASELINE_SCOPES,
+				scopes,
 				error: 'invalid_token',
 				errorDescription: 'Access token is missing, invalid, or expired',
 			}),
@@ -96,9 +98,10 @@ export function buildInsufficientScopeResponse(requiredScopes, resourceMetadataU
 
 export function authenticateHttpRequest(req) {
 	const resourceMetadataUrl = getRequestProtectedResourceMetadataUrl(req);
+	const defaultScopes = getDefaultScopesForRequestPath(req?.path);
 	const auth = extractRequestAuth(req.headers);
 	if (!auth?.token) {
-		return { ok: false, response: buildUnauthorizedResponse(resourceMetadataUrl) };
+		return { ok: false, response: buildUnauthorizedResponse(resourceMetadataUrl, defaultScopes) };
 	}
 
 	if (auth.scheme === 'Token') {
@@ -126,7 +129,7 @@ export function authenticateHttpRequest(req) {
 		if (!isLikelyJwt(auth.token)) {
 			return buildLegacyAuthContext(auth.token);
 		}
-		return { ok: false, response: buildInvalidTokenResponse(resourceMetadataUrl) };
+		return { ok: false, response: buildInvalidTokenResponse(resourceMetadataUrl, defaultScopes) };
 	}
 }
 

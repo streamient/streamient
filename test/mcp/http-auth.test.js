@@ -1,7 +1,15 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { getMcpEndpointUrl, signMcpAccessToken } from '../../modules/oauth.js';
+import { emailTools } from '../../apps/mcp/tools/emails.js';
+import { gitSyncTools } from '../../apps/mcp/tools/git_sync.js';
+import { graphTools } from '../../apps/mcp/tools/graph.js';
+import { memoryTools } from '../../apps/mcp/tools/memory.js';
+import { noteTools } from '../../apps/mcp/tools/notes.js';
+import { applyToolProfile, MCP_TOOL_PROFILES } from '../../apps/mcp/tools/profile.js';
+import { projectTools } from '../../apps/mcp/tools/projects.js';
+import { urlTools } from '../../apps/mcp/tools/urls.js';
+import { getDefaultScopesForRequestPath, getMcpEndpointUrl, getRequiredScopesForTool, hasRequiredScopes, signMcpAccessToken } from '../../modules/oauth.js';
 import {
 	authenticateHttpRequest,
 	buildUnauthorizedResponse,
@@ -9,6 +17,20 @@ import {
 	extractRequestAuth,
 	getRequiredScopesForRequestBody,
 } from '../../apps/mcp/lib/http-auth.js';
+
+function buildScopeTestTools() {
+	const api = {};
+	const defaultProjectId = 'project-1';
+	return {
+		...noteTools(api, defaultProjectId),
+		...memoryTools(api, defaultProjectId),
+		...urlTools(api, defaultProjectId),
+		...emailTools(api, defaultProjectId),
+		...projectTools(api),
+		...graphTools(api),
+		...gitSyncTools(api, defaultProjectId),
+	};
+}
 
 describe('MCP HTTP auth helper', () => {
 	it('extracts bearer and token credentials from headers', () => {
@@ -26,7 +48,7 @@ describe('MCP HTTP auth helper', () => {
 		const response = buildUnauthorizedResponse();
 		assert.equal(response.status, 401);
 		assert.ok(response.headers['WWW-Authenticate'].includes('resource_metadata='));
-		assert.ok(response.headers['WWW-Authenticate'].includes('scope="mcp:read"'));
+		assert.match(response.headers['WWW-Authenticate'], /scope="mcp:email mcp:git mcp:read mcp:write"/);
 	});
 
 	it('uses forwarded public host for auth challenges', () => {
@@ -42,6 +64,7 @@ describe('MCP HTTP auth helper', () => {
 
 		assert.equal(result.ok, false);
 		assert.match(result.response.headers['WWW-Authenticate'], /resource_metadata="https:\/\/mcp\.kumbukum\.com\/\.well-known\/oauth-protected-resource\/mcp"/);
+		assert.match(result.response.headers['WWW-Authenticate'], /scope="mcp:email mcp:git mcp:read mcp:write"/);
 	});
 
 	it('uses app-profile resource metadata for /mcp/app auth challenges', () => {
@@ -57,6 +80,7 @@ describe('MCP HTTP auth helper', () => {
 
 		assert.equal(result.ok, false);
 		assert.match(result.response.headers['WWW-Authenticate'], /resource_metadata="https:\/\/mcp\.kumbukum\.com\/\.well-known\/oauth-protected-resource\/mcp\/app"/);
+		assert.match(result.response.headers['WWW-Authenticate'], /scope="mcp:email mcp:git mcp:read mcp:write"/);
 	});
 
 	it('authenticates valid OAuth bearer tokens and mints bridge auth', () => {
@@ -144,6 +168,26 @@ describe('MCP HTTP auth helper', () => {
 			params: { name: 'create_note' },
 		});
 		assert.deepEqual(required, ['mcp:read', 'mcp:write']);
+	});
+
+	it('maps every non-read-only tool to elevated OAuth scopes', () => {
+		for (const [name, tool] of Object.entries(buildScopeTestTools())) {
+			if (tool.annotations?.readOnlyHint !== false) continue;
+			assert.notDeepEqual(getRequiredScopesForTool(name), ['mcp:read'], `${name} only requires baseline read`);
+		}
+	});
+
+	it('covers every app-profile tool with /mcp/app default scopes', () => {
+		const appScopes = getDefaultScopesForRequestPath('/mcp/app');
+		const appTools = applyToolProfile(buildScopeTestTools(), MCP_TOOL_PROFILES.APP);
+
+		for (const name of Object.keys(appTools)) {
+			assert.equal(hasRequiredScopes(appScopes, getRequiredScopesForTool(name)), true, `${name} is not covered by app default scopes`);
+		}
+	});
+
+	it('uses the same OAuth default scopes for /mcp and /mcp/app', () => {
+		assert.deepEqual(getDefaultScopesForRequestPath('/mcp'), getDefaultScopesForRequestPath('/mcp/app'));
 	});
 
 	it('returns insufficient_scope for write calls using read-only tokens', () => {

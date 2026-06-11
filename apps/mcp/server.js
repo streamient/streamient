@@ -17,7 +17,7 @@ import { graphTools } from './tools/graph.js';
 import { gitSyncTools } from './tools/git_sync.js';
 import { applyToolProfile, MCP_TOOL_PROFILES } from './tools/profile.js';
 import { MCP_SERVER_INSTRUCTIONS } from './instructions.js';
-import { buildProtectedResourceMetadata, getRequestExternalBaseUrl } from '../../modules/oauth.js';
+import { buildProtectedResourceMetadata, getRequestExternalBaseUrl, getRequiredScopesForTool } from '../../modules/oauth.js';
 import { recordException, setupExpressErrorHandler as setupOtelExpressErrorHandler } from './tracing.js';
 import { createLogger } from '../../modules/logger.js';
 
@@ -111,6 +111,15 @@ function logMcpRequest(event) {
   log[level]({ event: 'mcp_request', ...event }, `mcp ${event?.transport || 'http'} ${event?.method || ''}`.trim());
 }
 
+function buildToolMeta(name, tool) {
+  return {
+    ...(tool._meta || {}),
+    securitySchemes: [
+      { type: 'oauth2', scopes: getRequiredScopesForTool(name) },
+    ],
+  };
+}
+
 async function createServer(apiAuth, { projectId, oauthClientId, cacheKey, toolProfile = MCP_TOOL_PROFILES.FULL } = {}) {
   const api = new ApiClient(API_BASE_URL, apiAuth);
   const bootstrapStart = Date.now();
@@ -171,7 +180,13 @@ async function createServer(apiAuth, { projectId, oauthClientId, cacheKey, toolP
         throw err;
       }
     };
-    server.tool(name, tool.description, tool.inputSchema, tool.annotations, wrappedHandler);
+    server.registerTool(name, {
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+      outputSchema: tool.outputSchema,
+      annotations: tool.annotations,
+      _meta: buildToolMeta(name, tool),
+    }, wrappedHandler);
   }
 
   return { server, bootstrapMs, bootstrapCacheHit: cacheHit };

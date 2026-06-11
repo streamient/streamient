@@ -6,7 +6,7 @@ import pug from 'pug';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 
 import { authenticateClientForToken, mapDynamicRegistrationClientResponse, parseAuthorizationRequest, validateAuthorizationRequest } from '../services/oauth_service.js';
-import { getMcpAppEndpointUrl, getMcpEndpointUrl, getOauthIssuer, signMcpAccessToken, verifyMcpAccessToken } from '../modules/oauth.js';
+import { MCP_DEFAULT_SCOPES, getMcpAppEndpointUrl, getMcpEndpointUrl, getOauthIssuer, signMcpAccessToken, verifyMcpAccessToken } from '../modules/oauth.js';
 
 const oauthAuthorizeViewPath = fileURLToPath(new URL('../views/auth/oauth_authorize.pug', import.meta.url));
 const clientAssertionType = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer';
@@ -97,6 +97,34 @@ describe('oauth helpers', () => {
 
 		assert.deepEqual(parsed.scopes, ['mcp:email', 'mcp:read']);
 		assert.equal(parsed.resource, getMcpAppEndpointUrl());
+	});
+
+	it('defaults omitted app-profile scopes to all app tool scopes', () => {
+		const parsed = parseAuthorizationRequest({
+			client_id: 'https://example.com/oauth/client.json',
+			redirect_uri: 'http://127.0.0.1:3000/callback',
+			response_type: 'code',
+			state: 'abc123',
+			code_challenge: 'challenge',
+			code_challenge_method: 'S256',
+			resource: getMcpAppEndpointUrl(),
+		});
+
+		assert.deepEqual(parsed.scopes, [...MCP_DEFAULT_SCOPES].sort());
+	});
+
+	it('defaults omitted full MCP endpoint scopes to the same scopes as the app profile', () => {
+		const parsed = parseAuthorizationRequest({
+			client_id: 'https://example.com/oauth/client.json',
+			redirect_uri: 'http://127.0.0.1:3000/callback',
+			response_type: 'code',
+			state: 'abc123',
+			code_challenge: 'challenge',
+			code_challenge_method: 'S256',
+			resource: getMcpEndpointUrl(),
+		});
+
+		assert.deepEqual(parsed.scopes, [...MCP_DEFAULT_SCOPES].sort());
 	});
 
 	it('rejects authorization requests for unknown resources', () => {

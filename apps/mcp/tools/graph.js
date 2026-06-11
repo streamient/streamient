@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { mcpJson } from './output.js';
+import { MCP_JSON_OUTPUT_SCHEMA, mcpJson } from './output.js';
 
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
 const WRITE_INTERNAL = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
@@ -13,6 +13,7 @@ export function graphTools(api) {
         create_link: {
             description: 'Create a link between two items (notes, memories, URLs, or emails)',
             annotations: WRITE_INTERNAL,
+            outputSchema: MCP_JSON_OUTPUT_SCHEMA,
             inputSchema: {
                 source_id: z.string().describe('Source item ID'),
                 source_type: z.enum(['notes', 'memory', 'urls', 'emails']).describe('Source item type'),
@@ -29,6 +30,7 @@ export function graphTools(api) {
         get_links: {
             description: 'Get all links for a specific item',
             annotations: READ_ONLY,
+            outputSchema: MCP_JSON_OUTPUT_SCHEMA,
             inputSchema: {
                 item_id: z.string().describe('Item ID to get links for'),
             },
@@ -41,6 +43,7 @@ export function graphTools(api) {
         get_graph: {
             description: 'Get the full knowledge graph with nodes and edges. Includes manual links, tag-based connections, and optional semantic similarity edges.',
             annotations: READ_ONLY,
+            outputSchema: MCP_JSON_OUTPUT_SCHEMA,
             inputSchema: {
                 project_id: z.string().optional().describe('Filter by project ID'),
                 include_tags: z.boolean().optional().describe('Include tag-based edges (default: true)'),
@@ -61,6 +64,7 @@ export function graphTools(api) {
         traverse_graph: {
             description: 'Get an item and all its direct connections in the knowledge graph',
             annotations: READ_ONLY,
+            outputSchema: MCP_JSON_OUTPUT_SCHEMA,
             inputSchema: {
                 item_id: z.string().describe('Starting item ID'),
             },

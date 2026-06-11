@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { mcpJson } from './output.js';
+import { MCP_JSON_OUTPUT_SCHEMA, mcpJson } from './output.js';
 
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
 const REACHES_GIT = { readOnlyHint: false, destructiveHint: false, openWorldHint: true };
@@ -13,6 +13,7 @@ export function gitSyncTools(api, defaultProjectId) {
 		list_git_repos: {
 			description: 'List git repos configured for a project',
 			annotations: READ_ONLY,
+			outputSchema: MCP_JSON_OUTPUT_SCHEMA,
 			inputSchema: {
 				project_id: z.string().optional().describe('Project ID (defaults to the default project)'),
 			},
@@ -26,6 +27,7 @@ export function gitSyncTools(api, defaultProjectId) {
 		add_git_repo: {
 			description: 'Add a git repository to sync with a project. Imports markdown files as notes/memories. Defaults to read-only (never writes back to the repo).',
 			annotations: REACHES_GIT,
+			outputSchema: MCP_JSON_OUTPUT_SCHEMA,
 			inputSchema: {
 				repo_url: z.string().describe('HTTPS git repo URL'),
 				name: z.string().optional().describe('Friendly label for this repo'),
@@ -51,6 +53,7 @@ export function gitSyncTools(api, defaultProjectId) {
 		update_git_repo: {
 			description: 'Update settings of a configured git repo',
 			annotations: OVERWRITE_INTERNAL,
+			outputSchema: MCP_JSON_OUTPUT_SCHEMA,
 			inputSchema: {
 				id: z.string().describe('Git repo ID'),
 				name: z.string().optional(),
@@ -101,6 +104,7 @@ export function gitSyncTools(api, defaultProjectId) {
 		git_sync_status: {
 			description: 'Get the current sync status of a git repo',
 			annotations: READ_ONLY,
+			outputSchema: MCP_JSON_OUTPUT_SCHEMA,
 			inputSchema: {
 				id: z.string().describe('Git repo ID'),
 			},

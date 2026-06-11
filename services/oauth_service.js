@@ -10,6 +10,7 @@ import { OAuthRefreshToken } from '../model/oauth_refresh_token.js';
 import {
 	getAllowedMcpResourceUrls,
 	getAuthorizationServerMetadataUrls,
+	getDefaultScopesForResource,
 	getOauthIssuer,
 	getProtectedResourceMetadataUrl,
 	isAllowedMcpResource,
@@ -823,11 +824,14 @@ export function parseAuthorizationRequest(input = {}) {
 	const clientId = String(input.client_id || '').trim();
 	const redirectUri = String(input.redirect_uri || '').trim();
 	const responseType = String(input.response_type || '').trim();
-	const scope = normalizeScopeInput(String(input.scope || 'mcp:read'));
 	const state = typeof input.state === 'string' ? input.state : '';
 	const codeChallenge = String(input.code_challenge || '').trim();
 	const codeChallengeMethod = String(input.code_challenge_method || '').trim();
 	const resource = String(input.resource || '').trim().replace(/\/$/, '');
+	const requestedScope = Array.isArray(input.scope)
+		? input.scope.filter(Boolean)
+		: String(input.scope || '').trim();
+	const scope = normalizeScopeInput(requestedScope || getDefaultScopesForResource(resource));
 
 	if (!clientId) throw new OAuthError('invalid_request', 'client_id is required', 400);
 	if (!redirectUri) throw new OAuthError('invalid_request', 'redirect_uri is required', 400);

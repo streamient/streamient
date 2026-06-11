@@ -1,4 +1,9 @@
+import { z } from 'zod';
 import { sanitizeDeep } from '../../../modules/text_sanitize.js';
+
+export const MCP_JSON_OUTPUT_SCHEMA = {
+	data: z.any().describe('Sanitized tool result data'),
+};
 
 const INTERNAL_OUTPUT_FIELDS = new Set([
 	'__v',
@@ -65,10 +70,13 @@ export function sanitizeMcpOutput(value) {
 }
 
 export function mcpJson(value, { ephemeral = false } = {}) {
+	const structuredContent = {
+		data: sanitizeMcpOutput(value),
+	};
 	const item = {
 		type: 'text',
-		text: JSON.stringify(sanitizeMcpOutput(value), null, 2),
+		text: JSON.stringify(structuredContent.data, null, 2),
 	};
 	if (ephemeral) item.cache_control = { type: 'ephemeral' };
-	return { content: [item] };
+	return { content: [item], structuredContent };
 }
