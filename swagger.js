@@ -2056,6 +2056,34 @@ const swaggerSpec = {
                 },
             },
         },
+        '/reindex/status': {
+            get: {
+                tags: ['Utility'],
+                summary: 'Get search reindex status',
+                description: 'Returns the current account search reindex state. Use as a polling fallback when socket progress events are missed.',
+                responses: {
+                    200: {
+                        description: 'OK',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        status: { type: 'string', enum: ['idle', 'queued', 'progress', 'complete'] },
+                                        total_queued: { type: 'integer' },
+                                        indexed: { type: 'integer' },
+                                        remaining: { type: 'integer' },
+                                        started_at: { type: 'string', format: 'date-time' },
+                                        message: { type: 'string' },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                    403: { description: 'Account admin access required', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+                },
+            },
+        },
 
         // ---- BYO AI Settings ----
         '/settings/byo-ai': {

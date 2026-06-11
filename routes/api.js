@@ -21,7 +21,7 @@ import { listConversations, getConversationMessages, deleteConversation } from '
 import * as trashService from '../services/trash_service.js';
 import { crawlSite } from '../modules/crawler.js';
 import { getProjectCounts } from '../services/project_service.js';
-import { reindexHost, searchCollection, getFilteredCount, removeDocumentsByFilter } from '../modules/typesense.js';
+import { reindexHost, getReindexStatus, searchCollection, getFilteredCount, removeDocumentsByFilter } from '../modules/typesense.js';
 import { emitToTenant } from '../modules/socket.js';
 import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
@@ -1078,6 +1078,16 @@ router.get('/counts', async (req, res) => {
 });
 
 // ---- Typesense Reindex ----
+
+router.get('/reindex/status', requireRestrictedSettingsAccess, async (req, res) => {
+	try {
+		const status = await getReindexStatus(req.host_id, { Note, Memory, Url, Email });
+		res.json(status);
+	} catch (err) {
+		log.error({ err, host_id: req.host_id }, 'Reindex status error');
+		res.status(500).json({ error: 'Failed to load reindex status' });
+	}
+});
 
 router.post('/reindex', requireRestrictedSettingsAccess, async (req, res) => {
 	try {

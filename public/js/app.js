@@ -1047,6 +1047,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 			socket.emit('subscribe', `tenant:${__host_id}`);
 		});
 		socket.on('reindex:status', (data) => {
+			window.__lastReindexStatus = data || {};
 			window.dispatchEvent(new CustomEvent('reindex-status', { detail: data || {} }));
 			if (data?.status === 'complete') {
 				refreshCounts();
