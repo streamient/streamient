@@ -510,19 +510,75 @@ export function toIndexDocs(type, doc) {
 	return doc.id && !doc._id ? chunkTypesenseDoc(type, doc) : toTypesenseDocs(type, doc);
 }
 
-export async function indexDocument(host_id, type, doc) {
-	const ts = getTypesenseClient();
-	const collectionName = `${type}_${host_id}`;
+function sourceIdForIndexDocs(type, doc) {
 	const tsDocs = toIndexDocs(type, doc);
-	const sourceId = tsDocs[0]?.source_id || tsDocs[0]?.id;
-	if (sourceId) {
-		await removeDocument(host_id, type, sourceId);
+	return {
+		sourceId: tsDocs[0]?.source_id || tsDocs[0]?.id,
+		docs: tsDocs,
+	};
+}
+
+function summarizeSourceImportResults(sourceEntries, results) {
+	const expectedCounts = new Map();
+	const successCounts = new Map();
+	const failures = new Map();
+
+	for (const entry of sourceEntries) {
+		expectedCounts.set(entry.sourceId, (expectedCounts.get(entry.sourceId) || 0) + 1);
 	}
-	return withTypesenseResilience(
-		`upsert ${collectionName}`,
-		() => ts.collections(collectionName).documents().import(tsDocs, { action: 'upsert', dirty_values: 'coerce_or_drop' }),
-		{ fallback: null },
-	);
+
+	for (let i = 0; i < sourceEntries.length; i++) {
+		const entry = sourceEntries[i];
+		const result = results?.[i];
+		if (result?.success) {
+			successCounts.set(entry.sourceId, (successCounts.get(entry.sourceId) || 0) + 1);
+		} else {
+			failures.set(entry.sourceId, result?.error || 'missing import result');
+		}
+	}
+
+	return [...expectedCounts.keys()].map((sourceId) => {
+		const success = (successCounts.get(sourceId) || 0) === expectedCounts.get(sourceId) && !failures.has(sourceId);
+		return {
+			id: sourceId,
+			success,
+			error: success ? null : failures.get(sourceId),
+		};
+	});
+}
+
+/**
+ * Bulk-index source documents into a collection.
+ * Raw Mongo/Mongoose docs are transformed and chunked first; the return value
+ * reports success per source document, not per chunk.
+ */
+export async function bulkIndexDocuments(host_id, type, docs, options = {}) {
+	const sourceDocs = (Array.isArray(docs) ? docs : [docs]).filter(Boolean);
+	if (!sourceDocs.length) return [];
+
+	const sourceEntries = [];
+	const sourceIds = [];
+
+	for (const sourceDoc of sourceDocs) {
+		const { sourceId, docs: tsDocs } = sourceIdForIndexDocs(type, sourceDoc);
+		if (!sourceId || !tsDocs.length) continue;
+		sourceIds.push(sourceId);
+		for (const tsDoc of tsDocs) {
+			sourceEntries.push({ sourceId, doc: tsDoc });
+		}
+	}
+
+	if (!sourceEntries.length) return [];
+	if (options.removeExisting !== false) {
+		await removeDocumentsBySourceIds(host_id, type, sourceIds);
+	}
+
+	const results = await importDocuments(host_id, type, sourceEntries.map((entry) => entry.doc), options.action || 'upsert');
+	return summarizeSourceImportResults(sourceEntries, results);
+}
+
+export async function indexDocument(host_id, type, doc) {
+	return bulkIndexDocuments(host_id, type, [doc]).then((results) => results[0] || null);
 }
 
 /**
@@ -549,29 +605,8 @@ export async function importDocuments(host_id, type, docs, action = 'upsert') {
  * Remove a document from a collection.
  */
 export async function removeDocument(host_id, type, docId) {
-	const ts = getTypesenseClient();
-	const collectionName = `${type}_${host_id}`;
-	try {
-		return await withTypesenseResilience(
-			`delete ${collectionName}/${docId}`,
-			async () => {
-				try {
-					return await ts.collections(collectionName).documents().delete({
-						filter_by: `source_id:=${exactFilterValue(docId)} || id:=${exactFilterValue(docId)}`,
-					});
-				} catch (err) {
-					if (err?.httpStatus === 400 && (err.message || '').includes('source_id')) {
-						return ts.collections(collectionName).documents(docId).delete();
-					}
-					throw err;
-				}
-			},
-			{ fallback: null },
-		);
-	} catch (err) {
-		if (err?.httpStatus === 404) return null;
-		throw err;
-	}
+	const results = await bulkRemoveDocuments(host_id, type, [docId]);
+	return results[0] || null;
 }
 
 /**
@@ -616,6 +651,13 @@ export async function removeDocumentsBySourceIds(host_id, type, sourceIds) {
 		},
 		{ fallback: null },
 	);
+}
+
+export async function bulkRemoveDocuments(host_id, type, sourceIds) {
+	const ids = [...new Set((sourceIds || []).map((id) => String(id)).filter(Boolean))];
+	if (!ids.length) return [];
+	await removeDocumentsBySourceIds(host_id, type, ids);
+	return ids.map((id) => ({ id, success: true, error: null }));
 }
 
 /**

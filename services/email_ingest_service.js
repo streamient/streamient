@@ -22,7 +22,7 @@ import * as audit from './audit_service.js';
 import { emailAiCompletion, emailTriageCompletion } from '../modules/llm_client.js';
 import { getAiInstructions, getEmailSettings } from './byo_ai_service.js';
 import { sanitizeEmailHtml } from '../modules/email_html_sanitizer.js';
-import { indexEmailNow, removeEmailFromIndexNow } from './email_index_service.js';
+import { indexEmailNow, indexEmailsNow, removeEmailFromIndexNow, removeEmailsFromIndexNow } from './email_index_service.js';
 import { enqueueDraftSync, enqueueEmailMailboxSync } from './email_action_sync_service.js';
 import { createLogger } from '../modules/logger.js';
 import config from '../config.js';
@@ -38,6 +38,17 @@ const DEFAULT_EMAIL_LABELS = [
 	{ slug: 'no-action', name: 'No action', color: '#6c757d' },
 	{ slug: 'triaged', name: 'Done', color: '#198754' },
 ];
+
+function emailIndexOptions(ctx = {}) {
+	return {
+		indexFn: ctx.indexEmailFn,
+		indexManyFn: ctx.indexEmailsFn || ctx.indexEmailManyFn,
+		removeFn: ctx.removeEmailIndexFn,
+		removeManyFn: ctx.removeEmailIndexManyFn || ctx.removeEmailsIndexFn,
+		updateFn: ctx.updateEmailIndexStateFn,
+		updateManyFn: ctx.updateEmailIndexManyStateFn,
+	};
+}
 const SYSTEM_LABEL_SLUGS = DEFAULT_EMAIL_LABELS.map((label) => label.slug);
 const DEFAULT_EMAIL_LABEL_ORDER = new Map(DEFAULT_EMAIL_LABELS.map((label, index) => [label.slug, index]));
 const HIDDEN_EMAIL_LABEL_SLUGS = new Set(['triaged']);
@@ -612,8 +623,8 @@ export async function applyProjectEmailFilterToInbox(host_id, projectId, ctx = {
 	const moved = result?.modifiedCount ?? result?.nModified ?? ids.length;
 
 	if (!ctx.skipSideEffects) {
+		await removeEmailsFromIndexNow(host_id, ids, emailIndexOptions(ctx));
 		await Promise.all(ids.map(async (id) => {
-			await removeEmailFromIndexNow(host_id, id, { removeFn: ctx.removeEmailIndexFn, updateFn: ctx.updateEmailIndexStateFn });
 			removeLinksForItem(host_id, id).catch((err) => log.error({ err, host_id, email_id: id }, 'Remove links error'));
 			emitToTenant(host_id, 'email:deleted', { _id: id });
 		}));
@@ -901,9 +912,7 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 	if (bccReplyThreadUpdate?.selectedEmail) email = bccReplyThreadUpdate.selectedEmail;
 	if (!ctx.skipSideEffects) {
 		const changedEmails = bccReplyThreadUpdate?.changedEmails || [email];
-		for (const changedEmail of changedEmails) {
-			if (!changedEmail.in_trash) await indexEmailNow(host_id, changedEmail, { indexFn: ctx.indexEmailFn, updateFn: ctx.updateEmailIndexStateFn });
-		}
+		await indexEmailsNow(host_id, changedEmails.filter((changedEmail) => !changedEmail.in_trash), emailIndexOptions(ctx));
 		await emitEmailCreatedOrUpdated(host_id, created ? 'email:created' : 'email:updated', email, bccReplyThreadUpdate ? { thread: bccReplyThreadUpdate.thread } : {});
 		invalidateGraphCache(host_id).catch(() => {});
 		audit.log({ action: 'create', resource: 'email', resource_id: email._id.toString(), user_id: userId, host_id, ...ctx });
@@ -1408,9 +1417,7 @@ export async function updateEmail(host_id, emailId, data, ctx = {}) {
 		const changedEmails = threadUpdate?.changedEmails || [email];
 
 		if (!ctx.skipSideEffects) {
-			for (const changedEmail of changedEmails) {
-				await indexEmailNow(host_id, changedEmail, { indexFn: ctx.indexEmailFn, updateFn: ctx.updateEmailIndexStateFn });
-			}
+			await indexEmailsNow(host_id, changedEmails, emailIndexOptions(ctx));
 			await emitEmailCreatedOrUpdated(host_id, 'email:updated', email, threadUpdate ? { thread: threadUpdate.thread } : {});
 			invalidateGraphCache(host_id).catch(() => {});
 		}
@@ -1461,7 +1468,7 @@ export async function resetEmailTriage(host_id, emailId, ctx = {}) {
 			GraphLink.deleteMany({ host_id, source_id: email._id, source_type: 'emails', label: 'triage-context' }),
 		]);
 		if (!ctx.skipSideEffects) {
-			await indexEmailNow(host_id, email, { indexFn: ctx.indexEmailFn, updateFn: ctx.updateEmailIndexStateFn });
+			await indexEmailNow(host_id, email, emailIndexOptions(ctx));
 			await emitEmailCreatedOrUpdated(host_id, 'email:updated', email);
 			invalidateGraphCache(host_id).catch(() => {});
 		}
@@ -1481,7 +1488,7 @@ export async function deleteEmail(host_id, emailId, ctx = {}) {
 		{ returnDocument: 'after' },
 	);
 	if (email) {
-		await removeEmailFromIndexNow(host_id, emailId, { removeFn: ctx.removeEmailIndexFn, updateFn: ctx.updateEmailIndexStateFn });
+		await removeEmailFromIndexNow(host_id, emailId, emailIndexOptions(ctx));
 		removeLinksForItem(host_id, emailId).catch((err) => log.error({ err, host_id, email_id: emailId }, 'Remove links error'));
 		emitToTenant(host_id, 'email:deleted', { _id: emailId });
 		emitToTenant(host_id, 'counts:refresh');
@@ -1502,9 +1509,9 @@ export async function emptySpam(host_id, ctx = {}) {
 	const result = await Email.deleteMany({ _id: { $in: ids }, host_id, mailbox: 'spam', in_trash: { $ne: true } });
 	const deleted = result?.deletedCount ?? ids.length;
 
+	await removeEmailsFromIndexNow(host_id, ids, emailIndexOptions(ctx));
 	await Promise.all(ids.map(async (id) => {
 		await Promise.all([
-			removeEmailFromIndexNow(host_id, id, { removeFn: ctx.removeEmailIndexFn, updateFn: ctx.updateEmailIndexStateFn }),
 			removeLinksForItem(host_id, id).catch((err) => log.error({ err, host_id, email_id: id }, 'Remove links error')),
 		]);
 		emitToTenant(host_id, 'email:deleted', { _id: id });
@@ -2683,7 +2690,9 @@ export async function startEmailTriageRun(host_id, userId, options = {}) {
 			getThreadFn: options.getThreadFn,
 			getConnectionsFn: options.getConnectionsFn,
 			indexEmailFn: options.indexEmailFn,
+			indexEmailsFn: options.indexEmailsFn || options.indexEmailManyFn,
 			updateEmailIndexStateFn: options.updateEmailIndexStateFn,
+			updateEmailIndexManyStateFn: options.updateEmailIndexManyStateFn,
 		}).catch((err) => {
 			log.error({ err, host_id, user_id: userId, run_id: runId }, 'Email inbox triage background dispatch failed');
 		});
@@ -2707,6 +2716,7 @@ export async function triageInboxEmails(host_id, userId, options = {}) {
 	const instructions = await getAiInstructions(host_id);
 	const results = [];
 	const errors = [];
+	const emailsToIndex = [];
 	const runId = String(options.run_id || '').trim() || crypto.randomUUID();
 	let drafted = 0;
 	let linked = 0;
@@ -2792,7 +2802,7 @@ export async function triageInboxEmails(host_id, userId, options = {}) {
 				if (linkedCount) linked += linkedCount;
 				if ((email.mailbox || 'inbox') !== updated.mailbox) moved += 1;
 				if (!options.skipSideEffects) {
-					await indexEmailNow(host_id, updated, { indexFn: options.indexEmailFn, updateFn: options.updateEmailIndexStateFn });
+					emailsToIndex.push(updated);
 					await emitEmailCreatedOrUpdated(host_id, 'email:updated', updated);
 				}
 				results.push({
@@ -2820,7 +2830,7 @@ export async function triageInboxEmails(host_id, userId, options = {}) {
 				{ returnDocument: 'after' },
 			).catch(() => null);
 			if (failed && !options.skipSideEffects) {
-				await indexEmailNow(host_id, failed, { indexFn: options.indexEmailFn, updateFn: options.updateEmailIndexStateFn });
+				emailsToIndex.push(failed);
 				await emitEmailCreatedOrUpdated(host_id, 'email:updated', failed);
 			}
 			errors.push({ email_id: email._id.toString(), error: err.message });
@@ -2828,6 +2838,9 @@ export async function triageInboxEmails(host_id, userId, options = {}) {
 		await notifyProgress();
 	}
 
+	if (emailsToIndex.length && !options.skipSideEffects) {
+		await indexEmailsNow(host_id, emailsToIndex, emailIndexOptions(options));
+	}
 	if (results.length && !options.skipSideEffects) invalidateGraphCache(host_id).catch(() => {});
 	if (results.length && userId && !options.skipSideEffects) {
 		audit.log({

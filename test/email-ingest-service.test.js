@@ -2148,8 +2148,8 @@ describe('Email ingest service', () => {
 		} finally {
 			Email.findOneAndUpdate = originalFindOneAndUpdate;
 			EmailDraft.updateMany = originalDraftUpdateMany;
-				GraphLink.deleteMany = originalGraphDeleteMany;
-			}
+			GraphLink.deleteMany = originalGraphDeleteMany;
+		}
 		});
 
 		it('permanently empties tenant spam emails and cleans related indexes', async () => {
@@ -2212,11 +2212,51 @@ describe('Email ingest service', () => {
 			} finally {
 				Email.find = originalEmailFind;
 				Email.deleteMany = originalEmailDeleteMany;
-				GraphLink.deleteMany = originalGraphDeleteMany;
-			}
+			GraphLink.deleteMany = originalGraphDeleteMany;
+		}
 		});
 
-			it('normalizes AI triage JSON to supported structured fields', () => {
+		it('uses bulk email index removal when emptying spam', async () => {
+			const originalEmailFind = Email.find;
+			const originalEmailDeleteMany = Email.deleteMany;
+			const originalGraphDeleteMany = GraphLink.deleteMany;
+			const spamDocs = [
+				{ _id: { toString: () => 'spam-1' } },
+				{ _id: { toString: () => 'spam-2' } },
+			];
+			let removeCall = null;
+			let indexStateUpdate = null;
+
+			Email.find = () => ({
+				select: () => ({
+					lean: async () => spamDocs,
+				}),
+			});
+			Email.deleteMany = async () => ({ deletedCount: 2 });
+			GraphLink.deleteMany = async () => ({ deletedCount: 1 });
+
+			try {
+				const result = await emptySpam('host-1', {
+					removeEmailIndexManyFn: async (hostId, type, ids) => {
+						removeCall = { hostId, type, ids };
+						return ids.map((id) => ({ id, success: true }));
+					},
+					updateEmailIndexManyStateFn: async (query, update, options) => {
+						indexStateUpdate = { query, update, options };
+					},
+				});
+
+				assert.deepEqual(result, { deleted: 2 });
+				assert.deepEqual(removeCall, { hostId: 'host-1', type: 'emails', ids: ['spam-1', 'spam-2'] });
+				assert.deepEqual(indexStateUpdate.query, { _id: { $in: ['spam-1', 'spam-2'] }, host_id: 'host-1' });
+			} finally {
+				Email.find = originalEmailFind;
+				Email.deleteMany = originalEmailDeleteMany;
+			GraphLink.deleteMany = originalGraphDeleteMany;
+		}
+		});
+
+		it('normalizes AI triage JSON to supported structured fields', () => {
 			const triage = parseTriageResult('```json\n{"primary_action":"reply required","labels":["Reply Required","unknown"],"summary":"Needs reply","reason":"Customer asked a question","confidence":1.2,"action_points":[{"text":"Reply with setup details","type":"Reply"}],"related_context":[{"item_type":"note","item_id":"note-1","title":"Setup"}],"draft_reply":{"to":["sender@example.com"],"subject":"Re: Question","body_text":"Thanks"}}\n```');
 
 			assert.equal(triage.primary_action, 'reply-required');
@@ -2404,7 +2444,7 @@ describe('Email ingest service', () => {
 				Email.find = originalEmailFind;
 				Email.findOneAndUpdate = originalFindOneAndUpdate;
 				EmailDraft.findOneAndUpdate = originalDraftFindOneAndUpdate;
-				GraphLink.updateOne = originalGraphUpdateOne;
+			GraphLink.updateOne = originalGraphUpdateOne;
 				Tenant.findOne = originalTenantFindOne;
 			}
 		});

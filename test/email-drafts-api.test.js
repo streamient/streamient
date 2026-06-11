@@ -54,9 +54,10 @@ describe('Email draft API', () => {
 	const originalTenantMemberFindOneAndUpdate = TenantMember.findOneAndUpdate;
 		const originalEmailFind = Email.find;
 		const originalEmailFindOne = Email.findOne;
-		const originalEmailDeleteMany = Email.deleteMany;
-		const originalEmailUpdateOne = Email.updateOne;
-		const originalEmailCountDocuments = Email.countDocuments;
+			const originalEmailDeleteMany = Email.deleteMany;
+			const originalEmailUpdateOne = Email.updateOne;
+			const originalEmailUpdateMany = Email.updateMany;
+			const originalEmailCountDocuments = Email.countDocuments;
 		const originalGraphDeleteMany = GraphLink.deleteMany;
 		const originalAuditCreate = AuditLog.create;
 	const originalLabelBulkWrite = EmailLabel.bulkWrite;
@@ -117,10 +118,11 @@ describe('Email draft API', () => {
 		TenantMember.find = originalTenantMemberFind;
 		TenantMember.findOneAndUpdate = originalTenantMemberFindOneAndUpdate;
 			Email.find = originalEmailFind;
-			Email.findOne = originalEmailFindOne;
-			Email.deleteMany = originalEmailDeleteMany;
-			Email.updateOne = originalEmailUpdateOne;
-			Email.countDocuments = originalEmailCountDocuments;
+				Email.findOne = originalEmailFindOne;
+				Email.deleteMany = originalEmailDeleteMany;
+				Email.updateOne = originalEmailUpdateOne;
+				Email.updateMany = originalEmailUpdateMany;
+				Email.countDocuments = originalEmailCountDocuments;
 			GraphLink.deleteMany = originalGraphDeleteMany;
 			AuditLog.create = originalAuditCreate;
 		EmailLabel.bulkWrite = originalLabelBulkWrite;
@@ -259,10 +261,10 @@ describe('Email draft API', () => {
 				deleteQuery = query;
 				return { deletedCount: 2 };
 			};
-			Email.updateOne = async (query, update, options) => {
-				indexUpdates.push({ query, update, options });
-				return { modifiedCount: 0 };
-			};
+				Email.updateMany = async (query, update, options) => {
+					indexUpdates.push({ query, update, options });
+					return { modifiedCount: 0 };
+				};
 			GraphLink.deleteMany = async (query) => {
 				graphQueries.push(query);
 				return { deletedCount: 1 };
@@ -289,9 +291,8 @@ describe('Email draft API', () => {
 				assert.equal(json.message, 'Spam emptied, 2 emails deleted');
 				assert.deepEqual(findQuery, { host_id: 'host-1', mailbox: 'spam', in_trash: { $ne: true } });
 				assert.deepEqual(deleteQuery, { _id: { $in: ['spam-1', 'spam-2'] }, host_id: 'host-1', mailbox: 'spam', in_trash: { $ne: true } });
-				assert.deepEqual(indexUpdates.map((call) => call.query).sort((a, b) => String(a._id).localeCompare(String(b._id))), [
-					{ _id: 'spam-1', host_id: 'host-1' },
-					{ _id: 'spam-2', host_id: 'host-1' },
+				assert.deepEqual(indexUpdates.map((call) => call.query), [
+					{ _id: { $in: ['spam-1', 'spam-2'] }, host_id: 'host-1' },
 				]);
 				assert.deepEqual(graphQueries.sort((a, b) => String(a.$or?.[0]?.source_id || '').localeCompare(String(b.$or?.[0]?.source_id || ''))), [
 					{ host_id: 'host-1', $or: [{ source_id: 'spam-1' }, { target_id: 'spam-1' }] },

@@ -1,5 +1,5 @@
 import { Email } from '../model/email.js';
-import { indexDocument, removeDocument } from '../modules/typesense.js';
+import { bulkIndexDocuments, bulkRemoveDocuments } from '../modules/typesense.js';
 import { createLogger } from '../modules/logger.js';
 
 const log = createLogger('email-index');
@@ -8,39 +8,147 @@ function emailIndexId(emailOrId) {
 	return emailOrId?._id?.toString?.() || emailOrId?.id?.toString?.() || String(emailOrId || '');
 }
 
+function normalizeBulkResults(items, results) {
+	if (Array.isArray(results)) {
+		return results.map((result, index) => ({
+			id: result?.id || emailIndexId(items[index]),
+			success: result?.success !== false,
+			error: result?.error || null,
+		}));
+	}
+	return items.map((item) => ({ id: emailIndexId(item), success: true, error: null }));
+}
+
+async function runIndexEmails(hostId, emails, options) {
+	const indexManyFn = options.indexManyFn || options.bulkIndexFn;
+	if (indexManyFn) {
+		const results = await indexManyFn(hostId, 'emails', emails);
+		return normalizeBulkResults(emails, results);
+	}
+
+	if (options.indexFn) {
+		const results = [];
+		for (const email of emails) {
+			const id = emailIndexId(email);
+			try {
+				await options.indexFn(hostId, 'emails', email);
+				results.push({ id, success: true, error: null });
+			} catch (err) {
+				results.push({ id, success: false, error: err.message });
+			}
+		}
+		return results;
+	}
+
+	return bulkIndexDocuments(hostId, 'emails', emails);
+}
+
+async function runRemoveEmails(hostId, ids, options) {
+	const removeManyFn = options.removeManyFn || options.bulkRemoveFn;
+	if (removeManyFn) {
+		const results = await removeManyFn(hostId, 'emails', ids);
+		return normalizeBulkResults(ids, results);
+	}
+
+	if (options.removeFn) {
+		const results = [];
+		for (const id of ids) {
+			try {
+				await options.removeFn(hostId, 'emails', id);
+				results.push({ id, success: true, error: null });
+			} catch (err) {
+				results.push({ id, success: false, error: err.message });
+			}
+		}
+		return results;
+	}
+
+	return bulkRemoveDocuments(hostId, 'emails', ids);
+}
+
+async function markEmailsIndexed(hostId, ids, options = {}) {
+	const uniqueIds = [...new Set(ids.map((id) => String(id || '')).filter(Boolean))];
+	if (!uniqueIds.length) return;
+
+	const update = { $set: { is_indexed: true } };
+	const updateManyFn = options.updateManyFn || options.bulkUpdateFn;
+	if (updateManyFn) {
+		await updateManyFn({ _id: { $in: uniqueIds }, host_id: hostId }, update, { timestamps: false });
+		return;
+	}
+	if (uniqueIds.length > 1 && !options.updateFn) {
+		await Email.updateMany({ _id: { $in: uniqueIds }, host_id: hostId }, update, { timestamps: false });
+		return;
+	}
+
+	const updateFn = options.updateFn || Email.updateOne.bind(Email);
+	await Promise.all(
+		uniqueIds.map((id) => updateFn({ _id: id, host_id: hostId }, update, { timestamps: false })),
+	);
+}
+
+export async function indexEmailsNow(hostId, emails, options = {}) {
+	const emailList = (Array.isArray(emails) ? emails : [emails]).filter((email) => hostId && emailIndexId(email));
+	if (!emailList.length) return [];
+
+	const activeEmails = emailList.filter((email) => email.in_trash !== true);
+	const trashedIds = emailList.filter((email) => email.in_trash === true).map(emailIndexId);
+	const results = [];
+
+	try {
+		if (activeEmails.length) {
+			results.push(...await runIndexEmails(hostId, activeEmails, options));
+		}
+		if (trashedIds.length) {
+			results.push(...await runRemoveEmails(hostId, trashedIds, options));
+		}
+
+		const successIds = results.filter((result) => result.success).map((result) => result.id);
+		await markEmailsIndexed(hostId, successIds, options);
+
+		const failed = results.filter((result) => !result.success);
+		if (failed.length) {
+			log.error({ host_id: hostId, failed }, 'Email Typesense bulk index failures');
+		}
+		log.debug({ host_id: hostId, indexed: successIds.length, failed: failed.length }, 'Email index updated');
+		return results;
+	} catch (err) {
+		log.error({ err, host_id: hostId, email_count: emailList.length }, 'Email Typesense bulk index error');
+		return emailList.map((email) => ({ id: emailIndexId(email), success: false, error: err.message }));
+	}
+}
+
 export async function indexEmailNow(hostId, email, options = {}) {
 	const id = emailIndexId(email);
 	if (!hostId || !id) return false;
-	const indexFn = options.indexFn || indexDocument;
-	const removeFn = options.removeFn || removeDocument;
-	const updateFn = options.updateFn || Email.updateOne.bind(Email);
+	const results = await indexEmailsNow(hostId, [email], options);
+	return results.some((result) => result.id === id && result.success);
+}
+
+export async function removeEmailsFromIndexNow(hostId, emailOrIds, options = {}) {
+	const ids = (Array.isArray(emailOrIds) ? emailOrIds : [emailOrIds]).map(emailIndexId).filter((id) => hostId && id);
+	if (!ids.length) return [];
+
 	try {
-		if (email.in_trash === true) {
-			await removeFn(hostId, 'emails', id);
-		} else {
-			await indexFn(hostId, 'emails', email);
+		const results = await runRemoveEmails(hostId, ids, options);
+		const successIds = results.filter((result) => result.success).map((result) => result.id);
+		await markEmailsIndexed(hostId, successIds, options);
+
+		const failed = results.filter((result) => !result.success);
+		if (failed.length) {
+			log.error({ host_id: hostId, failed }, 'Email Typesense bulk remove failures');
 		}
-		await updateFn({ _id: id, host_id: hostId }, { $set: { is_indexed: true } }, { timestamps: false });
-		log.debug({ host_id: hostId, email_id: id, action: email.in_trash === true ? 'remove' : 'index' }, 'Email index updated');
-		return true;
+		log.debug({ host_id: hostId, removed: successIds.length, failed: failed.length }, 'Email removed from index');
+		return results;
 	} catch (err) {
-		log.error({ err, host_id: hostId, email_id: id }, 'Email Typesense index error');
-		return false;
+		log.error({ err, host_id: hostId, email_ids: ids }, 'Email Typesense bulk remove error');
+		return ids.map((id) => ({ id, success: false, error: err.message }));
 	}
 }
 
 export async function removeEmailFromIndexNow(hostId, emailOrId, options = {}) {
 	const id = emailIndexId(emailOrId);
 	if (!hostId || !id) return false;
-	const removeFn = options.removeFn || removeDocument;
-	const updateFn = options.updateFn || Email.updateOne.bind(Email);
-	try {
-		await removeFn(hostId, 'emails', id);
-		await updateFn({ _id: id, host_id: hostId }, { $set: { is_indexed: true } }, { timestamps: false });
-		log.debug({ host_id: hostId, email_id: id }, 'Email removed from index');
-		return true;
-	} catch (err) {
-		log.error({ err, host_id: hostId, email_id: id }, 'Email Typesense remove error');
-		return false;
-	}
+	const results = await removeEmailsFromIndexNow(hostId, [id], options);
+	return results.some((result) => result.id === id && result.success);
 }

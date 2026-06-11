@@ -10,7 +10,7 @@ import { MongoQueue, MongoWorker } from '../modules/mongo_queue.js';
 import { decrypt } from '../modules/encryption.js';
 import { emitToTenant } from '../modules/socket.js';
 import { invalidateGraphCache } from './graph_service.js';
-import { indexEmailNow } from './email_index_service.js';
+import { indexEmailsNow } from './email_index_service.js';
 import { createSystemTransport } from './email_service.js';
 import { enqueueReplySentSync } from './email_action_sync_service.js';
 import { buildEmailRealtimePayload, emitEmailCreatedOrUpdated } from './email_ingest_service.js';
@@ -22,6 +22,15 @@ const log = createLogger('email-send');
 const SEND_QUEUE = 'send_outgoing_email';
 const SEND_DELAY_MS = 10000;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function emailIndexOptions(options = {}) {
+	return {
+		indexFn: options.indexEmailFn,
+		indexManyFn: options.indexEmailsFn || options.indexEmailManyFn,
+		updateFn: options.updateEmailIndexStateFn,
+		updateManyFn: options.updateEmailIndexManyStateFn,
+	};
+}
 
 function normalizeAddress(value) {
 	return String(value || '').trim().toLowerCase();
@@ -241,11 +250,6 @@ async function markSourceEmailHandled(outgoing, options = {}) {
 		{ returnDocument: 'after' },
 	);
 	if (!sourceEmail) return null;
-	await indexEmailNow(outgoing.host_id, sourceEmail, {
-		indexFn: options.indexEmailFn,
-		updateFn: options.updateEmailIndexStateFn,
-	});
-	await emitEmailCreatedOrUpdated(outgoing.host_id, 'email:updated', sourceEmail);
 	return sourceEmail;
 }
 
@@ -314,11 +318,9 @@ export async function processOutgoingEmail(outgoingId, options = {}) {
 			{ returnDocument: 'after' },
 		).lean();
 		const sourceEmail = await markSourceEmailHandled(outgoing, options);
-		await indexEmailNow(outgoing.host_id, sentEmail, {
-			indexFn: options.indexEmailFn,
-			updateFn: options.updateEmailIndexStateFn,
-		});
+		await indexEmailsNow(outgoing.host_id, [sourceEmail, sentEmail].filter(Boolean), emailIndexOptions(options));
 		invalidateGraphCache(outgoing.host_id).catch(() => {});
+		if (sourceEmail) await emitEmailCreatedOrUpdated(outgoing.host_id, 'email:updated', sourceEmail);
 		const sentEmailPayload = await buildEmailRealtimePayload(outgoing.host_id, sentEmail);
 		const sourceEmailPayload = sourceEmail ? await buildEmailRealtimePayload(outgoing.host_id, sourceEmail) : null;
 		emitToTenant(outgoing.host_id, 'email:created', sentEmailPayload);

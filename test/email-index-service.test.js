@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { indexEmailNow, removeEmailFromIndexNow } from '../services/email_index_service.js';
+import { indexEmailNow, indexEmailsNow, removeEmailFromIndexNow, removeEmailsFromIndexNow } from '../services/email_index_service.js';
 
 describe('Email index service', () => {
 	it('marks email indexed only after immediate Typesense import succeeds', async () => {
@@ -73,5 +73,70 @@ describe('Email index service', () => {
 		assert.equal(result, true);
 		assert.deepEqual(removed, { hostId: 'host-1', type: 'emails', id: '507f1f77bcf86cd799439011' });
 		assert.deepEqual(stateUpdate.update, { $set: { is_indexed: true } });
+	});
+
+	it('bulk indexes multiple emails with one Typesense call and one state update', async () => {
+		let indexCall = null;
+		let stateUpdate = null;
+		const emails = [
+			{ _id: '507f1f77bcf86cd799439011', host_id: 'host-1', project: '507f1f77bcf86cd799439012', subject: 'A' },
+			{ _id: '507f1f77bcf86cd799439013', host_id: 'host-1', project: '507f1f77bcf86cd799439012', subject: 'B' },
+		];
+
+		const results = await indexEmailsNow('host-1', emails, {
+			indexManyFn: async (hostId, type, docs) => {
+				indexCall = { hostId, type, ids: docs.map((doc) => doc._id) };
+				return docs.map((doc) => ({ id: doc._id, success: true }));
+			},
+			updateManyFn: async (query, update, options) => {
+				stateUpdate = { query, update, options };
+			},
+		});
+
+		assert.deepEqual(results.map((result) => result.success), [true, true]);
+		assert.deepEqual(indexCall, { hostId: 'host-1', type: 'emails', ids: ['507f1f77bcf86cd799439011', '507f1f77bcf86cd799439013'] });
+		assert.deepEqual(stateUpdate.query, { _id: { $in: ['507f1f77bcf86cd799439011', '507f1f77bcf86cd799439013'] }, host_id: 'host-1' });
+		assert.deepEqual(stateUpdate.update, { $set: { is_indexed: true } });
+		assert.deepEqual(stateUpdate.options, { timestamps: false });
+	});
+
+	it('does not mark failed bulk email imports as indexed', async () => {
+		let stateUpdate = null;
+		const emails = [
+			{ _id: '507f1f77bcf86cd799439011', host_id: 'host-1', project: '507f1f77bcf86cd799439012', subject: 'A' },
+			{ _id: '507f1f77bcf86cd799439013', host_id: 'host-1', project: '507f1f77bcf86cd799439012', subject: 'B' },
+		];
+
+		const results = await indexEmailsNow('host-1', emails, {
+			indexManyFn: async () => [
+				{ id: '507f1f77bcf86cd799439011', success: true },
+				{ id: '507f1f77bcf86cd799439013', success: false, error: 'Typesense rejected doc' },
+			],
+			updateManyFn: async (query, update, options) => {
+				stateUpdate = { query, update, options };
+			},
+		});
+
+		assert.deepEqual(results.map((result) => result.success), [true, false]);
+		assert.deepEqual(stateUpdate.query, { _id: { $in: ['507f1f77bcf86cd799439011'] }, host_id: 'host-1' });
+	});
+
+	it('bulk removes multiple email documents with one Typesense call', async () => {
+		let removeCall = null;
+		let stateUpdate = null;
+
+		const results = await removeEmailsFromIndexNow('host-1', ['507f1f77bcf86cd799439011', '507f1f77bcf86cd799439013'], {
+			removeManyFn: async (hostId, type, ids) => {
+				removeCall = { hostId, type, ids };
+				return ids.map((id) => ({ id, success: true }));
+			},
+			updateManyFn: async (query, update, options) => {
+				stateUpdate = { query, update, options };
+			},
+		});
+
+		assert.deepEqual(results.map((result) => result.success), [true, true]);
+		assert.deepEqual(removeCall, { hostId: 'host-1', type: 'emails', ids: ['507f1f77bcf86cd799439011', '507f1f77bcf86cd799439013'] });
+		assert.deepEqual(stateUpdate.query, { _id: { $in: ['507f1f77bcf86cd799439011', '507f1f77bcf86cd799439013'] }, host_id: 'host-1' });
 	});
 });
