@@ -12,9 +12,20 @@ import { memoryTools } from '../../../apps/mcp/tools/memory.js';
 import { urlTools } from '../../../apps/mcp/tools/urls.js';
 import { emailTools } from '../../../apps/mcp/tools/emails.js';
 import { projectTools } from '../../../apps/mcp/tools/projects.js';
+import { graphTools } from '../../../apps/mcp/tools/graph.js';
 import { applyToolProfile, MCP_TOOL_PROFILES } from '../../../apps/mcp/tools/profile.js';
+import { getRequiredScopesForTool } from '../../../modules/oauth.js';
 
 import { FIXTURES } from './fixtures.js';
+
+function buildToolMeta(name, tool) {
+    return {
+        ...(tool._meta || {}),
+        securitySchemes: [
+            { type: 'oauth2', scopes: getRequiredScopesForTool(name) },
+        ],
+    };
+}
 
 /**
  * Create an MCP server instance wired to the given api mock.
@@ -32,10 +43,17 @@ export function buildMcpServer(api, { toolProfile = MCP_TOOL_PROFILES.FULL } = {
         ...urlTools(api, defaultProjectId),
         ...emailTools(api, defaultProjectId),
         ...projectTools(api),
+        ...graphTools(api),
     }, toolProfile);
 
     for (const [name, tool] of Object.entries(allTools)) {
-        server.tool(name, tool.description, tool.inputSchema, tool.annotations, tool.handler);
+        server.registerTool(name, {
+            description: tool.description,
+            inputSchema: tool.inputSchema,
+            outputSchema: tool.outputSchema,
+            annotations: tool.annotations,
+            _meta: buildToolMeta(name, tool),
+        }, tool.handler);
     }
 
     return server;

@@ -28,8 +28,11 @@ export const MCP_SCOPE_DETAILS = {
 
 export const MCP_BASELINE_SCOPES = ['mcp:read'];
 export const MCP_ALL_SCOPES = Object.keys(MCP_SCOPE_DETAILS);
+export const MCP_DEFAULT_SCOPES = ['mcp:read', 'mcp:write', 'mcp:email', 'mcp:git'];
+export const MCP_APP_DEFAULT_SCOPES = MCP_DEFAULT_SCOPES;
 
 export const MCP_TOOL_SCOPES = {
+	chat: ['mcp:read', 'mcp:write'],
 	create_note: ['mcp:read', 'mcp:write'],
 	update_note: ['mcp:read', 'mcp:write'],
 	delete_note: ['mcp:read', 'mcp:write'],
@@ -39,6 +42,9 @@ export const MCP_TOOL_SCOPES = {
 	save_url: ['mcp:read', 'mcp:write'],
 	update_url: ['mcp:read', 'mcp:write'],
 	delete_url: ['mcp:read', 'mcp:write'],
+	create_project: ['mcp:read', 'mcp:write'],
+	update_project: ['mcp:read', 'mcp:write'],
+	delete_project: ['mcp:read', 'mcp:write'],
 	create_link: ['mcp:read', 'mcp:write'],
 	delete_link: ['mcp:read', 'mcp:write'],
 	ingest_email: ['mcp:read', 'mcp:email'],
@@ -49,6 +55,10 @@ export const MCP_TOOL_SCOPES = {
 	delete_email: ['mcp:read', 'mcp:email'],
 	list_git_repos: ['mcp:read', 'mcp:git'],
 	get_git_repo: ['mcp:read', 'mcp:git'],
+	add_git_repo: ['mcp:read', 'mcp:git'],
+	remove_git_repo: ['mcp:read', 'mcp:git'],
+	trigger_git_sync: ['mcp:read', 'mcp:git'],
+	git_sync_status: ['mcp:read', 'mcp:git'],
 	create_git_repo: ['mcp:read', 'mcp:git'],
 	update_git_repo: ['mcp:read', 'mcp:git'],
 	delete_git_repo: ['mcp:read', 'mcp:git'],
@@ -158,6 +168,14 @@ export function scopeString(scope) {
 
 export function getRequiredScopesForTool(toolName) {
 	return MCP_TOOL_SCOPES[toolName] || MCP_BASELINE_SCOPES;
+}
+
+export function getDefaultScopesForResource(resource) {
+	return MCP_DEFAULT_SCOPES;
+}
+
+export function getDefaultScopesForRequestPath(path) {
+	return MCP_DEFAULT_SCOPES;
 }
 
 export function hasRequiredScopes(grantedScopes, requiredScopes) {

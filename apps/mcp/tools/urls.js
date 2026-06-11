@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { mcpJson } from './output.js';
+import { MCP_JSON_OUTPUT_SCHEMA, mcpJson } from './output.js';
 import { slimSearchResults } from './search-results.js';
 
 const MCP_URL_SEARCH_EXCLUDE_FIELDS = 'embedding';
@@ -16,6 +16,7 @@ export function urlTools(api, defaultProjectId) {
     save_url: {
       description: 'Save a URL — extracts content automatically. Set crawl_enabled to true for full-site crawling.',
       annotations: FETCH_EXTERNAL,
+      outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
         url: z.string().describe('The URL to save'),
         title: z.string().optional().describe('Optional custom title'),
@@ -33,6 +34,7 @@ export function urlTools(api, defaultProjectId) {
     list_urls: {
       description: 'List saved URLs, optionally filtered by project',
       annotations: READ_ONLY,
+      outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
         project_id: z.string().optional().describe('Project ID filter'),
         page: z.number().optional(),
@@ -51,6 +53,7 @@ export function urlTools(api, defaultProjectId) {
     search_urls: {
       description: 'Search saved URLs using semantic/text search',
       annotations: READ_ONLY,
+      outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
         query: z.string().describe('Search query'),
         per_page: z.number().optional().describe('Results to return (recommended 3 for first retrieval)'),
@@ -70,6 +73,7 @@ export function urlTools(api, defaultProjectId) {
     read_url: {
       description: 'Read a saved URL by ID',
       annotations: READ_ONLY,
+      outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
         id: z.string().describe('URL ID'),
       },
@@ -82,6 +86,7 @@ export function urlTools(api, defaultProjectId) {
     update_url: {
       description: 'Update a saved URL',
       annotations: OVERWRITE_INTERNAL,
+      outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
         id: z.string().describe('URL ID'),
         title: z.string().optional(),

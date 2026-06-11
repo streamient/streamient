@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { mcpJson } from './output.js';
+import { MCP_JSON_OUTPUT_SCHEMA, mcpJson } from './output.js';
 import { slimSearchResults } from './search-results.js';
 
 const MCP_KNOWLEDGE_SEARCH_EXCLUDE_FIELDS = {
@@ -23,6 +23,7 @@ export function memoryTools(api, defaultProjectId) {
     store_memory: {
       description: 'Store a new memory — use this to persist important conversation context, decisions, or learnings',
       annotations: WRITE_INTERNAL,
+      outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
         title: z.string().describe('Memory title/subject'),
         content: z.string().describe('Memory content'),
@@ -40,6 +41,7 @@ export function memoryTools(api, defaultProjectId) {
     recall_memory: {
       description: 'Search memories semantically for prior decisions, debugging history, user preferences, task outcomes, or agent-scoped learnings. Use per_page: 3 for the first focused retrieval. Omit project_id to search across all projects.',
       annotations: READ_ONLY,
+      outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
         query: z.string().describe('What to search for'),
         project_id: z.string().optional().describe('Filter results to a specific project (optional; omit to search all projects)'),
@@ -61,6 +63,7 @@ export function memoryTools(api, defaultProjectId) {
     search_memory: {
       description: 'Alias for recall_memory — search memories semantically for prior decisions, debugging history, user preferences, task outcomes, or agent-scoped learnings. Use per_page: 3 for the first focused retrieval. Omit project_id to search across all projects.',
       annotations: READ_ONLY,
+      outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
         query: z.string().describe('What to search for'),
         project_id: z.string().optional().describe('Filter results to a specific project (optional; omit to search all projects)'),
@@ -82,6 +85,7 @@ export function memoryTools(api, defaultProjectId) {
     read_memory: {
       description: 'Read a specific memory by ID',
       annotations: READ_ONLY,
+      outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
         id: z.string().describe('Memory ID'),
       },
@@ -94,6 +98,7 @@ export function memoryTools(api, defaultProjectId) {
     update_memory: {
       description: 'Update an existing memory',
       annotations: OVERWRITE_INTERNAL,
+      outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
         id: z.string().describe('Memory ID'),
         title: z.string().optional(),
@@ -122,6 +127,7 @@ export function memoryTools(api, defaultProjectId) {
     suggest_memory_tags: {
       description: 'Get suggested tags based on existing memory tags',
       annotations: READ_ONLY,
+      outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {},
       handler: async () => {
         const { tags } = await api.get('/memories/tags/suggest');
@@ -132,6 +138,7 @@ export function memoryTools(api, defaultProjectId) {
     search_knowledge: {
       description: 'Search across ALL data types (notes, memories, URLs, crawled pages) — default first retrieval tool. Use a specific query with per_page: 3, then broaden or raise per_page only if results are weak.',
       annotations: READ_ONLY,
+      outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
         query: z.string().describe('Search query'),
         project_id: z.string().optional().describe('Filter results to a specific project (optional)'),
@@ -153,6 +160,7 @@ export function memoryTools(api, defaultProjectId) {
     chat: {
       description: 'AI chat with intent classification — search, create items, or get analysis. Maintains conversation context across calls.',
       annotations: BROAD_CHAT_ACTION,
+      outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
         query: z.string().describe('User message, search query, or command (e.g. "create a note about X", "remember that Y", "find my notes about Z")'),
         conversation_id: z.string().optional().describe('Continue an existing conversation (optional)'),
