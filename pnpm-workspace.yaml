@@ -12,7 +12,17 @@ overrides:
   "@tiptap/core": ^3.22.3
   "@tiptap/pm": ^3.22.3
   "@tiptap/extension-code-block": ^3.22.3
+  react: 18.3.1
+  react-dom: 18.3.1
+  # vue@3.5.36 was published with workspace:* internal refs
+  "vue@3.5.36>@vue/shared": 3.5.36
+  "vue@3.5.36>@vue/compiler-dom": 3.5.36
+  "vue@3.5.36>@vue/runtime-dom": 3.5.36
+  "vue@3.5.36>@vue/compiler-sfc": 3.5.36
+  "vue@3.5.36>@vue/server-renderer": 3.5.36
+  "@vue/server-renderer@3.5.36>@vue/shared": 3.5.36
+  "@vue/server-renderer@3.5.36>@vue/compiler-ssr": 3.5.36
+  "@vue/server-renderer@3.5.36>vue": 3.5.36
 packages:
   - "apps/*"
   - "docs"
-

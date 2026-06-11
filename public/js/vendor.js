@@ -18486,7 +18486,7 @@ var E = (e2, t2, s2) => {
 // src/vendor.js
 var FilePond = __toESM(require_filepond(), 1);
 
-// node_modules/.pnpm/@yaireo+tagify@4.37.1_prop-types@15.8.1_react-dom@19.2.6_react@19.2.6__react@19.2.6/node_modules/@yaireo/tagify/dist/tagify.esm.js
+// node_modules/.pnpm/@yaireo+tagify@4.37.1_prop-types@15.8.1_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/@yaireo/tagify/dist/tagify.esm.js
 var t = "&#8203;";
 function e(t2, e2) {
   (null == e2 || e2 > t2.length) && (e2 = t2.length);
