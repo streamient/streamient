@@ -81,6 +81,7 @@ describe('MCP Tools — URLs', () => {
     it('search_urls — passes optional per_page and requests searchable body fields for excerpts', async () => {
         await tools.search_urls.handler({ query: 'example', per_page: 3 });
         assert.equal(api.lastCall.body.options.perPage, 3);
+        assert.equal(api.lastCall.body.options.include_fields, 'id,source_id,title,url,description,text_content,project_id,created_at,updated_at');
         assert.equal(api.lastCall.body.options.exclude_fields, 'embedding');
     });
 

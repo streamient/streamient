@@ -75,7 +75,7 @@ export function mcpJson(value, { ephemeral = false } = {}) {
 	};
 	const item = {
 		type: 'text',
-		text: JSON.stringify(structuredContent.data, null, 2),
+		text: JSON.stringify(structuredContent.data),
 	};
 	if (ephemeral) item.cache_control = { type: 'ephemeral' };
 	return { content: [item], structuredContent };

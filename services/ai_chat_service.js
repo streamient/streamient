@@ -578,12 +578,13 @@ async function handleConversation({ hostId, userId, query, conversationId, proje
  * @param {object} options
  * @param {string} options.projectId - Filter by project (optional)
  * @param {number} options.perPage - Results per collection (default 5)
+ * @param {string|object} options.include_fields - Typesense fields to include in result documents (optional)
  * @param {string|object} options.exclude_fields - Typesense fields to exclude from result documents (optional)
  * @returns {object} Raw Typesense results keyed by type
  */
 export async function searchKnowledge(hostId, query, options = {}) {
-	const { projectId, perPage = 5, includeEmails = true, exclude_fields } = options;
-	return searchAll(hostId, query, { projectId, perPage, includeEmails, exclude_fields });
+	const { projectId, perPage = 5, includeEmails = true, include_fields, exclude_fields } = options;
+	return searchAll(hostId, query, { projectId, perPage, includeEmails, include_fields, exclude_fields });
 }
 
 // ────────────────────────────────────────────────────────────────────

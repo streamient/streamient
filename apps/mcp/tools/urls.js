@@ -3,6 +3,7 @@ import { MCP_JSON_OUTPUT_SCHEMA, mcpJson } from './output.js';
 import { slimSearchResults } from './search-results.js';
 
 const MCP_URL_SEARCH_EXCLUDE_FIELDS = 'embedding';
+const MCP_URL_SEARCH_INCLUDE_FIELDS = 'id,source_id,title,url,description,text_content,project_id,created_at,updated_at';
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
 const WRITE_INTERNAL = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
 const OVERWRITE_INTERNAL = { readOnlyHint: false, destructiveHint: true, openWorldHint: false };
@@ -63,6 +64,7 @@ export function urlTools(api, defaultProjectId) {
           query: args.query,
           options: {
             perPage: args.per_page,
+            include_fields: MCP_URL_SEARCH_INCLUDE_FIELDS,
             exclude_fields: MCP_URL_SEARCH_EXCLUDE_FIELDS,
           },
         });

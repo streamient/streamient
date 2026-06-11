@@ -6,6 +6,7 @@ import { emailTools } from '../apps/mcp/tools/emails.js';
 import { projectTools } from '../apps/mcp/tools/projects.js';
 import { graphTools } from '../apps/mcp/tools/graph.js';
 import { gitSyncTools } from '../apps/mcp/tools/git_sync.js';
+import { applyPublicAppToolProfile, MCP_TOOL_PROFILES } from '../apps/mcp/tools/profile.js';
 import { MCP_SERVER_INSTRUCTIONS } from '../apps/mcp/instructions.js';
 
 const DEFAULT_PROJECT_ID = 'benchmark-project';
@@ -40,9 +41,9 @@ function summarizeInputSchema(inputSchema = {}) {
     return summary;
 }
 
-function buildTools() {
+function buildTools(profile = MCP_TOOL_PROFILES.FULL) {
     const api = {};
-    return {
+    const tools = {
         ...noteTools(api, DEFAULT_PROJECT_ID),
         ...memoryTools(api, DEFAULT_PROJECT_ID),
         ...urlTools(api, DEFAULT_PROJECT_ID),
@@ -51,10 +52,12 @@ function buildTools() {
         ...graphTools(api),
         ...gitSyncTools(api, DEFAULT_PROJECT_ID),
     };
+    if (profile === MCP_TOOL_PROFILES.APP) return applyPublicAppToolProfile(tools);
+    return tools;
 }
 
-function buildMetadata() {
-    const tools = buildTools();
+function buildMetadata(profile) {
+    const tools = buildTools(profile);
     return Object.entries(tools)
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([name, tool]) => ({
@@ -70,11 +73,14 @@ function sumToolChars(tools) {
 
 const labelArgIndex = process.argv.indexOf('--label');
 const label = labelArgIndex >= 0 ? process.argv[labelArgIndex + 1] : 'current';
-const tools = buildMetadata();
+const profileArgIndex = process.argv.indexOf('--profile');
+const profile = profileArgIndex >= 0 ? process.argv[profileArgIndex + 1] : MCP_TOOL_PROFILES.FULL;
+const tools = buildMetadata(profile);
 const toolChars = sumToolChars(tools);
 const instructionsChars = MCP_SERVER_INSTRUCTIONS.length;
 const result = {
     label,
+    profile,
     generated_at: new Date().toISOString(),
     token_estimator: 'ceil(chars / 4)',
     instructions: {

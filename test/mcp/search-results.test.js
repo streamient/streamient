@@ -2,6 +2,19 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { slimSearchResults } from '../../apps/mcp/tools/search-results.js';
+import { mcpJson } from '../../apps/mcp/tools/output.js';
+
+function assertNoRawBodyFields(value) {
+	if (Array.isArray(value)) {
+		for (const item of value) assertNoRawBodyFields(item);
+		return;
+	}
+	if (!value || typeof value !== 'object') return;
+	for (const field of ['content', 'text_content', 'attachment_text_content']) {
+		assert.equal(value[field], undefined, `raw body field leaked: ${field}`);
+	}
+	for (const nested of Object.values(value)) assertNoRawBodyFields(nested);
+}
 
 describe('MCP Search Results', () => {
 	it('slims a single Typesense collection response', () => {
@@ -77,13 +90,50 @@ describe('MCP Search Results', () => {
 				id: 'memory-1',
 				title: 'Memory 1',
 				content: `${'a'.repeat(1300)} tail`,
+				text_content: 'raw text must be removed',
+				attachment_text_content: 'raw attachment must be removed',
 			},
 		], { type: 'memory' });
 
 		assert.equal(result[0].content, undefined);
+		assert.equal(result[0].text_content, undefined);
+		assert.equal(result[0].attachment_text_content, undefined);
 		assert.equal(result[0].excerpt.length, 1203);
 		assert.equal(result[0].excerpt.endsWith('...'), true);
 		assert.equal(result[0].read_tool, 'read_memory');
+	});
+
+	it('keeps excerpts but strips raw body fields from nested search output', () => {
+		const result = slimSearchResults({
+			notes: {
+				found: 1,
+				hits: [{ document: { id: 'note-1', title: 'Note 1', content: 'raw html', text_content: 'Note excerpt' } }],
+			},
+			emails: {
+				found: 1,
+				hits: [{
+					document: {
+						id: 'email-1',
+						subject: 'Email 1',
+						text_content: 'Email excerpt',
+						attachment_text_content: 'Attachment excerpt',
+					},
+				}],
+			},
+		});
+
+		assert.equal(result.notes.hits[0].excerpt, 'raw html');
+		assert.equal(result.emails.hits[0].excerpt, 'Email excerpt');
+		assertNoRawBodyFields(result);
+	});
+
+	it('returns compact JSON text while preserving structuredContent', () => {
+		const result = mcpJson({ title: 'Compact', nested: { value: true } });
+
+		assert.deepEqual(result.structuredContent, {
+			data: { title: 'Compact', nested: { value: true } },
+		});
+		assert.equal(result.content[0].text, '{"title":"Compact","nested":{"value":true}}');
 	});
 
 	it('slims grouped Typesense responses to source documents', () => {

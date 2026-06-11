@@ -5,6 +5,20 @@ export const MCP_TOOL_PROFILES = {
 
 export const PUBLIC_APP_EXCLUDED_TOOLS = new Set([
 	'chat',
+	'create_project',
+	'delete_email',
+	'delete_link',
+	'delete_memory',
+	'delete_note',
+	'delete_project',
+	'delete_url',
+	'remove_git_repo',
+	'trigger_git_sync',
+	'update_git_repo',
+	'update_memory',
+	'update_note',
+	'update_project',
+	'update_url',
 ]);
 
 export function applyPublicAppToolProfile(tools) {

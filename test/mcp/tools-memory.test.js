@@ -70,8 +70,9 @@ describe('MCP Tools — Memory', () => {
         assert.equal(api.lastCall.body.options.perPage, 3);
     });
 
-    it('recall_memory — requests searchable body fields for excerpts', async () => {
+    it('recall_memory — requests lean searchable body fields for excerpts', async () => {
         await tools.recall_memory.handler({ query: 'important' });
+        assert.equal(api.lastCall.body.options.include_fields, 'id,source_id,title,content,source,tags,project_id,created_at,updated_at');
         assert.equal(api.lastCall.body.options.exclude_fields, 'embedding');
     });
 
@@ -87,8 +88,9 @@ describe('MCP Tools — Memory', () => {
         assert.equal(api.lastCall.body.options.perPage, 3);
     });
 
-    it('search_memory — requests searchable body fields for excerpts', async () => {
+    it('search_memory — requests lean searchable body fields for excerpts', async () => {
         await tools.search_memory.handler({ query: 'facts' });
+        assert.equal(api.lastCall.body.options.include_fields, 'id,source_id,title,content,source,tags,project_id,created_at,updated_at');
         assert.equal(api.lastCall.body.options.exclude_fields, 'embedding');
     });
 
@@ -152,8 +154,15 @@ describe('MCP Tools — Memory', () => {
         assert.equal(api.lastCall.body.per_page, 3);
     });
 
-    it('search_knowledge — requests searchable body fields for excerpts', async () => {
+    it('search_knowledge — requests lean searchable body fields for excerpts', async () => {
         await tools.search_knowledge.handler({ query: 'test' });
+        assert.deepEqual(api.lastCall.body.options.include_fields, {
+            notes: 'id,source_id,title,text_content,tags,project_id,created_at,updated_at',
+            memory: 'id,source_id,title,content,source,tags,project_id,created_at,updated_at',
+            urls: 'id,source_id,title,url,description,text_content,project_id,created_at,updated_at',
+            emails: 'id,source_id,subject,from,to,cc,bcc,from_emails,to_emails,cc_emails,bcc_emails,participant_emails,mailbox,labels,triaged,triage_summary,triage_primary_action,text_content,attachment_text_content,project_id,created_at,updated_at',
+            pages: 'id,source_id,title,url,parent_url_id,text_content,project_id,crawled_at',
+        });
         assert.deepEqual(api.lastCall.body.options.exclude_fields, {
             notes: 'embedding',
             memory: 'embedding',

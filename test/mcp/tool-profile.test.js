@@ -13,7 +13,7 @@ import { createMockApi } from './helpers/mock-api.js';
 import { FIXTURES } from './helpers/fixtures.js';
 
 describe('MCP public app tool profile', () => {
-	it('excludes broad chat while keeping email tools', () => {
+	it('excludes broad, destructive, and admin tools while keeping user workflow tools', () => {
 		const api = createMockApi();
 		const defaultProjectId = FIXTURES.project._id;
 		const tools = {
@@ -30,10 +30,43 @@ describe('MCP public app tool profile', () => {
 		const names = Object.keys(profiledTools);
 
 		assert.equal(Object.keys(tools).length, 44);
-		assert.equal(names.length, 43);
-		assert.equal(profiledTools.chat, undefined);
-		for (const name of ['ingest_email', 'read_email', 'list_emails', 'search_emails', 'get_email_thread', 'delete_email']) {
-			assert.ok(names.includes(name), `missing email tool: ${name}`);
+		assert.equal(names.length, 29);
+		for (const name of [
+			'chat',
+			'create_project',
+			'delete_email',
+			'delete_link',
+			'delete_memory',
+			'delete_note',
+			'delete_project',
+			'delete_url',
+			'remove_git_repo',
+			'trigger_git_sync',
+			'update_git_repo',
+			'update_memory',
+			'update_note',
+			'update_project',
+			'update_url',
+		]) {
+			assert.equal(profiledTools[name], undefined, `unexpected app tool: ${name}`);
+		}
+		for (const name of [
+			'search_knowledge',
+			'search_notes',
+			'recall_memory',
+			'read_note',
+			'read_memory',
+			'read_url',
+			'read_email',
+			'store_memory',
+			'create_note',
+			'save_url',
+			'create_link',
+			'suggest_memory_tags',
+			'add_git_repo',
+			'git_sync_status',
+		]) {
+			assert.ok(names.includes(name), `missing app tool: ${name}`);
 		}
 	});
 });

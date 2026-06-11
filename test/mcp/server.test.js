@@ -46,10 +46,46 @@ describe('MCP Server — Streamable HTTP transport', () => {
         it('should list the app-profile tools at /mcp/app', async () => {
             const { tools } = await appClient.listTools();
             const names = tools.map((t) => t.name);
-            assert.equal(tools.length, 43);
-            assert.equal(names.includes('chat'), false);
-            for (const name of ['ingest_email', 'read_email', 'list_emails', 'search_emails', 'get_email_thread', 'delete_email']) {
-                assert.ok(names.includes(name), `missing email tool: ${name}`);
+            assert.equal(tools.length, 29);
+            for (const name of [
+                'chat',
+                'create_project',
+                'delete_email',
+                'delete_link',
+                'delete_memory',
+                'delete_note',
+                'delete_project',
+                'delete_url',
+                'remove_git_repo',
+                'trigger_git_sync',
+                'update_git_repo',
+                'update_memory',
+                'update_note',
+                'update_project',
+                'update_url',
+            ]) {
+                assert.equal(names.includes(name), false, `unexpected app tool: ${name}`);
+            }
+            for (const name of [
+                'search_knowledge',
+                'search_notes',
+                'recall_memory',
+                'read_note',
+                'read_memory',
+                'read_url',
+                'read_email',
+                'store_memory',
+                'create_note',
+                'save_url',
+                'create_link',
+                'suggest_memory_tags',
+                'ingest_email',
+                'search_emails',
+                'get_email_thread',
+                'add_git_repo',
+                'git_sync_status',
+            ]) {
+                assert.ok(names.includes(name), `missing app tool: ${name}`);
             }
         });
 

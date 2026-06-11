@@ -42,6 +42,13 @@ function resolveExcludeFields(excludeFields, type) {
 	return excludeFields || _ts_exlude_default;
 }
 
+function resolveIncludeFields(includeFields, type) {
+	if (includeFields && typeof includeFields === 'object' && !Array.isArray(includeFields)) {
+		return includeFields[type] || includeFields.default || '';
+	}
+	return includeFields || '';
+}
+
 export function getConversationModelId(hostId, userId, llmScope = 'global') {
 	const base = `convo-${hostId}-${userId}`;
 	return normalizeLlmScope(llmScope) === 'email' ? `${base}-email` : base;
@@ -621,17 +628,19 @@ export async function searchCollection(host_id, type, query, options = {}) {
 	const requested = options.perPage || 10;
 	// Over-fetch so source_id dedup (chunk collapse) can still fill the page.
 	const fetchSize = isChunked ? Math.min(requested * 3, 250) : requested;
+	const includeFields = resolveIncludeFields(options.include_fields, type);
 	const params = {
 		q: query,
 		query_by: options.queryBy || 'title',
 		prefix: false,
 		per_page: fetchSize,
 		page: options.page || 1,
-		exclude_fields: resolveExcludeFields(options.exclude_fields, type),
 		...options.extra,
 	};
-	if (options.include_fields) {
-		params.include_fields = isChunked ? includeSourceIdField(options.include_fields) : options.include_fields;
+	if (includeFields) {
+		params.include_fields = isChunked ? includeSourceIdField(includeFields) : includeFields;
+	} else {
+		params.exclude_fields = resolveExcludeFields(options.exclude_fields, type);
 	}
 	if (options.filter_by) params.filter_by = options.filter_by;
 	return withTypesenseResilience(
@@ -726,17 +735,23 @@ export async function searchAll(host_id, query, options = {}) {
 	// Over-fetch so source_id dedup (chunk collapse) can still fill the page.
 	const fetchSize = Math.min(requested * 3, 250);
 
-	// Embedding-only search makes every per-collection param identical, so only
-	// the collection name varies — the rest goes in commonSearchParams.
 	const searchRequests = {
-		searches: types.map((type) => ({ collection: `${type}_${host_id}` })),
+		searches: types.map((type) => {
+			const includeFields = resolveIncludeFields(options.include_fields, type);
+			const search = { collection: `${type}_${host_id}` };
+			if (includeFields) {
+				search.include_fields = _chunk_fields[type] ? includeSourceIdField(includeFields) : includeFields;
+			} else {
+				search.exclude_fields = resolveExcludeFields(options.exclude_fields, type);
+			}
+			return search;
+		}),
 	};
 	const commonSearchParams = {
 		q: query,
 		query_by: 'embedding',
 		prefix: false,
 		per_page: fetchSize,
-		exclude_fields: _ts_exlude_default,
 	};
 	if (options.projectId) commonSearchParams.filter_by = `project_id:=${options.projectId}`;
 
