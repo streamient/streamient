@@ -12,7 +12,7 @@ describe('record infinite scroll wiring', () => {
 		const helperIndex = layout.indexOf('/js/infinite_scroll.js');
 		assert.notEqual(helperIndex, -1);
 
-		['notes', 'memories', 'urls', 'emails', 'ecc'].forEach((name) => {
+		['notes', 'memories', 'urls', 'emails', 'ecc', 'trash'].forEach((name) => {
 			const sectionIndex = layout.indexOf('/js/' + name + '.js');
 			assert.notEqual(sectionIndex, -1);
 			assert.ok(helperIndex < sectionIndex);
@@ -81,6 +81,22 @@ describe('record infinite scroll wiring', () => {
 		assert.ok(ecc.includes("activeMailbox !== 'drafts'"));
 		assert.ok(ecc.includes('!detailActive'));
 		assert.ok(!ecc.includes('new IntersectionObserver'));
+	});
+
+	it('uses shared infinite scroll for global trash', () => {
+		const trash = read('public/js/trash.js');
+
+		assert.ok(trash.includes('var PAGE_SIZE = 50;'));
+		assert.ok(trash.includes("'page=' + page"));
+		assert.ok(trash.includes("'limit=' + PAGE_SIZE"));
+		assert.ok(trash.includes('window.kkInfiniteScroll?.create'));
+		assert.ok(trash.includes("sentinelClass: 'trash-scroll-sentinel'"));
+		assert.ok(trash.includes('onLoadMore: loadMoreTrash'));
+		assert.ok(trash.includes('renderTrashItems(items, true)'));
+		assert.ok(trash.includes('hasMore = pageNum * PAGE_SIZE < total'));
+		assert.ok(trash.includes('infiniteScroll?.kick()'));
+		assert.ok(trash.includes('infiniteScroll.destroy()'));
+		assert.ok(!trash.includes('new IntersectionObserver'));
 	});
 
 	it('gives scroll sentinels nonzero dimensions', () => {
