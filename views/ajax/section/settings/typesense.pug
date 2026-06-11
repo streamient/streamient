@@ -11,47 +11,13 @@
 					span.ms-2 Reindex Search Data
 				p.text-muted Rebuild the search indexes. Use this if search results seem incomplete or out of sync.
 				p.text-warning.mb-4 This will temporarily disable search while the process is running.
-				button.btn.btn-outline-secondary#reindex-btn Reindex All My Data
-				#reindex-result.d-none.mt-4
+				button.btn.btn-outline-secondary#reindex-btn(type="button")
+					span.spinner-border.spinner-border-sm.me-2.d-none#reindex-btn-spinner(role="status" aria-hidden="true")
+					span#reindex-btn-text Reindex All My Data
+				#reindex-result.d-none.mt-4(role="status" aria-live="polite")
+					.alert.alert-info.mb-0#reindex-alert
+						span.spinner-border.spinner-border-sm.me-2.d-none#reindex-status-spinner(role="status" aria-hidden="true")
+						span#reindex-status-message
 
 
-script.
-	(function() {
-		var reindexBtn = document.getElementById('reindex-btn');
-		var resultEl = document.getElementById('reindex-result');
-
-		function renderReindexStatus(data) {
-			if (!resultEl || !data) return;
-			var status = data.status || 'queued';
-			var alertClass = status === 'complete' ? 'alert-success' : 'alert-info';
-			var message = data.message || 'Reindexing status updated.';
-			resultEl.innerHTML = '<div class="alert ' + alertClass + '">' + message + '</div>';
-			resultEl.classList.remove('d-none');
-		}
-
-		window.addEventListener('reindex-status', function(event) {
-			renderReindexStatus(event.detail || {});
-		});
-
-		reindexBtn && reindexBtn.addEventListener('click', async function() {
-			var confirmed = await confirmAction('Reindex All Data', 'This will rebuild all search indexes.');
-			if (!confirmed) return;
-
-			reindexBtn.disabled = true;
-			reindexBtn.textContent = 'Reindexing...';
-
-			try {
-				var data = await api('POST', '/reindex');
-				renderReindexStatus({
-					status: data.total_queued > 0 ? 'queued' : 'complete',
-					message: data.message,
-				});
-			} catch (err) {
-				resultEl.innerHTML = '<div class="alert alert-danger">' + err.message + '</div>';
-				resultEl.classList.remove('d-none');
-			} finally {
-				reindexBtn.disabled = false;
-				reindexBtn.textContent = 'Reindex All Data';
-			}
-		});
-	})();
+script(src=`/static/v-${v}/js/settings_reindex.js`)

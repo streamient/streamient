@@ -1049,15 +1049,7 @@ export async function getFilteredCount(host_id, type, projectId) {
  */
 export async function reindexHost(host_id, models) {
 	const ts = getTypesenseClient();
-	const { Note, Memory, Url, Email } = models;
-
-	const typeModelMap = [
-		{ type: 'notes', model: Note },
-		{ type: 'memory', model: Memory },
-		{ type: 'urls', model: Url },
-		{ type: 'emails', model: Email },
-	];
-
+	const typeModelMap = getIndexedTypeModelMap(models);
 	const results = {};
 
 	// Drop indexed content collections first. Keep conversation history intact:
@@ -1144,6 +1136,16 @@ export async function initTypesense() {
 const BATCH_LIMIT = 150;
 const REINDEX_STATUS_TTL_SECONDS = 3600;
 
+function getIndexedTypeModelMap(models) {
+	const { Note, Memory, Url, Email } = models;
+	return [
+		{ type: 'notes', model: Note },
+		{ type: 'memory', model: Memory },
+		{ type: 'urls', model: Url },
+		{ type: 'emails', model: Email },
+	];
+}
+
 function getReindexStatusKey(host_id) {
 	return `reindex-status:${host_id}`;
 }
@@ -1183,15 +1185,49 @@ async function countPendingForHost(host_id, typeModelMap) {
 	return counts.reduce((sum, count) => sum + count, 0);
 }
 
-export async function indexMissing(models) {
-	const { Note, Memory, Url, Email } = models;
+export function buildReindexStatus(reindexState, remaining = 0) {
+	if (!reindexState?.total_queued) {
+		return {
+			status: 'idle',
+			total_queued: 0,
+			indexed: 0,
+			remaining: 0,
+			message: 'Search index is idle.',
+		};
+	}
 
-	const typeModelMap = [
-		{ type: 'notes', model: Note },
-		{ type: 'memory', model: Memory },
-		{ type: 'urls', model: Url },
-		{ type: 'emails', model: Email },
-	];
+	const totalQueued = Math.max(Number(reindexState.total_queued) || 0, Number(remaining) || 0);
+	const remainingCount = Math.max(Number(remaining) || 0, 0);
+	const indexedTotal = Math.max(totalQueued - remainingCount, 0);
+	const status = remainingCount === 0 ? 'complete' : (indexedTotal > 0 ? 'progress' : 'queued');
+	const itemLabel = indexedTotal === 1 ? 'item' : 'items';
+	const totalLabel = totalQueued === 1 ? 'item' : 'items';
+	const message = status === 'complete'
+		? `Reindex complete. Indexed ${indexedTotal} ${itemLabel}.`
+		: status === 'queued'
+			? `Reindexing is queued for ${totalQueued} ${totalLabel}.`
+			: `Reindexing... ${indexedTotal} ${itemLabel} indexed, ${remainingCount} remaining.`;
+
+	return {
+		status,
+		indexed: indexedTotal,
+		remaining: remainingCount,
+		total_queued: totalQueued,
+		started_at: reindexState.started_at,
+		message,
+	};
+}
+
+export async function getReindexStatus(host_id, models) {
+	const reindexState = await getStoredReindexStatus(host_id);
+	if (!reindexState?.total_queued) return buildReindexStatus(null, 0);
+
+	const remaining = await countPendingForHost(host_id, getIndexedTypeModelMap(models));
+	return buildReindexStatus(reindexState, remaining);
+}
+
+export async function indexMissing(models) {
+	const typeModelMap = getIndexedTypeModelMap(models);
 
 	let totalIndexed = 0;
 	const hostProgress = new Map();
@@ -1286,24 +1322,14 @@ export async function indexMissing(models) {
 		if (!reindexState?.total_queued) continue;
 
 		const remaining = await countPendingForHost(host_id, typeModelMap);
-		const totalQueued = Math.max(reindexState.total_queued, remaining);
-		const indexedTotal = Math.max(totalQueued - remaining, 0);
-		const status = remaining === 0 ? 'complete' : 'progress';
-		const itemLabel = indexedTotal === 1 ? 'item' : 'items';
-		const message = status === 'complete'
-			? `Reindex complete. Indexed ${indexedTotal} ${itemLabel}.`
-			: `Reindexing... ${indexedTotal} ${itemLabel} indexed, ${remaining} remaining.`;
+		const statusData = buildReindexStatus(reindexState, remaining);
 
 		emitToTenant(host_id, 'reindex:status', {
-			status,
-			indexed: indexedTotal,
-			remaining,
-			total_queued: totalQueued,
+			...statusData,
 			by_type: progress.by_type,
-			message,
 		});
 
-		if (status === 'complete') {
+		if (statusData.status === 'complete') {
 			await clearStoredReindexStatus(host_id);
 		}
 	}
