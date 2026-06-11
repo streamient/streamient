@@ -62,15 +62,15 @@ describe('ECC Email AI prompt buttons', () => {
 		const resetSelectedTriage = functionBlock(eccJs, 'resetSelectedTriage');
 
 		assert.ok(moveSelected.includes('applyEmailSocketUpdate(result?.email || result);'));
-		assert.ok(moveSelected.includes('await loadLabels();'));
+		assert.ok(!moveSelected.includes('await loadLabels();'));
 		assert.ok(!moveSelected.includes('loadAll()'));
 
 		assert.ok(trashSelected.includes('ids.forEach(removeEmailFromList);'));
-		assert.ok(trashSelected.includes('await loadLabels();'));
+		assert.ok(!trashSelected.includes('await loadLabels();'));
 		assert.ok(!trashSelected.includes('loadAll()'));
 
 		assert.ok(resetSelectedTriage.includes('applyEmailSocketUpdate(result?.email || result);'));
-		assert.ok(resetSelectedTriage.includes('await loadLabels();'));
+		assert.ok(!resetSelectedTriage.includes('await loadLabels();'));
 		assert.ok(!resetSelectedTriage.includes('loadAll()'));
 		assert.ok(!resetSelectedTriage.includes('activeMailbox = \'inbox\';'));
 		assert.ok(!resetSelectedTriage.includes('activeLabel = \'\';'));
