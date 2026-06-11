@@ -6,6 +6,7 @@ import {
 	buildCrawledPageIndexDocs,
 	bulkIndexCrawledPages,
 	crawlSite,
+	getCrawlStepLimit,
 	getCrawledPageDocumentId,
 	isHtmlResponse,
 	shouldSkipCrawledUrl,
@@ -41,12 +42,18 @@ function makeCrawlStateModel(initialStates = []) {
 	const model = {
 		store,
 		deleted: false,
+		deletedFilters: [],
 		async deleteMany(filter) {
 			model.deleted = true;
+			model.deletedFilters.push(filter);
+			let deletedCount = 0;
 			for (let i = store.length - 1; i >= 0; i--) {
-				if (matchesFilter(store[i], filter)) store.splice(i, 1);
+				if (matchesFilter(store[i], filter)) {
+					store.splice(i, 1);
+					deletedCount++;
+				}
 			}
-			return { deletedCount: 0 };
+			return { deletedCount };
 		},
 		async countDocuments(filter) {
 			return store.filter((state) => matchesFilter(state, filter)).length;
@@ -83,6 +90,46 @@ function makeCrawlStateModel(initialStates = []) {
 }
 
 describe('crawler indexing and state', () => {
+	it('uses 100 as the per-run crawl limit and disables Crawlee retries', async () => {
+		assert.equal(getCrawlStepLimit({}), 100);
+
+		const urlDoc = makeUrlDoc();
+		const stateModel = makeCrawlStateModel();
+		let crawlerOptions = null;
+		const crawlerRuns = [];
+		class FakeCrawler {
+			constructor(options) {
+				crawlerOptions = options;
+			}
+			async run(batch) {
+				crawlerRuns.push(batch);
+				for (const url of batch) {
+					await crawlerOptions.requestHandler({
+						request: { url, loadedUrl: url },
+						response: { status: () => 200, headers: () => ({ 'content-type': 'text/html; charset=utf-8' }) },
+						page: {
+							title: async () => 'Home',
+							evaluate: async () => 'Body text',
+						},
+						enqueueLinks: async () => {},
+					});
+				}
+			}
+		}
+
+		await crawlSite(urlDoc, {
+			CrawlState: stateModel,
+			Url: { updateOne: async () => {} },
+			PlaywrightCrawler: FakeCrawler,
+			ensureCollections: async () => {},
+			bulkIndexCrawledPages: async () => ({ indexedCount: 1, attemptedCount: 1, chunkCount: 1 }),
+		});
+
+		assert.equal(crawlerOptions.maxRequestsPerCrawl, 100);
+		assert.equal(crawlerOptions.maxRequestRetries, 0);
+		assert.deepEqual(crawlerRuns, [['https://example.com']]);
+	});
+
 	it('builds overlapping Typesense chunks for long crawled page bodies', () => {
 		const text = Array.from({ length: 6200 }, (_, i) => String(i % 10)).join('');
 		const urlId = 'url-1';
@@ -280,6 +327,203 @@ describe('crawler indexing and state', () => {
 
 		assert.equal(indexed, 0);
 		assert.deepEqual(indexedPages, []);
-		assert.ok(stateModel.store.some((state) => state.normalized_url === 'https://example.com/private' && state.status === 'failed' && state.error === 'HTTP 403'));
+		assert.ok(stateModel.store.some((state) => state.normalized_url === 'https://example.com/private' && state.status === 'failed' && state.error === 'HTTP 403' && state.http_status === 403 && state.failure_type === 'denied'));
+	});
+
+	it('records blocked crawler errors with HTTP status metadata', async () => {
+		const urlDoc = makeUrlDoc({ url: 'https://example.com/private' });
+		const stateModel = makeCrawlStateModel();
+		const indexed = await crawlSite(urlDoc, {
+			CrawlState: stateModel,
+			Url: { updateOne: async () => {} },
+			PlaywrightCrawler: class {
+				constructor(options) {
+					this.options = options;
+				}
+				async run(batch) {
+					for (const url of batch) {
+						this.options.failedRequestHandler({
+							request: { url },
+							error: new Error('Request blocked - received 403 status code.'),
+						});
+					}
+				}
+			},
+			ensureCollections: async () => {},
+			bulkIndexCrawledPages: async (hostId, input) => ({ indexedCount: 0, attemptedCount: input.pages.length, chunkCount: 0 }),
+			stepLimit: 10,
+		});
+
+		assert.equal(indexed, 0);
+		assert.ok(stateModel.store.some((state) => state.normalized_url === 'https://example.com/private' && state.status === 'failed' && state.http_status === 403 && state.failure_type === 'denied'));
+	});
+
+	it('does not requeue terminal failed URLs discovered in later steps', async () => {
+		const urlDoc = makeUrlDoc({ crawl_partial: true });
+		const stateModel = makeCrawlStateModel([
+			{
+				host_id: 'host-1',
+				parent_url_id: urlDoc._id,
+				normalized_url: 'https://example.com/start',
+				url: 'https://example.com/start',
+				status: 'queued',
+			},
+			{
+				host_id: 'host-1',
+				parent_url_id: urlDoc._id,
+				normalized_url: 'https://example.com/blocked',
+				url: 'https://example.com/blocked',
+				status: 'failed',
+				error: 'HTTP 403',
+				http_status: 403,
+				failure_type: 'denied',
+			},
+		]);
+		const transformResults = [];
+
+		await crawlSite(urlDoc, {
+			CrawlState: stateModel,
+			Url: { updateOne: async () => {} },
+			PlaywrightCrawler: class {
+				constructor(options) {
+					this.options = options;
+				}
+				async run(batch) {
+					for (const url of batch) {
+						await this.options.requestHandler({
+							request: { url, loadedUrl: url },
+							response: { status: () => 200, headers: () => ({ 'content-type': 'text/html; charset=utf-8' }) },
+							page: {
+								title: async () => 'Start',
+								evaluate: async () => 'Body text',
+							},
+							enqueueLinks: async ({ transformRequestFunction }) => {
+								transformResults.push(transformRequestFunction({ url: 'https://example.com/blocked' }));
+								transformResults.push(transformRequestFunction({ url: 'https://example.com/next' }));
+							},
+						});
+					}
+				}
+			},
+			ensureCollections: async () => {},
+			bulkIndexCrawledPages: async () => ({ indexedCount: 1, attemptedCount: 1, chunkCount: 1 }),
+			stepLimit: 10,
+		});
+
+		assert.equal(transformResults[0], false);
+		assert.equal(transformResults[1].url, 'https://example.com/next');
+		assert.ok(stateModel.store.some((state) => state.normalized_url === 'https://example.com/blocked' && state.status === 'failed'));
+		assert.ok(!stateModel.store.some((state) => state.normalized_url === 'https://example.com/blocked' && state.status === 'queued'));
+		assert.ok(stateModel.store.some((state) => state.normalized_url === 'https://example.com/next' && state.status === 'queued'));
+	});
+
+	it('preserves failed states during scheduled recrawl resets', async () => {
+		const urlDoc = makeUrlDoc({ crawl_partial: false });
+		const stateModel = makeCrawlStateModel([
+			{
+				host_id: 'host-1',
+				parent_url_id: urlDoc._id,
+				normalized_url: 'https://example.com/old-queued',
+				url: 'https://example.com/old-queued',
+				status: 'queued',
+			},
+			{
+				host_id: 'host-1',
+				parent_url_id: urlDoc._id,
+				normalized_url: 'https://example.com/old-visited',
+				url: 'https://example.com/old-visited',
+				status: 'visited',
+			},
+			{
+				host_id: 'host-1',
+				parent_url_id: urlDoc._id,
+				normalized_url: 'https://example.com/blocked',
+				url: 'https://example.com/blocked',
+				status: 'failed',
+				error: 'HTTP 403',
+				http_status: 403,
+				failure_type: 'denied',
+			},
+		]);
+
+		await crawlSite(urlDoc, {
+			CrawlState: stateModel,
+			Url: { updateOne: async () => {} },
+			PlaywrightCrawler: class {
+				constructor(options) {
+					this.options = options;
+				}
+				async run(batch) {
+					for (const url of batch) {
+						await this.options.requestHandler({
+							request: { url, loadedUrl: url },
+							response: { status: () => 200, headers: () => ({ 'content-type': 'text/html; charset=utf-8' }) },
+							page: {
+								title: async () => 'Home',
+								evaluate: async () => 'Body text',
+							},
+							enqueueLinks: async () => {},
+						});
+					}
+				}
+			},
+			ensureCollections: async () => {},
+			bulkIndexCrawledPages: async () => ({ indexedCount: 1, attemptedCount: 1, chunkCount: 1 }),
+			stepLimit: 10,
+		});
+
+		assert.ok(stateModel.deletedFilters.some((filter) => filter.status === 'queued'));
+		assert.ok(stateModel.deletedFilters.some((filter) => filter.status === 'visited'));
+		assert.ok(!stateModel.deletedFilters.some((filter) => !filter.status));
+		assert.ok(stateModel.store.some((state) => state.normalized_url === 'https://example.com/blocked' && state.status === 'failed'));
+		assert.ok(!stateModel.store.some((state) => state.normalized_url === 'https://example.com/old-queued'));
+		assert.ok(!stateModel.store.some((state) => state.normalized_url === 'https://example.com/old-visited'));
+	});
+
+	it('clears failed states on explicit manual reset', async () => {
+		const urlDoc = makeUrlDoc({ crawl_partial: true });
+		const stateModel = makeCrawlStateModel([
+			{
+				host_id: 'host-1',
+				parent_url_id: urlDoc._id,
+				normalized_url: 'https://example.com/blocked',
+				url: 'https://example.com/blocked',
+				status: 'failed',
+				error: 'HTTP 403',
+				http_status: 403,
+				failure_type: 'denied',
+			},
+		]);
+
+		await crawlSite(urlDoc, {
+			CrawlState: stateModel,
+			Url: { updateOne: async () => {} },
+			PlaywrightCrawler: class {
+				constructor(options) {
+					this.options = options;
+				}
+				async run(batch) {
+					for (const url of batch) {
+						await this.options.requestHandler({
+							request: { url, loadedUrl: url },
+							response: { status: () => 200, headers: () => ({ 'content-type': 'text/html; charset=utf-8' }) },
+							page: {
+								title: async () => 'Home',
+								evaluate: async () => 'Body text',
+							},
+							enqueueLinks: async () => {},
+						});
+					}
+				}
+			},
+			ensureCollections: async () => {},
+			bulkIndexCrawledPages: async () => ({ indexedCount: 1, attemptedCount: 1, chunkCount: 1 }),
+			resetFailed: true,
+			stepLimit: 10,
+		});
+
+		assert.ok(stateModel.deletedFilters.some((filter) => filter.host_id === 'host-1' && filter.parent_url_id === urlDoc._id && !filter.status));
+		assert.ok(!stateModel.store.some((state) => state.normalized_url === 'https://example.com/blocked'));
+		assert.ok(stateModel.store.some((state) => state.url === 'https://example.com' && state.status === 'visited'));
 	});
 });

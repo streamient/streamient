@@ -802,7 +802,7 @@ router.post('/urls/:id/resync', async (req, res) => {
 	if (!url) return res.status(404).json({ error: 'URL not found' });
 	if (!url.crawl_enabled) return res.status(400).json({ error: 'Crawling is not enabled for this URL' });
 
-	crawlSite(url).catch((err) => log.error({ err }, 'Manual URL resync error'));
+	crawlSite(url, { resetFailed: true }).catch((err) => log.error({ err }, 'Manual URL resync error'));
 	res.json({ message: 'URL crawl resync started' });
 });
 

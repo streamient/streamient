@@ -8,6 +8,8 @@ const crawlStateSchema = new mongoose.Schema(
 		status: { type: String, enum: ['queued', 'visited', 'failed'], default: 'queued', index: true },
 		title: { type: String, default: '' },
 		error: { type: String, default: '' },
+		http_status: { type: Number, default: null },
+		failure_type: { type: String, default: '' },
 		project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true },
 		owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 		host_id: { type: String, required: true, index: true },

@@ -89,6 +89,51 @@ function normalizeUrlEntries(urls, { skipNonCrawlable = true } = {}) {
 	return entries;
 }
 
+function normalizeHttpStatus(value) {
+	const parsed = parseInt(value, 10);
+	return Number.isFinite(parsed) && parsed >= 100 && parsed <= 599 ? parsed : null;
+}
+
+function failureTypeForStatus(statusCode) {
+	if (statusCode === 401 || statusCode === 403) return 'denied';
+	if (statusCode === 404 || statusCode === 410) return 'not_found';
+	if (statusCode >= 400) return 'http';
+	return 'error';
+}
+
+function httpStatusFromError(err) {
+	const message = errorMessage(err);
+	const match = message.match(/\b(?:received|HTTP|status(?: code)?[:\s])\s*([1-5]\d\d)\b/i);
+	return normalizeHttpStatus(match?.[1]);
+}
+
+function failureEntry(url, error, { httpStatus = null, failureType = '' } = {}) {
+	const statusCode = normalizeHttpStatus(httpStatus);
+	return {
+		url,
+		error,
+		http_status: statusCode,
+		failure_type: failureType || failureTypeForStatus(statusCode),
+	};
+}
+
+function failureEntryForStatus(url, statusCode) {
+	const normalizedStatus = normalizeHttpStatus(statusCode);
+	return failureEntry(url, `HTTP ${normalizedStatus}`, {
+		httpStatus: normalizedStatus,
+		failureType: failureTypeForStatus(normalizedStatus),
+	});
+}
+
+function failureEntryForError(url, err) {
+	const message = errorMessage(err);
+	const statusCode = httpStatusFromError(err);
+	return failureEntry(url, message, {
+		httpStatus: statusCode,
+		failureType: statusCode ? failureTypeForStatus(statusCode) : 'error',
+	});
+}
+
 export function buildCrawlStateBulkOps(urlDoc, { queued = [], visited = [], failed = [] } = {}, now = new Date()) {
 	const base = crawlStateBase(urlDoc);
 	const ops = [];
@@ -107,6 +152,8 @@ export function buildCrawlStateBulkOps(urlDoc, { queued = [], visited = [], fail
 						url: entry.url,
 						status: 'visited',
 						error: '',
+						http_status: null,
+						failure_type: '',
 						last_seen: now,
 						visited_at: now,
 					},
@@ -129,6 +176,8 @@ export function buildCrawlStateBulkOps(urlDoc, { queued = [], visited = [], fail
 						url: entry.url,
 						status: 'queued',
 						error: '',
+						http_status: null,
+						failure_type: '',
 						last_seen: now,
 					},
 				},
@@ -138,7 +187,7 @@ export function buildCrawlStateBulkOps(urlDoc, { queued = [], visited = [], fail
 	}
 
 	for (const entry of failedEntries) {
-		const original = failed.find((item) => (item.url || item) === entry.url) || {};
+		const original = failed.find((item) => normalizeCrawlUrl(item.url || item) === entry.normalized_url) || {};
 		ops.push({
 			updateOne: {
 				filter: { host_id: base.host_id, parent_url_id: base.parent_url_id, normalized_url: entry.normalized_url },
@@ -148,6 +197,8 @@ export function buildCrawlStateBulkOps(urlDoc, { queued = [], visited = [], fail
 						url: entry.url,
 						status: 'failed',
 						error: String(original.error || 'Crawl failed').slice(0, 1000),
+						http_status: normalizeHttpStatus(original.http_status),
+						failure_type: String(original.failure_type || 'error'),
 						last_seen: now,
 						failed_at: now,
 					},
@@ -194,12 +245,27 @@ async function updateUrlCrawlSummary(urlModel, crawlStateModel, urlDoc) {
 	return { ...counts, partial };
 }
 
-async function seedInitialCrawlState(urlDoc, crawlStateModel, { reset = false } = {}) {
+async function resetCrawlState(urlDoc, crawlStateModel, { resetFailed = false } = {}) {
 	const filter = { host_id: urlDoc.host_id, parent_url_id: urlDoc._id };
-	if (reset) await crawlStateModel.deleteMany(filter);
+	if (resetFailed) {
+		await crawlStateModel.deleteMany(filter);
+		return;
+	}
 
-	const existing = reset ? 0 : await crawlStateModel.countDocuments(filter);
-	if (existing > 0) return;
+	await Promise.all([
+		crawlStateModel.deleteMany({ ...filter, status: 'queued' }),
+		crawlStateModel.deleteMany({ ...filter, status: 'visited' }),
+	]);
+}
+
+async function seedInitialCrawlState(urlDoc, crawlStateModel, { reset = false, resetFailed = false } = {}) {
+	const filter = { host_id: urlDoc.host_id, parent_url_id: urlDoc._id };
+	if (reset) {
+		await resetCrawlState(urlDoc, crawlStateModel, { resetFailed });
+	} else {
+		const existing = await crawlStateModel.countDocuments(filter);
+		if (existing > 0) return;
+	}
 
 	const legacyVisited = Array.isArray(urlDoc.crawl_visited) ? urlDoc.crawl_visited : [];
 	const legacyFrontier = Array.isArray(urlDoc.crawl_frontier) && urlDoc.crawl_frontier.length ? urlDoc.crawl_frontier : [urlDoc.url];
@@ -220,6 +286,15 @@ async function getVisitedUrlSet(urlDoc, crawlStateModel) {
 		host_id: urlDoc.host_id,
 		parent_url_id: urlDoc._id,
 		status: 'visited',
+	});
+	return new Set(urls);
+}
+
+async function getFailedUrlSet(urlDoc, crawlStateModel) {
+	const urls = await crawlStateModel.distinct('normalized_url', {
+		host_id: urlDoc.host_id,
+		parent_url_id: urlDoc._id,
+		status: 'failed',
 	});
 	return new Set(urls);
 }
@@ -313,13 +388,16 @@ export async function crawlSite(urlDoc, deps = {}) {
 	const crawlStateModel = deps.CrawlState || CrawlState;
 	const ensureCollectionsFn = deps.ensureCollections || ensureCollections;
 	const bulkIndexPagesFn = deps.bulkIndexCrawledPages || bulkIndexCrawledPages;
+	const resetFailed = deps.resetFailed === true;
 	const pages = [];
 	const failedInRun = new Map();
 
 	await ensureCollectionsFn(hostId);
-	await seedInitialCrawlState(urlDoc, crawlStateModel, { reset: urlDoc.crawl_partial !== true });
+	await seedInitialCrawlState(urlDoc, crawlStateModel, { reset: resetFailed || urlDoc.crawl_partial !== true, resetFailed });
 
+	const failed = await getFailedUrlSet(urlDoc, crawlStateModel);
 	let queuedStates = await getQueuedCrawlStates(urlDoc, crawlStateModel, stepLimit);
+	queuedStates = queuedStates.filter((state) => !failed.has(state.normalized_url));
 	if (!queuedStates.length) {
 		const summary = await updateUrlCrawlSummary(urlModel, crawlStateModel, urlDoc);
 		log.info({ url: urlDoc.url, partial: summary.partial, frontierRemaining: summary.queued }, 'Crawl step skipped: no queued URLs');
@@ -329,7 +407,7 @@ export async function crawlSite(urlDoc, deps = {}) {
 	const batch = queuedStates.map((state) => state.url).filter((url) => !shouldSkipCrawledUrl(url));
 	const skipped = queuedStates.filter((state) => shouldSkipCrawledUrl(state.url));
 	for (const state of skipped) {
-		failedInRun.set(state.normalized_url, { url: state.url, error: 'Skipped non-crawlable URL' });
+		failedInRun.set(state.normalized_url, failureEntry(state.url, 'Skipped non-crawlable URL', { failureType: 'skipped' }));
 	}
 
 	const visited = await getVisitedUrlSet(urlDoc, crawlStateModel);
@@ -346,6 +424,7 @@ export async function crawlSite(urlDoc, deps = {}) {
 
 	const crawler = new crawlerClass({
 		maxRequestsPerCrawl: stepLimit,
+		maxRequestRetries: 0,
 		maxConcurrency: 3,
 		requestHandlerTimeoutSecs: 30,
 
@@ -354,15 +433,15 @@ export async function crawlSite(urlDoc, deps = {}) {
 			const normalizedCurrent = normalizeCrawlUrl(currentUrl);
 			const statusCode = response?.status?.() || null;
 			if (statusCode && statusCode >= 400) {
-				failedInRun.set(normalizedCurrent, { url: currentUrl, error: `HTTP ${statusCode}` });
+				failedInRun.set(normalizedCurrent, failureEntryForStatus(currentUrl, statusCode));
 				return;
 			}
 			if (!isHtmlResponse(response)) {
-				failedInRun.set(normalizedCurrent, { url: currentUrl, error: 'Non-HTML response' });
+				failedInRun.set(normalizedCurrent, failureEntry(currentUrl, 'Non-HTML response', { failureType: 'non_html' }));
 				return;
 			}
 			if (shouldSkipCrawledUrl(currentUrl)) {
-				failedInRun.set(normalizedCurrent, { url: currentUrl, error: 'Skipped non-crawlable URL' });
+				failedInRun.set(normalizedCurrent, failureEntry(currentUrl, 'Skipped non-crawlable URL', { failureType: 'skipped' }));
 				return;
 			}
 
@@ -388,6 +467,8 @@ export async function crawlSite(urlDoc, deps = {}) {
 				transformRequestFunction: (req) => {
 					if (shouldSkipCrawledUrl(req.url)) return false;
 					const normalized = normalizeCrawlUrl(req.url);
+					if (failed.has(normalized)) return false;
+					if (failedInRun.has(normalized)) return false;
 					if (visited.has(normalized)) return false;
 					if (visitedInRun.has(normalized)) return false;
 					if (discoveredInRun.has(normalized)) return false;
@@ -399,7 +480,7 @@ export async function crawlSite(urlDoc, deps = {}) {
 
 		failedRequestHandler({ request, error }) {
 			const normalized = normalizeCrawlUrl(request.url);
-			failedInRun.set(normalized, { url: request.url, error: errorMessage(error) });
+			failedInRun.set(normalized, failureEntryForError(request.url, error));
 			log.warn({ url: request.url }, 'Crawl failed');
 		},
 	});
