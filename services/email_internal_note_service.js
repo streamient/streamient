@@ -25,15 +25,30 @@ function normalizeParentNoteId(value) {
 	return parentNoteId || null;
 }
 
-function buildEventPayload(note, threadSourceIds = [], clientRequestId = '') {
+function buildEventPayload(note, threadSourceIds = [], clientRequestId = '', options = {}) {
 	const payload = {
 		_id: stringifyObjectId(note),
 		source_email: stringifyObjectId(note?.source_email),
 		parent_note: normalizeParentNoteId(note?.parent_note),
 		thread_source_ids: threadSourceIds,
 	};
+	if (options.includeNote && note) payload.note = publicNote(note);
 	if (clientRequestId) payload.client_request_id = clientRequestId;
 	return payload;
+}
+
+function publicNote(note) {
+	const obj = typeof note?.toObject === 'function' ? note.toObject() : { ...(note || {}) };
+	return {
+		...obj,
+		_id: stringifyObjectId(obj._id || note),
+		source_email: stringifyObjectId(obj.source_email),
+		parent_note: normalizeParentNoteId(obj.parent_note),
+		project: stringifyObjectId(obj.project),
+		owner: obj.owner && typeof obj.owner === 'object'
+			? { ...obj.owner, _id: stringifyObjectId(obj.owner._id || obj.owner) }
+			: stringifyObjectId(obj.owner),
+	};
 }
 
 async function getSourceEmail(hostId, emailId) {
@@ -90,8 +105,9 @@ export async function createEmailInternalNote(userId, hostId, emailId, data = {}
 		host_id: hostId,
 		...normalized,
 	});
+	await note.populate('owner', 'name email');
 
-	emitToTenant(hostId, 'email-internal-note:created', buildEventPayload(note, threadContext.sourceIds, clientRequestId));
+	emitToTenant(hostId, 'email-internal-note:created', buildEventPayload(note, threadContext.sourceIds, clientRequestId, { includeNote: true }));
 	audit.log({
 		action: 'create',
 		resource: 'email_internal_note',
@@ -102,7 +118,7 @@ export async function createEmailInternalNote(userId, hostId, emailId, data = {}
 		...ctx,
 	});
 
-	return note.populate('owner', 'name email');
+	return note;
 }
 
 export async function updateEmailInternalNote(hostId, emailId, noteId, data = {}, ctx = {}) {
@@ -126,7 +142,7 @@ export async function updateEmailInternalNote(hostId, emailId, noteId, data = {}
 	).populate('owner', 'name email');
 
 	if (note) {
-		emitToTenant(hostId, 'email-internal-note:updated', buildEventPayload(note, threadContext.sourceIds, clientRequestId));
+		emitToTenant(hostId, 'email-internal-note:updated', buildEventPayload(note, threadContext.sourceIds, clientRequestId, { includeNote: true }));
 		if (ctx.user_id) {
 			const details = audit.diffSnapshot(before, note);
 			audit.log({ action: 'update', resource: 'email_internal_note', resource_id: noteId, host_id: hostId, details, ...ctx });

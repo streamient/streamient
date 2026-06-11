@@ -1060,7 +1060,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 			'email:created', 'email:updated', 'email:deleted',
 			'email-draft:created', 'email-draft:updated', 'email-draft:deleted',
 			'email-internal-note:created', 'email-internal-note:updated', 'email-internal-note:deleted',
-			'outgoing-email:queued', 'outgoing-email:canceled', 'outgoing-email:sent', 'outgoing-email:error',
+			'outgoing-email:queued', 'outgoing-email:sending', 'outgoing-email:canceled', 'outgoing-email:sent', 'outgoing-email:error',
 			'counts:refresh',
 		];
 		for (const evt of crudEvents) {

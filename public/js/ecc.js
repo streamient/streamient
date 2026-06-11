@@ -64,6 +64,7 @@
 	var emailReplySuggestions = [];
 	var replySuggestionsAutoCloseTimer = null;
 	var currentDraft = null;
+	var currentDetailThread = [];
 	var draftEditor = null;
 	var draftEditorHost = null;
 	var draftAutosaveTimer = null;
@@ -73,12 +74,14 @@
 	var draftSendInProgress = false;
 	var draftRecipientTagifies = [];
 	var pendingLocalDraftDeleteIds = new Set();
+	var outgoingNoticeTimer = null;
 	var noteEditor = null;
 	var noteEditorHost = null;
 	var currentInternalNotes = [];
 	var selectedEmailThreadSourceIds = [];
 	var pendingInternalNoteSocketEvents = [];
 	var windowListeners = [];
+	var eccCountsTimer = null;
 	var triageRunId = '';
 	var triageProgress = null;
 	var triagePollTimer = null;
@@ -162,6 +165,17 @@
 			return email?.display_date || email?.createdAt || email?.updatedAt || '';
 		}
 
+		function emailSortTime(email) {
+			var time = new Date(emailDisplayDate(email)).getTime();
+			return Number.isFinite(time) ? time : 0;
+		}
+
+		function sortThreadDesc(messages) {
+			return (messages || []).slice().sort(function (a, b) {
+				return emailSortTime(b) - emailSortTime(a);
+			});
+		}
+
 		function emailListDisplayEmail(email) {
 			return email?.thread_latest || email;
 		}
@@ -173,8 +187,26 @@
 			}) || fallbackEmail || null;
 		}
 
+		function updateSelectedThreadSourceIds(extraEmail) {
+			var ids = [];
+			var add = function (value) {
+				var id = String(value || '');
+				if (id && !ids.includes(id)) ids.push(id);
+			};
+			(currentDetailThread || []).forEach(function (email) {
+				add(emailId(email));
+				(email?.thread_source_ids || []).forEach(add);
+			});
+			(extraEmail?.thread_source_ids || []).forEach(add);
+			selectedEmailThreadSourceIds = ids;
+		}
+
 		function draftSourceEmailId(draft) {
 			return String(draft?.source_email?._id || draft?.source_email || '');
+		}
+
+		function draftId(draft) {
+			return String(draft?._id || draft?.id || '');
 		}
 
 		function replaceChildren(node) {
@@ -890,7 +922,6 @@
 			email.labels = remaining;
 			if (selectedEmail && emailId(selectedEmail) === emailId(email)) selectedEmail.labels = remaining;
 			showSuccess('Label removed');
-			loadLabels().catch(function () {});
 			// Removing the label that scopes the current view drops the email from it.
 			if (activeLabel && slug === activeLabel) {
 				removeEmailFromList(emailId(email));
@@ -923,7 +954,6 @@
 			// which would re-read stale Typesense data and re-show the moved email.
 			removeEmailFromList(id);
 			backToListView();
-			loadLabels().catch(function () {});
 		} catch (err) {
 			showError(err.message || 'Failed to move email');
 		}
@@ -941,7 +971,6 @@
 			// update reconciles once Typesense re-indexes (no stale list reload).
 			removeEmailFromList(id);
 			backToListView();
-			loadLabels().catch(function () {});
 		} catch (err) {
 			showError(err.message || 'Failed to move email to trash');
 		}
@@ -1286,7 +1315,6 @@
 		button.disabled = true;
 		button.textContent = 'Using...';
 		try {
-			var hadDraft = Boolean(currentDraft?._id);
 			var res = await api('POST', '/emails/' + encodeURIComponent(replyEmail._id) + '/draft-reply', {
 				body_text: reply.body_text,
 			});
@@ -1297,7 +1325,6 @@
 				await openReplyEditor(replyEmail, detailDraftEl);
 				detailDraftEl?.scrollIntoView({ block: 'start', behavior: 'smooth' });
 			}
-			if (!hadDraft && currentDraft?._id) loadLabels().catch(() => {});
 			showSuccess('Draft reply updated');
 		} catch (err) {
 			showError(err.message || 'Failed to use reply');
@@ -1406,13 +1433,12 @@
 			function backToListView() {
 				selectedEmail = null;
 				replyTargetEmail = null;
+				currentDetailThread = [];
+				selectedEmailThreadSourceIds = [];
 				pendingEmailId = '';
 				showListView();
 				renderEmailAi(null);
 				writeUrlState('');
-				// Drafts list items are only refreshed on reload, so re-fetch to drop any
-				// draft that was queued for sending (now hidden) while the detail was open.
-				if (activeMailbox === 'drafts') loadEmails().catch(() => {});
 			}
 
 		function showDetailView() {
@@ -1427,6 +1453,8 @@
 
 		function showDetailLoading(emailId) {
 			showDetailView();
+			currentDetailThread = [];
+			selectedEmailThreadSourceIds = [];
 			if (detailTitle) detailTitle.textContent = 'Loading email';
 			if (detailSubtitle) detailSubtitle.textContent = emailId || '';
 			if (detailDate) detailDate.textContent = '';
@@ -1458,6 +1486,8 @@
 			showListView();
 			selectedEmail = null;
 			replyTargetEmail = null;
+			currentDetailThread = [];
+			selectedEmailThreadSourceIds = [];
 			resetSelectionState();
 			updateActionBar();
 			renderMoveMenu();
@@ -1490,6 +1520,7 @@
 		}
 
 		function destroyDraftEditor() {
+			clearOutgoingNoticeTimer();
 			if (draftAutosaveTimer) {
 				clearInterval(draftAutosaveTimer);
 				draftAutosaveTimer = null;
@@ -1650,7 +1681,11 @@
 			var detail = event.detail || {};
 			if (consumeSuppressedInternalNoteSocket(event.type, detail)) return;
 			if (!detailActive || !eventAffectsSelectedThread(detail)) return;
-			loadInternalNotes(selectedEmail);
+			if (event.type === 'email-internal-note:deleted') {
+				removeInternalNoteById(detail._id);
+				return;
+			}
+			if (detail.note) upsertInternalNote(detail.note);
 		}
 
 		function bindInternalNoteActions(email) {
@@ -1722,7 +1757,7 @@
 			suppressNextInternalNoteSocket('email-internal-note:deleted', { client_request_id: clientRequestId });
 			try {
 				await api('DELETE', '/emails/' + encodeURIComponent(email._id) + '/internal-notes/' + encodeURIComponent(noteId) + '?client_request_id=' + encodeURIComponent(clientRequestId));
-				await loadInternalNotes(email);
+				removeInternalNoteById(noteId);
 				showSuccess('Internal note deleted');
 			} catch (err) {
 				showError(err.message || 'Failed to delete internal note');
@@ -1888,12 +1923,11 @@
 				throw err;
 			}
 			if (String(currentDraft?._id || '') === String(draftId)) currentDraft = null;
+			removeDraftFromList(String(draftId || ''));
 			destroyDraftEditor();
 			if (!silent) showSuccess('Draft deleted');
-			await loadLabels();
 			if (activeMailbox === 'drafts') {
 				backToListView();
-				await loadEmails();
 			} else {
 				renderDraftDetail(null);
 				syncDraftControls();
@@ -1910,19 +1944,18 @@
 				if (silent) setDraftSaveStatus(card, 'Saving...', '');
 				try {
 					var draftToSave = draft || currentDraft;
-					var hadDraft = Boolean(draftToSave?._id || currentDraft?._id);
 					var payload = draftPayloadFromForm(card);
 					var res = draftToSave?._id
 						? await api('PUT', '/email-drafts/' + encodeURIComponent(draftToSave._id), payload)
 						: await api('POST', '/emails/' + encodeURIComponent(replyEmail._id) + '/draft-reply', payload);
 					currentDraft = res.draft || null;
+					if (currentDraft) applyDraftSocketUpdate(currentDraft);
 					draftAutosaveDirty = false;
 					setDraftSaveStatus(card, 'Saved', '');
 					if (!silent) {
 						if (!options?.keepOpen) destroyDraftEditor();
 						showSuccess('Draft saved');
 					}
-					if (activeMailbox === 'drafts' || (!hadDraft && currentDraft?._id)) loadLabels().catch(() => {});
 					return currentDraft;
 				} catch (err) {
 					if (silent) {
@@ -1939,8 +1972,42 @@
 			return nextSave;
 		}
 
-		function renderOutgoingQueuedNotice(outgoing, abortUntil, email) {
+		function clearOutgoingNoticeTimer() {
+			if (outgoingNoticeTimer) clearInterval(outgoingNoticeTimer);
+			outgoingNoticeTimer = null;
+		}
+
+		function removeOutgoingNotice() {
+			clearOutgoingNoticeTimer();
+			detailDraftEl?.querySelector('.ecc-outgoing-queued')?.remove();
+		}
+
+		function outgoingId(outgoing) {
+			return String(outgoing?._id || outgoing?.id || '');
+		}
+
+		function updateOutgoingNoticeStatus(status) {
+			var card = detailDraftEl?.querySelector('.ecc-outgoing-queued');
+			if (!card) return;
+			var title = card.querySelector('.ecc-outgoing-title');
+			var detail = card.querySelector('.ecc-outgoing-detail');
+			var abortButton = card.querySelector('.ecc-outgoing-abort');
+			if (status === 'sending') {
+				clearOutgoingNoticeTimer();
+				if (title) title.textContent = 'Sending...';
+				if (detail) detail.textContent = 'Sending started.';
+				if (abortButton) abortButton.disabled = true;
+			}
+		}
+
+		function renderOutgoingQueuedNotice(outgoing, abortUntil, email, options) {
 			if (!detailDraftEl) return;
+			var id = outgoingId(outgoing);
+			var existing = detailDraftEl.querySelector('.ecc-outgoing-queued');
+			if (existing && existing.dataset.outgoingId === id) {
+				updateOutgoingNoticeStatus(options?.status || outgoing?.status || 'queued');
+				return;
+			}
 			destroyDraftEditor();
 			// destroyDraftEditor hides the editor host; when the draft was opened inline
 			// (drafts mailbox), that host IS detailDraftEl, so re-show it for the banner.
@@ -1948,34 +2015,41 @@
 			replaceChildren(detailDraftEl);
 			var card = document.createElement('div');
 			card.className = 'alert alert-info d-flex justify-content-between align-items-center gap-3 mb-3 ecc-outgoing-queued';
+			card.dataset.outgoingId = id;
 			var textWrap = document.createElement('div');
 			textWrap.className = 'min-w-0';
-			var countdown = textNode('div', 'fw-semibold', 'Sending in 10 seconds');
-			var detail = textNode('div', 'small', 'You can abort before sending starts.');
+			var isSending = options?.status === 'sending' || outgoing?.status === 'sending';
+			var countdown = textNode('div', 'fw-semibold ecc-outgoing-title', isSending ? 'Sending...' : 'Sending in 10 seconds');
+			var detail = textNode('div', 'small ecc-outgoing-detail', isSending ? 'Sending started.' : 'You can abort before sending starts.');
 			textWrap.appendChild(countdown);
 			textWrap.appendChild(detail);
-			var abortButton = textNode('button', 'btn btn-outline-danger btn-sm text-nowrap', 'Abort');
+			var abortButton = textNode('button', 'btn btn-outline-danger btn-sm text-nowrap ecc-outgoing-abort', 'Abort');
 			abortButton.type = 'button';
+			abortButton.disabled = isSending;
 			card.appendChild(textWrap);
 			card.appendChild(abortButton);
 			detailDraftEl.appendChild(card);
 
 			var abortTime = new Date(abortUntil || Date.now() + 10000).getTime();
-			var timer = setInterval(function () {
-				var remaining = Math.max(0, Math.ceil((abortTime - Date.now()) / 1000));
-				countdown.textContent = remaining > 0 ? 'Sending in ' + remaining + ' seconds' : 'Sending...';
-				if (remaining <= 0) {
-					clearInterval(timer);
-					abortButton.disabled = true;
-				}
-			}, 250);
+			clearOutgoingNoticeTimer();
+			if (!isSending) {
+				outgoingNoticeTimer = setInterval(function () {
+					var remaining = Math.max(0, Math.ceil((abortTime - Date.now()) / 1000));
+					countdown.textContent = remaining > 0 ? 'Sending in ' + remaining + ' seconds' : 'Sending...';
+					if (remaining <= 0) {
+						clearOutgoingNoticeTimer();
+						abortButton.disabled = true;
+					}
+				}, 250);
+			}
 
 			abortButton.addEventListener('click', async function () {
 				abortButton.disabled = true;
 				try {
-					var res = await api('POST', '/outgoing-emails/' + encodeURIComponent(outgoing._id) + '/cancel', {});
-					clearInterval(timer);
+					var res = await api('POST', '/outgoing-emails/' + encodeURIComponent(id) + '/cancel', {});
+					clearOutgoingNoticeTimer();
 					currentDraft = res.draft || currentDraft;
+					if (currentDraft) applyDraftSocketUpdate(currentDraft);
 					renderDraftDetail(currentDraft);
 					await openReplyEditor(email || selectedEmail, detailDraftEl);
 					showSuccess('Send aborted');
@@ -2004,8 +2078,8 @@
 				if (!savedDraft?._id) throw new Error('Draft could not be saved before sending');
 				var res = await api('POST', '/email-drafts/' + encodeURIComponent(savedDraft._id) + '/send', draftPayloadFromForm(card));
 				currentDraft = savedDraft;
+				removeDraftFromList(savedDraft._id);
 				renderOutgoingQueuedNotice(res.outgoing_email, res.abort_until, replyEmail);
-				loadLabels().catch(() => {});
 			} catch (err) {
 				showError(err.message || 'Failed to queue send');
 				if (sendButton) sendButton.disabled = false;
@@ -2195,6 +2269,7 @@
 				var showDraftBtn = textNode('button', 'btn btn-primary btn-sm', 'Show draft');
 				showDraftBtn.type = 'button';
 				showDraftBtn.addEventListener('click', function () {
+					openReplyEditor(replyTargetEmail || email, detailDraftEl);
 					detailDraftEl?.scrollIntoView({ block: 'start', behavior: 'smooth' });
 				});
 				detailActionsEl.appendChild(showDraftBtn);
@@ -2246,8 +2321,10 @@
 		}
 
 		function renderEmailDetail(email, thread, draft) {
-			var messages = Array.isArray(thread) ? thread : [];
+			var messages = sortThreadDesc(Array.isArray(thread) ? thread : []);
 			var selected = email || messages[0] || null;
+			currentDetailThread = messages;
+			updateSelectedThreadSourceIds(selected);
 			var displayEmail = messages[0] || selected;
 			if (detailTitle) detailTitle.textContent = selected?.subject || '(No subject)';
 			if (detailSubtitle) {
@@ -2293,6 +2370,30 @@
 				return renderInternalNote(note, selectedEmail, 0);
 			}).join('');
 			bindInternalNoteActions(selectedEmail);
+		}
+
+		function upsertInternalNote(note) {
+			var id = internalNoteId(note);
+			if (!id) return;
+			var replaced = false;
+			currentInternalNotes = (currentInternalNotes || []).map(function (item) {
+				if (internalNoteId(item) === id) {
+					replaced = true;
+					return note;
+				}
+				return item;
+			});
+			if (!replaced) currentInternalNotes.push(note);
+			renderInternalNoteList(currentInternalNotes);
+		}
+
+		function removeInternalNoteById(noteId) {
+			var id = String(noteId || '');
+			if (!id) return;
+			currentInternalNotes = (currentInternalNotes || []).filter(function (item) {
+				return internalNoteId(item) !== id;
+			});
+			renderInternalNoteList(currentInternalNotes);
 		}
 
 		async function loadInternalNotes(email) {
@@ -2342,15 +2443,16 @@
 				if (!payload.text_content.trim()) return;
 				button.disabled = true;
 				try {
+					var res = null;
 					if (mode === 'edit') {
 						suppressNextInternalNoteSocket('email-internal-note:updated', { client_request_id: clientRequestId });
-						await api('PUT', '/emails/' + encodeURIComponent(email._id) + '/internal-notes/' + encodeURIComponent(noteId), payload);
+						res = await api('PUT', '/emails/' + encodeURIComponent(email._id) + '/internal-notes/' + encodeURIComponent(noteId), payload);
 					} else {
 						suppressNextInternalNoteSocket('email-internal-note:created', { client_request_id: clientRequestId });
-						await api('POST', '/emails/' + encodeURIComponent(email._id) + '/internal-notes', payload);
+						res = await api('POST', '/emails/' + encodeURIComponent(email._id) + '/internal-notes', payload);
 					}
 					destroyNoteEditor();
-					await loadInternalNotes(email);
+					if (res?.note) upsertInternalNote(res.note);
 					showSuccess(mode === 'edit' ? 'Internal note updated' : 'Internal note added');
 				} catch (err) {
 					showError(err.message || 'Failed to save internal note');
@@ -2473,11 +2575,36 @@
 			bindSelectCheckbox(item.querySelector('.ecc-email-select'));
 		}
 
+		function renderDraftItemHtml(draft) {
+			var id = draftId(draft);
+			var sourceEmailId = draftSourceEmailId(draft);
+			return '<div class="list-group-item list-group-item-action ecc-email-item" role="button" tabindex="0" data-id="' + escapeHtml(id) + '" data-source-email="' + escapeHtml(sourceEmailId) + '">'
+				+ '<div class="d-flex justify-content-between align-items-start gap-3 min-w-0">'
+				+ '<div class="form-check ecc-email-select-wrap">'
+				+ '<input class="form-check-input ecc-email-select" type="checkbox" value="' + escapeHtml(id) + '" aria-label="Select draft">'
+				+ '</div>'
+				+ '<div class="min-w-0 flex-grow-1">'
+				+ '<div class="fw-semibold text-truncate">' + escapeHtml(draft.subject || '(No subject)') + '</div>'
+				+ '</div>'
+				+ '<small class="text-muted text-nowrap">' + escapeHtml(formatDateTime(draft.updatedAt)) + '</small>'
+				+ '</div>'
+				+ '</div>';
+		}
+
+		function draftMatchesCurrentView(draft) {
+			if (!draft) return false;
+			if (['discarded', 'ready'].includes(String(draft.status || ''))) return false;
+			if (!selectedProject) return true;
+			return emailProjectId(draft) === String(selectedProject);
+		}
+
 		function showEmptyEmailsIfNeeded() {
 			if (!listEl || listEl.querySelector('.ecc-email-item')) return;
 			listEl.innerHTML = '<div class="list-group-item text-muted ecc-email-empty">No emails for this view.</div>';
 			selectedEmail = null;
 			replyTargetEmail = null;
+			currentDetailThread = [];
+			selectedEmailThreadSourceIds = [];
 			emailAiMessages = [];
 			emailReplySuggestions = [];
 			renderEmailAi(null);
@@ -2494,6 +2621,8 @@
 			listEl.innerHTML = '<div class="list-group-item text-muted ecc-email-empty">No emails for this view.</div>';
 			selectedEmail = null;
 			replyTargetEmail = null;
+			currentDetailThread = [];
+			selectedEmailThreadSourceIds = [];
 			emailAiMessages = [];
 			emailReplySuggestions = [];
 			renderEmailAi(null);
@@ -2502,6 +2631,8 @@
 		}
 		selectedEmail = null;
 		replyTargetEmail = null;
+		currentDetailThread = [];
+		selectedEmailThreadSourceIds = [];
 		emailAiMessages = [];
 		emailReplySuggestions = [];
 		renderEmailAi(null);
@@ -2519,29 +2650,18 @@
 		updateActionBar();
 		renderMoveMenu();
 		selectedEmail = null;
+		replyTargetEmail = null;
+		currentDetailThread = [];
+		selectedEmailThreadSourceIds = [];
 		emailAiMessages = [];
 		emailReplySuggestions = [];
 		renderEmailAi(null);
 		if (!drafts.length) {
-			listEl.innerHTML = '<div class="list-group-item text-muted">No drafts for this view.</div>';
+			listEl.innerHTML = '<div class="list-group-item text-muted ecc-email-empty">No drafts for this view.</div>';
 			updateActionBar();
 			return;
 		}
-		listEl.innerHTML = drafts.map(function (draft) {
-			var draftId = String(draft._id || draft.id || '');
-			var sourceEmailId = draftSourceEmailId(draft);
-			return '<div class="list-group-item list-group-item-action ecc-email-item" role="button" tabindex="0" data-id="' + escapeHtml(draftId) + '" data-source-email="' + escapeHtml(sourceEmailId) + '">'
-				+ '<div class="d-flex justify-content-between align-items-start gap-3 min-w-0">'
-				+ '<div class="form-check ecc-email-select-wrap">'
-				+ '<input class="form-check-input ecc-email-select" type="checkbox" value="' + escapeHtml(draftId) + '" aria-label="Select draft">'
-				+ '</div>'
-				+ '<div class="min-w-0 flex-grow-1">'
-				+ '<div class="fw-semibold text-truncate">' + escapeHtml(draft.subject || '(No subject)') + '</div>'
-				+ '</div>'
-				+ '<small class="text-muted text-nowrap">' + escapeHtml(formatDateTime(draft.updatedAt)) + '</small>'
-				+ '</div>'
-				+ '</div>';
-		}).join('');
+		listEl.innerHTML = drafts.map(renderDraftItemHtml).join('');
 		listEl.querySelectorAll('.ecc-email-item').forEach(function (button) {
 			bindDraftItem(button);
 		});
@@ -2563,10 +2683,9 @@
 		showDetailLoading(id);
 		try {
 			var res = await api('GET', '/emails/' + encodeURIComponent(id) + '/thread?order=desc&include=draft');
-			var thread = res.thread || [];
-			selectedEmailThreadSourceIds = thread.map(function (item) {
-				return emailId(item);
-			}).filter(Boolean);
+			var thread = sortThreadDesc(res.thread || []);
+			currentDetailThread = thread;
+			updateSelectedThreadSourceIds();
 			var email = thread.find(function (item) {
 				return emailId(item) === id;
 			}) || thread[0] || null;
@@ -2592,6 +2711,7 @@
 		} catch (err) {
 			selectedEmail = null;
 			replyTargetEmail = null;
+			currentDetailThread = [];
 			selectedEmailThreadSourceIds = [];
 			pendingEmailId = '';
 			emailAiMessages = [];
@@ -2634,7 +2754,6 @@
 			results.forEach(function (result) {
 				applyEmailSocketUpdate(result?.email || result);
 			});
-			await loadLabels();
 		} catch (err) {
 			showError(err.message || 'Failed to move emails');
 		}
@@ -2654,7 +2773,6 @@
 			showSuccess(ids.length + ' moved to trash');
 			clearSelection();
 			ids.forEach(removeEmailFromList);
-			await loadLabels();
 		} catch (err) {
 			showError(err.message || 'Failed to move emails to trash');
 		}
@@ -2672,7 +2790,7 @@
 			}));
 			showSuccess(ids.length + ' draft(s) deleted');
 			clearSelection();
-			await loadAll();
+			ids.forEach(removeDraftFromList);
 		} catch (err) {
 			ids.forEach(function (id) {
 				pendingLocalDraftDeleteIds.delete(String(id || ''));
@@ -2695,7 +2813,6 @@
 			results.forEach(function (result) {
 				applyEmailSocketUpdate(result?.email || result);
 			});
-			await loadLabels();
 		} catch (err) {
 			showError(err.message || 'Failed to reset triage');
 		}
@@ -2707,86 +2824,86 @@
 		renderLabels(data.labels || []);
 	}
 
-		async function loadEmails() {
-			if (!listEl) return;
-			var seq = ++emailLoadSeq;
-			emailPage = 1;
-			emailLoadingMore = false;
-			emailHasMore = false;
-			showListView();
-			listEl.innerHTML = '<div class="list-group-item text-muted">Loading emails...</div>';
-			resetSelectionState();
-			updateActionBar();
-			if (activeMailbox === 'drafts') {
-				var draftData = await api('GET', draftsPath());
-				if (!listEl || seq !== emailLoadSeq) return;
-				renderDrafts(draftData.drafts || []);
-				return;
-			}
-			var data = await api('GET', emailsPagePath(1));
+	async function loadEmails() {
+		if (!listEl) return;
+		var seq = ++emailLoadSeq;
+		emailPage = 1;
+		emailLoadingMore = false;
+		emailHasMore = false;
+		showListView();
+		listEl.innerHTML = '<div class="list-group-item text-muted">Loading emails...</div>';
+		resetSelectionState();
+		updateActionBar();
+		if (activeMailbox === 'drafts') {
+			var draftData = await api('GET', draftsPath());
+			if (!listEl || seq !== emailLoadSeq) return;
+			renderDrafts(draftData.drafts || []);
+			return;
+		}
+		var data = await api('GET', emailsPagePath(1));
+		if (!listEl || seq !== emailLoadSeq) return;
+		var emails = data.emails || [];
+		emailHasMore = emails.length === EMAIL_PAGE_SIZE;
+		renderEmails(emails);
+	}
+
+	function appendEmails(emails) {
+		if (!listEl || !emails.length) return;
+		listEl.querySelector('.ecc-email-empty')?.remove();
+		var wrapper = document.createElement('div');
+		wrapper.innerHTML = emails.map(renderEmailItemHtml).join('');
+		Array.prototype.slice.call(wrapper.children).forEach(function (item) {
+			bindEmailItem(item);
+			listEl.appendChild(item);
+		});
+	}
+
+	async function loadMoreEmails() {
+		if (!listEl || emailLoadingMore || !emailHasMore) return;
+		if (detailActive || activeMailbox === 'drafts') return;
+		emailLoadingMore = true;
+		var seq = emailLoadSeq;
+		var page = emailPage + 1;
+		try {
+			var data = await api('GET', emailsPagePath(page));
 			if (!listEl || seq !== emailLoadSeq) return;
 			var emails = data.emails || [];
+			emailPage = page;
 			emailHasMore = emails.length === EMAIL_PAGE_SIZE;
-			renderEmails(emails);
-		}
-
-		function appendEmails(emails) {
-			if (!listEl || !emails.length) return;
-			listEl.querySelector('.ecc-email-empty')?.remove();
-			var wrapper = document.createElement('div');
-			wrapper.innerHTML = emails.map(renderEmailItemHtml).join('');
-			Array.prototype.slice.call(wrapper.children).forEach(function (item) {
-				bindEmailItem(item);
-				listEl.appendChild(item);
-			});
-		}
-
-		async function loadMoreEmails() {
-			if (!listEl || emailLoadingMore || !emailHasMore) return;
-			if (detailActive || activeMailbox === 'drafts') return;
-			emailLoadingMore = true;
-			var seq = emailLoadSeq;
-			var page = emailPage + 1;
-			try {
-				var data = await api('GET', emailsPagePath(page));
-				if (!listEl || seq !== emailLoadSeq) return;
-				var emails = data.emails || [];
-				emailPage = page;
-				emailHasMore = emails.length === EMAIL_PAGE_SIZE;
-				appendEmails(emails);
-				// Re-arm the observer so it re-fires if the sentinel is still in view
-				// (IntersectionObserver only reports transitions, not steady state).
-				if (emailHasMore && eccObserver && eccSentinelEl) {
-					eccObserver.unobserve(eccSentinelEl);
-					eccObserver.observe(eccSentinelEl);
-				}
-			} catch (err) {
-				showError(err.message || 'Failed to load more emails');
-			} finally {
-				if (seq === emailLoadSeq) emailLoadingMore = false;
+			appendEmails(emails);
+			// Re-arm the observer so it re-fires if the sentinel is still in view
+			// (IntersectionObserver only reports transitions, not steady state).
+			if (emailHasMore && eccObserver && eccSentinelEl) {
+				eccObserver.unobserve(eccSentinelEl);
+				eccObserver.observe(eccSentinelEl);
 			}
+		} catch (err) {
+			showError(err.message || 'Failed to load more emails');
+		} finally {
+			if (seq === emailLoadSeq) emailLoadingMore = false;
 		}
+	}
 
-		function setupInfiniteScroll() {
-			var root = document.querySelector('.ecc-main');
-			if (!root || !listEl || typeof IntersectionObserver === 'undefined') return;
-			eccSentinelEl = document.createElement('div');
-			eccSentinelEl.className = 'ecc-scroll-sentinel';
-			eccSentinelEl.setAttribute('aria-hidden', 'true');
-			listEl.parentNode.insertBefore(eccSentinelEl, listEl.nextSibling);
-			eccObserver = new IntersectionObserver(function (entries) {
-				if (entries.some(function (entry) { return entry.isIntersecting; })) loadMoreEmails();
-			}, { root: root, rootMargin: '400px' });
-			eccObserver.observe(eccSentinelEl);
-		}
+	function setupInfiniteScroll() {
+		var root = document.querySelector('.ecc-main');
+		if (!root || !listEl || typeof IntersectionObserver === 'undefined') return;
+		eccSentinelEl = document.createElement('div');
+		eccSentinelEl.className = 'ecc-scroll-sentinel';
+		eccSentinelEl.setAttribute('aria-hidden', 'true');
+		listEl.parentNode.insertBefore(eccSentinelEl, listEl.nextSibling);
+		eccObserver = new IntersectionObserver(function (entries) {
+			if (entries.some(function (entry) { return entry.isIntersecting; })) loadMoreEmails();
+		}, { root: root, rootMargin: '400px' });
+		eccObserver.observe(eccSentinelEl);
+	}
 
-		async function loadAll() {
-			try {
-				await Promise.all([loadLabels(), loadEmails()]);
-			} catch (err) {
-				if (listEl) listEl.innerHTML = '<div class="list-group-item text-danger">' + escapeHtml(err.message) + '</div>';
-			}
+	async function loadAll() {
+		try {
+			await Promise.all([loadLabels(), loadEmails()]);
+		} catch (err) {
+			if (listEl) listEl.innerHTML = '<div class="list-group-item text-danger">' + escapeHtml(err.message) + '</div>';
 		}
+	}
 
 		function listItemThreadIds(item) {
 			return String(item?.dataset?.threadIds || item?.dataset?.threadKey || '')
@@ -2805,7 +2922,6 @@
 		function applyEmailSocketUpdate(email) {
 			if (!listEl || !email) return;
 			if (activeMailbox === 'drafts') {
-				loadEmails();
 				return;
 			}
 			var id = emailId(email);
@@ -2855,6 +2971,94 @@
 			updateActionBar();
 		}
 
+		function currentDetailHasOutgoingNotice() {
+			return Boolean(detailDraftEl?.querySelector('.ecc-outgoing-queued'));
+		}
+
+		function emailAffectsCurrentDetail(email) {
+			if (!detailActive || !selectedEmail?._id || !email) return false;
+			var selectedIds = selectedEmailThreadSourceIds.length ? selectedEmailThreadSourceIds : [emailId(selectedEmail)];
+			var sourceIds = (email.thread_source_ids || []).map(String);
+			if (sourceIds.some(function (sourceId) { return selectedIds.includes(sourceId); })) return true;
+			if (selectedIds.includes(emailId(email))) return true;
+			var incomingThreadIds = emailThreadIds(email);
+			var currentThreadIds = [];
+			(currentDetailThread || []).forEach(function (item) {
+				currentThreadIds = currentThreadIds.concat(emailThreadIds(item));
+			});
+			return threadIdsOverlap(incomingThreadIds, currentThreadIds);
+		}
+
+		function mergeEmailIntoCurrentDetail(email, options) {
+			if (!options?.force && !emailAffectsCurrentDetail(email)) return false;
+			var id = emailId(email);
+			var merged = false;
+			var messages = (currentDetailThread || []).map(function (item) {
+				if (emailId(item) === id) {
+					merged = true;
+					return { ...item, ...email };
+				}
+				return item;
+			});
+			if (!merged && id) messages.push(email);
+			currentDetailThread = sortThreadDesc(messages);
+			updateSelectedThreadSourceIds(email);
+			if (options?.selectEmail) {
+				selectedEmail = email;
+			} else if (emailId(selectedEmail) === id) {
+				selectedEmail = currentDetailThread.find(function (item) { return emailId(item) === id; }) || email;
+			}
+			replyTargetEmail = latestReplyTargetFromThread(currentDetailThread, selectedEmail);
+			if (options?.render !== false && !draftEditorHost && !currentDetailHasOutgoingNotice()) {
+				renderEmailDetail(selectedEmail, currentDetailThread, options?.draft === undefined ? currentDraft : options.draft);
+				renderEmailAi(selectedEmail);
+			}
+			return true;
+		}
+
+		function showEmptyDraftsIfNeeded() {
+			if (!listEl || activeMailbox !== 'drafts' || listEl.querySelector('.ecc-email-item')) return;
+			listEl.innerHTML = '<div class="list-group-item text-muted ecc-email-empty">No drafts for this view.</div>';
+			updateActionBar();
+		}
+
+		function removeDraftFromList(id) {
+			if (!listEl || !id) return;
+			listEl.querySelector('.ecc-email-item[data-id="' + CSS.escape(id) + '"]')?.remove();
+			selectedIds.delete(id);
+			updateActionBar();
+			showEmptyDraftsIfNeeded();
+		}
+
+		function applyDraftSocketUpdate(draft) {
+			if (!draft) return;
+			var id = draftId(draft);
+			if (!id) return;
+			if (String(currentDraft?._id || '') === id) currentDraft = draftMatchesCurrentView(draft) ? draft : null;
+			if (activeMailbox !== 'drafts' || !listEl) return;
+			if (!draftMatchesCurrentView(draft)) {
+				removeDraftFromList(id);
+				return;
+			}
+			var wrapper = document.createElement('div');
+			wrapper.innerHTML = renderDraftItemHtml(draft);
+			var item = wrapper.firstElementChild;
+			if (!item) return;
+			bindDraftItem(item);
+			var existing = listEl.querySelector('.ecc-email-item[data-id="' + CSS.escape(id) + '"]');
+			if (existing) {
+				existing.replaceWith(item);
+			} else {
+				listEl.querySelector('.ecc-email-empty')?.remove();
+				listEl.prepend(item);
+			}
+			if (selectedIds.has(id)) {
+				var checkbox = item.querySelector('.ecc-email-select');
+				if (checkbox) setEmailSelected(checkbox, true);
+			}
+			updateActionBar();
+		}
+
 		function removeEmailFromList(id) {
 			if (!listEl || !id) return;
 			listEl.querySelector('.ecc-email-item[data-id="' + CSS.escape(id) + '"]')?.remove();
@@ -2867,30 +3071,90 @@
 			showEmptyEmailsIfNeeded();
 		}
 
+		function scheduleEccCountsRefresh() {
+			if (eccCountsTimer) clearTimeout(eccCountsTimer);
+			eccCountsTimer = setTimeout(function () {
+				eccCountsTimer = null;
+				loadLabels().catch(() => {});
+			}, 300);
+		}
+
+		function outgoingMatchesCurrentNotice(outgoing) {
+			var id = outgoingId(outgoing);
+			if (!id || !detailDraftEl) return false;
+			return Boolean(detailDraftEl.querySelector('.ecc-outgoing-queued[data-outgoing-id="' + CSS.escape(id) + '"]'));
+		}
+
+		function outgoingAffectsSelectedThread(outgoing, draft) {
+			if (outgoingMatchesCurrentNotice(outgoing)) return true;
+			var sourceId = String(outgoing?.source_email || draft?.source_email || '');
+			return Boolean(detailActive && sourceId && selectedEmailThreadSourceIds.includes(sourceId));
+		}
+
 		function handleEmailSocketEvent(event) {
 			var email = event.detail || {};
 			applyEmailSocketUpdate(email);
-			loadLabels().catch(() => {});
+			mergeEmailIntoCurrentDetail(email);
 			updateTriageProgressFromEmail(email);
 		}
 
 		function handleDraftSocketEvent(event) {
 			if (shouldIgnoreLocalDraftDeleteEvent(event)) return;
-			// Don't tear down an open draft detail (e.g. the abort-send banner) by switching
-			// back to the list view; the list is refreshed when the user returns to it.
-			if (activeMailbox === 'drafts' && !detailActive) loadEmails().catch(() => {});
-			loadLabels().catch(() => {});
+			if (event.type === 'email-draft:deleted') {
+				removeDraftFromList(draftId(event.detail || {}));
+				return;
+			}
+			applyDraftSocketUpdate(event.detail || {});
+		}
+
+		function handleOutgoingQueued(event) {
+			var detail = event.detail || {};
+			var outgoing = detail.outgoing_email || {};
+			if (outgoingAffectsSelectedThread(outgoing, detail.draft)) {
+				renderOutgoingQueuedNotice(outgoing, detail.abort_until, selectedEmail);
+			}
+		}
+
+		function handleOutgoingSending(event) {
+			var detail = event.detail || {};
+			var outgoing = detail.outgoing_email || {};
+			if (!outgoingAffectsSelectedThread(outgoing, detail.draft)) return;
+			if (currentDetailHasOutgoingNotice()) {
+				updateOutgoingNoticeStatus('sending');
+			} else {
+				renderOutgoingQueuedNotice(outgoing, detail.abort_until, selectedEmail, { status: 'sending' });
+			}
+		}
+
+		function handleOutgoingCanceled(event) {
+			var detail = event.detail || {};
+			var outgoing = detail.outgoing_email || {};
+			var draft = detail.draft || null;
+			if (draft) applyDraftSocketUpdate(draft);
+			if (outgoingAffectsSelectedThread(outgoing, draft)) {
+				currentDraft = draft || currentDraft;
+				renderDraftDetail(currentDraft);
+				openReplyEditor(replyTargetEmail || selectedEmail, detailDraftEl).catch(() => {});
+			}
 		}
 
 		function handleOutgoingSent(event) {
 			var detail = event.detail || {};
 			var outgoing = detail.outgoing_email || {};
 			var sentEmail = detail.email || null;
+			var sourceEmail = detail.source_email || null;
+			var draft = detail.draft || null;
+			if (draft) applyDraftSocketUpdate(draft);
+			if (sourceEmail) applyEmailSocketUpdate(sourceEmail);
 			if (sentEmail) applyEmailSocketUpdate(sentEmail);
-			loadLabels().catch(() => {});
-			var sourceId = String(outgoing.source_email || '');
-			if (detailActive && sourceId && selectedEmailThreadSourceIds.includes(sourceId)) {
-				selectEmail(sentEmail?._id || emailId(selectedEmail)).catch(() => {});
+			if (outgoingAffectsSelectedThread(outgoing, draft)) {
+				removeOutgoingNotice();
+				if (sourceEmail) mergeEmailIntoCurrentDetail(sourceEmail, { render: false, force: true });
+				if (sentEmail) {
+					mergeEmailIntoCurrentDetail(sentEmail, { selectEmail: true, draft: null, force: true });
+				} else if (sourceEmail) {
+					mergeEmailIntoCurrentDetail(sourceEmail, { draft: null, force: true });
+				}
 			}
 		}
 
@@ -2899,9 +3163,9 @@
 			var outgoing = detail.outgoing_email || {};
 			var draft = detail.draft || null;
 			showError(detail.error || 'Email sending failed');
-			loadLabels().catch(() => {});
-			var sourceId = String(outgoing.source_email || draft?.source_email || '');
-			if (detailActive && sourceId && selectedEmailThreadSourceIds.includes(sourceId)) {
+			if (draft) applyDraftSocketUpdate(draft);
+			if (outgoingAffectsSelectedThread(outgoing, draft)) {
+				clearOutgoingNoticeTimer();
 				currentDraft = draft || currentDraft;
 				renderDraftDetail(currentDraft);
 				openReplyEditor(selectedEmail, detailDraftEl).catch(() => {});
@@ -2910,7 +3174,6 @@
 
 		function handleEmailDeleted(event) {
 			removeEmailFromList(emailId(event.detail || {}));
-			loadLabels().catch(() => {});
 		}
 
 		function renderTriageProgress() {
@@ -3004,7 +3267,6 @@
 			activeLabel = '';
 			pendingEmailId = '';
 			writeUrlState('');
-			await loadAll();
 			if (triageProgress.status === 'failed') {
 				showError(run?.last_error || 'Inbox triage failed. Run: ' + triageRunId);
 				return;
@@ -3108,7 +3370,10 @@
 		}
 
 	function onModalDeleted(e) {
-		if (e.detail?.type === 'emails') loadAll();
+		if (e.detail?.type !== 'emails') return;
+		var id = String(e.detail?.id || '');
+		removeEmailFromList(id);
+		if (detailActive && id && emailId(selectedEmail) === id) backToListView();
 	}
 
 	function mount() {
@@ -3163,6 +3428,8 @@
 		selectedProject = '';
 		selectedEmail = null;
 		replyTargetEmail = null;
+		currentDetailThread = [];
+		selectedEmailThreadSourceIds = [];
 		detailActive = false;
 		pendingEmailId = '';
 		triageRunId = '';
@@ -3206,7 +3473,7 @@
 			try {
 				await api('DELETE', '/trash?confirm=true');
 				showSuccess('Trash emptied');
-				await loadAll();
+				if (activeMailbox === 'trash' && !activeLabel) renderEmails([]);
 			} catch (err) {
 				showError(err.message || 'Failed to empty trash');
 			}
@@ -3217,7 +3484,7 @@
 			try {
 				await api('DELETE', '/emails/spam?confirm=true');
 				showSuccess('Spam emptied');
-				await loadAll();
+				if (activeMailbox === 'spam' && !activeLabel) renderEmails([]);
 			} catch (err) {
 				showError(err.message || 'Failed to empty spam');
 			}
@@ -3236,6 +3503,10 @@
 		addWindowListener('email-internal-note:created', handleInternalNoteSocketEvent);
 		addWindowListener('email-internal-note:updated', handleInternalNoteSocketEvent);
 		addWindowListener('email-internal-note:deleted', handleInternalNoteSocketEvent);
+		addWindowListener('counts:refresh', scheduleEccCountsRefresh);
+		addWindowListener('outgoing-email:queued', handleOutgoingQueued);
+		addWindowListener('outgoing-email:sending', handleOutgoingSending);
+		addWindowListener('outgoing-email:canceled', handleOutgoingCanceled);
 		addWindowListener('outgoing-email:sent', handleOutgoingSent);
 		addWindowListener('outgoing-email:error', handleOutgoingError);
 		setupInfiniteScroll();
@@ -3246,6 +3517,9 @@
 
 	function unmount() {
 		stopTriageRunPolling();
+		clearOutgoingNoticeTimer();
+		if (eccCountsTimer) clearTimeout(eccCountsTimer);
+		eccCountsTimer = null;
 		for (var i = 0; i < windowListeners.length; i++) {
 			window.removeEventListener(windowListeners[i][0], windowListeners[i][1]);
 		}
@@ -3303,6 +3577,8 @@
 		aiSendBtn = null;
 		selectedEmail = null;
 		replyTargetEmail = null;
+		currentDetailThread = [];
+		selectedEmailThreadSourceIds = [];
 		detailActive = false;
 		currentDraft = null;
 		destroyDraftEditor();

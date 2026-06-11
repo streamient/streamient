@@ -17,6 +17,10 @@ const MODEL_MAP = {
 	emails: { model: Email, tsType: 'emails' },
 };
 
+function eventTypeForTrashType(type) {
+	return type === 'memories' ? 'memory' : type.slice(0, -1);
+}
+
 function getModelEntry(type) {
 	const entry = MODEL_MAP[type];
 	if (!entry) throw new Error(`Invalid trash type: ${type}`);
@@ -79,6 +83,7 @@ export async function permanentDelete(host_id, type, id) {
 			removeDocument(host_id, tsType, id).catch((err) => log.error({ err }, 'Typesense remove error'));
 		}
 		removeLinksForItem(host_id, id).catch((err) => log.error({ err }, 'Graph link cleanup error'));
+		emitToTenant(host_id, `${eventTypeForTrashType(type)}:deleted`, { _id: id });
 	}
 	return doc;
 }
@@ -99,7 +104,7 @@ export async function batchPermanentDelete(host_id, items) {
 }
 
 export async function emptyTrash(host_id) {
-	const deletions = Object.entries(MODEL_MAP).map(async ([, { model, tsType }]) => {
+	const deletions = Object.entries(MODEL_MAP).map(async ([type, { model, tsType }]) => {
 		const docs = await model.find({ host_id, in_trash: true }).select('_id').lean();
 		const ids = docs.map((d) => d._id.toString());
 
@@ -107,6 +112,7 @@ export async function emptyTrash(host_id) {
 
 		for (const id of ids) {
 			removeDocument(host_id, tsType, id).catch((err) => log.error({ err }, 'Typesense remove error'));
+			emitToTenant(host_id, `${eventTypeForTrashType(type)}:deleted`, { _id: id });
 		}
 
 		return ids.length;

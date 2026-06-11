@@ -257,6 +257,7 @@ export async function processOutgoingEmail(outgoingId, options = {}) {
 	);
 	if (!outgoing) return null;
 	const sendStartedAt = Date.now();
+	emitOutgoing(outgoing.host_id, 'outgoing-email:sending', outgoing);
 	log.info({ host_id: outgoing.host_id, outgoing_id: outgoing._id.toString(), attempts: outgoing.attempts, to: outgoing.to.length }, 'Sending outgoing email');
 	try {
 		const identity = await EmailIdentity.findOne({ _id: outgoing.email_identity, host_id: outgoing.host_id }).lean();
