@@ -74,9 +74,10 @@ After saving a URL, use `create_link` to connect it to related notes or memories
 - Do not write HTML directly into frontend JS files; use Pug templates in `views/ajax` instead.
 
 ## Development
-- Use Docker compose only (Orbstack on macOS)
+- Use Docker compose only
 - pnpm as package manager
 - To sign into the app you can use nitai@fastmail.com and the localhost:8025 (mailpit) to retrieve the magic link
+- The local URL is http://k.lan
 
 ## Design
 - Forms: Right align: submit/save button, Left align: cancel/abort
