@@ -35,4 +35,13 @@ describe('MCP Tools — Projects', () => {
         assert.equal(parsed.id, FIXTURES.project._id);
         assert.equal(parsed.host_id, undefined);
     });
+
+    it('delete_project — calls DELETE /projects/:id', async () => {
+        const result = await tools.delete_project.handler({ id: FIXTURES.project._id });
+        assert.equal(api.lastCall.method, 'DELETE');
+        assert.equal(api.lastCall.path, `/projects/${FIXTURES.project._id}`);
+        const parsed = JSON.parse(result.content[0].text);
+        assert.equal(parsed.message, 'Project deleted');
+        assert.equal(result.structuredContent.data.message, 'Project deleted');
+    });
 });

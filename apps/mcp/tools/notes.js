@@ -64,12 +64,13 @@ export function noteTools(api, defaultProjectId) {
     delete_note: {
       description: 'Delete a note by ID',
       annotations: OVERWRITE_INTERNAL,
+      outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
         id: z.string().describe('Note ID'),
       },
       handler: async (args) => {
         await api.delete(`/notes/${args.id}`);
-        return { content: [{ type: 'text', text: 'Note deleted' }] };
+        return mcpJson({ message: 'Note deleted' });
       },
     },
 

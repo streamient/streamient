@@ -118,7 +118,9 @@ describe('MCP Tools — Memory', () => {
         const result = await tools.delete_memory.handler({ id: FIXTURES.memory._id });
         assert.equal(api.lastCall.method, 'DELETE');
         assert.ok(api.lastCall.path.includes(FIXTURES.memory._id));
-        assert.equal(result.content[0].text, 'Memory deleted');
+        const parsed = JSON.parse(result.content[0].text);
+        assert.equal(parsed.message, 'Memory deleted');
+        assert.equal(result.structuredContent.data.message, 'Memory deleted');
     });
 
     it('suggest_memory_tags — calls GET /memories/tags/suggest', async () => {

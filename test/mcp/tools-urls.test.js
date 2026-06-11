@@ -111,6 +111,8 @@ describe('MCP Tools — URLs', () => {
         const result = await tools.delete_url.handler({ id: FIXTURES.url._id });
         assert.equal(api.lastCall.method, 'DELETE');
         assert.ok(api.lastCall.path.includes(FIXTURES.url._id));
-        assert.equal(result.content[0].text, 'URL deleted');
+        const parsed = JSON.parse(result.content[0].text);
+        assert.equal(parsed.message, 'URL deleted');
+        assert.equal(result.structuredContent.data.message, 'URL deleted');
     });
 });

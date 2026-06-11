@@ -115,12 +115,13 @@ export function memoryTools(api, defaultProjectId) {
     delete_memory: {
       description: 'Delete a memory by ID',
       annotations: OVERWRITE_INTERNAL,
+      outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
         id: z.string().describe('Memory ID'),
       },
       handler: async (args) => {
         await api.delete(`/memories/${args.id}`);
-        return { content: [{ type: 'text', text: 'Memory deleted' }] };
+        return mcpJson({ message: 'Memory deleted' });
       },
     },
 

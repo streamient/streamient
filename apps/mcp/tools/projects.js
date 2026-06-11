@@ -67,12 +67,13 @@ export function projectTools(api) {
     delete_project: {
       description: 'Delete a project by ID (cannot delete the default project)',
       annotations: OVERWRITE_INTERNAL,
+      outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
         id: z.string().describe('Project ID'),
       },
       handler: async (args) => {
         await api.delete(`/projects/${args.id}`);
-        return { content: [{ type: 'text', text: 'Project deleted' }] };
+        return mcpJson({ message: 'Project deleted' });
       },
     },
 

@@ -84,6 +84,8 @@ describe('MCP Tools — Emails', () => {
 		const result = await tools.delete_email.handler({ id: EMAIL_FIXTURE._id });
 		assert.equal(api.lastCall.method, 'DELETE');
 		assert.equal(api.lastCall.path, `/emails/${EMAIL_FIXTURE._id}`);
-		assert.equal(result.content[0].text, 'Email deleted');
+		const parsed = JSON.parse(result.content[0].text);
+		assert.equal(parsed.message, 'Email deleted');
+		assert.equal(result.structuredContent.data.message, 'Email deleted');
 	});
 });

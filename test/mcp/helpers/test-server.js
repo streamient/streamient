@@ -13,6 +13,7 @@ import { urlTools } from '../../../apps/mcp/tools/urls.js';
 import { emailTools } from '../../../apps/mcp/tools/emails.js';
 import { projectTools } from '../../../apps/mcp/tools/projects.js';
 import { graphTools } from '../../../apps/mcp/tools/graph.js';
+import { gitSyncTools } from '../../../apps/mcp/tools/git_sync.js';
 import { applyToolProfile, MCP_TOOL_PROFILES } from '../../../apps/mcp/tools/profile.js';
 import { getRequiredScopesForTool } from '../../../modules/oauth.js';
 
@@ -44,6 +45,7 @@ export function buildMcpServer(api, { toolProfile = MCP_TOOL_PROFILES.FULL } = {
         ...emailTools(api, defaultProjectId),
         ...projectTools(api),
         ...graphTools(api),
+        ...gitSyncTools(api, defaultProjectId),
     }, toolProfile);
 
     for (const [name, tool] of Object.entries(allTools)) {

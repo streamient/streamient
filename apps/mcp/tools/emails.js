@@ -100,12 +100,13 @@ export function emailTools(api, defaultProjectId) {
 		delete_email: {
 			description: 'Delete an email by ID',
 			annotations: OVERWRITE_INTERNAL,
+			outputSchema: MCP_JSON_OUTPUT_SCHEMA,
 			inputSchema: {
 				id: z.string().describe('Email ID'),
 			},
 			handler: async (args) => {
 				await api.delete(`/emails/${args.id}`);
-				return { content: [{ type: 'text', text: 'Email deleted' }] };
+				return mcpJson({ message: 'Email deleted' });
 			},
 		},
 	};

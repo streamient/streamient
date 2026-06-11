@@ -38,15 +38,15 @@ describe('MCP Server — Streamable HTTP transport', () => {
     });
 
     describe('tools/list', () => {
-        it('should list all 38 tools', async () => {
+        it('should list all 44 tools', async () => {
             const { tools } = await client.listTools();
-            assert.equal(tools.length, 38);
+            assert.equal(tools.length, 44);
         });
 
         it('should list the app-profile tools at /mcp/app', async () => {
             const { tools } = await appClient.listTools();
             const names = tools.map((t) => t.name);
-            assert.equal(tools.length, 37);
+            assert.equal(tools.length, 43);
             assert.equal(names.includes('chat'), false);
             for (const name of ['ingest_email', 'read_email', 'list_emails', 'search_emails', 'get_email_thread', 'delete_email']) {
                 assert.ok(names.includes(name), `missing email tool: ${name}`);
@@ -62,8 +62,9 @@ describe('MCP Server — Streamable HTTP transport', () => {
                 'suggest_memory_tags', 'search_knowledge', 'chat',
                 'save_url', 'list_urls', 'search_urls', 'read_url', 'update_url', 'delete_url',
                 'ingest_email', 'read_email', 'list_emails', 'search_emails', 'get_email_thread', 'delete_email',
-                'list_projects', 'get_project',
+                'list_projects', 'get_project', 'create_project', 'update_project', 'delete_project', 'get_project_counts',
                 'create_link', 'get_links', 'get_graph', 'traverse_graph', 'delete_link',
+                'list_git_repos', 'add_git_repo', 'update_git_repo', 'remove_git_repo', 'trigger_git_sync', 'git_sync_status',
             ];
             for (const name of expected) {
                 assert.ok(names.includes(name), `missing tool: ${name}`);
@@ -93,14 +94,12 @@ describe('MCP Server — Streamable HTTP transport', () => {
             }
         });
 
-        it('JSON-returning tools should advertise an output schema', async () => {
+        it('every advertised app tool should include a JSON output schema', async () => {
             const { tools } = await appClient.listTools();
-            const names = new Map(tools.map((tool) => [tool.name, tool]));
-            for (const name of ['get_graph', 'get_links', 'get_project', 'get_project_counts', 'read_note', 'search_knowledge']) {
-                const tool = names.get(name);
-                assert.ok(tool?.outputSchema, `tool ${name} missing outputSchema`);
+            for (const tool of tools) {
+                assert.ok(tool.outputSchema, `tool ${tool.name} missing outputSchema`);
                 assert.equal(tool.outputSchema.type, 'object');
-                assert.ok(tool.outputSchema.properties?.data, `tool ${name} missing outputSchema.data`);
+                assert.ok(tool.outputSchema.properties?.data, `tool ${tool.name} missing outputSchema.data`);
             }
         });
 

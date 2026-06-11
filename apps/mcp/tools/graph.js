@@ -87,12 +87,13 @@ export function graphTools(api) {
         delete_link: {
             description: 'Delete a link between two items',
             annotations: OVERWRITE_INTERNAL,
+            outputSchema: MCP_JSON_OUTPUT_SCHEMA,
             inputSchema: {
                 link_id: z.string().describe('Link ID to delete'),
             },
             handler: async (args) => {
                 await api.delete(`/links/${args.link_id}`);
-                return { content: [{ type: 'text', text: 'Link deleted' }] };
+                return mcpJson({ message: 'Link deleted' });
             },
         },
     };

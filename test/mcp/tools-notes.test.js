@@ -87,7 +87,9 @@ describe('MCP Tools — Notes', () => {
         const result = await tools.delete_note.handler({ id: FIXTURES.note._id });
         assert.equal(api.lastCall.method, 'DELETE');
         assert.ok(api.lastCall.path.includes(FIXTURES.note._id));
-        assert.equal(result.content[0].text, 'Note deleted');
+        const parsed = JSON.parse(result.content[0].text);
+        assert.equal(parsed.message, 'Note deleted');
+        assert.equal(result.structuredContent.data.message, 'Note deleted');
     });
 
     // ── list_notes ────────────────────────────────────────────────

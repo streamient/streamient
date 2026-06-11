@@ -83,4 +83,25 @@ describe('MCP Tools — Git Sync', () => {
 		assert.equal(parsed.summary.imported_commits, 3);
 		assert.equal(parsed.last_commit_sha, 'abc123');
 	});
+
+	it('remove_git_repo calls DELETE /git-repos/:id', async () => {
+		const result = await tools.remove_git_repo.handler({ id: repo._id });
+		const parsed = JSON.parse(result.content[0].text);
+
+		assert.equal(api.lastCall.method, 'DELETE');
+		assert.equal(api.lastCall.path, `/git-repos/${repo._id}`);
+		assert.equal(parsed.message, 'Git repo removed');
+		assert.equal(result.structuredContent.data.message, 'Git repo removed');
+	});
+
+	it('trigger_git_sync returns structured sync result', async () => {
+		const result = await tools.trigger_git_sync.handler({ id: repo._id });
+		const parsed = JSON.parse(result.content[0].text);
+
+		assert.equal(api.lastCall.method, 'POST');
+		assert.equal(api.lastCall.path, `/git-repos/${repo._id}/sync`);
+		assert.equal(parsed.message, 'Sync complete');
+		assert.equal(parsed.summary.imported_commits, 1);
+		assert.equal(result.structuredContent.data.message, 'Sync complete');
+	});
 });

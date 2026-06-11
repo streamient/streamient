@@ -80,24 +80,26 @@ export function gitSyncTools(api, defaultProjectId) {
 		remove_git_repo: {
 			description: 'Remove a git repo configuration and its local working copy',
 			annotations: OVERWRITE_INTERNAL,
+			outputSchema: MCP_JSON_OUTPUT_SCHEMA,
 			inputSchema: {
 				id: z.string().describe('Git repo ID'),
 			},
 			handler: async (args) => {
 				await api.delete(`/git-repos/${args.id}`);
-				return { content: [{ type: 'text', text: 'Git repo removed' }] };
+				return mcpJson({ message: 'Git repo removed' });
 			},
 		},
 
 		trigger_git_sync: {
 			description: 'Manually trigger a sync for a git repo (pull from git; push to git only in read/write mode)',
 			annotations: REACHES_GIT,
+			outputSchema: MCP_JSON_OUTPUT_SCHEMA,
 			inputSchema: {
 				id: z.string().describe('Git repo ID'),
 			},
 			handler: async (args) => {
 				const result = await api.post(`/git-repos/${args.id}/sync`, {});
-				return { content: [{ type: 'text', text: result.message || 'Sync complete' }] };
+				return mcpJson(result?.message ? result : { message: 'Sync complete' });
 			},
 		},
 

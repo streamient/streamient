@@ -122,6 +122,8 @@ describe('MCP Tools — Graph', () => {
         const result = await tools.delete_link.handler({ link_id: LINK_FIXTURE._id });
         assert.equal(api.lastCall.method, 'DELETE');
         assert.ok(api.lastCall.path.includes(`/links/${LINK_FIXTURE._id}`));
-        assert.equal(result.content[0].text, 'Link deleted');
+        const parsed = JSON.parse(result.content[0].text);
+        assert.equal(parsed.message, 'Link deleted');
+        assert.equal(result.structuredContent.data.message, 'Link deleted');
     });
 });

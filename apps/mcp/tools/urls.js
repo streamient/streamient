@@ -103,12 +103,13 @@ export function urlTools(api, defaultProjectId) {
     delete_url: {
       description: 'Delete a saved URL by ID',
       annotations: OVERWRITE_INTERNAL,
+      outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
         id: z.string().describe('URL ID'),
       },
       handler: async (args) => {
         await api.delete(`/urls/${args.id}`);
-        return { content: [{ type: 'text', text: 'URL deleted' }] };
+        return mcpJson({ message: 'URL deleted' });
       },
     },
   };
