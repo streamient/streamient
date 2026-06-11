@@ -3,6 +3,7 @@ import { User } from '../model/user.js';
 import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
 import { Url } from '../model/url.js';
+import { CrawlState } from '../model/crawl_state.js';
 import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
 import { EmailInternalNote } from '../model/email_internal_note.js';
@@ -72,6 +73,7 @@ export async function deleteTenantData(hostId, tenantId = null, deps = {}) {
 		Note,
 		Memory,
 		Url,
+		CrawlState,
 			Email,
 			EmailDraft,
 			EmailInternalNote,
@@ -115,6 +117,7 @@ export async function deleteTenantData(hostId, tenantId = null, deps = {}) {
 		models.Note.deleteMany({ host_id: hostId }),
 		models.Memory.deleteMany({ host_id: hostId }),
 		models.Url.deleteMany({ host_id: hostId }),
+		models.CrawlState.deleteMany({ host_id: hostId }),
 			models.Email.deleteMany({ host_id: hostId }),
 			models.EmailDraft.deleteMany({ host_id: hostId }),
 			models.EmailInternalNote.deleteMany({ host_id: hostId }),

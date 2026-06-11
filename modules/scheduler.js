@@ -183,6 +183,10 @@ export async function runEmailRetentionCleanup({
 export function startScheduler() {
 	let crawlReindexRunning = false;
 	new Cron('*/10 * * * *', async () => {
+		if (process.env.SCHEDULER_CRAWL_ENABLED === 'false') {
+			log.info('Scheduled crawl skipped: SCHEDULER_CRAWL_ENABLED=false');
+			return;
+		}
 		if (crawlReindexRunning) return;
 		crawlReindexRunning = true;
 		try {

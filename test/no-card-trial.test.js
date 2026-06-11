@@ -299,6 +299,7 @@ describe('no-card trial tenant cleanup', () => {
 			'Note',
 			'Memory',
 				'Url',
+				'CrawlState',
 					'Email',
 					'EmailDraft',
 					'EmailInternalNote',
@@ -369,6 +370,7 @@ describe('no-card trial tenant cleanup', () => {
 		});
 
 		assert.equal(calls.Email.host_id, 'host-1');
+		assert.equal(calls.CrawlState.host_id, 'host-1');
 		assert.equal(calls.EmailInternalNote.host_id, 'host-1');
 		assert.equal(calls.EmailExternalSyncState.host_id, 'host-1');
 		assert.equal(calls.OutgoingEmail.host_id, 'host-1');
