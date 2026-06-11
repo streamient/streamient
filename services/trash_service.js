@@ -2,7 +2,7 @@ import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
 import { Url } from '../model/url.js';
 import { Email } from '../model/email.js';
-import { bulkIndexDocuments, bulkRemoveDocuments } from '../modules/typesense.js';
+import { bulkIndexDocuments, bulkRemoveDocuments, listDocuments } from '../modules/typesense.js';
 import { emitToTenant } from '../modules/socket.js';
 import { removeLinksForItem } from './graph_service.js';
 import { createLogger } from '../modules/logger.js';
@@ -14,6 +14,12 @@ const MODEL_MAP = {
 	memories: { model: Memory, tsType: 'memory' },
 	urls: { model: Url, tsType: 'urls' },
 	emails: { model: Email, tsType: 'emails' },
+};
+const TRASH_INCLUDE_FIELDS = {
+	notes: 'id,source_id,title,project_id,in_trash,trashed_at,created_at,updated_at',
+	memories: 'id,source_id,title,source,project_id,in_trash,trashed_at,created_at,updated_at',
+	urls: 'id,source_id,title,url,description,project_id,in_trash,trashed_at,created_at,updated_at',
+	emails: 'id,source_id,subject,from,mailbox,project_id,in_trash,trashed_at,created_at,updated_at',
 };
 
 function eventTypeForTrashType(type) {
@@ -34,6 +40,48 @@ function groupTrashItems(items) {
 		grouped.get(item.type).push(item.id);
 	}
 	return grouped;
+}
+
+function dateFromTypesenseSeconds(value) {
+	const number = Number(value || 0);
+	if (!Number.isFinite(number) || number <= 0) return null;
+	return new Date(number * 1000).toISOString();
+}
+
+function trashTimestamp(item) {
+	const value = item?.trashed_at;
+	const time = value ? new Date(value).getTime() : 0;
+	return Number.isFinite(time) ? time : 0;
+}
+
+function trashHitToItem(type, hit) {
+	const doc = hit?.document || {};
+	const id = String(doc.source_id || doc.id || '').trim();
+	return {
+		...doc,
+		_id: id,
+		id,
+		_type: type,
+		project: doc.project_id || '',
+		trashed_at: dateFromTypesenseSeconds(doc.trashed_at),
+		createdAt: dateFromTypesenseSeconds(doc.created_at),
+		updatedAt: dateFromTypesenseSeconds(doc.updated_at),
+	};
+}
+
+async function listTrashType(host_id, type, limit, deps = {}) {
+	const { tsType } = getModelEntry(type);
+	const listFn = deps.listDocuments || listDocuments;
+	const result = await listFn(host_id, tsType, {
+		perPage: limit,
+		filter_by: 'in_trash:=true',
+		sort_by: 'trashed_at:desc',
+		include_fields: TRASH_INCLUDE_FIELDS[type],
+	});
+	return {
+		items: (result.hits || []).map((hit) => trashHitToItem(type, hit)),
+		total: Number(result.found || 0),
+	};
 }
 
 async function markIndexed(model, host_id, ids) {
@@ -95,26 +143,18 @@ async function permanentDeleteItemsByType(host_id, type, ids, deps = {}) {
 	return docs;
 }
 
-export async function listTrash(host_id, { type, page = 1, limit = 50 } = {}) {
+export async function listTrash(host_id, { type, page = 1, limit = 50 } = {}, deps = {}) {
 	const types = type ? [type] : Object.keys(MODEL_MAP);
 	const skip = (page - 1) * limit;
+	const fetchLimit = skip + limit;
 
-	const queries = types.map((t) => {
-		const { model } = getModelEntry(t);
-		return model
-			.find({ host_id, in_trash: true })
-			.select('-content -text_content')
-			.sort({ trashed_at: -1 })
-			.lean()
-			.then((docs) => docs.map((d) => ({ ...d, _type: t })));
-	});
-
-	const results = (await Promise.all(queries)).flat();
-	results.sort((a, b) => new Date(b.trashed_at) - new Date(a.trashed_at));
+	const results = await Promise.all(types.map((t) => listTrashType(host_id, t, fetchLimit, deps)));
+	const items = results.flatMap((result) => result.items);
+	items.sort((a, b) => trashTimestamp(b) - trashTimestamp(a));
 
 	return {
-		items: results.slice(skip, skip + limit),
-		total: results.length,
+		items: items.slice(skip, skip + limit),
+		total: results.reduce((sum, result) => sum + result.total, 0),
 	};
 }
 
@@ -165,11 +205,16 @@ export async function emptyTrash(host_id, deps = {}) {
 	return { deleted: counts.reduce((a, b) => a + b, 0) };
 }
 
-export async function getTrashCount(host_id) {
-	const counts = await Promise.all(
-		Object.values(MODEL_MAP).map(({ model }) =>
-			model.countDocuments({ host_id, in_trash: true }),
-		),
-	);
+export async function getTrashCount(host_id, deps = {}) {
+	const listFn = deps.listDocuments || listDocuments;
+	const counts = await Promise.all(Object.keys(MODEL_MAP).map(async (type) => {
+		const { tsType } = getModelEntry(type);
+		const result = await listFn(host_id, tsType, {
+			perPage: 1,
+			filter_by: 'in_trash:=true',
+			include_fields: 'id,source_id',
+		});
+		return Number(result.found || 0);
+	}));
 	return counts.reduce((a, b) => a + b, 0);
 }

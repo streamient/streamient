@@ -1,5 +1,5 @@
 import { Url } from '../model/url.js';
-import { searchCollection, removeDocument } from '../modules/typesense.js';
+import { searchCollection, indexDocument, removeDocument } from '../modules/typesense.js';
 import { extractUrlContent } from '../modules/url_content_extractor.js';
 import { emitToTenant } from '../modules/socket.js';
 import { invalidateGraphCache, removeLinksForItem } from './graph_service.js';
@@ -165,11 +165,11 @@ export async function updateUrl(host_id, urlId, data, ctx = {}) {
 export async function deleteUrl(host_id, urlId, ctx = {}) {
 	const urlDoc = await Url.findOneAndUpdate(
 		{ _id: urlId, host_id, in_trash: { $ne: true } },
-		{ $set: { in_trash: true, trashed_at: new Date() } },
+		{ $set: { in_trash: true, trashed_at: new Date(), is_indexed: false } },
 		{ returnDocument: 'after' },
 	);
 	if (urlDoc) {
-		removeDocument(host_id, 'urls', urlId).catch((err) => log.error({ err }, 'Typesense remove error'));
+		indexDocument(host_id, 'urls', urlDoc).catch((err) => log.error({ err }, 'Typesense trash index error'));
 		removeLinksForItem(host_id, urlId).catch((err) => log.error({ err }, 'Remove links error'));
 		emitToTenant(host_id, 'url:deleted', { _id: urlId });
 		invalidateGraphCache(host_id).catch(() => {});

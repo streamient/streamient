@@ -101,11 +101,11 @@ export function emailDisplayDate(email = {}) {
 
 export function decorateEmailForClient(email = {}) {
 	const doc = email?.toObject ? email.toObject() : { ...email };
-	doc.excerpt = buildEmailExcerpt(doc);
+	doc.excerpt = doc.excerpt || buildEmailExcerpt(doc);
 	doc.display_date = emailDisplayDate(doc);
 	if (doc.thread_latest) {
 		const latest = doc.thread_latest?.toObject ? doc.thread_latest.toObject() : { ...doc.thread_latest };
-		latest.excerpt = buildEmailExcerpt(latest);
+		latest.excerpt = latest.excerpt || buildEmailExcerpt(latest);
 		latest.display_date = emailDisplayDate(latest);
 		doc.thread_latest = latest;
 	}

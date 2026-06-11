@@ -5,6 +5,7 @@ import { emitToTenant } from './socket.js';
 import { getRedisClient } from './redis.js';
 import { normalizeLlmScope, resolveLlmApiKey } from '../services/byo_ai_service.js';
 import { sanitizeDeep } from './text_sanitize.js';
+import { buildEmailExcerpt } from './email_display.js';
 import { createLogger } from './logger.js';
 
 const log = createLogger('typesense');
@@ -26,6 +27,7 @@ const _chunk_fields = {
 	emails: ['text_content', 'attachment_text_content'],
 	pages: ['text_content'],
 };
+const _trash_filtered_types = new Set(['notes', 'memory', 'urls', 'emails']);
 
 function chunkMetadataFields() {
 	return [
@@ -226,6 +228,59 @@ function exactFilterValue(value) {
 	return '`' + String(value).replace(/`/g, '\\`') + '`';
 }
 
+function hasTrashFilter(filterBy) {
+	return typeof filterBy === 'string' && /\bin_trash\s*[:=]/.test(filterBy);
+}
+
+function combineFilters(...filters) {
+	return filters.filter(Boolean).join(' && ');
+}
+
+function applyActiveTrashFilter(type, filterBy = '') {
+	if (!_trash_filtered_types.has(type) || hasTrashFilter(filterBy)) return filterBy || '';
+	return combineFilters(filterBy, 'in_trash:=false');
+}
+
+function unixSeconds(value) {
+	if (!value) return 0;
+	const time = new Date(value).getTime();
+	return Number.isFinite(time) ? Math.floor(time / 1000) : 0;
+}
+
+function trashFields(doc = {}) {
+	const fields = { in_trash: Boolean(doc.in_trash) };
+	const trashedAt = unixSeconds(doc.trashed_at);
+	if (trashedAt) fields.trashed_at = trashedAt;
+	return fields;
+}
+
+function canonicalEmailMessageId(value) {
+	const raw = String(value || '').trim();
+	if (!raw) return '';
+	return raw.replace(/^<+|>+$/g, '').trim().toLowerCase();
+}
+
+function emailThreadIdentifiers(doc = {}) {
+	const ids = [];
+	const add = (value) => {
+		const id = canonicalEmailMessageId(value);
+		if (id && !ids.includes(id)) ids.push(id);
+	};
+	add(doc.message_id);
+	for (const ref of doc.references || []) add(ref);
+	add(doc.in_reply_to);
+	if (!ids.length) ids.push(String(doc._id || doc.id || ''));
+	return ids.filter(Boolean);
+}
+
+function emailThreadKey(doc = {}) {
+	const references = (doc.references || []).map(canonicalEmailMessageId).filter(Boolean);
+	return references[0]
+		|| canonicalEmailMessageId(doc.in_reply_to)
+		|| canonicalEmailMessageId(doc.message_id)
+		|| String(doc._id || doc.id || '');
+}
+
 function normalizeEmailAddressValue(value) {
 	const text = String(value || '').trim();
 	if (!text) return '';
@@ -252,6 +307,7 @@ export function toTypesenseDoc(type, doc) {
 		project_id: doc.project?.toString() || '',
 		created_at: Math.floor(new Date(doc.createdAt || Date.now()).getTime() / 1000),
 		updated_at: Math.floor(new Date(doc.updatedAt || Date.now()).getTime() / 1000),
+		...trashFields(doc),
 	};
 
 	switch (type) {
@@ -289,7 +345,10 @@ export function toTypesenseDoc(type, doc) {
 					triage_action_points: (doc.triage_action_points || []).map((item) => item.text || '').filter(Boolean),
 					message_id: doc.message_id || '',
 					references: doc.references || [],
-					in_trash: Boolean(doc.in_trash),
+					in_reply_to: doc.in_reply_to || '',
+					thread_key: emailThreadKey(doc),
+					thread_identifiers: emailThreadIdentifiers(doc),
+					excerpt: buildEmailExcerpt(doc),
 				};
 		default:
 			return base;
@@ -308,6 +367,8 @@ const schemas = {
 			{ name: 'text_content', type: 'string' },
 			{ name: 'project_id', type: 'string', facet: true },
 			{ name: 'tags', type: 'string[]', facet: true, optional: true },
+			{ name: 'in_trash', type: 'bool', facet: true, optional: true },
+			{ name: 'trashed_at', type: 'int64', optional: true },
 			{ name: 'created_at', type: 'int64' },
 			{ name: 'updated_at', type: 'int64' },
 			...chunkMetadataFields(),
@@ -336,6 +397,8 @@ const schemas = {
 			{ name: 'project_id', type: 'string', facet: true },
 			{ name: 'tags', type: 'string[]', facet: true, optional: true },
 			{ name: 'source', type: 'string', optional: true },
+			{ name: 'in_trash', type: 'bool', facet: true, optional: true },
+			{ name: 'trashed_at', type: 'int64', optional: true },
 			{ name: 'created_at', type: 'int64' },
 			{ name: 'updated_at', type: 'int64' },
 			...chunkMetadataFields(),
@@ -364,6 +427,8 @@ const schemas = {
 			{ name: 'description', type: 'string', optional: true },
 			{ name: 'text_content', type: 'string', optional: true },
 			{ name: 'project_id', type: 'string', facet: true },
+			{ name: 'in_trash', type: 'bool', facet: true, optional: true },
+			{ name: 'trashed_at', type: 'int64', optional: true },
 			{ name: 'created_at', type: 'int64' },
 			{ name: 'updated_at', type: 'int64' },
 			...chunkMetadataFields(),
@@ -408,7 +473,12 @@ const schemas = {
 				{ name: 'triage_action_points', type: 'string[]', optional: true },
 				{ name: 'message_id', type: 'string', optional: true },
 				{ name: 'references', type: 'string[]', optional: true },
+				{ name: 'in_reply_to', type: 'string', optional: true },
+				{ name: 'thread_key', type: 'string', facet: true, optional: true },
+				{ name: 'thread_identifiers', type: 'string[]', facet: true, optional: true },
+				{ name: 'excerpt', type: 'string', optional: true },
 				{ name: 'in_trash', type: 'bool', facet: true, optional: true },
+				{ name: 'trashed_at', type: 'int64', optional: true },
 				{ name: 'project_id', type: 'string', facet: true },
 				{ name: 'created_at', type: 'int64' },
 				{ name: 'updated_at', type: 'int64' },
@@ -684,7 +754,8 @@ export async function searchCollection(host_id, type, query, options = {}) {
 	} else {
 		params.exclude_fields = resolveExcludeFields(options.exclude_fields, type);
 	}
-	if (options.filter_by) params.filter_by = options.filter_by;
+	const filterBy = applyActiveTrashFilter(type, options.filter_by);
+	if (filterBy) params.filter_by = filterBy;
 	return withTypesenseResilience(
 		`search ${collectionName}`,
 		async () => {
@@ -712,13 +783,19 @@ export async function listDocuments(host_id, type, options = {}) {
 		include_fields: options.include_fields || listIncludeFields,
 		exclude_fields: 'embedding',
 	};
-	if (options.filter_by) baseParams.filter_by = options.filter_by;
+	const filterBy = applyActiveTrashFilter(type, options.filter_by);
+	if (filterBy) baseParams.filter_by = filterBy;
 	if (options.sort_by) baseParams.sort_by = options.sort_by;
-	if (_chunk_fields[type] && options.group !== false) {
+	if (options.group_by) {
+		baseParams.group_by = options.group_by;
+		baseParams.group_limit = options.group_limit || 1;
+		baseParams.include_fields = includeSourceIdField(baseParams.include_fields);
+	} else if (_chunk_fields[type] && options.group !== false) {
 		baseParams.group_by = 'source_id';
 		baseParams.group_limit = 1;
 		baseParams.include_fields = includeSourceIdField(baseParams.include_fields);
 	}
+	if (options.group_max_candidates) baseParams.group_max_candidates = options.group_max_candidates;
 
 	if (limit <= 250) {
 		return withTypesenseResilience(
@@ -783,6 +860,10 @@ export async function searchAll(host_id, query, options = {}) {
 		searches: types.map((type) => {
 			const includeFields = resolveIncludeFields(options.include_fields, type);
 			const search = { collection: `${type}_${host_id}` };
+			const filters = [];
+			if (options.projectId) filters.push(`project_id:=${exactFilterValue(options.projectId)}`);
+			const filterBy = applyActiveTrashFilter(type, filters.join(' && '));
+			if (filterBy) search.filter_by = filterBy;
 			if (includeFields) {
 				search.include_fields = _chunk_fields[type] ? includeSourceIdField(includeFields) : includeFields;
 			} else {
@@ -797,7 +878,6 @@ export async function searchAll(host_id, query, options = {}) {
 		prefix: false,
 		per_page: fetchSize,
 	};
-	if (options.projectId) commonSearchParams.filter_by = `project_id:=${options.projectId}`;
 
 	const results = await withTypesenseResilience(
 		`multiSearch host ${host_id}`,
@@ -860,7 +940,7 @@ export async function quickSearch(host_id, query, options = {}) {
 		const fields = QUICK_SEARCH_FIELDS[type];
 		const filters = [];
 		if (options.projectId) filters.push(`project_id:=${exactFilterValue(options.projectId)}`);
-		if (type === 'emails') filters.push('in_trash:=false');
+		const filterBy = applyActiveTrashFilter(type, filters.join(' && '));
 		return {
 			collection: `${type}_${host_id}`,
 			q,
@@ -873,7 +953,7 @@ export async function quickSearch(host_id, query, options = {}) {
 			highlight_end_tag: '__kk_hl_end__',
 			exclude_fields: _ts_exlude_default,
 			sort_by: type === 'pages' ? '_text_match:desc,crawled_at:desc' : '_text_match:desc,updated_at:desc',
-			...(filters.length ? { filter_by: filters.join(' && ') } : {}),
+			...(filterBy ? { filter_by: filterBy } : {}),
 		};
 	});
 
@@ -933,7 +1013,10 @@ export async function getFilteredCount(host_id, type, projectId) {
 			per_page: 0,
 			exclude_fields: _ts_exlude_default,
 		};
-		if (projectId) search.filter_by = `project_id:=${projectId}`;
+		const filters = [];
+		if (projectId) filters.push(`project_id:=${exactFilterValue(projectId)}`);
+		const filterBy = applyActiveTrashFilter(type, filters.join(' && '));
+		if (filterBy) search.filter_by = filterBy;
 		if (_chunk_fields[type]) {
 			search.group_by = 'source_id';
 			search.group_limit = 1;
@@ -1006,7 +1089,7 @@ export async function reindexHost(host_id, models) {
 			if (createErr.httpStatus !== 409) throw createErr;
 		}
 
-		const query = { host_id, in_trash: { $ne: true } };
+		const query = { host_id };
 		const total = await model.countDocuments(query);
 		await model.updateMany(query, { $set: { is_indexed: false } }, { timestamps: false });
 		results[type] = { queued: total };
@@ -1095,7 +1178,7 @@ async function clearStoredReindexStatus(host_id) {
 
 async function countPendingForHost(host_id, typeModelMap) {
 	const counts = await Promise.all(
-		typeModelMap.map(({ model }) => model.countDocuments({ host_id, is_indexed: { $ne: true }, in_trash: { $ne: true } })),
+		typeModelMap.map(({ model }) => model.countDocuments({ host_id, is_indexed: { $ne: true } })),
 	);
 	return counts.reduce((sum, count) => sum + count, 0);
 }
@@ -1116,7 +1199,7 @@ export async function indexMissing(models) {
 	for (const { type, model } of typeModelMap) {
 		// Fast aggregate: get host_ids that have unindexed docs, sorted by most-recently-updated first
 		const hosts = await model.aggregate([
-			{ $match: { is_indexed: { $ne: true }, in_trash: { $ne: true } } },
+			{ $match: { is_indexed: { $ne: true } } },
 			{ $sort: { updatedAt: -1 } },
 			{ $group: { _id: '$host_id' } },
 		]);
@@ -1127,7 +1210,7 @@ export async function indexMissing(models) {
 			await ensureCollections(host_id);
 
 			const docs = await model
-				.find({ host_id, is_indexed: { $ne: true }, in_trash: { $ne: true } })
+				.find({ host_id, is_indexed: { $ne: true } })
 				.sort({ updatedAt: -1 })
 				.limit(BATCH_LIMIT)
 				.lean();
@@ -1475,7 +1558,15 @@ export async function conversationSearch(hostId, userId, query, options = {}) {
 	// Build per-collection search requests — embedding-only makes every param
 	// identical across collections, so only the collection name varies here.
 	const types = includeEmails ? ['notes', 'memory', 'urls', 'emails', 'pages'] : ['notes', 'memory', 'urls', 'pages'];
-	const searches = types.map((type) => ({ collection: `${type}_${hostId}` }));
+	const searches = types.map((type) => {
+		const filters = [];
+		if (projectId) filters.push(`project_id:=${exactFilterValue(projectId)}`);
+		const filterBy = applyActiveTrashFilter(type, filters.join(' && '));
+		return {
+			collection: `${type}_${hostId}`,
+			...(filterBy ? { filter_by: filterBy } : {}),
+		};
+	});
 
 	// Common search params — q must be top-level when conversation is enabled.
 	// No group_by: chunks (shared source_id) are deduped app-side after the
@@ -1489,9 +1580,6 @@ export async function conversationSearch(hostId, userId, query, options = {}) {
 		conversation: true,
 		conversation_model_id: convoModelId,
 	};
-	if (projectId) {
-		searchParams.filter_by = `project_id:=${projectId}`;
-	}
 	if (conversationId) {
 		searchParams.conversation_id = conversationId;
 	}

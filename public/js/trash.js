@@ -3,8 +3,18 @@
 	var listEl, emptyBtn, selectAllCb, batchActions, batchCount, batchRestoreBtn, batchDeleteBtn, filterBtns;
 	var currentFilter = '';
 
-	var ICONS = { notes: 'description', memories: 'lightbulb', urls: 'link' };
-	var LABELS = { notes: 'Note', memories: 'Memory', urls: 'URL' };
+	var ICONS = { notes: 'description', memories: 'lightbulb', urls: 'link', emails: 'mail' };
+	var LABELS = { notes: 'Note', memories: 'Memory', urls: 'URL', emails: 'Email' };
+
+	function escapeHtml(value) {
+		var div = document.createElement('div');
+		div.textContent = value || '';
+		return div.innerHTML;
+	}
+
+	function itemTitle(item) {
+		return item.subject || item.title || item.url || '(No subject)';
+	}
 
 	function getSelected() {
 		return Array.from(listEl.querySelectorAll('.batch-cb:checked')).map(function (cb) {
@@ -42,12 +52,12 @@
 		listEl.innerHTML = items.length
 			? items
 				.map(function (item) {
-					return '<div class="list-group-item d-flex justify-content-between align-items-start trash-item" data-id="' + item._id + '" data-type="' + item._type + '">'
-						+ '<div class="batch-cb-wrap me-2 pt-1"><input type="checkbox" class="form-check-input batch-cb" value="' + item._id + '" data-type="' + item._type + '"></div>'
+					return '<div class="list-group-item d-flex justify-content-between align-items-start trash-item" data-id="' + escapeHtml(item._id) + '" data-type="' + escapeHtml(item._type) + '">'
+						+ '<div class="batch-cb-wrap me-2 pt-1"><input type="checkbox" class="form-check-input batch-cb" value="' + escapeHtml(item._id) + '" data-type="' + escapeHtml(item._type) + '"></div>'
 						+ '<div class="flex-grow-1">'
 						+ '<div class="d-flex align-items-center gap-2 mb-1">'
-						+ '<span class="badge text-bg-secondary tag-badge rounded-pill">' + kkIcon(ICONS[item._type] || 'file') + ' ' + (LABELS[item._type] || item._type) + '</span>'
-						+ '<strong>' + (item.title || item.url || 'Untitled') + '</strong>'
+						+ '<span class="badge text-bg-secondary tag-badge rounded-pill">' + kkIcon(ICONS[item._type] || 'file') + ' ' + escapeHtml(LABELS[item._type] || item._type) + '</span>'
+						+ '<strong>' + escapeHtml(itemTitle(item)) + '</strong>'
 						+ '</div>'
 						+ '<small class="text-muted">Trashed ' + new Date(item.trashed_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) + '</small>'
 						+ '</div>'

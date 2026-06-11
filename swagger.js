@@ -182,6 +182,7 @@ const swaggerSpec = {
                     message_id: { type: 'string' },
                     references: { type: 'array', items: { type: 'string' } },
                     in_reply_to: { type: 'string' },
+                    thread_key: { type: 'string', description: 'Typesense list grouping key derived from the root connected message identifier.' },
                     thread_identifiers: { type: 'array', items: { type: 'string' }, description: 'Canonical message identifiers for the connected email thread when included by realtime/update responses.' },
                     thread_source_ids: { type: 'array', items: { type: 'string' }, description: 'Email document IDs in the connected thread when included by realtime/update responses.' },
                     from: { type: 'array', items: { type: 'string' } },
@@ -193,11 +194,14 @@ const swaggerSpec = {
                     html_content: { type: 'string', description: 'Sanitized HTML email body. Remote image URLs are stored on data-kk-remote-src until explicitly loaded by a client.' },
                     html_content_has_remote_images: { type: 'boolean' },
                     attachment_text_content: { type: 'string' },
+                    excerpt: { type: 'string', description: 'Compact list excerpt. Typesense-backed list rows return this without Mongo hydration.' },
                     display_date: { type: 'string', format: 'date-time', nullable: true, description: 'Message display date using createdAt before updatedAt fallback.' },
                     thread_latest: { type: 'object', nullable: true, additionalProperties: true, description: 'Newest non-trash email in this connected thread when included by list responses for display sender/date/excerpt.' },
                     source: { type: 'string', enum: ['api', 'emailforwarding'] },
-	                    mailbox: { type: 'string', enum: ['inbox', 'archived', 'sent', 'spam'] },
+	                    mailbox: { type: 'string', enum: ['inbox', 'archived', 'sent', 'spam', 'trash'] },
 	                    labels: { type: 'array', items: { type: 'string' } },
+	                    in_trash: { type: 'boolean' },
+	                    trashed_at: { type: 'string', format: 'date-time', nullable: true },
 	                    triaged: { type: 'boolean' },
 	                    triaged_at: { type: 'string', format: 'date-time', nullable: true },
 	                    triage_summary: { type: 'string' },
@@ -1157,7 +1161,7 @@ const swaggerSpec = {
             get: {
                 tags: ['Emails'],
                 summary: 'List emails',
-                description: 'Mailbox results are collapsed to one latest email per connected message-id/references/in-reply-to thread.',
+                description: 'Typesense-backed mailbox results grouped by thread_key. Mongo is used for detail, thread, and write paths only.',
                 parameters: [
                     { $ref: '#/components/parameters/page' },
                     { $ref: '#/components/parameters/limit' },
@@ -1193,6 +1197,22 @@ const swaggerSpec = {
                 responses: {
                     201: { description: 'Created', content: { 'application/json': { schema: { type: 'object', properties: { email: { $ref: '#/components/schemas/Email' } } } } } },
                     400: { description: 'Invalid payload', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+                },
+            },
+        },
+        '/emails/ids': {
+            get: {
+                tags: ['Emails'],
+                summary: 'List email IDs for current view',
+                description: 'Typesense-backed ID list grouped by thread_key using the same mailbox, label, triage, and project filters as /emails.',
+                parameters: [
+                    { $ref: '#/components/parameters/project' },
+	                    { name: 'mailbox', in: 'query', schema: { type: 'string', enum: ['inbox', 'archived', 'sent', 'spam', 'trash'] } },
+                    { name: 'label', in: 'query', schema: { type: 'string' } },
+                    { name: 'triaged', in: 'query', schema: { type: 'boolean' } },
+                ],
+                responses: {
+                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { ids: { type: 'array', items: { type: 'string' } } } } } } },
                 },
             },
         },
@@ -1571,7 +1591,7 @@ const swaggerSpec = {
             get: {
                 tags: ['Emails'],
                 summary: 'List email labels and command center counts',
-                description: 'Sent mailbox counts are collapsed to one count per thread.',
+                description: 'Typesense-backed mailbox and label counts grouped by thread_key. Draft counts still come from Mongo draft records.',
                 parameters: [
                     { $ref: '#/components/parameters/project' },
 	                    { name: 'mailbox', in: 'query', schema: { type: 'string', enum: ['inbox', 'archived', 'sent', 'spam', 'drafts', 'trash'] } },
@@ -2207,6 +2227,7 @@ const swaggerSpec = {
             get: {
                 tags: ['Trash'],
                 summary: 'List trashed items',
+                description: 'Typesense-backed mixed trash listing for notes, memories, URLs, and emails. Items are sorted by trashed_at descending and writes still use Mongo.',
                 parameters: [
                     { name: 'type', in: 'query', schema: { type: 'string', enum: ['notes', 'memories', 'urls', 'emails'] } },
                     { $ref: '#/components/parameters/page' },
@@ -2229,6 +2250,7 @@ const swaggerSpec = {
             get: {
                 tags: ['Trash'],
                 summary: 'Get trash item count',
+                description: 'Typesense-backed count across notes, memories, URLs, and emails.',
                 responses: {
                     200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { count: { type: 'integer' } } } } } },
                 },

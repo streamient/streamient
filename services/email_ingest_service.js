@@ -15,14 +15,14 @@ import { Project } from '../model/project.js';
 import { Tenant } from '../modules/tenancy.js';
 import { extractText } from './import_service.js';
 import { detectFileType } from '../modules/file_detect.js';
-import { searchCollection, searchAll, listDocuments } from '../modules/typesense.js';
+import { searchCollection, searchAll, listDocuments, normalizeGroupedSearchResult } from '../modules/typesense.js';
 import { emitToTenant } from '../modules/socket.js';
 import { getConnectionsForItem, invalidateGraphCache, removeLinksForItem } from './graph_service.js';
 import * as audit from './audit_service.js';
 import { emailAiCompletion, emailTriageCompletion } from '../modules/llm_client.js';
 import { getAiInstructions, getEmailSettings } from './byo_ai_service.js';
 import { sanitizeEmailHtml } from '../modules/email_html_sanitizer.js';
-import { indexEmailNow, indexEmailsNow, removeEmailFromIndexNow, removeEmailsFromIndexNow } from './email_index_service.js';
+import { indexEmailNow, indexEmailsNow, removeEmailsFromIndexNow } from './email_index_service.js';
 import { enqueueDraftSync, enqueueEmailMailboxSync } from './email_action_sync_service.js';
 import { createLogger } from '../modules/logger.js';
 import config from '../config.js';
@@ -102,18 +102,31 @@ const EMAIL_LIST_INCLUDE_FIELDS = [
 	'id',
 	'source_id',
 	'project_id',
+	'subject',
+	'from',
+	'to',
+	'cc',
+	'bcc',
 	'mailbox',
 	'labels',
 	'triaged',
+	'triage_status',
+	'triage_summary',
+	'triage_primary_action',
+	'triage_action_points',
 	'in_trash',
 	'message_id',
 	'references',
+	'in_reply_to',
+	'thread_key',
+	'thread_identifiers',
+	'excerpt',
+	'trashed_at',
 	'created_at',
 	'updated_at',
 ].join(',');
 const EMAIL_LIST_TYPESENSE_PAGE_SIZE = 250;
-const EMAIL_LIST_TYPESENSE_LOOKAHEAD = 3;
-const EMAIL_LIST_TYPESENSE_MAX_PAGES = 100;
+const EMAIL_LIST_TYPESENSE_GROUP_MAX = 100000;
 
 function canonicalMessageId(value) {
 	const raw = String(value || '').trim();
@@ -639,12 +652,13 @@ export async function applyProjectEmailFilterToInbox(host_id, projectId, ctx = {
 	const moved = result?.modifiedCount ?? result?.nModified ?? ids.length;
 
 	if (!ctx.skipSideEffects) {
-		await removeEmailsFromIndexNow(host_id, ids, emailIndexOptions(ctx));
-		await Promise.all(ids.map(async (id) => {
+		const updatedEmails = await Email.find({ _id: { $in: ids }, host_id }).lean();
+		await indexEmailsNow(host_id, updatedEmails, emailIndexOptions(ctx));
+		await Promise.all(updatedEmails.map(async (email) => {
+			const id = stringifyObjectId(email._id);
 			removeLinksForItem(host_id, id).catch((err) => log.error({ err, host_id, email_id: id }, 'Remove links error'));
-			emitToTenant(host_id, 'email:deleted', { _id: id });
+			await emitEmailCreatedOrUpdated(host_id, 'email:updated', email);
 		}));
-		emitToTenant(host_id, 'counts:refresh');
 		invalidateGraphCache(host_id).catch(() => {});
 		if (ctx.user_id) {
 			audit.log({
@@ -928,7 +942,7 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 	if (bccReplyThreadUpdate?.selectedEmail) email = bccReplyThreadUpdate.selectedEmail;
 	if (!ctx.skipSideEffects) {
 		const changedEmails = bccReplyThreadUpdate?.changedEmails || [email];
-		await indexEmailsNow(host_id, changedEmails.filter((changedEmail) => !changedEmail.in_trash), emailIndexOptions(ctx));
+		await indexEmailsNow(host_id, changedEmails, emailIndexOptions(ctx));
 		await emitEmailCreatedOrUpdated(host_id, created ? 'email:created' : 'email:updated', email, bccReplyThreadUpdate ? { thread: bccReplyThreadUpdate.thread } : {});
 		invalidateGraphCache(host_id).catch(() => {});
 		audit.log({ action: 'create', resource: 'email', resource_id: email._id.toString(), user_id: userId, host_id, ...ctx });
@@ -1133,15 +1147,16 @@ async function countEmailThreadsByTypesense(host_id, projectId, filters = {}, op
 		perPage: 1,
 		filter_by: buildEmailListTypesenseFilter(projectId, filters),
 		include_fields: 'id,source_id',
+		group_by: 'thread_key',
+		group_limit: 1,
+		group_max_candidates: EMAIL_LIST_TYPESENSE_GROUP_MAX,
 	});
-	const count = Number(result?.found || 0);
-	return count > 0 ? count : null;
+	return Number(result?.found || 0);
 }
 
 async function countEmailThreadsForView(host_id, projectId, filters = {}, options = {}) {
 	if (options.useTypesense) {
-		const typesenseCount = await countEmailThreadsByTypesense(host_id, projectId, filters, options);
-		if (typesenseCount !== null) return typesenseCount;
+		return countEmailThreadsByTypesense(host_id, projectId, filters, options);
 	}
 	return countEmailThreadsByQuery(buildEmailListQuery(host_id, projectId, filters));
 }
@@ -1159,86 +1174,109 @@ async function listEmailsFromMongo(host_id, projectId, filters = {}) {
 	return withLatest.slice((safePage - 1) * safeLimit, safePage * safeLimit);
 }
 
-function emailHitId(hit = {}) {
-	return String(hit.document?.source_id || hit.document?.id || '').trim();
+function dateFromTypesenseSeconds(value) {
+	const number = Number(value || 0);
+	if (!Number.isFinite(number) || number <= 0) return null;
+	return new Date(number * 1000).toISOString();
 }
 
-async function collectEmailListTypesenseIds(host_id, projectId, filters = {}, options = {}) {
+function emailListRowFromTypesenseDocument(document = {}) {
+	const id = String(document.source_id || document.id || '').trim();
+	const createdAt = dateFromTypesenseSeconds(document.created_at);
+	const updatedAt = dateFromTypesenseSeconds(document.updated_at);
+	const trashedAt = dateFromTypesenseSeconds(document.trashed_at);
+	return {
+		_id: id,
+		id,
+		project: document.project_id || '',
+		project_id: document.project_id || '',
+		subject: document.subject || '',
+		from: document.from || [],
+		to: document.to || [],
+		cc: document.cc || [],
+		bcc: document.bcc || [],
+		mailbox: document.mailbox || 'inbox',
+		labels: document.labels || [],
+		triaged: Boolean(document.triaged),
+		triage_status: document.triage_status || '',
+		triage_summary: document.triage_summary || '',
+		triage_primary_action: document.triage_primary_action || '',
+		triage_action_points: (document.triage_action_points || []).map((item) => (
+			typeof item === 'string' ? { text: item } : item
+		)),
+		message_id: document.message_id || '',
+		references: document.references || [],
+		in_reply_to: document.in_reply_to || '',
+		thread_identifiers: document.thread_identifiers || [],
+		thread_source_ids: id ? [id] : [],
+		in_trash: Boolean(document.in_trash),
+		trashed_at: trashedAt,
+		createdAt,
+		updatedAt,
+		excerpt: document.excerpt || '',
+		display_date: createdAt || updatedAt,
+	};
+}
+
+function emailListDocumentsFromResult(result) {
+	return (normalizeGroupedSearchResult(result)?.hits || [])
+		.map((hit) => hit.document || {})
+		.filter((document) => document.source_id || document.id);
+}
+
+async function searchEmailListTypesense(host_id, projectId, filters = {}, options = {}) {
 	const safePage = Math.max(1, parseInt(filters.page, 10) || 1);
 	const safeLimit = Math.max(1, parseInt(filters.limit, 10) || 50);
-	const target = ((safePage - 1) * safeLimit) + (safeLimit * EMAIL_LIST_TYPESENSE_LOOKAHEAD);
 	const searchFn = options.searchFn || searchCollection;
 	const filterBy = buildEmailListTypesenseFilter(projectId, filters);
-	const ids = [];
-	const seen = new Set();
-	let typesensePage = 1;
-
-	while (ids.length < target && typesensePage <= EMAIL_LIST_TYPESENSE_MAX_PAGES) {
-		const result = await searchFn(host_id, 'emails', '*', {
-			queryBy: 'subject',
-			perPage: EMAIL_LIST_TYPESENSE_PAGE_SIZE,
-			page: typesensePage,
-			filter_by: filterBy,
-			include_fields: EMAIL_LIST_INCLUDE_FIELDS,
-			exclude_fields: 'embedding',
-			extra: { sort_by: 'updated_at:desc' },
-		});
-		const hits = result?.hits || [];
-		if (!hits.length) break;
-		for (const hit of hits) {
-			const id = emailHitId(hit);
-			if (!id || seen.has(id)) continue;
-			seen.add(id);
-			ids.push(id);
-			if (ids.length >= target) break;
-		}
-		typesensePage += 1;
-	}
-
-	return ids;
-}
-
-async function hydrateEmailListCandidates(host_id, projectId, filters = {}, ids = []) {
-	if (!ids.length) return [];
-	const query = buildEmailListQuery(host_id, projectId, filters);
-	query._id = { $in: ids };
-	const emails = await Email.find(query).lean();
-	const byId = new Map(emails.map((email) => [String(email._id), email]));
-	return ids.map((id) => byId.get(String(id))).filter(Boolean);
+	return searchFn(host_id, 'emails', '*', {
+		queryBy: 'subject',
+		perPage: safeLimit,
+		page: safePage,
+		filter_by: filterBy,
+		include_fields: EMAIL_LIST_INCLUDE_FIELDS,
+		exclude_fields: 'embedding',
+		group: false,
+		extra: {
+			sort_by: 'updated_at:desc',
+			group_by: 'thread_key',
+			group_limit: 1,
+			group_missing_values: false,
+			group_max_candidates: EMAIL_LIST_TYPESENSE_GROUP_MAX,
+		},
+	});
 }
 
 async function listEmailsFromTypesense(host_id, projectId, filters = {}, options = {}) {
-	const safePage = Math.max(1, parseInt(filters.page, 10) || 1);
-	const safeLimit = Math.max(1, parseInt(filters.limit, 10) || 50);
-	const ids = await collectEmailListTypesenseIds(host_id, projectId, filters, options);
-	if (!ids.length) return null;
-
-	const emails = await hydrateEmailListCandidates(host_id, projectId, filters, ids);
-	if (!emails.length) return null;
-
-	const collapsed = collapseEmailsByThread(emails);
-	const withLatest = await attachLatestThreadEmails(host_id, projectId, collapsed);
-	return withLatest.slice((safePage - 1) * safeLimit, safePage * safeLimit);
+	const result = await searchEmailListTypesense(host_id, projectId, filters, options);
+	return emailListDocumentsFromResult(result).map(emailListRowFromTypesenseDocument);
 }
 
 export async function listEmails(host_id, projectId, { page = 1, limit = 50, mailbox, label, triaged, useTypesense = false, searchFn = searchCollection } = {}) {
 	const filters = { page, limit, mailbox, label, triaged };
 	if (useTypesense) {
-		const emails = await listEmailsFromTypesense(host_id, projectId, filters, { searchFn });
-		if (emails) return emails;
+		return listEmailsFromTypesense(host_id, projectId, filters, { searchFn });
 	}
 	return listEmailsFromMongo(host_id, projectId, filters);
 }
 
-export async function listEmailIds(host_id, projectId, { mailbox, label, triaged } = {}) {
-	const query = buildEmailListQuery(host_id, projectId, { mailbox, label, triaged });
-	const emails = await Email.find(query)
-		.select('_id message_id references in_reply_to updatedAt createdAt')
-		.sort({ updatedAt: -1 })
-		.lean();
-	const collapsed = collapseEmailsByThread(emails);
-	const withLatest = await attachLatestThreadEmails(host_id, projectId, collapsed);
-	return withLatest.map((email) => email._id.toString());
+export async function listEmailIds(host_id, projectId, { mailbox, label, triaged, searchFn = searchCollection } = {}) {
+	const ids = [];
+	let page = 1;
+	while (true) {
+		const result = await searchEmailListTypesense(host_id, projectId, {
+			page,
+			limit: EMAIL_LIST_TYPESENSE_PAGE_SIZE,
+			mailbox,
+			label,
+			triaged,
+		}, { searchFn });
+		const pageIds = emailListDocumentsFromResult(result).map((document) => String(document.source_id || document.id || '')).filter(Boolean);
+		ids.push(...pageIds);
+		if (pageIds.length < EMAIL_LIST_TYPESENSE_PAGE_SIZE) break;
+		page += 1;
+	}
+	return ids;
 }
 
 function applyTriageStatusFilters(query, filters = {}) {
@@ -1616,9 +1654,9 @@ export async function deleteEmail(host_id, emailId, ctx = {}) {
 		{ returnDocument: 'after' },
 	);
 	if (email) {
-		await removeEmailFromIndexNow(host_id, emailId, emailIndexOptions(ctx));
+		await indexEmailNow(host_id, email, emailIndexOptions(ctx));
 		removeLinksForItem(host_id, emailId).catch((err) => log.error({ err, host_id, email_id: emailId }, 'Remove links error'));
-		emitToTenant(host_id, 'email:deleted', { _id: emailId });
+		await emitEmailCreatedOrUpdated(host_id, 'email:updated', email);
 		emitToTenant(host_id, 'counts:refresh');
 		invalidateGraphCache(host_id).catch(() => {});
 		await enqueueEmailMailboxSync(host_id, email, 'trash', ctx);

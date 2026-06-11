@@ -91,17 +91,10 @@ export async function indexEmailsNow(hostId, emails, options = {}) {
 	const emailList = (Array.isArray(emails) ? emails : [emails]).filter((email) => hostId && emailIndexId(email));
 	if (!emailList.length) return [];
 
-	const activeEmails = emailList.filter((email) => email.in_trash !== true);
-	const trashedIds = emailList.filter((email) => email.in_trash === true).map(emailIndexId);
 	const results = [];
 
 	try {
-		if (activeEmails.length) {
-			results.push(...await runIndexEmails(hostId, activeEmails, options));
-		}
-		if (trashedIds.length) {
-			results.push(...await runRemoveEmails(hostId, trashedIds, options));
-		}
+		results.push(...await runIndexEmails(hostId, emailList, options));
 
 		const successIds = results.filter((result) => result.success).map((result) => result.id);
 		await markEmailsIndexed(hostId, successIds, options);

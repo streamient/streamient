@@ -57,7 +57,30 @@ describe('Email index service', () => {
 		}
 	});
 
-	it('removes trashed email documents immediately', async () => {
+	it('indexes soft-deleted email documents with trash fields', async () => {
+		let indexed = null;
+
+		const result = await indexEmailNow('host-1', {
+			_id: '507f1f77bcf86cd799439011',
+			host_id: 'host-1',
+			project: '507f1f77bcf86cd799439012',
+			subject: 'Trashed',
+			in_trash: true,
+			trashed_at: new Date('2026-06-05T12:27:00.000Z'),
+		}, {
+			indexFn: async (hostId, type, email) => {
+				indexed = { hostId, type, email };
+			},
+			updateFn: async () => {},
+		});
+
+		assert.equal(result, true);
+		assert.equal(indexed.type, 'emails');
+		assert.equal(indexed.email.in_trash, true);
+		assert.deepEqual(indexed.email.trashed_at, new Date('2026-06-05T12:27:00.000Z'));
+	});
+
+	it('removes permanently deleted email documents immediately', async () => {
 		let removed = null;
 		let stateUpdate = null;
 

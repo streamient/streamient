@@ -1098,32 +1098,19 @@ describe('Email ingest service', () => {
 		}
 	});
 
-	it('uses Typesense candidates for ECC email list pagination before Mongo hydration', async () => {
+	it('uses Typesense documents directly for ECC email list pagination', async () => {
 		const originalFind = Email.find;
-		const findQueries = [];
 		const searchCalls = [];
 		const docs = [
-			{ _id: 'email-1', message_id: 'email-1@example.com', mailbox: 'inbox', updatedAt: '2026-06-11T10:00:00.000Z' },
-			{ _id: 'email-2', message_id: 'email-2@example.com', mailbox: 'inbox', updatedAt: '2026-06-11T09:00:00.000Z' },
-			{ _id: 'email-3', message_id: 'email-3@example.com', mailbox: 'inbox', updatedAt: '2026-06-11T08:00:00.000Z' },
-			{ _id: 'email-4', message_id: 'email-4@example.com', mailbox: 'inbox', updatedAt: '2026-06-11T07:00:00.000Z' },
-			{ _id: 'email-5', message_id: 'email-5@example.com', mailbox: 'inbox', updatedAt: '2026-06-11T06:00:00.000Z' },
+			{ id: 'email-1', source_id: 'email-1', subject: 'One', from: ['one@example.com'], message_id: 'email-1@example.com', mailbox: 'inbox', updated_at: 1781172000, created_at: 1781172000 },
+			{ id: 'email-2', source_id: 'email-2', subject: 'Two', from: ['two@example.com'], message_id: 'email-2@example.com', mailbox: 'inbox', updated_at: 1781168400, created_at: 1781168400 },
+			{ id: 'email-3', source_id: 'email-3', subject: 'Three', from: ['three@example.com'], message_id: 'email-3@example.com', mailbox: 'inbox', updated_at: 1781164800, created_at: 1781164800 },
+			{ id: 'email-4', source_id: 'email-4', subject: 'Four', from: ['four@example.com'], message_id: 'email-4@example.com', mailbox: 'inbox', updated_at: 1781161200, created_at: 1781161200 },
+			{ id: 'email-5', source_id: 'email-5', subject: 'Five', from: ['five@example.com'], message_id: 'email-5@example.com', mailbox: 'inbox', updated_at: 1781157600, created_at: 1781157600 },
 		];
-		const docsById = new Map(docs.map((email) => [email._id, email]));
 
-		Email.find = (query) => {
-			findQueries.push(query);
-			if (query._id?.$in) {
-				return {
-					lean: async () => query._id.$in.map((id) => docsById.get(id)).filter(Boolean),
-				};
-			}
-			if (query.$or) {
-				return {
-					lean: async () => [],
-				};
-			}
-			throw new Error('unexpected full email collection scan');
+		Email.find = () => {
+			throw new Error('unexpected Mongo email list scan');
 		};
 
 		try {
@@ -1135,30 +1122,29 @@ describe('Email ingest service', () => {
 				useTypesense: true,
 				searchFn: async (hostId, type, query, options) => {
 					searchCalls.push({ hostId, type, query, options });
-					if (options.page > 1) return { hits: [], found: 5 };
+					const start = (options.page - 1) * options.perPage;
 					return {
 						found: 5,
-						hits: docs.map((email) => ({
-							document: {
-								id: email._id,
-								source_id: email._id,
-							},
+						grouped_hits: docs.slice(start, start + options.perPage).map((email) => ({
+							group_key: [email.source_id],
+							hits: [{ document: email }],
 						})),
 					};
 				},
 			});
 
 			assert.deepEqual(emails.map((email) => email._id), ['email-3', 'email-4']);
+			assert.deepEqual(emails.map((email) => email.subject), ['Three', 'Four']);
+			assert.deepEqual(emails.map((email) => email.from[0]), ['three@example.com', 'four@example.com']);
 			assert.equal(searchCalls[0].hostId, 'host-1');
 			assert.equal(searchCalls[0].type, 'emails');
 			assert.equal(searchCalls[0].query, '*');
 			assert.equal(searchCalls[0].options.queryBy, 'subject');
 			assert.equal(searchCalls[0].options.extra.sort_by, 'updated_at:desc');
+			assert.equal(searchCalls[0].options.extra.group_by, 'thread_key');
 			assert.match(searchCalls[0].options.filter_by, /project_id:=`project-1`/);
 			assert.match(searchCalls[0].options.filter_by, /mailbox:=`inbox`/);
 			assert.match(searchCalls[0].options.filter_by, /triaged:=false/);
-			assert.deepEqual(findQueries[0]._id.$in, ['email-1', 'email-2', 'email-3', 'email-4', 'email-5']);
-			assert.ok(!findQueries.some((query) => !query._id && !query.$or));
 		} finally {
 			Email.find = originalFind;
 		}
@@ -1848,73 +1834,99 @@ describe('Email ingest service', () => {
 	});
 
 	it('listEmailIds returns id strings for the current view filters', async () => {
-		const findQueries = [];
 		const originalFind = Email.find;
+		const searchCalls = [];
 
-		Email.find = (query) => {
-			findQueries.push(query);
-			return {
-				select: () => ({
-					sort: () => ({
-						lean: async () => [{ _id: 'inbox-1' }, { _id: 'inbox-2' }],
-					}),
-				}),
-			};
+		Email.find = () => {
+			throw new Error('unexpected Mongo email ID scan');
 		};
 
 		try {
-			const ids = await listEmailIds('host-1', null, { mailbox: 'inbox', triaged: false });
+			const ids = await listEmailIds('host-1', null, {
+				mailbox: 'inbox',
+				triaged: false,
+				searchFn: async (hostId, type, query, options) => {
+					searchCalls.push({ hostId, type, query, options });
+					return {
+						found: 2,
+						grouped_hits: [
+							{ group_key: ['thread-1'], hits: [{ document: { id: 'inbox-1', source_id: 'inbox-1' } }] },
+							{ group_key: ['thread-2'], hits: [{ document: { id: 'inbox-2', source_id: 'inbox-2' } }] },
+						],
+					};
+				},
+			});
 
-			const findQuery = findQueries[0];
-			assert.equal(findQuery.host_id, 'host-1');
-			assert.equal(findQuery.mailbox, 'inbox');
-			assert.equal(findQuery.in_trash, false);
-			assert.equal(findQuery.triaged, false);
 			assert.deepEqual(ids, ['inbox-1', 'inbox-2']);
+			assert.equal(searchCalls[0].hostId, 'host-1');
+			assert.equal(searchCalls[0].type, 'emails');
+			assert.match(searchCalls[0].options.filter_by, /mailbox:=`inbox`/);
+			assert.match(searchCalls[0].options.filter_by, /triaged:=false/);
+			assert.equal(searchCalls[0].options.extra.group_by, 'thread_key');
 		} finally {
 			Email.find = originalFind;
 		}
 	});
 
-	it('listEmailIds collapses sent threads to the newest message creation time', async () => {
+	it('listEmailIds uses Typesense thread grouping for sent views', async () => {
 		const originalFind = Email.find;
-		const sentOlder = { _id: 'sent-older', message_id: 'sent-older@example.com', in_reply_to: 'root@example.com', references: ['root@example.com'], createdAt: '2026-01-01T10:00:00.000Z', updatedAt: '2026-01-01T12:00:00.000Z' };
-		const sentNewest = { _id: 'sent-newest', message_id: 'sent-newest@example.com', in_reply_to: 'root@example.com', references: ['root@example.com'], createdAt: '2026-01-01T11:00:00.000Z', updatedAt: '2026-01-01T11:00:00.000Z' };
-		const sentOther = { _id: 'sent-other', message_id: 'sent-other@example.com', in_reply_to: 'other-root@example.com', references: ['other-root@example.com'], createdAt: '2026-01-01T09:00:00.000Z', updatedAt: '2026-01-01T09:00:00.000Z' };
+		const searchCalls = [];
 
-		Email.find = () => ({
-			select: () => ({
-				sort: () => ({
-					lean: async () => [sentNewest, sentOlder, sentOther],
-				}),
-			}),
-		});
+		Email.find = () => {
+			throw new Error('unexpected Mongo email ID scan');
+		};
 
 		try {
-			const ids = await listEmailIds('host-1', 'project-1', { mailbox: 'sent' });
+			const ids = await listEmailIds('host-1', 'project-1', {
+				mailbox: 'sent',
+				searchFn: async (hostId, type, query, options) => {
+					searchCalls.push({ hostId, type, query, options });
+					return {
+						found: 2,
+						grouped_hits: [
+							{ group_key: ['root@example.com'], hits: [{ document: { id: 'sent-newest', source_id: 'sent-newest', thread_key: 'root@example.com' } }] },
+							{ group_key: ['other-root@example.com'], hits: [{ document: { id: 'sent-other', source_id: 'sent-other', thread_key: 'other-root@example.com' } }] },
+						],
+					};
+				},
+			});
+
 			assert.deepEqual(ids, ['sent-newest', 'sent-other']);
+			assert.match(searchCalls[0].options.filter_by, /project_id:=`project-1`/);
+			assert.match(searchCalls[0].options.filter_by, /mailbox:=`sent`/);
+			assert.equal(searchCalls[0].options.extra.group_by, 'thread_key');
 		} finally {
 			Email.find = originalFind;
 		}
 	});
 
-	it('listEmailIds collapses inbox threads to the newest message creation time', async () => {
+	it('listEmailIds uses Typesense thread grouping for inbox views', async () => {
 		const originalFind = Email.find;
-		const inboxOlder = { _id: 'inbox-older', message_id: 'older@example.com', in_reply_to: 'root@example.com', references: ['root@example.com'], createdAt: '2026-01-01T10:00:00.000Z', updatedAt: '2026-01-01T12:00:00.000Z' };
-		const inboxNewest = { _id: 'inbox-newest', message_id: 'newest@example.com', in_reply_to: 'older@example.com', references: ['root@example.com', 'older@example.com'], createdAt: '2026-01-01T11:00:00.000Z', updatedAt: '2026-01-01T11:00:00.000Z' };
-		const inboxOther = { _id: 'inbox-other', message_id: 'other@example.com', in_reply_to: '', references: [], createdAt: '2026-01-01T09:00:00.000Z', updatedAt: '2026-01-01T09:00:00.000Z' };
+		const searchCalls = [];
 
-		Email.find = () => ({
-			select: () => ({
-				sort: () => ({
-					lean: async () => [inboxNewest, inboxOlder, inboxOther],
-				}),
-			}),
-		});
+		Email.find = () => {
+			throw new Error('unexpected Mongo email ID scan');
+		};
 
 		try {
-			const ids = await listEmailIds('host-1', 'project-1', { mailbox: 'inbox' });
+			const ids = await listEmailIds('host-1', 'project-1', {
+				mailbox: 'inbox',
+				searchFn: async (hostId, type, query, options) => {
+					searchCalls.push({ hostId, type, query, options });
+					return {
+						found: 2,
+						grouped_hits: [
+							{ group_key: ['root@example.com'], hits: [{ document: { id: 'inbox-newest', source_id: 'inbox-newest', thread_key: 'root@example.com' } }] },
+							{ group_key: ['other@example.com'], hits: [{ document: { id: 'inbox-other', source_id: 'inbox-other', thread_key: 'other@example.com' } }] },
+						],
+					};
+				},
+			});
+
 			assert.deepEqual(ids, ['inbox-newest', 'inbox-other']);
+			assert.match(searchCalls[0].options.filter_by, /project_id:=`project-1`/);
+			assert.match(searchCalls[0].options.filter_by, /mailbox:=`inbox`/);
+			assert.equal(searchCalls[0].options.extra.group_by, 'thread_key');
 		} finally {
 			Email.find = originalFind;
 		}
@@ -2030,7 +2042,7 @@ describe('Email ingest service', () => {
 		}
 	});
 
-	it('uses Typesense counts for ECC mailbox and label badges before Mongo fallback', async () => {
+	it('uses Typesense counts for ECC mailbox and label badges without Mongo fallback', async () => {
 		const originalBulkWrite = EmailLabel.bulkWrite;
 		const originalLabelFind = EmailLabel.find;
 		const originalEmailFind = Email.find;
@@ -2058,6 +2070,7 @@ describe('Email ingest service', () => {
 					countFilters.push(options.filter_by);
 					assert.equal(hostId, 'host-1');
 					assert.equal(type, 'emails');
+					assert.equal(options.group_by, 'thread_key');
 					if (options.filter_by.includes('mailbox:=`inbox`')) return { found: 11 };
 					if (options.filter_by.includes('mailbox:=`archived`')) return { found: 6 };
 					if (options.filter_by.includes('mailbox:=`sent`')) return { found: 5 };

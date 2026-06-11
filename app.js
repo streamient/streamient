@@ -31,6 +31,7 @@ import healthRoutes from './routes/health.js';
 import importRoutes from './routes/import.js';
 import { backfillEmailTriageState, backfillForwardedSentReplies } from './services/email_ingest_service.js';
 import { backfillGitSyncMode } from './services/git_sync_service.js';
+import { backfillTypesenseTrashFields } from './services/typesense_backfill_service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -226,6 +227,7 @@ async function start() {
 	await backfillEmailTriageState();
 	await backfillForwardedSentReplies();
 	await backfillGitSyncMode();
+	await backfillTypesenseTrashFields();
 	await initRedis();
 	await initTypesense();
 

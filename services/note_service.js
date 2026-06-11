@@ -1,5 +1,5 @@
 import { Note } from '../model/note.js';
-import { searchCollection, removeDocument } from '../modules/typesense.js';
+import { searchCollection, indexDocument, removeDocument } from '../modules/typesense.js';
 import { emitToTenant } from '../modules/socket.js';
 import { invalidateGraphCache, removeLinksForItem } from './graph_service.js';
 import * as audit from './audit_service.js';
@@ -72,11 +72,11 @@ export async function updateNote(host_id, noteId, data, ctx = {}) {
 export async function deleteNote(host_id, noteId, ctx = {}) {
 	const note = await Note.findOneAndUpdate(
 		{ _id: noteId, host_id, in_trash: { $ne: true } },
-		{ $set: { in_trash: true, trashed_at: new Date() } },
+		{ $set: { in_trash: true, trashed_at: new Date(), is_indexed: false } },
 		{ returnDocument: 'after' },
 	);
 	if (note) {
-		removeDocument(host_id, 'notes', noteId).catch((err) => log.error({ err }, 'Typesense remove error'));
+		indexDocument(host_id, 'notes', note).catch((err) => log.error({ err }, 'Typesense trash index error'));
 		removeLinksForItem(host_id, noteId).catch((err) => log.error({ err }, 'Remove links error'));
 		emitToTenant(host_id, 'note:deleted', { _id: noteId });
 		invalidateGraphCache(host_id).catch(() => {});

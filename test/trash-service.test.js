@@ -5,7 +5,7 @@ import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
 import { Url } from '../model/url.js';
 import { Email } from '../model/email.js';
-import { batchRestore, emptyTrash } from '../services/trash_service.js';
+import { batchRestore, emptyTrash, getTrashCount, listTrash } from '../services/trash_service.js';
 
 function cloneDoc(doc) {
 	return { ...doc };
@@ -20,6 +20,66 @@ function chainFindIds(ids) {
 }
 
 describe('Trash service Typesense bulk writes', () => {
+	it('lists mixed trash items from Typesense sorted by trashed date', async () => {
+		const calls = [];
+		const responses = {
+			notes: {
+				found: 1,
+				hits: [
+					{ document: { id: 'note-1', source_id: 'note-1', title: 'Note title', project_id: 'project-1', trashed_at: 1780662300 } },
+				],
+			},
+			memory: {
+				found: 0,
+				hits: [],
+			},
+			urls: {
+				found: 1,
+				hits: [
+					{ document: { id: 'url-1', source_id: 'url-1', title: 'URL title', url: 'https://example.com', project_id: 'project-1', trashed_at: 1780662200 } },
+				],
+			},
+			emails: {
+				found: 1,
+				hits: [
+					{ document: { id: 'email-1', source_id: 'email-1', subject: 'Email subject', project_id: 'project-1', trashed_at: 1780662400 } },
+				],
+			},
+		};
+
+		const result = await listTrash('host-1', { page: 1, limit: 2 }, {
+			listDocuments: async (hostId, type, options) => {
+				calls.push({ hostId, type, options });
+				return responses[type];
+			},
+		});
+
+		assert.deepEqual(result.items.map((item) => item._id), ['email-1', 'note-1']);
+		assert.equal(result.items[0]._type, 'emails');
+		assert.equal(result.items[0].subject, 'Email subject');
+		assert.equal(result.total, 3);
+		assert.deepEqual(calls.map((call) => call.type), ['notes', 'memory', 'urls', 'emails']);
+		assert.ok(calls.every((call) => call.options.filter_by === 'in_trash:=true'));
+		assert.ok(calls.every((call) => call.options.sort_by === 'trashed_at:desc'));
+	});
+
+	it('gets trash count from Typesense', async () => {
+		const counts = { notes: 2, memory: 3, urls: 4, emails: 5 };
+		const calls = [];
+
+		const count = await getTrashCount('host-1', {
+			listDocuments: async (hostId, type, options) => {
+				calls.push({ hostId, type, options });
+				return { found: counts[type], hits: [] };
+			},
+		});
+
+		assert.equal(count, 14);
+		assert.deepEqual(calls.map((call) => call.type), ['notes', 'memory', 'urls', 'emails']);
+		assert.ok(calls.every((call) => call.options.filter_by === 'in_trash:=true'));
+		assert.ok(calls.every((call) => call.options.perPage === 1));
+	});
+
 	it('restores selected items with one bulk index call per type', async () => {
 		const originals = {
 			noteFindOneAndUpdate: Note.findOneAndUpdate,

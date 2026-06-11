@@ -1,6 +1,6 @@
 import { Memory } from '../model/memory.js';
 import mongoose from 'mongoose';
-import { searchCollection, removeDocument } from '../modules/typesense.js';
+import { searchCollection, indexDocument, removeDocument } from '../modules/typesense.js';
 import { emitToTenant } from '../modules/socket.js';
 import { invalidateGraphCache, removeLinksForItem } from './graph_service.js';
 import * as audit from './audit_service.js';
@@ -81,11 +81,11 @@ export async function updateMemory(host_id, memoryId, data, ctx = {}) {
 export async function deleteMemory(host_id, memoryId, ctx = {}) {
 	const mem = await Memory.findOneAndUpdate(
 		{ _id: memoryId, host_id, in_trash: { $ne: true } },
-		{ $set: { in_trash: true, trashed_at: new Date() } },
+		{ $set: { in_trash: true, trashed_at: new Date(), is_indexed: false } },
 		{ returnDocument: 'after' },
 	);
 	if (mem) {
-		removeDocument(host_id, 'memory', memoryId).catch((err) => log.error({ err }, 'Typesense remove error'));
+		indexDocument(host_id, 'memory', mem).catch((err) => log.error({ err }, 'Typesense trash index error'));
 		removeLinksForItem(host_id, memoryId).catch((err) => log.error({ err }, 'Remove links error'));
 		emitToTenant(host_id, 'memory:deleted', { _id: memoryId });
 		invalidateGraphCache(host_id).catch(() => {});
