@@ -669,6 +669,16 @@ small,
 	color: initial !important;
 }
 
+.kk-scroll-sentinel,
+.emails-scroll-sentinel,
+.ecc-scroll-sentinel {
+	display: block;
+	width: 100%;
+	min-height: 1px;
+	height: 1px;
+	pointer-events: none;
+}
+
 .fs-7 {
 	font-size: 0.7rem;
 }

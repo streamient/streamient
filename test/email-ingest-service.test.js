@@ -1098,6 +1098,72 @@ describe('Email ingest service', () => {
 		}
 	});
 
+	it('uses Typesense candidates for ECC email list pagination before Mongo hydration', async () => {
+		const originalFind = Email.find;
+		const findQueries = [];
+		const searchCalls = [];
+		const docs = [
+			{ _id: 'email-1', message_id: 'email-1@example.com', mailbox: 'inbox', updatedAt: '2026-06-11T10:00:00.000Z' },
+			{ _id: 'email-2', message_id: 'email-2@example.com', mailbox: 'inbox', updatedAt: '2026-06-11T09:00:00.000Z' },
+			{ _id: 'email-3', message_id: 'email-3@example.com', mailbox: 'inbox', updatedAt: '2026-06-11T08:00:00.000Z' },
+			{ _id: 'email-4', message_id: 'email-4@example.com', mailbox: 'inbox', updatedAt: '2026-06-11T07:00:00.000Z' },
+			{ _id: 'email-5', message_id: 'email-5@example.com', mailbox: 'inbox', updatedAt: '2026-06-11T06:00:00.000Z' },
+		];
+		const docsById = new Map(docs.map((email) => [email._id, email]));
+
+		Email.find = (query) => {
+			findQueries.push(query);
+			if (query._id?.$in) {
+				return {
+					lean: async () => query._id.$in.map((id) => docsById.get(id)).filter(Boolean),
+				};
+			}
+			if (query.$or) {
+				return {
+					lean: async () => [],
+				};
+			}
+			throw new Error('unexpected full email collection scan');
+		};
+
+		try {
+			const emails = await listEmails('host-1', 'project-1', {
+				mailbox: 'inbox',
+				triaged: false,
+				page: 2,
+				limit: 2,
+				useTypesense: true,
+				searchFn: async (hostId, type, query, options) => {
+					searchCalls.push({ hostId, type, query, options });
+					if (options.page > 1) return { hits: [], found: 5 };
+					return {
+						found: 5,
+						hits: docs.map((email) => ({
+							document: {
+								id: email._id,
+								source_id: email._id,
+							},
+						})),
+					};
+				},
+			});
+
+			assert.deepEqual(emails.map((email) => email._id), ['email-3', 'email-4']);
+			assert.equal(searchCalls[0].hostId, 'host-1');
+			assert.equal(searchCalls[0].type, 'emails');
+			assert.equal(searchCalls[0].query, '*');
+			assert.equal(searchCalls[0].options.queryBy, 'subject');
+			assert.equal(searchCalls[0].options.extra.sort_by, 'updated_at:desc');
+			assert.match(searchCalls[0].options.filter_by, /project_id:=`project-1`/);
+			assert.match(searchCalls[0].options.filter_by, /mailbox:=`inbox`/);
+			assert.match(searchCalls[0].options.filter_by, /triaged:=false/);
+			assert.deepEqual(findQueries[0]._id.$in, ['email-1', 'email-2', 'email-3', 'email-4', 'email-5']);
+			assert.ok(!findQueries.some((query) => !query._id && !query.$or));
+		} finally {
+			Email.find = originalFind;
+		}
+	});
+
 	it('collapses sent emails by thread and keeps the newest sent reply', async () => {
 		const findQueries = [];
 		const originalFind = Email.find;
@@ -1956,6 +2022,57 @@ describe('Email ingest service', () => {
 		try {
 			const result = await listEmailLabels('host-1');
 			assert.equal(result.mailboxes.find((mailbox) => mailbox.slug === 'archived').count, 2);
+		} finally {
+			EmailLabel.bulkWrite = originalBulkWrite;
+			EmailLabel.find = originalLabelFind;
+			Email.find = originalEmailFind;
+			EmailDraft.countDocuments = originalDraftCountDocuments;
+		}
+	});
+
+	it('uses Typesense counts for ECC mailbox and label badges before Mongo fallback', async () => {
+		const originalBulkWrite = EmailLabel.bulkWrite;
+		const originalLabelFind = EmailLabel.find;
+		const originalEmailFind = Email.find;
+		const originalDraftCountDocuments = EmailDraft.countDocuments;
+		const countFilters = [];
+
+		EmailLabel.bulkWrite = async () => ({});
+		EmailLabel.find = () => ({
+			sort: () => ({
+				lean: async () => [
+					{ _id: 'reply-required', slug: 'reply-required', name: 'Review', color: '#dc3545', is_system: true },
+				],
+			}),
+		});
+		Email.find = () => {
+			throw new Error('unexpected Mongo email count scan');
+		};
+		EmailDraft.countDocuments = async () => 3;
+
+		try {
+			const result = await listEmailLabels('host-1', {
+				project: 'project-1',
+				useTypesense: true,
+				countFn: async (hostId, type, options) => {
+					countFilters.push(options.filter_by);
+					assert.equal(hostId, 'host-1');
+					assert.equal(type, 'emails');
+					if (options.filter_by.includes('mailbox:=`inbox`')) return { found: 11 };
+					if (options.filter_by.includes('mailbox:=`archived`')) return { found: 6 };
+					if (options.filter_by.includes('mailbox:=`sent`')) return { found: 5 };
+					if (options.filter_by.includes('mailbox:=`spam`')) return { found: 2 };
+					if (options.filter_by.includes('in_trash:=true')) return { found: 1 };
+					if (options.filter_by.includes('labels:=`reply-required`')) return { found: 4 };
+					return { found: 1 };
+				},
+			});
+
+			assert.equal(result.mailboxes.find((mailbox) => mailbox.slug === 'inbox').count, 11);
+			assert.equal(result.mailboxes.find((mailbox) => mailbox.slug === 'drafts').count, 3);
+			assert.equal(result.mailboxes.find((mailbox) => mailbox.slug === 'trash').count, 1);
+			assert.equal(result.labels.find((label) => label.slug === 'reply-required').count, 4);
+			assert.ok(countFilters.every((filter) => filter.includes('project_id:=`project-1`')));
 		} finally {
 			EmailLabel.bulkWrite = originalBulkWrite;
 			EmailLabel.find = originalLabelFind;

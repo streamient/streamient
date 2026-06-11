@@ -424,6 +424,7 @@ router.get('/emails', requireEmailFeatureAccess, async (req, res) => {
 		mailbox: req.query.mailbox,
 		label: req.query.label,
 		triaged: req.query.triaged,
+		useTypesense: true,
 	});
 	res.json({ emails: emails.map(decorateEmailForClient) });
 });
@@ -441,6 +442,7 @@ router.get('/email-labels', requireEmailFeatureAccess, async (req, res) => {
 	const data = await emailIngestService.listEmailLabels(req.host_id, {
 		project: req.query.project,
 		mailbox: req.query.mailbox,
+		useTypesense: true,
 	});
 	res.json(data);
 });

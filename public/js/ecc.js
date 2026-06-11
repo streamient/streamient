@@ -112,8 +112,7 @@
 	var emailLoadingMore = false;
 	var emailHasMore = false;
 	var emailLoadSeq = 0;
-	var eccObserver = null;
-	var eccSentinelEl = null;
+	var eccInfiniteScroll = null;
 
 	function addWindowListener(event, handler) {
 		window.addEventListener(event, handler);
@@ -2845,6 +2844,7 @@
 		var emails = data.emails || [];
 		emailHasMore = emails.length === EMAIL_PAGE_SIZE;
 		renderEmails(emails);
+		eccInfiniteScroll?.kick();
 	}
 
 	function appendEmails(emails) {
@@ -2871,12 +2871,7 @@
 			emailPage = page;
 			emailHasMore = emails.length === EMAIL_PAGE_SIZE;
 			appendEmails(emails);
-			// Re-arm the observer so it re-fires if the sentinel is still in view
-			// (IntersectionObserver only reports transitions, not steady state).
-			if (emailHasMore && eccObserver && eccSentinelEl) {
-				eccObserver.unobserve(eccSentinelEl);
-				eccObserver.observe(eccSentinelEl);
-			}
+			if (emails.length) eccInfiniteScroll?.kick();
 		} catch (err) {
 			showError(err.message || 'Failed to load more emails');
 		} finally {
@@ -2886,15 +2881,17 @@
 
 	function setupInfiniteScroll() {
 		var root = document.querySelector('.ecc-main');
-		if (!root || !listEl || typeof IntersectionObserver === 'undefined') return;
-		eccSentinelEl = document.createElement('div');
-		eccSentinelEl.className = 'ecc-scroll-sentinel';
-		eccSentinelEl.setAttribute('aria-hidden', 'true');
-		listEl.parentNode.insertBefore(eccSentinelEl, listEl.nextSibling);
-		eccObserver = new IntersectionObserver(function (entries) {
-			if (entries.some(function (entry) { return entry.isIntersecting; })) loadMoreEmails();
-		}, { root: root, rootMargin: '400px' });
-		eccObserver.observe(eccSentinelEl);
+		if (eccInfiniteScroll) eccInfiniteScroll.destroy();
+		eccInfiniteScroll = window.kkInfiniteScroll?.create({
+			root: root,
+			insertAfter: listEl,
+			sentinelClass: 'ecc-scroll-sentinel',
+			rootMarginPx: 900,
+			canLoad: function () {
+				return Boolean(listEl) && !emailLoadingMore && emailHasMore && !detailActive && activeMailbox !== 'drafts';
+			},
+			onLoadMore: loadMoreEmails,
+		});
 	}
 
 	async function loadAll() {
@@ -3524,10 +3521,8 @@
 			window.removeEventListener(windowListeners[i][0], windowListeners[i][1]);
 		}
 		windowListeners.length = 0;
-		if (eccObserver) eccObserver.disconnect();
-		eccObserver = null;
-		if (eccSentinelEl) eccSentinelEl.remove();
-		eccSentinelEl = null;
+		if (eccInfiniteScroll) eccInfiniteScroll.destroy();
+		eccInfiniteScroll = null;
 		listEl = null;
 		mailboxesEl = null;
 		labelsEl = null;

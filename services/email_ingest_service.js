@@ -15,7 +15,7 @@ import { Project } from '../model/project.js';
 import { Tenant } from '../modules/tenancy.js';
 import { extractText } from './import_service.js';
 import { detectFileType } from '../modules/file_detect.js';
-import { searchCollection, searchAll } from '../modules/typesense.js';
+import { searchCollection, searchAll, listDocuments } from '../modules/typesense.js';
 import { emitToTenant } from '../modules/socket.js';
 import { getConnectionsForItem, invalidateGraphCache, removeLinksForItem } from './graph_service.js';
 import * as audit from './audit_service.js';
@@ -98,6 +98,22 @@ const EMAIL_AI_INCLUDE_FIELDS = [
 	'created_at',
 	'updated_at',
 ].join(',');
+const EMAIL_LIST_INCLUDE_FIELDS = [
+	'id',
+	'source_id',
+	'project_id',
+	'mailbox',
+	'labels',
+	'triaged',
+	'in_trash',
+	'message_id',
+	'references',
+	'created_at',
+	'updated_at',
+].join(',');
+const EMAIL_LIST_TYPESENSE_PAGE_SIZE = 250;
+const EMAIL_LIST_TYPESENSE_LOOKAHEAD = 3;
+const EMAIL_LIST_TYPESENSE_MAX_PAGES = 100;
 
 function canonicalMessageId(value) {
 	const raw = String(value || '').trim();
@@ -989,6 +1005,25 @@ function buildEmailListQuery(host_id, projectId, filters = {}) {
 	return query;
 }
 
+function buildEmailListTypesenseFilter(projectId, filters = {}) {
+	const parts = [];
+	if (projectId) parts.push(`project_id:=${exactTypesenseValue(projectId)}`);
+	if (filters.mailbox === 'trash') {
+		parts.push('in_trash:=true');
+	} else {
+		parts.push('in_trash:=false');
+		if (filters.mailbox) parts.push(`mailbox:=${exactTypesenseValue(normalizeMailbox(filters.mailbox))}`);
+	}
+	if (filters.label) parts.push(`labels:=${exactTypesenseValue(normalizeSlug(filters.label))}`);
+	const triaged = parseBooleanFilter(filters.triaged);
+	if (triaged === true) {
+		parts.push('triaged:=true');
+	} else if (triaged === false) {
+		parts.push('triaged:=false');
+	}
+	return parts.join(' && ');
+}
+
 function emailSortTime(email = {}) {
 	const value = email.createdAt || email.updatedAt;
 	const time = value ? new Date(value).getTime() : 0;
@@ -1092,10 +1127,29 @@ async function countEmailThreadsByQuery(query) {
 	return collapseEmailsByThread(emails).length;
 }
 
-export async function listEmails(host_id, projectId, { page = 1, limit = 50, mailbox, label, triaged } = {}) {
-	const query = buildEmailListQuery(host_id, projectId, { mailbox, label, triaged });
-	const safePage = Math.max(1, parseInt(page, 10) || 1);
-	const safeLimit = Math.max(1, parseInt(limit, 10) || 50);
+async function countEmailThreadsByTypesense(host_id, projectId, filters = {}, options = {}) {
+	const countFn = options.countFn || listDocuments;
+	const result = await countFn(host_id, 'emails', {
+		perPage: 1,
+		filter_by: buildEmailListTypesenseFilter(projectId, filters),
+		include_fields: 'id,source_id',
+	});
+	const count = Number(result?.found || 0);
+	return count > 0 ? count : null;
+}
+
+async function countEmailThreadsForView(host_id, projectId, filters = {}, options = {}) {
+	if (options.useTypesense) {
+		const typesenseCount = await countEmailThreadsByTypesense(host_id, projectId, filters, options);
+		if (typesenseCount !== null) return typesenseCount;
+	}
+	return countEmailThreadsByQuery(buildEmailListQuery(host_id, projectId, filters));
+}
+
+async function listEmailsFromMongo(host_id, projectId, filters = {}) {
+	const query = buildEmailListQuery(host_id, projectId, filters);
+	const safePage = Math.max(1, parseInt(filters.page, 10) || 1);
+	const safeLimit = Math.max(1, parseInt(filters.limit, 10) || 50);
 
 	const emails = await Email.find(query)
 		.sort({ updatedAt: -1 })
@@ -1103,6 +1157,77 @@ export async function listEmails(host_id, projectId, { page = 1, limit = 50, mai
 	const collapsed = collapseEmailsByThread(emails);
 	const withLatest = await attachLatestThreadEmails(host_id, projectId, collapsed);
 	return withLatest.slice((safePage - 1) * safeLimit, safePage * safeLimit);
+}
+
+function emailHitId(hit = {}) {
+	return String(hit.document?.source_id || hit.document?.id || '').trim();
+}
+
+async function collectEmailListTypesenseIds(host_id, projectId, filters = {}, options = {}) {
+	const safePage = Math.max(1, parseInt(filters.page, 10) || 1);
+	const safeLimit = Math.max(1, parseInt(filters.limit, 10) || 50);
+	const target = ((safePage - 1) * safeLimit) + (safeLimit * EMAIL_LIST_TYPESENSE_LOOKAHEAD);
+	const searchFn = options.searchFn || searchCollection;
+	const filterBy = buildEmailListTypesenseFilter(projectId, filters);
+	const ids = [];
+	const seen = new Set();
+	let typesensePage = 1;
+
+	while (ids.length < target && typesensePage <= EMAIL_LIST_TYPESENSE_MAX_PAGES) {
+		const result = await searchFn(host_id, 'emails', '*', {
+			queryBy: 'subject',
+			perPage: EMAIL_LIST_TYPESENSE_PAGE_SIZE,
+			page: typesensePage,
+			filter_by: filterBy,
+			include_fields: EMAIL_LIST_INCLUDE_FIELDS,
+			exclude_fields: 'embedding',
+			extra: { sort_by: 'updated_at:desc' },
+		});
+		const hits = result?.hits || [];
+		if (!hits.length) break;
+		for (const hit of hits) {
+			const id = emailHitId(hit);
+			if (!id || seen.has(id)) continue;
+			seen.add(id);
+			ids.push(id);
+			if (ids.length >= target) break;
+		}
+		typesensePage += 1;
+	}
+
+	return ids;
+}
+
+async function hydrateEmailListCandidates(host_id, projectId, filters = {}, ids = []) {
+	if (!ids.length) return [];
+	const query = buildEmailListQuery(host_id, projectId, filters);
+	query._id = { $in: ids };
+	const emails = await Email.find(query).lean();
+	const byId = new Map(emails.map((email) => [String(email._id), email]));
+	return ids.map((id) => byId.get(String(id))).filter(Boolean);
+}
+
+async function listEmailsFromTypesense(host_id, projectId, filters = {}, options = {}) {
+	const safePage = Math.max(1, parseInt(filters.page, 10) || 1);
+	const safeLimit = Math.max(1, parseInt(filters.limit, 10) || 50);
+	const ids = await collectEmailListTypesenseIds(host_id, projectId, filters, options);
+	if (!ids.length) return null;
+
+	const emails = await hydrateEmailListCandidates(host_id, projectId, filters, ids);
+	if (!emails.length) return null;
+
+	const collapsed = collapseEmailsByThread(emails);
+	const withLatest = await attachLatestThreadEmails(host_id, projectId, collapsed);
+	return withLatest.slice((safePage - 1) * safeLimit, safePage * safeLimit);
+}
+
+export async function listEmails(host_id, projectId, { page = 1, limit = 50, mailbox, label, triaged, useTypesense = false, searchFn = searchCollection } = {}) {
+	const filters = { page, limit, mailbox, label, triaged };
+	if (useTypesense) {
+		const emails = await listEmailsFromTypesense(host_id, projectId, filters, { searchFn });
+		if (emails) return emails;
+	}
+	return listEmailsFromMongo(host_id, projectId, filters);
 }
 
 export async function listEmailIds(host_id, projectId, { mailbox, label, triaged } = {}) {
@@ -1289,20 +1414,23 @@ export async function listEmailLabels(host_id, filters = {}) {
 	const labels = await ensureDefaultEmailLabels(host_id);
 	const visibleLabels = labels.filter((label) => !HIDDEN_EMAIL_LABEL_SLUGS.has(label.slug));
 	const projectId = filters.project || null;
-	const baseQuery = { host_id, in_trash: false, ...(projectId ? { project: projectId } : {}) };
+	const countOptions = {
+		useTypesense: Boolean(filters.useTypesense),
+		countFn: filters.countFn,
+	};
 
 	const [mailboxCounts, labelCounts] = await Promise.all([
 		Promise.all([
-			countEmailThreadsByQuery(buildEmailListQuery(host_id, projectId, { mailbox: 'inbox', triaged: false })),
-			countEmailThreadsByQuery(buildEmailListQuery(host_id, projectId, { mailbox: 'archived' })),
-			countEmailThreadsByQuery(buildEmailListQuery(host_id, projectId, { mailbox: 'sent' })),
-			countEmailThreadsByQuery(buildEmailListQuery(host_id, projectId, { mailbox: 'spam' })),
+			countEmailThreadsForView(host_id, projectId, { mailbox: 'inbox', triaged: false }, countOptions),
+			countEmailThreadsForView(host_id, projectId, { mailbox: 'archived' }, countOptions),
+			countEmailThreadsForView(host_id, projectId, { mailbox: 'sent' }, countOptions),
+			countEmailThreadsForView(host_id, projectId, { mailbox: 'spam' }, countOptions),
 			EmailDraft.countDocuments({ host_id, status: { $nin: ['discarded', 'ready'] }, ...(projectId ? { project: projectId } : {}) }),
-			countEmailThreadsByQuery({ host_id, in_trash: true, ...(projectId ? { project: projectId } : {}) }),
+			countEmailThreadsForView(host_id, projectId, { mailbox: 'trash' }, countOptions),
 		]),
 		Promise.all(visibleLabels.map(async (label) => ({
 			slug: label.slug,
-			count: await countEmailThreadsByQuery({ ...baseQuery, labels: label.slug }),
+			count: await countEmailThreadsForView(host_id, projectId, { label: label.slug }, countOptions),
 		}))),
 	]);
 

@@ -7,8 +7,7 @@
 	var loadingMore = false;
 	var hasMore = false;
 	var loadSeq = 0;
-	var observer = null;
-	var sentinelEl = null;
+	var infiniteScroll = null;
 
 	function addWindowListener(event, handler) {
 		window.addEventListener(event, handler);
@@ -158,12 +157,14 @@
 		var seq = ++loadSeq;
 		pageNum = 1;
 		loadingMore = false;
+		hasMore = false;
 		var data = await api('GET', emailsPath(pageNum));
 		if (!listEl || seq !== loadSeq) return;
 		var emails = data.emails || [];
 		hasMore = emails.length === PAGE_SIZE;
 
 		renderEmails(emails);
+		infiniteScroll?.kick();
 	}
 
 	function appendEmailItems(emails) {
@@ -183,6 +184,7 @@
 		loadingMore = true;
 		var seq = loadSeq;
 		var page = pageNum + 1;
+		var appended = false;
 		try {
 			var data = await api('GET', emailsPath(page));
 			if (!listEl || seq !== loadSeq) return;
@@ -190,16 +192,14 @@
 			pageNum = page;
 			hasMore = emails.length === PAGE_SIZE;
 			appendEmailItems(emails);
-			// Re-arm the observer so it re-fires if the sentinel is still in view
-			// (IntersectionObserver only reports transitions, not steady state).
-			if (hasMore && observer && sentinelEl) {
-				observer.unobserve(sentinelEl);
-				observer.observe(sentinelEl);
-			}
+			appended = emails.length > 0;
 		} catch (err) {
 			showError('Failed to load more emails: ' + (err.message || 'Unknown error'));
 		} finally {
-			if (seq === loadSeq) loadingMore = false;
+			if (seq === loadSeq) {
+				loadingMore = false;
+				if (appended) infiniteScroll?.kick();
+			}
 		}
 	}
 
@@ -215,15 +215,14 @@
 
 	function setupInfiniteScroll() {
 		var root = document.getElementById('main-content');
-		if (!root || typeof IntersectionObserver === 'undefined') return;
-		sentinelEl = document.createElement('div');
-		sentinelEl.className = 'emails-scroll-sentinel';
-		sentinelEl.setAttribute('aria-hidden', 'true');
-		listEl.parentNode.insertBefore(sentinelEl, listEl.nextSibling);
-		observer = new IntersectionObserver(function (entries) {
-			if (entries.some(function (entry) { return entry.isIntersecting; })) loadMore();
-		}, { root: root, rootMargin: '400px' });
-		observer.observe(sentinelEl);
+		if (infiniteScroll) infiniteScroll.destroy();
+		infiniteScroll = window.kkInfiniteScroll?.create({
+			root: root,
+			insertAfter: listEl,
+			sentinelClass: 'emails-scroll-sentinel',
+			canLoad: function () { return Boolean(listEl) && !loadingMore && hasMore; },
+			onLoadMore: loadMore,
+		});
 	}
 
 	function mount() {
@@ -246,10 +245,8 @@
 			window.removeEventListener(windowListeners[i][0], windowListeners[i][1]);
 		}
 		windowListeners.length = 0;
-		if (observer) observer.disconnect();
-		observer = null;
-		if (sentinelEl) sentinelEl.remove();
-		sentinelEl = null;
+		if (infiniteScroll) infiniteScroll.destroy();
+		infiniteScroll = null;
 		listEl = null;
 	}
 

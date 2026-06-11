@@ -704,10 +704,12 @@ export async function listDocuments(host_id, type, options = {}) {
 	const ts = getTypesenseClient();
 	const collectionName = `${type}_${host_id}`;
 	const limit = options.perPage || 250;
+	const listQueryBy = type === 'emails' ? 'subject' : 'title';
+	const listIncludeFields = type === 'emails' ? 'id,source_id,subject,project_id,created_at,updated_at' : 'id,title,tags,project_id,created_at';
 	const baseParams = {
 		q: '*',
-		query_by: 'title',
-		include_fields: options.include_fields || 'id,title,tags,project_id,created_at',
+		query_by: listQueryBy,
+		include_fields: options.include_fields || listIncludeFields,
 		exclude_fields: 'embedding',
 	};
 	if (options.filter_by) baseParams.filter_by = options.filter_by;
