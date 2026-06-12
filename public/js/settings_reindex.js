@@ -69,8 +69,8 @@
 
 	function setButtonRunning(running) {
 		reindexBtn.disabled = Boolean(running);
-		if (reindexBtnSpinner) reindexBtnSpinner.classList.toggle('d-none', !running);
-		if (reindexBtnText) reindexBtnText.textContent = running ? 'Reindexing...' : 'Reindex All My Data';
+		if (reindexBtnSpinner) reindexBtnSpinner.classList.add('d-none');
+		if (reindexBtnText) reindexBtnText.textContent = 'Reindex All My Data';
 	}
 
 	function setAlertClass(status) {
