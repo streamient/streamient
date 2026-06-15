@@ -12,7 +12,7 @@
 	var actionCount;
 	var selectAllAcrossEl;
 	var selectAllAcrossLink;
-	var moveMenu;
+	var moveActionsEl;
 	var trashBtn;
 	var emptyTrashBtn;
 	var trashToolbar;
@@ -90,10 +90,9 @@
 	var INTERNAL_NOTE_PREVIEW_LIMIT = 150;
 	var REPLY_SUGGESTIONS_AUTO_CLOSE_MS = 45000;
 	var MAILBOX_ACTIONS = [
-		{ slug: 'inbox', name: 'Inbox', icon: 'email' },
-		{ slug: 'archived', name: 'Archived', icon: 'archive' },
-		{ slug: 'sent', name: 'Sent', icon: 'send' },
-		{ slug: 'spam', name: 'Spam', icon: 'warning' },
+		{ slug: 'inbox', name: 'Inbox' },
+		{ slug: 'archived', name: 'Archived' },
+		{ slug: 'spam', name: 'Spam' },
 	];
 	var SYSTEM_TRIAGE_LABELS = ['reply-required', 'human-do', 'waiting', 'no-action', 'triaged', 'spam'];
 	// Triage status labels shown (and removable) in the email detail. Mirrors the
@@ -439,16 +438,7 @@
 		function renderEmailBody(email, options) {
 			var wrapper = document.createElement('div');
 			var header = document.createElement('div');
-			header.className = 'd-flex justify-content-between align-items-center gap-3 mb-2';
-
-			var bodyActions = document.createElement('div');
-			bodyActions.className = 'd-flex align-items-center gap-2';
-			if (options?.showActions) {
-				var moveDropdown = buildBodyMoveDropdown(email);
-				if (moveDropdown) bodyActions.appendChild(moveDropdown);
-				var trashButton = buildBodyTrashButton(email);
-				if (trashButton) bodyActions.appendChild(trashButton);
-			}
+			header.className = 'd-flex justify-content-end align-items-center gap-3 mb-2';
 
 			var controls = document.createElement('div');
 			controls.className = 'd-flex align-items-center gap-2 kk-email-body-controls ecc-email-body-controls';
@@ -477,7 +467,6 @@
 			controls.appendChild(modeGroup);
 			controls.appendChild(themeGroup);
 			controls.appendChild(loadImagesBtn);
-			header.appendChild(bodyActions);
 			header.appendChild(controls);
 			wrapper.appendChild(header);
 
@@ -791,7 +780,7 @@
 			: (selectedIds.size + ' selected');
 		actionBar.classList.toggle('d-none', detailActive || selectedIds.size === 0);
 		actionBar.classList.toggle('d-flex', !detailActive && selectedIds.size > 0);
-		moveMenu?.closest('.dropdown')?.classList.toggle('d-none', isDraftMailbox);
+		moveActionsEl?.classList.toggle('d-none', isDraftMailbox);
 		resetTriageBtn?.classList.toggle('d-none', isDraftMailbox);
 		if (trashBtn) {
 			trashBtn.classList.toggle('d-none', activeMailbox === 'trash' && !isDraftMailbox);
@@ -804,79 +793,22 @@
 		updateTriageButton();
 	}
 
-	function renderMoveMenu() {
-		if (!moveMenu) return;
+	function renderMoveActions() {
+		if (!moveActionsEl) return;
 		var targets = MAILBOX_ACTIONS.filter(function (mailbox) {
 			return activeLabel || activeMailbox === 'trash' || activeMailbox !== mailbox.slug;
 		});
-		moveMenu.innerHTML = targets.map(function (mailbox) {
-			return '<li><button class="dropdown-item ecc-move-target" type="button" data-mailbox="' + escapeHtml(mailbox.slug) + '">'
-				+ kkIcon(mailbox.icon, 'me-2')
-				+ escapeHtml(mailbox.name)
-				+ '</button></li>';
+		moveActionsEl.innerHTML = targets.map(function (mailbox) {
+			var label = mailbox.slug === 'archived' ? 'Archive' : mailbox.name;
+			return '<button class="btn btn-outline-secondary btn-sm ecc-move-target" type="button" data-mailbox="' + escapeHtml(mailbox.slug) + '" title="Move selected emails to ' + escapeHtml(mailbox.name) + '">'
+				+ escapeHtml(label)
+				+ '</button>';
 		}).join('');
-		moveMenu.querySelectorAll('.ecc-move-target').forEach(function (button) {
+		moveActionsEl.querySelectorAll('.ecc-move-target').forEach(function (button) {
 			button.addEventListener('click', function () {
 				moveSelected(button.dataset.mailbox || 'inbox');
 			});
 		});
-	}
-
-	function buildBodyMoveDropdown(email) {
-		if (!email?._id) return null;
-		var currentMailbox = String(email.mailbox || 'inbox');
-		var inTrash = email.in_trash === true;
-		var targets = MAILBOX_ACTIONS.filter(function (mailbox) {
-			return inTrash || mailbox.slug !== currentMailbox;
-		});
-		if (!targets.length) return null;
-		var wrap = document.createElement('div');
-		wrap.className = 'dropdown';
-		var btn = document.createElement('button');
-		btn.type = 'button';
-		btn.className = 'btn btn-outline-secondary btn-sm dropdown-toggle';
-		btn.setAttribute('data-bs-toggle', 'dropdown');
-		btn.setAttribute('aria-expanded', 'false');
-		btn.innerHTML = kkIcon('drive_file_move', 'me-1') + '<span>Move</span>';
-		var menu = document.createElement('ul');
-		menu.className = 'dropdown-menu dropdown-menu-end';
-		menu.innerHTML = targets.map(function (mailbox) {
-			return '<li><button class="dropdown-item ecc-body-move-target" type="button" data-mailbox="' + escapeHtml(mailbox.slug) + '">'
-				+ kkIcon(mailbox.icon, 'me-2')
-				+ escapeHtml(mailbox.name)
-				+ '</button></li>';
-		}).join('');
-		menu.querySelectorAll('.ecc-body-move-target').forEach(function (item) {
-			item.addEventListener('click', function () {
-				moveCurrentEmail(item.dataset.mailbox || 'inbox');
-			});
-		});
-		wrap.appendChild(btn);
-		wrap.appendChild(menu);
-		// Use Popper's fixed strategy so the menu escapes the scrollable/overflow-hidden
-		// detail container — otherwise it gets clipped when the email body is short or empty.
-		if (window.BsDropdown) {
-			try {
-				window.BsDropdown.getOrCreateInstance(btn, { popperConfig: { strategy: 'fixed' } });
-			} catch (err) {
-				// Fall back to Bootstrap's default data-api init.
-			}
-		}
-		return wrap;
-	}
-
-	function buildBodyTrashButton(email) {
-		if (!email?._id) return null;
-		// Don't offer "move to trash" when already viewing a trashed email.
-		if (email.in_trash === true) return null;
-		var btn = document.createElement('button');
-		btn.type = 'button';
-		btn.className = 'btn btn-outline-secondary btn-sm';
-		btn.innerHTML = kkIcon('delete', 'me-1') + '<span>Trash</span>';
-		btn.addEventListener('click', function () {
-			trashCurrentEmail();
-		});
-		return btn;
 	}
 
 	// Render the email's current triage status as removable badges into `container`.
@@ -1489,7 +1421,7 @@
 			selectedEmailThreadSourceIds = [];
 			resetSelectionState();
 			updateActionBar();
-			renderMoveMenu();
+			renderMoveActions();
 			if (!emails.length) {
 				listEl.innerHTML = '<div class="list-group-item text-muted ecc-email-empty">' + escapeHtml(answer || 'No matching emails.') + '</div>';
 				updateActionBar();
@@ -2615,7 +2547,7 @@
 		showListView();
 		resetSelectionState();
 		updateActionBar();
-		renderMoveMenu();
+		renderMoveActions();
 		if (!emails.length) {
 			listEl.innerHTML = '<div class="list-group-item text-muted ecc-email-empty">No emails for this view.</div>';
 			selectedEmail = null;
@@ -2647,7 +2579,7 @@
 		showListView();
 		resetSelectionState();
 		updateActionBar();
-		renderMoveMenu();
+		renderMoveActions();
 		selectedEmail = null;
 		replyTargetEmail = null;
 		currentDetailThread = [];
@@ -3387,7 +3319,7 @@
 		actionCount = document.getElementById('ecc-action-count');
 		selectAllAcrossEl = document.getElementById('ecc-select-all-across');
 		selectAllAcrossLink = document.getElementById('ecc-select-all-across-link');
-		moveMenu = document.getElementById('ecc-move-menu');
+		moveActionsEl = document.getElementById('ecc-move-actions');
 		trashBtn = document.getElementById('ecc-trash-btn');
 		emptyTrashBtn = document.getElementById('ecc-empty-trash-btn');
 		trashToolbar = document.getElementById('ecc-trash-toolbar');
@@ -3436,7 +3368,7 @@
 		resetSelectionState();
 		emailAiMessages = [];
 		renderEmailAi(null);
-		renderMoveMenu();
+		renderMoveActions();
 		updateActionBar();
 
 		mailboxesEl?.querySelectorAll('[data-mailbox]').forEach(function (button) {
@@ -3535,7 +3467,7 @@
 		actionCount = null;
 		selectAllAcrossEl = null;
 		selectAllAcrossLink = null;
-		moveMenu = null;
+		moveActionsEl = null;
 		trashBtn = null;
 		emptyTrashBtn = null;
 		trashToolbar = null;

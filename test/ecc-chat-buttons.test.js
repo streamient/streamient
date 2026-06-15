@@ -28,7 +28,7 @@ describe('ECC Email AI prompt buttons', () => {
 		assert.ok(eccJs.includes('summary.next_steps'));
 	});
 
-	it('keeps ECC detail action buttons scoped to the selected message', () => {
+	it('keeps selected ECC detail message state scoped to the selected message', () => {
 		const eccJs = fs.readFileSync(new URL('../public/js/ecc.js', import.meta.url), 'utf8');
 
 		assert.ok(eccJs.includes('if (options?.showActions)'));
@@ -45,6 +45,31 @@ describe('ECC Email AI prompt buttons', () => {
 		assert.ok(eccPug.includes('span.badge.text-bg-secondary.me-3.d-none#ecc-detail-mailbox-status'));
 		assert.ok(eccJs.includes('var status = activeLabel ? mailboxStatusName(email) : \'\';'));
 		assert.ok(eccJs.includes('detailMailboxStatus.classList.toggle(\'d-none\', !status);'));
+	});
+
+	it('renders ECC list move actions as inline buttons', () => {
+		const eccPug = fs.readFileSync(new URL('../views/ajax/section/ecc.pug', import.meta.url), 'utf8');
+		const eccJs = fs.readFileSync(new URL('../public/js/ecc.js', import.meta.url), 'utf8');
+
+		assert.ok(eccPug.includes('#ecc-move-actions'));
+		assert.ok(!eccPug.includes('#ecc-move-btn'));
+		assert.ok(!eccPug.includes('#ecc-move-menu'));
+		assert.ok(!eccPug.includes("icon('checkSquare'"));
+		assert.ok(!eccPug.includes("icon('restore'"));
+		assert.ok(eccJs.includes('function renderMoveActions()'));
+		assert.ok(eccJs.includes('btn btn-outline-secondary btn-sm ecc-move-target'));
+		assert.ok(!eccJs.includes("{ slug: 'sent', name: 'Sent'"));
+		assert.ok(!eccJs.includes('kkIcon(mailbox.icon'));
+		assert.ok(!eccJs.includes('class="dropdown-item ecc-move-target"'));
+	});
+
+	it('does not render selected-message legacy move controls in ECC detail', () => {
+		const eccJs = fs.readFileSync(new URL('../public/js/ecc.js', import.meta.url), 'utf8');
+
+		assert.ok(!eccJs.includes('buildBodyMoveDropdown'));
+		assert.ok(!eccJs.includes('buildBodyTrashButton'));
+		assert.ok(!eccJs.includes('ecc-body-move-target'));
+		assert.ok(!eccJs.includes('dropdown-menu dropdown-menu-end'));
 	});
 
 	it('uses realtime thread identifiers to reconcile visible thread rows', () => {

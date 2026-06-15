@@ -48,22 +48,15 @@ else
 			.d-flex.justify-content-between.align-items-center.mb-3#ecc-view-header
 				.d-flex.align-items-center.gap-2
 					button.btn.btn-outline-secondary.btn-sm#ecc-select-all-btn.d-none(type="button" title="Select all visible emails" aria-pressed="false")
-						!= icon('checkSquare', 'me-1')
 						span#ecc-select-all-text Select all
-					.d-none.align-items-center.gap-2#ecc-action-bar
+					.d-none.align-items-center.flex-wrap.gap-2#ecc-action-bar
 						span.badge.text-bg-secondary#ecc-action-count 0 selected
 						span.ecc-select-all-across.small.d-none#ecc-select-all-across
 							a.ecc-select-all-across-link(href="#" id="ecc-select-all-across-link")
-						.dropdown
-							button.btn.btn-outline-secondary.btn-sm.dropdown-toggle#ecc-move-btn(type="button" data-bs-toggle="dropdown" aria-expanded="false")
-								!= icon('drive_file_move', 'me-1')
-								span Move
-							ul.dropdown-menu#ecc-move-menu(aria-labelledby="ecc-move-btn")
+						.d-flex.align-items-center.flex-wrap.gap-2#ecc-move-actions
 						button.btn.btn-outline-secondary.btn-sm#ecc-reset-triage-btn(type="button")
-							!= icon('restore', 'me-1')
 							span Reset triage
 						button.btn.btn-outline-danger.btn-sm#ecc-trash-btn(type="button")
-							!= icon('delete', 'me-1')
 							span.ecc-trash-text Trash
 				.d-flex.align-items-center.gap-2
 					button.btn.btn-primary.btn-sm#ecc-triage-btn(type="button")
