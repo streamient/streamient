@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import pug from 'pug';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 
-import { authenticateClientForToken, mapDynamicRegistrationClientResponse, parseAuthorizationRequest, validateAuthorizationRequest } from '../services/oauth_service.js';
+import { authenticateClientForToken, buildAuthorizationServerMetadata, buildOauthUiConfig, mapDynamicRegistrationClientResponse, parseAuthorizationRequest, validateAuthorizationRequest } from '../services/oauth_service.js';
 import { MCP_DEFAULT_SCOPES, getMcpAppEndpointUrl, getMcpEndpointUrl, getOauthIssuer, signMcpAccessToken, verifyMcpAccessToken } from '../modules/oauth.js';
 
 const oauthAuthorizeViewPath = fileURLToPath(new URL('../views/auth/oauth_authorize.pug', import.meta.url));
@@ -65,6 +65,16 @@ async function signClientAssertion(privateKey, clientId, options = {}) {
 }
 
 describe('oauth helpers', () => {
+	it('advertises DCR instead of client metadata documents for OAuth discovery', () => {
+		const metadata = buildAuthorizationServerMetadata();
+		const uiConfig = buildOauthUiConfig();
+
+		assert.equal(metadata.client_id_metadata_document_supported, false);
+		assert.equal(uiConfig.client_registration.client_id_metadata_document_supported, false);
+		assert.equal(uiConfig.client_registration.dynamic_registration_supported, true);
+		assert.equal(uiConfig.client_registration.pre_registration_supported, true);
+	});
+
 	it('parses a valid authorization request for the MCP endpoint resource', () => {
 		const parsed = parseAuthorizationRequest({
 			client_id: 'https://example.com/oauth/client.json',

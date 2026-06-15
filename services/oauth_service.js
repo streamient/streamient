@@ -785,7 +785,7 @@ export function buildAuthorizationServerMetadata() {
 		token_endpoint_auth_methods_supported: OAUTH_TOKEN_ENDPOINT_AUTH_METHODS,
 		token_endpoint_auth_signing_alg_values_supported: PRIVATE_KEY_JWT_SIGNING_ALGS,
 		code_challenge_methods_supported: ['S256'],
-		client_id_metadata_document_supported: true,
+		client_id_metadata_document_supported: false,
 		scopes_supported: MCP_ALL_SCOPES,
 	};
 }
@@ -805,7 +805,7 @@ export function buildOauthUiConfig() {
 		allowed_resources: getAllowedMcpResourceUrls(),
 		scope_details: listScopeDetails(['mcp:read', 'mcp:write', 'mcp:email', 'mcp:git']),
 		client_registration: {
-			client_id_metadata_document_supported: true,
+			client_id_metadata_document_supported: false,
 			dynamic_registration_supported: true,
 			pre_registration_supported: true,
 		},

@@ -1,0 +1,460 @@
+{
+	"$schema": "https://developers.openai.com/apps-sdk/schemas/chatgpt-app-submission.v1.json",
+	"schema_version": 1,
+	"app_info": {
+		"display_name": "Kumbukum",
+		"subtitle": "Shared AI memory",
+		"description": "Kumbukum gives ChatGPT access to a user's authenticated memory workspace. Users can search and retrieve notes, memories, saved URLs, emails, projects, graph links, and git-sync context, then create new private notes, memories, saved URLs, email records, and graph links when requested.",
+		"category": "PRODUCTIVITY"
+	},
+	"tools": {
+		"create_note": {
+			"annotations": {
+				"readOnlyHint": false,
+				"openWorldHint": false,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Creates a private note in the user's Kumbukum workspace, so it changes workspace state.",
+				"open_world_justification": "Writes only to the user's private Kumbukum workspace and does not publish content to public internet systems.",
+				"destructive_justification": "Creates a new note and does not delete, overwrite, revoke access, or perform irreversible actions."
+			}
+		},
+		"read_note": {
+			"annotations": {
+				"readOnlyHint": true,
+				"openWorldHint": false,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Retrieves a selected note by ID without modifying workspace data.",
+				"open_world_justification": "Reads from the user's private Kumbukum workspace and does not change public internet state.",
+				"destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+			}
+		},
+		"list_notes": {
+			"annotations": {
+				"readOnlyHint": true,
+				"openWorldHint": false,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Lists notes from the user's workspace without creating or updating records.",
+				"open_world_justification": "Reads private workspace data and does not write to public internet systems.",
+				"destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+			}
+		},
+		"search_notes": {
+			"annotations": {
+				"readOnlyHint": true,
+				"openWorldHint": false,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Searches stored notes and returns matching results without modifying data.",
+				"open_world_justification": "Searches private Kumbukum data and does not change public internet state.",
+				"destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+			}
+		},
+		"store_memory": {
+			"annotations": {
+				"readOnlyHint": false,
+				"openWorldHint": false,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Stores a new private memory in the user's Kumbukum workspace.",
+				"open_world_justification": "Writes only to the user's private Kumbukum workspace and does not publish content publicly.",
+				"destructive_justification": "Creates a new memory and does not delete, overwrite, revoke access, or perform irreversible actions."
+			}
+		},
+		"recall_memory": {
+			"annotations": {
+				"readOnlyHint": true,
+				"openWorldHint": false,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Searches stored memories and returns matching results without modifying data.",
+				"open_world_justification": "Searches private Kumbukum data and does not change public internet state.",
+				"destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+			}
+		},
+		"search_memory": {
+			"annotations": {
+				"readOnlyHint": true,
+				"openWorldHint": false,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Searches stored memories and returns matching results without modifying data.",
+				"open_world_justification": "Searches private Kumbukum data and does not change public internet state.",
+				"destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+			}
+		},
+		"read_memory": {
+			"annotations": {
+				"readOnlyHint": true,
+				"openWorldHint": false,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Retrieves a selected memory by ID without modifying workspace data.",
+				"open_world_justification": "Reads private Kumbukum data and does not change public internet state.",
+				"destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+			}
+		},
+		"suggest_memory_tags": {
+			"annotations": {
+				"readOnlyHint": true,
+				"openWorldHint": false,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Retrieves suggested tags from existing workspace metadata without modifying records.",
+				"open_world_justification": "Reads private Kumbukum tag data and does not change public internet state.",
+				"destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+			}
+		},
+		"search_knowledge": {
+			"annotations": {
+				"readOnlyHint": true,
+				"openWorldHint": false,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Searches stored notes, memories, URLs, emails, and crawled pages without modifying data.",
+				"open_world_justification": "Searches private Kumbukum data and does not change public internet state.",
+				"destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+			}
+		},
+		"save_url": {
+			"annotations": {
+				"readOnlyHint": false,
+				"openWorldHint": true,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Creates a saved URL record in the user's Kumbukum workspace and may fetch page content.",
+				"open_world_justification": "May contact external URLs to retrieve page content before saving it privately.",
+				"destructive_justification": "Creates a saved URL record and does not delete, overwrite, revoke access, or perform irreversible actions."
+			}
+		},
+		"list_urls": {
+			"annotations": {
+				"readOnlyHint": true,
+				"openWorldHint": false,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Lists saved URLs from the user's workspace without modifying records.",
+				"open_world_justification": "Reads private Kumbukum data and does not change public internet state.",
+				"destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+			}
+		},
+		"search_urls": {
+			"annotations": {
+				"readOnlyHint": true,
+				"openWorldHint": false,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Searches saved URLs and crawled content without modifying data.",
+				"open_world_justification": "Searches private Kumbukum data and does not change public internet state.",
+				"destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+			}
+		},
+		"read_url": {
+			"annotations": {
+				"readOnlyHint": true,
+				"openWorldHint": false,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Retrieves a selected saved URL record without modifying workspace data.",
+				"open_world_justification": "Reads private Kumbukum data and does not change public internet state.",
+				"destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+			}
+		},
+		"ingest_email": {
+			"annotations": {
+				"readOnlyHint": false,
+				"openWorldHint": false,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Stores a provided email payload in the user's private Kumbukum workspace.",
+				"open_world_justification": "Writes only to Kumbukum and does not send email or publish content externally.",
+				"destructive_justification": "Creates an email record and does not delete, overwrite, revoke access, or perform irreversible actions."
+			}
+		},
+		"read_email": {
+			"annotations": {
+				"readOnlyHint": true,
+				"openWorldHint": false,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Retrieves a selected stored email by ID without modifying workspace data.",
+				"open_world_justification": "Reads private Kumbukum email data and does not send messages or change public internet state.",
+				"destructive_justification": "Does not delete, overwrite, send messages, revoke access, or perform irreversible actions."
+			}
+		},
+		"list_emails": {
+			"annotations": {
+				"readOnlyHint": true,
+				"openWorldHint": false,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Lists stored emails from the user's workspace without modifying records.",
+				"open_world_justification": "Reads private Kumbukum email data and does not send messages or change public internet state.",
+				"destructive_justification": "Does not delete, overwrite, send messages, revoke access, or perform irreversible actions."
+			}
+		},
+		"search_emails": {
+			"annotations": {
+				"readOnlyHint": true,
+				"openWorldHint": false,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Searches stored email records without modifying workspace data.",
+				"open_world_justification": "Searches private Kumbukum email data and does not send messages or change public internet state.",
+				"destructive_justification": "Does not delete, overwrite, send messages, revoke access, or perform irreversible actions."
+			}
+		},
+		"get_email_thread": {
+			"annotations": {
+				"readOnlyHint": true,
+				"openWorldHint": false,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Retrieves stored emails related to a selected message thread without modifying data.",
+				"open_world_justification": "Reads private Kumbukum email data and does not send messages or change public internet state.",
+				"destructive_justification": "Does not delete, overwrite, send messages, revoke access, or perform irreversible actions."
+			}
+		},
+		"list_projects": {
+			"annotations": {
+				"readOnlyHint": true,
+				"openWorldHint": false,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Lists available Kumbukum projects without modifying workspace data.",
+				"open_world_justification": "Reads private workspace metadata and does not change public internet state.",
+				"destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+			}
+		},
+		"get_project": {
+			"annotations": {
+				"readOnlyHint": true,
+				"openWorldHint": false,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Retrieves metadata for a selected project without modifying workspace data.",
+				"open_world_justification": "Reads private workspace metadata and does not change public internet state.",
+				"destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+			}
+		},
+		"get_project_counts": {
+			"annotations": {
+				"readOnlyHint": true,
+				"openWorldHint": false,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Retrieves per-project document counts without modifying records.",
+				"open_world_justification": "Reads private workspace metadata and does not change public internet state.",
+				"destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+			}
+		},
+		"create_link": {
+			"annotations": {
+				"readOnlyHint": false,
+				"openWorldHint": false,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Creates a private graph link between existing Kumbukum items.",
+				"open_world_justification": "Writes only to the user's private Kumbukum graph and does not publish content publicly.",
+				"destructive_justification": "Creates a link and does not delete, overwrite, revoke access, or perform irreversible actions."
+			}
+		},
+		"get_links": {
+			"annotations": {
+				"readOnlyHint": true,
+				"openWorldHint": false,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Retrieves graph links for an item without modifying workspace data.",
+				"open_world_justification": "Reads private Kumbukum graph data and does not change public internet state.",
+				"destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+			}
+		},
+		"get_graph": {
+			"annotations": {
+				"readOnlyHint": true,
+				"openWorldHint": false,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Retrieves the user's knowledge graph without modifying records.",
+				"open_world_justification": "Reads private Kumbukum graph data and does not change public internet state.",
+				"destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+			}
+		},
+		"traverse_graph": {
+			"annotations": {
+				"readOnlyHint": true,
+				"openWorldHint": false,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Retrieves direct graph connections for an item without modifying records.",
+				"open_world_justification": "Reads private Kumbukum graph data and does not change public internet state.",
+				"destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+			}
+		},
+		"list_git_repos": {
+			"annotations": {
+				"readOnlyHint": true,
+				"openWorldHint": false,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Lists configured git-sync repositories without modifying configuration or repository contents.",
+				"open_world_justification": "Reads Kumbukum git-sync configuration and does not contact or change public internet state.",
+				"destructive_justification": "Does not delete, overwrite, revoke access, push code, or perform irreversible actions."
+			}
+		},
+		"add_git_repo": {
+			"annotations": {
+				"readOnlyHint": false,
+				"openWorldHint": true,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Adds a git-sync configuration and may import markdown content into the user's Kumbukum workspace.",
+				"open_world_justification": "May contact an external git repository to import content into Kumbukum.",
+				"destructive_justification": "Adds sync configuration and imports content but does not remove repositories or perform irreversible actions."
+			}
+		},
+		"git_sync_status": {
+			"annotations": {
+				"readOnlyHint": true,
+				"openWorldHint": false,
+				"destructiveHint": false
+			},
+			"justifications": {
+				"read_only_justification": "Retrieves sync status for a configured git repository without changing data.",
+				"open_world_justification": "Reads Kumbukum sync status and does not change public internet state.",
+				"destructive_justification": "Does not delete, overwrite, revoke access, push code, or perform irreversible actions."
+			}
+		}
+	},
+	"test_cases": [
+		{
+			"description": "Search across the review demo workspace.",
+			"user_prompt": "Search my Kumbukum knowledge for OpenAI review demo.",
+			"file_attachment_urls": null,
+			"tools_triggered": "search_knowledge",
+			"expected_output": "Returns relevant demo notes, memories, URLs, or emails with concise excerpts and identifiers for follow-up reads.",
+			"expected_output_url": null
+		},
+		{
+			"description": "Retrieve a specific note after search.",
+			"user_prompt": "Open the product launch note from the OpenAI review demo results.",
+			"file_attachment_urls": null,
+			"tools_triggered": "search_notes, read_note",
+			"expected_output": "Finds and reads the matching note, then summarizes its launch checklist and related context.",
+			"expected_output_url": null
+		},
+		{
+			"description": "Recall stored reviewer preferences.",
+			"user_prompt": "What reviewer preference memories do I have for the OpenAI app submission?",
+			"file_attachment_urls": null,
+			"tools_triggered": "recall_memory",
+			"expected_output": "Returns matching memory records such as reviewer preferences and summarizes the relevant guidance.",
+			"expected_output_url": null
+		},
+		{
+			"description": "Use the email layer in the public app profile.",
+			"user_prompt": "Find the demo review checklist email and summarize the requested checks.",
+			"file_attachment_urls": null,
+			"tools_triggered": "search_emails, read_email",
+			"expected_output": "Finds the stored demo email and summarizes the checklist without exposing unnecessary internal metadata.",
+			"expected_output_url": null
+		},
+		{
+			"description": "Save a URL into Kumbukum for later retrieval.",
+			"user_prompt": "Save https://developers.openai.com/apps-sdk/app-submission-guidelines to Kumbukum with the title OpenAI app submission guidelines.",
+			"file_attachment_urls": null,
+			"tools_triggered": "save_url",
+			"expected_output": "Creates a saved URL record in the user's workspace and confirms the saved title or URL.",
+			"expected_output_url": null
+		},
+		{
+			"description": "Create persistent memory from a user instruction.",
+			"user_prompt": "Remember that OpenAI app review answers should be concise and source-backed.",
+			"file_attachment_urls": null,
+			"tools_triggered": "store_memory",
+			"expected_output": "Stores a new memory in the user's workspace and confirms what was remembered.",
+			"expected_output_url": null
+		},
+		{
+			"description": "Create a project note from conversation context.",
+			"user_prompt": "Create a note titled OpenAI review follow-up with a short checklist for testing OAuth, email search, and graph links.",
+			"file_attachment_urls": null,
+			"tools_triggered": "create_note",
+			"expected_output": "Creates a private note with the requested title and checklist content.",
+			"expected_output_url": null
+		},
+		{
+			"description": "Inspect graph relationships for a known item.",
+			"user_prompt": "Show the graph links related to the OpenAI App Review Demo launch note.",
+			"file_attachment_urls": null,
+			"tools_triggered": "search_notes, get_links",
+			"expected_output": "Finds the relevant note and returns its connected memories, URLs, or emails where links exist.",
+			"expected_output_url": null
+		}
+	],
+	"negative_test_cases": [
+		{
+			"description": "Do not invoke Kumbukum for unrelated calendar scheduling.",
+			"user_prompt": "Schedule a meeting with Nitai tomorrow at 3 PM.",
+			"file_attachment_urls": null,
+			"tools_triggered": null,
+			"expected_output": "The app should not be invoked because Kumbukum does not manage calendars or schedule meetings.",
+			"expected_output_url": null
+		},
+		{
+			"description": "Do not invoke Kumbukum to send external email.",
+			"user_prompt": "Send an email to the OpenAI reviewer with our demo account credentials.",
+			"file_attachment_urls": null,
+			"tools_triggered": null,
+			"expected_output": "The app should not be invoked to send email because Kumbukum stores/searches email records but does not send outbound email.",
+			"expected_output_url": null
+		},
+		{
+			"description": "Do not invoke Kumbukum for destructive deletion in the app profile.",
+			"user_prompt": "Delete all memories and notes from my Kumbukum account.",
+			"file_attachment_urls": null,
+			"tools_triggered": null,
+			"expected_output": "The app should not perform this request because destructive delete tools are not exposed in the app profile.",
+			"expected_output_url": null
+		},
+		{
+			"description": "Do not invoke Kumbukum for subscription checkout.",
+			"user_prompt": "Upgrade my Kumbukum account to a paid subscription.",
+			"file_attachment_urls": null,
+			"tools_triggered": null,
+			"expected_output": "The app should not be invoked because the ChatGPT app does not facilitate purchases, checkout, or subscription upgrades.",
+			"expected_output_url": null
+		}
+	]
+}
