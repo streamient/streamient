@@ -13,11 +13,33 @@ block settings
 			.card.mb-4
 				.card-body
 					h5.card-title Create New Token
+					label.form-label(for="token-name") Token name
 					.input-group
-						input.form-control#token-name(type="text" placeholder="Token name (e.g. MCP Server)")
-						button.btn.btn-outline-secondary#create-token Create
+						input.form-control.form-control-sm#token-name(type="text" autocomplete="off")
+						button.btn.btn-sm.btn-outline-secondary#create-token(type="button") Create
 
 			#tokens-list
+				#tokens-table
+
+			template#new-token-alert-template
+				.alert.alert-success.alert-dismissible.fade.show.new-token-alert
+					strong Token created!
+					span.ms-1 Copy it now - it won't be shown again.
+					.input-group.mt-2
+						input.form-control.form-control-sm.new-token-value(type="text" readonly)
+						button.btn.btn-sm.btn-outline-secondary.copy-new-token(type="button")
+							!= icon('clipboard')
+							span.ms-1 Copy
+					small.copy-token-status.text-muted.mt-2.d-block(aria-live="polite")
+					button.btn-close(type="button" data-bs-dismiss="alert" aria-label="Close")
+
+			template#token-row-template
+				.list-group-item.d-flex.justify-content-between.align-items-center
+					div
+						strong.token-row-name
+						small.text-muted.ms-2.token-row-created
+					button.btn.btn-sm.btn-outline-danger.delete-token(type="button" aria-label="Delete token")
+						!= icon('delete')
 
 		.tab-pane.fade#oauth-pane(role='tabpanel')
 			.card.mb-4

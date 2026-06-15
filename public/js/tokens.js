@@ -3,6 +3,10 @@
 	var createBtn = document.getElementById('create-token');
 	var nameInput = document.getElementById('token-name');
 	var tokensList = document.getElementById('tokens-list');
+	var newTokenTemplate = document.getElementById('new-token-alert-template');
+	var tokenRowTemplate = document.getElementById('token-row-template');
+
+	if (!createBtn || !nameInput || !tokensList || !newTokenTemplate || !tokenRowTemplate) return;
 
 	loadTokens();
 
@@ -14,22 +18,7 @@
 			const data = await api('POST', '/tokens', { name });
 			nameInput.value = '';
 
-			const alertHtml = `
-				<div class="alert alert-success alert-dismissible fade show" id="new-token-alert">
-					<strong>Token created!</strong> Copy it now — it won't be shown again.
-					<div class="input-group mt-2">
-						<input class="form-control" type="text" value="${data.token}" readonly id="new-token-value">
-						<button class="btn btn-outline-secondary" id="copy-new-token">${kkIcon('clipboard')} Copy</button>
-					</div>
-					<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-				</div>
-			`;
-			tokensList.insertAdjacentHTML('afterbegin', alertHtml);
-
-			document.getElementById('copy-new-token')?.addEventListener('click', () => {
-				navigator.clipboard.writeText(data.token);
-				showSuccess('Token copied');
-			});
+			tokensList.insertBefore(renderNewTokenAlert(data), tokensList.firstChild);
 
 			loadTokens();
 		} catch (err) {
@@ -40,33 +29,17 @@
 	async function loadTokens() {
 		try {
 			const data = await api('GET', '/tokens');
-			const listEl = document.getElementById('tokens-table');
-			if (!listEl) {
-				const table = document.createElement('div');
-				table.id = 'tokens-table';
-				tokensList.appendChild(table);
-			}
-			const tableEl = document.getElementById('tokens-table');
+			const tableEl = ensureTokensTable();
+			tableEl.innerHTML = '';
 
 			if (!data.tokens?.length) {
 				return;
 			}
 
-			tableEl.innerHTML = `
-				<div class="list-group mt-3">
-					${data.tokens.map((t) => `
-						<div class="list-group-item d-flex justify-content-between align-items-center">
-							<div>
-								<strong>${escapeHtml(t.name)}</strong>
-								<small class="text-muted ms-2">Created ${new Date(t.created_at).toLocaleDateString()}</small>
-							</div>
-							<button class="btn btn-sm btn-outline-danger delete-token" data-id="${t._id}">
-								${kkIcon('delete')}
-							</button>
-						</div>
-					`).join('')}
-				</div>
-			`;
+			const group = document.createElement('div');
+			group.className = 'list-group mt-3';
+			data.tokens.forEach((token) => group.appendChild(renderTokenRow(token)));
+			tableEl.appendChild(group);
 
 			tableEl.querySelectorAll('.delete-token').forEach((btn) => {
 				btn.addEventListener('click', async () => {
@@ -74,6 +47,7 @@
 					if (!confirmed) return;
 					try {
 						await api('DELETE', `/tokens/${btn.dataset.id}`);
+						removeNewTokenAlert(btn.dataset.id);
 						showSuccess('Token deleted');
 						loadTokens();
 					} catch (err) {
@@ -86,9 +60,122 @@
 		}
 	}
 
-	function escapeHtml(str) {
-		var div = document.createElement('div');
-		div.textContent = str;
-		return div.innerHTML;
+	function ensureTokensTable() {
+		var tableEl = document.getElementById('tokens-table');
+		if (tableEl) return tableEl;
+
+		tableEl = document.createElement('div');
+		tableEl.id = 'tokens-table';
+		tokensList.appendChild(tableEl);
+		return tableEl;
+	}
+
+	function renderNewTokenAlert(tokenData) {
+		var alertEl = newTokenTemplate.content.firstElementChild.cloneNode(true);
+		var tokenInput = alertEl.querySelector('.new-token-value');
+		var copyBtn = alertEl.querySelector('.copy-new-token');
+		var copyStatus = alertEl.querySelector('.copy-token-status');
+		var token = tokenData.token;
+
+		alertEl.dataset.tokenId = tokenData._id;
+
+		tokenInput.value = token;
+		copyBtn.addEventListener('click', async () => {
+			try {
+				const result = await copyText(token, tokenInput);
+				if (result.copied) {
+					copyStatus.textContent = '';
+					showSuccess('Token copied');
+					return;
+				}
+
+				if (result.selected) {
+					copyStatus.textContent = `Token selected. Press ${copyShortcut()} to copy.`;
+					return;
+				}
+
+				showError('Could not copy token');
+			} catch (err) {
+				showError('Could not copy token');
+			}
+		});
+
+		return alertEl;
+	}
+
+	function removeNewTokenAlert(tokenId) {
+		tokensList.querySelectorAll('.new-token-alert').forEach((alertEl) => {
+			if (alertEl.dataset.tokenId === tokenId) alertEl.remove();
+		});
+	}
+
+	function renderTokenRow(token) {
+		var rowEl = tokenRowTemplate.content.firstElementChild.cloneNode(true);
+		var nameEl = rowEl.querySelector('.token-row-name');
+		var createdEl = rowEl.querySelector('.token-row-created');
+		var deleteBtn = rowEl.querySelector('.delete-token');
+
+		nameEl.textContent = token.name;
+		createdEl.textContent = `Created ${new Date(token.created_at).toLocaleDateString()}`;
+		deleteBtn.dataset.id = token._id;
+
+		return rowEl;
+	}
+
+	async function copyText(text, inputEl) {
+		if (navigator.clipboard?.writeText && window.isSecureContext) {
+			try {
+				await navigator.clipboard.writeText(text);
+				return { copied: true, selected: false };
+			} catch (err) {
+				// Fall back to selection-based copy below.
+			}
+		}
+
+		const selectedInput = selectElement(inputEl);
+		if (selectedInput && copySelection()) return { copied: true, selected: true };
+		if (selectedInput) return { copied: false, selected: true };
+
+		const textarea = document.createElement('textarea');
+		textarea.value = text;
+		textarea.setAttribute('readonly', '');
+		textarea.style.position = 'fixed';
+		textarea.style.top = '-1000px';
+		textarea.style.left = '-1000px';
+		document.body.appendChild(textarea);
+
+		try {
+			const selectedTextarea = selectElement(textarea);
+			if (selectedTextarea && copySelection()) return { copied: true, selected: true };
+			if (selectedTextarea) return { copied: false, selected: true };
+		} finally {
+			textarea.remove();
+		}
+
+		throw new Error('Copy failed');
+	}
+
+	function selectElement(element) {
+		if (!element) return false;
+
+		element.focus({ preventScroll: true });
+		element.select();
+		if (typeof element.setSelectionRange === 'function') element.setSelectionRange(0, element.value.length);
+
+		return true;
+	}
+
+	function copySelection() {
+		if (typeof document.execCommand !== 'function') return false;
+
+		try {
+			return document.execCommand('copy');
+		} catch (err) {
+			return false;
+		}
+	}
+
+	function copyShortcut() {
+		return /Mac|iPhone|iPad|iPod/.test(navigator.platform) ? 'Cmd+C' : 'Ctrl+C';
 	}
 })();
