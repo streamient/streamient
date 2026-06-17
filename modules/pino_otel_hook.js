@@ -47,6 +47,25 @@ const _buildLogRecord = function(inputArgs = []) {
 	};
 };
 
+const _canAttachStdoutBody = function(value) {
+	return value && typeof value === 'object' && !(value instanceof Error) && !Array.isArray(value);
+};
+
+const _withStdoutBody = function(inputArgs = []) {
+	const logRecord = _buildLogRecord(inputArgs);
+	const body = String(logRecord.body || '');
+	if (!body.trim()) return inputArgs;
+
+	const firstArg = inputArgs[0];
+	if (_canAttachStdoutBody(firstArg)) {
+		if (Object.prototype.hasOwnProperty.call(firstArg, 'body')) return inputArgs;
+		return [{ ...firstArg, body }, ...inputArgs.slice(1)];
+	}
+
+	if (firstArg instanceof Error) return inputArgs;
+	return [{ body }, ...inputArgs];
+};
+
 // Find the first Error instance in the log arguments so it can be attached to the
 // current span as an exception event. We walk both top-level args and shallow object
 // properties because handlers commonly call `log.error('msg:', err)` or `log.error({ err })`.
@@ -96,7 +115,7 @@ export const buildPinoOtelHooks = function(source = 'pino') {
 	return {
 		logMethod(inputArgs, method, level) {
 			emitFromPinoArgs(inputArgs, level, source);
-			return method.apply(this, inputArgs);
+			return method.apply(this, _withStdoutBody(inputArgs));
 		},
 	};
 };

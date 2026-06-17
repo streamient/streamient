@@ -81,6 +81,20 @@ describe('Typesense chunking', () => {
 		assert.equal(docs[0].excerpt, 'body text');
 	});
 
+	it('strips lone surrogates from email index chunks', () => {
+		const validPair = '\uD835\uDC00';
+		const docs = toTypesenseDocs('emails', {
+			_id: 'email-surrogate-1',
+			subject: 'Email',
+			text_content: `Hello \uD835 paid backlink \uDC00 ${validPair}`,
+			attachment_text_content: '',
+			project: 'project-1',
+		});
+
+		assert.equal(docs.length, 1);
+		assert.equal(docs[0].text_content, `Hello  paid backlink  ${validPair}`);
+	});
+
 	it('normalizes grouped hits back to the source document id', () => {
 		const result = normalizeGroupedSearchResult({
 			found: 1,

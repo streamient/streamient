@@ -3,9 +3,33 @@
 // DEL, the C1 control block (e.g. U+0085 NEL / U+009C that show up in mojibake'd
 // imports), and the Unicode line/paragraph separators U+2028 / U+2029.
 const UNSAFE_CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u2028\u2029]/g;
+const SURROGATE_CHARS = /[\uD800-\uDFFF]/;
+
+function stripLoneSurrogates(value) {
+	if (!SURROGATE_CHARS.test(value)) return value;
+
+	let output = '';
+	for (let i = 0; i < value.length; i++) {
+		const code = value.charCodeAt(i);
+
+		if (code >= 0xD800 && code <= 0xDBFF) {
+			const nextCode = value.charCodeAt(i + 1);
+			if (nextCode >= 0xDC00 && nextCode <= 0xDFFF) {
+				output += value[i] + value[i + 1];
+				i++;
+			}
+			continue;
+		}
+
+		if (code >= 0xDC00 && code <= 0xDFFF) continue;
+		output += value[i];
+	}
+
+	return output;
+}
 
 export function sanitizeText(value) {
-	return typeof value === 'string' ? value.replace(UNSAFE_CONTROL_CHARS, '') : value;
+	return typeof value === 'string' ? stripLoneSurrogates(value).replace(UNSAFE_CONTROL_CHARS, '') : value;
 }
 
 function isPlainObject(value) {
