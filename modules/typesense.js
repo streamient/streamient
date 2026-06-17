@@ -19,6 +19,7 @@ const _chunk_overlap = 200;
 // Single shared collection for all tenants' conversation history.
 // Isolation is enforced via the conversation model_id, which encodes host + user.
 const CONVERSATION_STORE_COLLECTION = 'conversation_store';
+const MISSING_IMPORT_RESULT_ERROR = 'Typesense import returned no result for this document';
 
 const _chunk_fields = {
 	notes: ['text_content'],
@@ -603,7 +604,7 @@ function summarizeSourceImportResults(sourceEntries, results) {
 		if (result?.success) {
 			successCounts.set(entry.sourceId, (successCounts.get(entry.sourceId) || 0) + 1);
 		} else {
-			failures.set(entry.sourceId, result?.error || 'missing import result');
+			failures.set(entry.sourceId, result?.error || MISSING_IMPORT_RESULT_ERROR);
 		}
 	}
 
@@ -615,6 +616,24 @@ function summarizeSourceImportResults(sourceEntries, results) {
 			error: success ? null : failures.get(sourceId),
 		};
 	});
+}
+
+function summarizeImportError(err) {
+	if (!err) return null;
+	return {
+		name: err.name,
+		message: err.message,
+		httpStatus: err.httpStatus,
+		code: err.code,
+	};
+}
+
+function summarizeImportResultErrors(results) {
+	return [...new Set(
+		results
+			.filter((result) => !result?.success)
+			.map((result) => result?.error || MISSING_IMPORT_RESULT_ERROR),
+	)].slice(0, 5).join(' | ');
 }
 
 /**
@@ -663,11 +682,17 @@ export async function importDocuments(host_id, type, docs, action = 'upsert') {
 		return await withTypesenseResilience(
 			`import ${collectionName}`,
 			() => ts.collections(collectionName).documents().import(docs, { action, dirty_values: 'coerce_or_drop' }),
-			{ fallback: [] },
 		);
 	} catch (err) {
-		log.error({ err, docCount: docs.length, collection: collectionName }, 'import error');
-		return err.importResults || [];
+		if (Array.isArray(err.importResults) && err.importResults.length) {
+			const failedCount = err.importResults.filter((result) => !result?.success).length;
+			log.error({ errorInfo: summarizeImportError(err), docCount: docs.length, importResultCount: err.importResults.length, failedCount, errorSummary: summarizeImportResultErrors(err.importResults), collection: collectionName }, 'Kumbukum indexer: import returned partial failures');
+			return err.importResults;
+		}
+
+		const error = err?.message || 'Typesense import failed';
+		log.error({ errorInfo: summarizeImportError(err), docCount: docs.length, collection: collectionName }, 'Kumbukum indexer: import failed');
+		return docs.map(() => ({ success: false, error }));
 	}
 }
 
@@ -1045,7 +1070,7 @@ export async function getFilteredCount(host_id, type, projectId) {
 /**
  * Queue all documents for scheduler-based reindexing for a host.
  * Drops and recreates collections, then marks MongoDB records as unindexed
- * so indexMissing() can repopulate Typesense in batches.
+ * so runKumbukumIndexer() can repopulate Typesense in batches.
  */
 export async function reindexHost(host_id, models) {
 	const ts = getTypesenseClient();
@@ -1226,7 +1251,7 @@ export async function getReindexStatus(host_id, models) {
 	return buildReindexStatus(reindexState, remaining);
 }
 
-export async function indexMissing(models) {
+export async function runKumbukumIndexer(models) {
 	const typeModelMap = getIndexedTypeModelMap(models);
 
 	let totalIndexed = 0;
@@ -1286,7 +1311,7 @@ export async function indexMissing(models) {
 				if (results[i]?.success) {
 					successCounts.set(entry.sourceId, (successCounts.get(entry.sourceId) || 0) + 1);
 				} else {
-					failedIds.set(entry.sourceId, results[i]?.error || 'missing import result');
+					failedIds.set(entry.sourceId, results[i]?.error || MISSING_IMPORT_RESULT_ERROR);
 				}
 			}
 
@@ -1308,11 +1333,13 @@ export async function indexMissing(models) {
 			}
 
 			if (failed.length) {
-				log.error({ failedCount: failed.length, type, host_id, failed }, 'indexMissing: failures');
+				const failedIdsSample = failed.slice(0, 10).map((item) => item.id).join(',');
+				const errorSummary = [...new Set(failed.map((item) => item.error))].slice(0, 5).join(' | ');
+				log.error({ failedCount: failed.length, failedSampleCount: Math.min(failed.length, 10), errorSummary, type, host_id, failedIdsSample }, 'Kumbukum indexer: failures');
 			}
 
 			if (docs.length > 0) {
-				log.info({ imported: successIds.length, total: docs.length, type, host_id }, 'indexMissing: imported docs');
+				log.info({ imported: successIds.length, total: docs.length, type, host_id }, 'Kumbukum indexer: imported docs');
 			}
 		}
 	}
@@ -1335,7 +1362,7 @@ export async function indexMissing(models) {
 	}
 
 	if (totalIndexed > 0) {
-		log.info({ totalIndexed }, 'indexMissing: indexed documents total');
+		log.info({ totalIndexed }, 'Kumbukum indexer: indexed documents total');
 	}
 
 	return totalIndexed;

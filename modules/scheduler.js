@@ -1,6 +1,6 @@
 import { Cron } from 'croner';
 import { reindexDue } from './crawler.js';
-import { indexMissing, removeDocument } from './typesense.js';
+import { removeDocument, runKumbukumIndexer } from './typesense.js';
 import { User } from '../model/user.js';
 import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
@@ -209,13 +209,13 @@ export function startScheduler() {
 		}
 	});
 
-	// Batch indexing: find documents with is_indexed:false and batch-import to Typesense
+	// Kumbukum indexer: find documents with is_indexed:false and batch-import to Typesense
 	new Cron('*/20 * * * * *', async () => {
 		try {
-			const indexed = await indexMissing({ Note, Memory, Url, Email });
-			if (indexed > 0) log.info({ indexed }, 'Index batch complete');
+			const indexed = await runKumbukumIndexer({ Note, Memory, Url, Email });
+			if (indexed > 0) log.info({ indexed }, 'Kumbukum indexer batch complete');
 		} catch (err) {
-			log.error({ err }, 'Index batch error');
+			log.error({ err }, 'Kumbukum indexer batch error');
 		}
 	});
 
