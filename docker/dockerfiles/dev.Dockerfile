@@ -18,6 +18,6 @@ RUN apt-get update && \
 # Install Chromium + Playwright runtime deps for Crawlee/PlaywrightCrawler.
 # In dev image we install via npx because node_modules are mounted/installed later by init service.
 RUN mkdir -p /ms-playwright && chmod 755 /ms-playwright
-RUN npx -y playwright@1.60.0 install --with-deps chromium
+RUN npx -y playwright@1.61.0 install --with-deps chromium
 
 ENTRYPOINT ["tini", "--"]
