@@ -483,7 +483,7 @@ router.get('/emails/triage-runs/:run_id', requireEmailFeatureAccess, async (req,
 	res.json({ run });
 });
 
-router.get('/emails/from-addresses', requireEmailFeatureAccess, async (req, res) => {
+async function suggestRecipientEmailAddresses(req, res) {
 	try {
 		const result = await emailIngestService.suggestFromEmailAddresses(req.host_id, {
 			query: req.query.q,
@@ -494,7 +494,10 @@ router.get('/emails/from-addresses', requireEmailFeatureAccess, async (req, res)
 	} catch (err) {
 		res.status(400).json({ error: err.message || 'Email address search failed' });
 	}
-});
+}
+
+router.get('/emails/recipient-addresses', requireEmailFeatureAccess, suggestRecipientEmailAddresses);
+router.get('/emails/from-addresses', requireEmailFeatureAccess, suggestRecipientEmailAddresses);
 
 router.get('/emails/:id/triage-status', requireEmailFeatureAccess, async (req, res) => {
 	const status = await emailIngestService.getEmailTriageStatus(req.host_id, req.params.id, {

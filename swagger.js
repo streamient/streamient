@@ -1560,10 +1560,39 @@ const swaggerSpec = {
                 },
             },
         },
+        '/emails/recipient-addresses': {
+            get: {
+                tags: ['Emails'],
+                summary: 'Suggest email addresses for draft recipients',
+                description: 'Searches email participants in the requested project first, then falls back tenant-wide when no project results are found.',
+                parameters: [
+                    { name: 'q', in: 'query', schema: { type: 'string' }, description: 'Partial email address query' },
+                    { name: 'project', in: 'query', schema: { type: 'string' }, description: 'Project to search first before tenant fallback' },
+                    { name: 'limit', in: 'query', schema: { type: 'integer', default: 10, maximum: 25 } },
+                ],
+                responses: {
+                    200: {
+                        description: 'OK',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        addresses: { type: 'array', items: { type: 'string', format: 'email' } },
+                                        scope: { type: 'string', enum: ['project', 'tenant'] },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
         '/emails/from-addresses': {
             get: {
                 tags: ['Emails'],
-                summary: 'Suggest sender email addresses for draft recipients',
+                summary: 'Suggest email addresses for draft recipients',
+                description: 'Compatibility alias for /emails/recipient-addresses.',
                 parameters: [
                     { name: 'q', in: 'query', schema: { type: 'string' }, description: 'Partial email address query' },
                     { name: 'project', in: 'query', schema: { type: 'string' }, description: 'Project to search first before tenant fallback' },

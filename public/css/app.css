@@ -906,8 +906,12 @@ small,
 	min-width: 0;
 }
 
-.ecc-recipient-control .tagify {
+.ecc-recipient-control .ts-wrapper {
 	width: 100%;
+	min-height: 1.75rem;
+}
+
+.ecc-recipient-control .ts-wrapper.multi .ts-control {
 	height: 1.75rem;
 	min-height: 1.75rem;
 	max-height: 1.75rem;
@@ -922,50 +926,44 @@ small,
 	color: var(--bs-body-color);
 	font-size: 0.875rem;
 	line-height: 1.25;
-	--tag-bg: rgba(var(--bs-primary-rgb), 0.12);
-	--tag-hover: rgba(var(--bs-primary-rgb), 0.18);
-	--tag-pad: 0.08rem 0.35rem;
-	--tag-text-color: var(--bs-body-color);
-	--tag-remove-btn-color: var(--bs-body-color);
-	--tag-remove-bg: transparent;
-	--tag-remove-btn-bg--hover: rgba(var(--bs-danger-rgb), 0.16);
 }
 
-.ecc-recipient-control .tagify.tagify--focus {
+.ecc-recipient-control .ts-wrapper.focus .ts-control {
 	border-color: #86b7fe;
 	box-shadow: 0 0 0 0.18rem rgba(13, 110, 253, 0.16);
 }
 
-.ecc-recipient-control .tagify__tag {
+.ecc-recipient-control .ts-wrapper.multi .ts-control > div.item {
 	flex: 0 0 auto;
 	margin: 0 0.2rem 0 0;
+	padding: 0.08rem 0.35rem;
+	border-radius: var(--bs-border-radius-sm);
+	background: rgba(var(--bs-primary-rgb), 0.12);
+	color: var(--bs-body-color);
 	line-height: 1.2;
 }
 
-.ecc-recipient-control .tagify__tag > div {
-	border-radius: var(--bs-border-radius-sm);
-}
-
-.ecc-recipient-control .tagify__input {
+.ecc-recipient-control .ts-wrapper.multi .ts-control > input {
 	flex: 1 0 8rem;
 	min-width: 8rem;
 	min-height: 0;
 	margin: 0;
 	padding: 0;
+	border: 0;
+	background: transparent;
 	color: var(--bs-body-color);
 	line-height: 1.2;
 	white-space: nowrap;
 }
 
-.ecc-recipient-control .tagify__tag__removeBtn {
-	color: var(--tag-remove-btn-color);
-	width: 0.85rem;
-	height: 0.85rem;
-	margin-inline: auto 0.2rem;
-	font: 12px/1 Arial;
+.ecc-recipient-control .ts-wrapper.plugin-remove_button .item .remove {
+	padding-left: 0.25rem;
+	border-left: 0;
+	color: var(--bs-body-color);
+	text-decoration: none;
 }
 
-.ecc-recipient-control .tagify__dropdown {
+.ecc-recipient-control .ts-dropdown {
 	z-index: 1060;
 }
 

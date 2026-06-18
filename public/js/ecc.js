@@ -72,7 +72,7 @@
 	var draftAutosaveSaving = false;
 	var draftSaveChain = Promise.resolve();
 	var draftSendInProgress = false;
-	var draftRecipientTagifies = [];
+	var draftRecipientSelects = [];
 	var pendingLocalDraftDeleteIds = new Set();
 	var outgoingNoticeTimer = null;
 	var noteEditor = null;
@@ -249,67 +249,13 @@
 				});
 		}
 
-		function tagifyItemValue(item) {
-			if (typeof item === 'string') return item;
-			return item?.value || item?.email || item?.address || item?.text || '';
-		}
-
-		function tagifyDomValueToList(tagify) {
-			var values = [];
-			var tagNodes = [];
-			if (tagify?.getTagElms) {
-				tagNodes = Array.from(tagify.getTagElms() || []);
-			} else if (tagify?.DOM?.scope) {
-				tagNodes = Array.from(tagify.DOM.scope.querySelectorAll('.tagify__tag') || []);
-			}
-			tagNodes.forEach(function (node) {
-				var data = node.__tagifyTagData || {};
-				values.push(tagifyItemValue(data) || node.textContent || '');
-			});
-			if (tagify?.DOM?.input) values.push(tagify.DOM.input.textContent || tagify.DOM.input.innerText || '');
-			return uniqueRecipientList(values);
-		}
-
-		function recipientControlDomValueToList(input) {
-			var root = input?.closest?.('.ecc-recipient-control') || input?.parentElement;
-			if (!root) return [];
-			var values = [];
-			root.querySelectorAll('.tagify__tag').forEach(function (node) {
-				var data = node.__tagifyTagData || {};
-				values.push(tagifyItemValue(data) || node.getAttribute('value') || node.getAttribute('title') || node.textContent || '');
-			});
-			root.querySelectorAll('.tagify__input').forEach(function (node) {
-				values.push(node.textContent || node.innerText || '');
-			});
-			return uniqueRecipientList(values);
-		}
-
-		function commitTagifyInput(tagify) {
-			if (!tagify) return;
-			var pending = uniqueRecipientList([
-				tagify.state?.inputText || '',
-				tagify.DOM?.input?.textContent || tagify.DOM?.input?.innerText || '',
-			]);
-			if (pending.length) tagify.addTags(pending, true);
-			if (tagify.update) tagify.update();
-		}
-
 		function recipientInputValueToList(input) {
-			var tagify = input?._kkTagify || input?.__tagify;
-			var domValues = recipientControlDomValueToList(input);
-			if (tagify) {
-				commitTagifyInput(tagify);
-				return uniqueRecipientList([
-					...(tagify.value || []).map(tagifyItemValue),
-					...tagifyDomValueToList(tagify),
-					...inputValueToList(input?.value),
-					...domValues,
-				]);
+			var tomSelect = input?._kkTomSelect || input?.tomselect;
+			if (tomSelect) {
+				commitTomSelectInput(tomSelect);
+				return uniqueRecipientList(tomSelect.items || []);
 			}
-			return uniqueRecipientList([
-				...inputValueToList(input?.value),
-				...domValues,
-			]);
+			return uniqueRecipientList(inputValueToList(input?.value));
 		}
 
 		function normalizeEmailAddress(value) {
@@ -1459,14 +1405,14 @@
 			draftAutosaveDirty = false;
 			draftAutosaveSaving = false;
 			draftSendInProgress = false;
-			draftRecipientTagifies.forEach(function (tagify) {
+			draftRecipientSelects.forEach(function (tomSelect) {
 				try {
-					tagify.destroy();
+					tomSelect.destroy();
 				} catch {
-					// Editor teardown should continue even if Tagify already removed itself.
+					// Editor teardown should continue even if Tom Select already removed itself.
 				}
 			});
-			draftRecipientTagifies = [];
+			draftRecipientSelects = [];
 			if (draftEditor) {
 				draftEditor.destroy();
 				draftEditor = null;
@@ -1726,68 +1672,110 @@
 
 		function recipientSuggestionPath(email, query) {
 			var projectId = emailProjectId(email);
-			var path = '/emails/from-addresses?q=' + encodeURIComponent(query || '') + '&limit=10';
+			var path = '/emails/recipient-addresses?q=' + encodeURIComponent(query || '') + '&limit=10';
 			if (projectId) path += '&project=' + encodeURIComponent(projectId);
 			return path;
 		}
 
-		function setupDraftRecipientTagify(input, email, initialItems, markDirty) {
-			var initial = (initialItems || []).map(normalizeEmailAddress).filter(Boolean);
+		function recipientOption(address) {
+			return { value: address, text: address };
+		}
+
+		function commitTomSelectInput(tomSelect) {
+			if (!tomSelect) return;
+			var pending = normalizeEmailAddress(tomSelect.control_input?.value || '');
+			if (!pending) return;
+			if (!DRAFT_EMAIL_RE.test(pending)) throw new Error('Recipient contains invalid email address');
+			if ((tomSelect.items || []).length >= 10 && !(tomSelect.items || []).includes(pending)) throw new Error('Recipient field cannot contain more than 10 addresses');
+			if (!tomSelect.options[pending]) tomSelect.addOption(recipientOption(pending));
+			if (!(tomSelect.items || []).includes(pending)) tomSelect.addItem(pending, true);
+			tomSelect.setTextboxValue('');
+			tomSelect.refreshOptions(false);
+		}
+
+		function setupDraftRecipientTomSelect(input, email, initialItems, markDirty) {
+			var initial = uniqueRecipientList(initialItems || []);
 			input.value = '';
-			if (!window.Tagify) {
+			if (!window.TomSelect) {
 				input.value = listToInputValue(initial);
 				input.addEventListener('input', markDirty);
 				return null;
 			}
 
-			var tagify = new window.Tagify(input, {
-				delimiters: ',|\n',
-				enforceWhitelist: false,
-				maxTags: 10,
-				trim: true,
-				dropdown: {
-					enabled: 1,
-					maxItems: 10,
-					closeOnSelect: true,
-					highlightFirst: true,
+			var tomSelect = new window.TomSelect(input, {
+				plugins: ['remove_button'],
+				valueField: 'value',
+				labelField: 'text',
+				searchField: ['text', 'value'],
+				delimiter: ',',
+				maxItems: 10,
+				persist: false,
+				createOnBlur: true,
+				preload: false,
+				loadThrottle: 300,
+				createFilter: function (value) {
+					return DRAFT_EMAIL_RE.test(normalizeEmailAddress(value));
 				},
-				validate: function (tagData) {
-					return DRAFT_EMAIL_RE.test(normalizeEmailAddress(tagData.value));
+				create: function (value) {
+					var address = normalizeEmailAddress(value);
+					if (!DRAFT_EMAIL_RE.test(address)) return false;
+					return recipientOption(address);
 				},
-				transformTag: function (tagData) {
-					tagData.value = normalizeEmailAddress(tagData.value);
-				},
-			});
-
-			input._kkTagify = tagify;
-			draftRecipientTagifies.push(tagify);
-			if (initial.length) tagify.addTags(initial, true);
-
-			tagify.on('input', function (event) {
-				var query = String(event.detail.value || '').trim();
-				if (query.length < 2) return;
-				tagify.loading(true);
-				api('GET', recipientSuggestionPath(email, query))
-					.then(function (res) {
-						tagify.settings.whitelist = (res.addresses || []).map(function (address) {
-							return { value: address };
+				load: function (query, callback) {
+					query = String(query || '').trim();
+					if (query.length < 2) {
+						callback();
+						return;
+					}
+					api('GET', recipientSuggestionPath(email, query))
+						.then(function (res) {
+							callback((res.addresses || []).map(normalizeEmailAddress).filter(function (address) {
+								return DRAFT_EMAIL_RE.test(address);
+							}).map(recipientOption));
+						})
+						.catch(function () {
+							callback();
 						});
-						tagify.loading(false);
-						tagify.dropdown.show(query);
-					})
-					.catch(function () {
-						tagify.settings.whitelist = [];
-						tagify.loading(false);
-						tagify.dropdown.hide();
-					});
+				},
+				render: {
+					option: function (item, escape) {
+						return '<div class="py-1">' + escape(item.text || item.value || '') + '</div>';
+					},
+					item: function (item, escape) {
+						return '<div>' + escape(item.text || item.value || '') + '</div>';
+					},
+				},
 			});
-			tagify.on('add', markDirty);
-			tagify.on('remove', markDirty);
-			tagify.on('edit:updated', markDirty);
-			tagify.on('invalid', function (event) {
-				if (event.detail?.message) setDraftSaveStatus(input.closest('.ecc-detail-draft'), event.detail.message, 'error');
+
+			input._kkTomSelect = tomSelect;
+			draftRecipientSelects.push(tomSelect);
+			if (initial.length) {
+				initial.forEach(function (address) {
+					tomSelect.addOption(recipientOption(address));
+				});
+				tomSelect.setValue(initial, true);
+			}
+			tomSelect.on('change', markDirty);
+			tomSelect.on('type', function (value) {
+				if (value) markDirty();
 			});
-			return tagify;
+			tomSelect.on('blur', function () {
+				try {
+					commitTomSelectInput(tomSelect);
+				} catch (err) {
+					setDraftSaveStatus(input.closest('.ecc-detail-draft'), err.message || 'Recipient contains invalid email address', 'error');
+				}
+			});
+			return tomSelect;
+		}
+
+		function focusRecipientControl(input) {
+			var tomSelect = input?._kkTomSelect || input?.tomselect;
+			if (tomSelect?.focus) {
+				tomSelect.focus();
+				return;
+			}
+			input?.focus();
 		}
 
 		function draftPayloadFromForm(card) {
@@ -2118,18 +2106,18 @@
 				if (!input.classList.contains('ecc-draft-to') && !input.classList.contains('ecc-draft-cc') && !input.classList.contains('ecc-draft-bcc')) input.addEventListener('input', markDirty);
 				input.addEventListener('change', markDirty);
 			});
-			setupDraftRecipientTagify(fields.querySelector('.ecc-draft-to'), replyEmail, draft?.to?.length ? draft.to : (replyEmail?.from || []), markDirty);
-			setupDraftRecipientTagify(fields.querySelector('.ecc-draft-cc'), replyEmail, draft?.cc || [], markDirty);
-			setupDraftRecipientTagify(fields.querySelector('.ecc-draft-bcc'), replyEmail, draft?.bcc || [], markDirty);
+			setupDraftRecipientTomSelect(fields.querySelector('.ecc-draft-to'), replyEmail, draft?.to?.length ? draft.to : (replyEmail?.from || []), markDirty);
+			setupDraftRecipientTomSelect(fields.querySelector('.ecc-draft-cc'), replyEmail, draft?.cc || [], markDirty);
+			setupDraftRecipientTomSelect(fields.querySelector('.ecc-draft-bcc'), replyEmail, draft?.bcc || [], markDirty);
 			fields.querySelector('.ecc-draft-show-cc')?.addEventListener('click', function () {
 				fields.querySelector('.ecc-draft-cc-row')?.classList.remove('d-none');
 				fields.querySelector('.ecc-draft-show-cc')?.classList.add('d-none');
-				fields.querySelector('.ecc-draft-cc')?.focus();
+				focusRecipientControl(fields.querySelector('.ecc-draft-cc'));
 			});
 			fields.querySelector('.ecc-draft-show-bcc')?.addEventListener('click', function () {
 				fields.querySelector('.ecc-draft-bcc-row')?.classList.remove('d-none');
 				fields.querySelector('.ecc-draft-show-bcc')?.classList.add('d-none');
-				fields.querySelector('.ecc-draft-bcc')?.focus();
+				focusRecipientControl(fields.querySelector('.ecc-draft-bcc'));
 			});
 
 			var footer = document.createElement('div');
