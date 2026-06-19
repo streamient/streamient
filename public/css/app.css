@@ -922,8 +922,8 @@ small,
 	padding: 0 0.35rem;
 	border-color: var(--bs-border-color);
 	border-radius: var(--bs-border-radius-sm);
-	background: var(--bs-body-bg);
-	color: var(--bs-body-color);
+	background: var(--panel2b, var(--bs-body-bg));
+	color: var(--text, var(--bs-body-color));
 	font-size: 0.875rem;
 	line-height: 1.25;
 }
@@ -939,7 +939,7 @@ small,
 	padding: 0.08rem 0.35rem;
 	border-radius: var(--bs-border-radius-sm);
 	background: rgba(var(--bs-primary-rgb), 0.12);
-	color: var(--bs-body-color);
+	color: var(--text, var(--bs-body-color));
 	line-height: 1.2;
 }
 
@@ -951,7 +951,7 @@ small,
 	padding: 0;
 	border: 0;
 	background: transparent;
-	color: var(--bs-body-color);
+	color: var(--text, var(--bs-body-color));
 	line-height: 1.2;
 	white-space: nowrap;
 }
@@ -959,12 +959,35 @@ small,
 .ecc-recipient-control .ts-wrapper.plugin-remove_button .item .remove {
 	padding-left: 0.25rem;
 	border-left: 0;
-	color: var(--bs-body-color);
+	color: var(--text, var(--bs-body-color));
 	text-decoration: none;
 }
 
 .ecc-recipient-control .ts-dropdown {
 	z-index: 1060;
+	border-color: var(--line-strong, var(--bs-border-color));
+	background: var(--panel3-dropdown, var(--bs-body-bg));
+	color: var(--text, var(--bs-body-color));
+	box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.12);
+}
+
+.ecc-recipient-control .ts-dropdown .option,
+.ecc-recipient-control .ts-dropdown .create,
+.ecc-recipient-control .ts-dropdown .no-results {
+	background: transparent;
+	color: var(--text, var(--bs-body-color));
+}
+
+.ecc-recipient-control .ts-dropdown .option.active,
+.ecc-recipient-control .ts-dropdown .option:hover,
+.ecc-recipient-control .ts-dropdown .active {
+	background: var(--hover, rgba(var(--bs-primary-rgb), 0.12));
+	color: var(--text-strong, var(--bs-body-color));
+}
+
+.ecc-recipient-control .ts-dropdown .highlight {
+	background: rgba(var(--bs-warning-rgb), 0.25);
+	color: inherit;
 }
 
 .kk-email-editor-toolbar {

@@ -106,6 +106,7 @@
 		{ slug: 'no-action', name: 'No action', color: '#6c757d' },
 	];
 	var DRAFT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+	var DRAFT_RECIPIENT_SEARCH_MIN = 2;
 	var EMAIL_PAGE_SIZE = 50;
 	var emailPage = 1;
 	var emailLoadingMore = false;
@@ -1695,6 +1696,7 @@
 
 		function setupDraftRecipientTomSelect(input, email, initialItems, markDirty) {
 			var initial = uniqueRecipientList(initialItems || []);
+			var removedRecipients = new Set();
 			input.value = '';
 			if (!window.TomSelect) {
 				input.value = listToInputValue(initial);
@@ -1711,8 +1713,12 @@
 				maxItems: 10,
 				persist: false,
 				createOnBlur: true,
-				preload: false,
+				preload: 'focus',
 				loadThrottle: 300,
+				shouldLoad: function (query) {
+					var value = String(query || '').trim();
+					return value.length === 0 || value.length >= DRAFT_RECIPIENT_SEARCH_MIN;
+				},
 				createFilter: function (value) {
 					return DRAFT_EMAIL_RE.test(normalizeEmailAddress(value));
 				},
@@ -1723,14 +1729,15 @@
 				},
 				load: function (query, callback) {
 					query = String(query || '').trim();
-					if (query.length < 2) {
+					if (query.length > 0 && query.length < DRAFT_RECIPIENT_SEARCH_MIN) {
 						callback();
 						return;
 					}
 					api('GET', recipientSuggestionPath(email, query))
 						.then(function (res) {
 							callback((res.addresses || []).map(normalizeEmailAddress).filter(function (address) {
-								return DRAFT_EMAIL_RE.test(address);
+								if (!DRAFT_EMAIL_RE.test(address)) return false;
+								return query || !removedRecipients.has(address);
 							}).map(recipientOption));
 						})
 						.catch(function () {
@@ -1743,6 +1750,19 @@
 					},
 					item: function (item, escape) {
 						return '<div>' + escape(item.text || item.value || '') + '</div>';
+					},
+					option_create: function (data, escape) {
+						return '<div class="create py-1">Hit Enter to add ' + escape(data.input || 'this email address') + '</div>';
+					},
+					no_results: function (data, escape) {
+						var query = String(data.input || '').trim();
+						if (query) return null;
+						return '<div class="no-results py-1">' + escape('No recent email addresses') + '</div>';
+					},
+					not_loading: function (data, escape) {
+						var query = String(data.input || '').trim();
+						if (!query) return null;
+						return '<div class="no-results py-1">' + escape('Enter at least ' + DRAFT_RECIPIENT_SEARCH_MIN + ' characters') + '</div>';
 					},
 				},
 			});
@@ -1758,6 +1778,16 @@
 			tomSelect.on('change', markDirty);
 			tomSelect.on('type', function (value) {
 				if (value) markDirty();
+			});
+			tomSelect.on('item_add', function (value) {
+				removedRecipients.delete(normalizeEmailAddress(value));
+			});
+			tomSelect.on('item_remove', function (value) {
+				var address = normalizeEmailAddress(value);
+				if (!address) return;
+				removedRecipients.add(address);
+				if (!(tomSelect.items || []).includes(address)) tomSelect.removeOption(address, true);
+				tomSelect.refreshOptions(false);
 			});
 			tomSelect.on('blur', function () {
 				try {
