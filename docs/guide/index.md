@@ -22,7 +22,7 @@ Memories are primarily used by your AI tools to provide context and improve resp
 
 ### URLs
 
-Save links with a single click. Kumbukum automatically extracts the title, description, and page content so you can search through your bookmarks by what they contain, not just their URL. You can also enable full-site crawling to capture deeper context from the sites your team relies on.
+Save links with a single click. Kumbukum automatically extracts the title, description, and page content so you can search through your bookmarks by what they contain, not just their URL. You can also enable URL path crawling to capture deeper context from the saved URL path.
 
 ### Knowledge Graph
 

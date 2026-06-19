@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "https://your-instance.example.com/api/v1",
+      "url": "/api/v1",
       "description": "API v1"
     }
   ],
@@ -433,6 +433,10 @@
           "in_reply_to": {
             "type": "string"
           },
+          "thread_key": {
+            "type": "string",
+            "description": "Typesense list grouping key derived from the root connected message identifier."
+          },
           "thread_identifiers": {
             "type": "array",
             "items": {
@@ -487,6 +491,10 @@
           "attachment_text_content": {
             "type": "string"
           },
+          "excerpt": {
+            "type": "string",
+            "description": "Compact list excerpt. Typesense-backed list rows return this without Mongo hydration."
+          },
           "display_date": {
             "type": "string",
             "format": "date-time",
@@ -512,7 +520,8 @@
               "inbox",
               "archived",
               "sent",
-              "spam"
+              "spam",
+              "trash"
             ]
           },
           "labels": {
@@ -520,6 +529,14 @@
             "items": {
               "type": "string"
             }
+          },
+          "in_trash": {
+            "type": "boolean"
+          },
+          "trashed_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           },
           "triaged": {
             "type": "boolean"
@@ -3213,7 +3230,7 @@
           "Emails"
         ],
         "summary": "List emails",
-        "description": "Mailbox results are collapsed to one latest email per connected message-id/references/in-reply-to thread.",
+        "description": "Typesense-backed mailbox results grouped by thread_key. Mongo is used for detail, thread, and write paths only.",
         "parameters": [
           {
             "$ref": "#/components/parameters/page"
@@ -3332,6 +3349,68 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/emails/ids": {
+      "get": {
+        "tags": [
+          "Emails"
+        ],
+        "summary": "List email IDs for current view",
+        "description": "Typesense-backed ID list grouped by thread_key using the same mailbox, label, triage, and project filters as /emails.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/project"
+          },
+          {
+            "name": "mailbox",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "inbox",
+                "archived",
+                "sent",
+                "spam",
+                "trash"
+              ]
+            }
+          },
+          {
+            "name": "label",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "triaged",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -4675,12 +4754,77 @@
         }
       }
     },
+    "/emails/recipient-addresses": {
+      "get": {
+        "tags": [
+          "Emails"
+        ],
+        "summary": "Suggest email addresses for draft recipients",
+        "description": "Searches email participants in the requested project first, then falls back tenant-wide when no project results are found.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Partial email address query"
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Project to search first before tenant fallback"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "maximum": 25
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "addresses": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "email"
+                      }
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "project",
+                        "tenant"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/emails/from-addresses": {
       "get": {
         "tags": [
           "Emails"
         ],
-        "summary": "Suggest sender email addresses for draft recipients",
+        "summary": "Suggest email addresses for draft recipients",
+        "description": "Compatibility alias for /emails/recipient-addresses.",
         "parameters": [
           {
             "name": "q",
@@ -4744,7 +4888,7 @@
           "Emails"
         ],
         "summary": "List email labels and command center counts",
-        "description": "Sent mailbox counts are collapsed to one count per thread.",
+        "description": "Typesense-backed mailbox and label counts grouped by thread_key. Draft counts still come from Mongo draft records.",
         "parameters": [
           {
             "$ref": "#/components/parameters/project"
@@ -5433,7 +5577,7 @@
           "URLs"
         ],
         "summary": "Update a URL",
-        "description": "Set crawl_enabled to false to stop full-site crawling and remove crawled page documents for this URL from the pages index.",
+        "description": "Set crawl_enabled to false to stop URL path crawling and remove crawled page documents for this URL from the pages index.",
         "parameters": [
           {
             "name": "id",
@@ -5528,6 +5672,66 @@
                       "type": "string"
                     }
                   }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/urls/{id}/resync": {
+      "post": {
+        "tags": [
+          "URLs"
+        ],
+        "summary": "Resync crawled URL pages",
+        "description": "Deletes existing crawled page documents for this URL, then starts URL path crawling in the background.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resync started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "deleted_pages": {
+                      "type": "integer",
+                      "description": "Number of crawled page documents removed before resync."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Crawling disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -6313,6 +6517,64 @@
         }
       }
     },
+    "/reindex/status": {
+      "get": {
+        "tags": [
+          "Utility"
+        ],
+        "summary": "Get search reindex status",
+        "description": "Returns the current account search reindex state. Use as a polling fallback when socket progress events are missed.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "idle",
+                        "queued",
+                        "progress",
+                        "complete"
+                      ]
+                    },
+                    "total_queued": {
+                      "type": "integer"
+                    },
+                    "indexed": {
+                      "type": "integer"
+                    },
+                    "remaining": {
+                      "type": "integer"
+                    },
+                    "started_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Account admin access required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/settings/byo-ai": {
       "get": {
         "tags": [
@@ -6718,6 +6980,7 @@
           "Trash"
         ],
         "summary": "List trashed items",
+        "description": "Typesense-backed mixed trash listing for notes, memories, URLs, and emails. Items are sorted by trashed_at descending and writes still use Mongo.",
         "parameters": [
           {
             "name": "type",
@@ -6798,6 +7061,7 @@
           "Trash"
         ],
         "summary": "Get trash item count",
+        "description": "Typesense-backed count across notes, memories, URLs, and emails.",
         "responses": {
           "200": {
             "description": "OK",

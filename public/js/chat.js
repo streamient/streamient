@@ -801,7 +801,7 @@ async function rmHandleUrlCrawlChange(event) {
 function rmGetUrlPagesMetaText() {
 	if (!rmUrlPagesTotal) {
 		if (!rmUrlCrawlEnabled) {
-			return 'No unique crawled pages indexed yet. Enable full-site crawling and save this URL to index linked pages.';
+			return 'No unique crawled pages indexed yet. Enable URL path crawling and save this URL to index pages under its path.';
 		}
 		return 'No unique crawled pages indexed yet. Crawling runs in the background after save, so new pages may appear shortly.';
 	}

@@ -139,14 +139,14 @@ The `/mcp/app` app profile hides this broad chat tool and exposes the explicit s
 ## URLs
 
 ### `save_url`
-Save a URL with auto-extracted content. Set `crawl_enabled` for full-site crawling.
+Save a URL with auto-extracted content. Set `crawl_enabled` for URL path crawling.
 
 | Parameter       | Type    | Required | Description                     |
 | --------------- | ------- | -------- | ------------------------------- |
 | `url`           | string  | yes      | URL to save                     |
 | `title`         | string  | no       | Title override                  |
 | `description`   | string  | no       | Description override            |
-| `crawl_enabled` | boolean | no       | Enable full-site crawling       |
+| `crawl_enabled` | boolean | no       | Enable URL path crawling        |
 | `project_id`    | string  | no       | Project ID (default: auto)      |
 
 ### `list_urls`

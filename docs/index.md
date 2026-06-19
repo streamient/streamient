@@ -22,7 +22,7 @@ features:
     - title: Memories
       details: Persistent AI memory for decisions, context, and learnings that survive across sessions.
     - title: URL Bookmarks
-      details: Save URLs with auto-extracted content. Optional full-site crawling with Playwright.
+      details: Save URLs with auto-extracted content. Optional URL path crawling with Playwright.
     - title: Knowledge Graph
       details: Connect notes, memories, and URLs with manual, tag-based, and semantic links.
     - title: AI Chat

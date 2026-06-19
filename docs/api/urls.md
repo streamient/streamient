@@ -28,7 +28,7 @@ When saved, Kumbukum auto-extracts the page title, description, Open Graph image
 
 If the account already has the same active URL saved, Kumbukum returns the existing URL with `duplicate: true` and does not create another record.
 
-Set `crawl_enabled: true` to enable full-site crawling with Playwright. Crawled pages are re-indexed every 24 hours.
+Set `crawl_enabled: true` to enable URL path crawling with Playwright. Crawled pages are re-indexed every 24 hours.
 
 ## Get URL
 
@@ -50,7 +50,15 @@ PUT /api/v1/urls/:id
 }
 ```
 
-Set `crawl_enabled: false` to stop full-site crawling and remove crawled pages for this URL from the pages index.
+Set `crawl_enabled: false` to stop URL path crawling and remove crawled pages for this URL from the pages index.
+
+## Resync Crawled Pages
+
+```
+POST /api/v1/urls/:id/resync
+```
+
+Deletes existing crawled page documents for the URL, then starts URL path crawling in the background.
 
 ## Delete URL
 

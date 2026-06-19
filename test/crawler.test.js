@@ -6,9 +6,11 @@ import {
 	buildCrawledPageIndexDocs,
 	bulkIndexCrawledPages,
 	crawlSite,
+	getCrawlScope,
 	getCrawlStepLimit,
 	getCrawledPageDocumentId,
 	isHtmlResponse,
+	isUrlInCrawlScope,
 	shouldSkipCrawledUrl,
 } from '../modules/crawler.js';
 
@@ -90,6 +92,18 @@ function makeCrawlStateModel(initialStates = []) {
 }
 
 describe('crawler indexing and state', () => {
+	it('limits crawl scope to the saved URL and descendant paths', () => {
+		const scope = getCrawlScope('https://example.com/docs/');
+
+		assert.equal(isUrlInCrawlScope('https://example.com/docs', scope), true);
+		assert.equal(isUrlInCrawlScope('https://example.com/docs/', scope), true);
+		assert.equal(isUrlInCrawlScope('https://example.com/docs/intro', scope), true);
+		assert.equal(isUrlInCrawlScope('https://example.com/docs?ref=nav', scope), true);
+		assert.equal(isUrlInCrawlScope('https://example.com/docs-extra', scope), false);
+		assert.equal(isUrlInCrawlScope('https://example.com/pricing', scope), false);
+		assert.equal(isUrlInCrawlScope('https://hubspot.com/docs', scope), false);
+	});
+
 	it('uses 100 as the per-run crawl limit and disables Crawlee retries', async () => {
 		assert.equal(getCrawlStepLimit({}), 100);
 
@@ -261,6 +275,113 @@ describe('crawler indexing and state', () => {
 		assert.equal(urlUpdates[0].update.$set.crawl_frontier.length, 0);
 		assert.equal(urlUpdates[0].update.$set.crawl_visited.length, 0);
 		assert.equal(urlUpdates[0].update.$set.crawl_partial, true);
+	});
+
+	it('queues only discovered links under the saved URL path', async () => {
+		const urlDoc = makeUrlDoc({ url: 'https://example.com/docs' });
+		const stateModel = makeCrawlStateModel();
+		const transformResults = [];
+
+		await crawlSite(urlDoc, {
+			CrawlState: stateModel,
+			Url: { updateOne: async () => {} },
+			PlaywrightCrawler: class {
+				constructor(options) {
+					this.options = options;
+				}
+				async run(batch) {
+					for (const url of batch) {
+						await this.options.requestHandler({
+							request: { url, loadedUrl: url },
+							response: { status: () => 200, headers: () => ({ 'content-type': 'text/html; charset=utf-8' }) },
+							page: {
+								title: async () => 'Docs',
+								evaluate: async () => 'Body text',
+							},
+							enqueueLinks: async ({ transformRequestFunction }) => {
+								transformResults.push(transformRequestFunction({ url: 'https://example.com/docs/intro' }));
+								transformResults.push(transformRequestFunction({ url: 'https://example.com/docs?ref=nav' }));
+								transformResults.push(transformRequestFunction({ url: 'https://example.com/docs-extra' }));
+								transformResults.push(transformRequestFunction({ url: 'https://example.com/pricing' }));
+								transformResults.push(transformRequestFunction({ url: 'https://hubspot.com/partners' }));
+							},
+						});
+					}
+				}
+			},
+			ensureCollections: async () => {},
+			bulkIndexCrawledPages: async () => ({ indexedCount: 1, attemptedCount: 1, chunkCount: 1 }),
+			stepLimit: 10,
+		});
+
+		assert.equal(transformResults[0].url, 'https://example.com/docs/intro');
+		assert.equal(transformResults[1].url, 'https://example.com/docs?ref=nav');
+		assert.equal(transformResults[2], false);
+		assert.equal(transformResults[3], false);
+		assert.equal(transformResults[4], false);
+		assert.ok(stateModel.store.some((state) => state.normalized_url === 'https://example.com/docs/intro' && state.status === 'queued'));
+		assert.ok(stateModel.store.some((state) => state.normalized_url === 'https://example.com/docs?ref=nav' && state.status === 'queued'));
+		assert.ok(!stateModel.store.some((state) => state.normalized_url === 'https://example.com/pricing'));
+		assert.ok(!stateModel.store.some((state) => state.normalized_url === 'https://hubspot.com/partners'));
+	});
+
+	it('fails already queued URLs outside the saved URL path without crawling them', async () => {
+		const urlDoc = makeUrlDoc({ url: 'https://example.com/docs', crawl_partial: true });
+		const stateModel = makeCrawlStateModel([
+			{
+				host_id: 'host-1',
+				parent_url_id: urlDoc._id,
+				normalized_url: 'https://example.com/docs',
+				url: 'https://example.com/docs',
+				status: 'queued',
+			},
+			{
+				host_id: 'host-1',
+				parent_url_id: urlDoc._id,
+				normalized_url: 'https://example.com/pricing',
+				url: 'https://example.com/pricing',
+				status: 'queued',
+			},
+			{
+				host_id: 'host-1',
+				parent_url_id: urlDoc._id,
+				normalized_url: 'https://hubspot.com/partners',
+				url: 'https://hubspot.com/partners',
+				status: 'queued',
+			},
+		]);
+		const crawlerRuns = [];
+
+		await crawlSite(urlDoc, {
+			CrawlState: stateModel,
+			Url: { updateOne: async () => {} },
+			PlaywrightCrawler: class {
+				constructor(options) {
+					this.options = options;
+				}
+				async run(batch) {
+					crawlerRuns.push(batch);
+					for (const url of batch) {
+						await this.options.requestHandler({
+							request: { url, loadedUrl: url },
+							response: { status: () => 200, headers: () => ({ 'content-type': 'text/html; charset=utf-8' }) },
+							page: {
+								title: async () => 'Docs',
+								evaluate: async () => 'Body text',
+							},
+							enqueueLinks: async () => {},
+						});
+					}
+				}
+			},
+			ensureCollections: async () => {},
+			bulkIndexCrawledPages: async () => ({ indexedCount: 1, attemptedCount: 1, chunkCount: 1 }),
+			stepLimit: 10,
+		});
+
+		assert.deepEqual(crawlerRuns, [['https://example.com/docs']]);
+		assert.ok(stateModel.store.some((state) => state.normalized_url === 'https://example.com/pricing' && state.status === 'failed' && state.failure_type === 'skipped'));
+		assert.ok(stateModel.store.some((state) => state.normalized_url === 'https://hubspot.com/partners' && state.status === 'failed' && state.failure_type === 'skipped'));
 	});
 
 	it('skips binary URLs and non-HTML responses without page chunks', async () => {

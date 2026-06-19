@@ -807,8 +807,14 @@ router.post('/urls/:id/resync', async (req, res) => {
 	if (!url) return res.status(404).json({ error: 'URL not found' });
 	if (!url.crawl_enabled) return res.status(400).json({ error: 'Crawling is not enabled for this URL' });
 
-	crawlSite(url, { resetFailed: true }).catch((err) => log.error({ err }, 'Manual URL resync error'));
-	res.json({ message: 'URL crawl resync started' });
+	try {
+		const deletedPages = await removeUrlPages(req.host_id, req.params.id);
+		crawlSite(url, { resetFailed: true }).catch((err) => log.error({ err }, 'Manual URL resync error'));
+		res.json({ message: 'URL crawl resync started', deleted_pages: deletedPages });
+	} catch (err) {
+		log.error({ err }, 'URL resync cleanup error');
+		res.status(500).json({ error: 'Failed to clear crawled pages before resync' });
+	}
 });
 
 router.delete('/urls/:id/pages', async (req, res) => {

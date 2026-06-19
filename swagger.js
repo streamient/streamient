@@ -1828,7 +1828,7 @@ const swaggerSpec = {
             put: {
                 tags: ['URLs'],
                 summary: 'Update a URL',
-                description: 'Set crawl_enabled to false to stop full-site crawling and remove crawled page documents for this URL from the pages index.',
+                description: 'Set crawl_enabled to false to stop URL path crawling and remove crawled page documents for this URL from the pages index.',
                 parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
                 requestBody: {
                     required: true,
@@ -1845,6 +1845,19 @@ const swaggerSpec = {
                 parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
                 responses: {
                     200: { description: 'Deleted', content: { 'application/json': { schema: { type: 'object', properties: { message: { type: 'string' } } } } } },
+                    404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+                },
+            },
+        },
+        '/urls/{id}/resync': {
+            post: {
+                tags: ['URLs'],
+                summary: 'Resync crawled URL pages',
+                description: 'Deletes existing crawled page documents for this URL, then starts URL path crawling in the background.',
+                parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+                responses: {
+                    200: { description: 'Resync started', content: { 'application/json': { schema: { type: 'object', properties: { message: { type: 'string' }, deleted_pages: { type: 'integer', description: 'Number of crawled page documents removed before resync.' } } } } } },
+                    400: { description: 'Crawling disabled', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
                     404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
                 },
             },

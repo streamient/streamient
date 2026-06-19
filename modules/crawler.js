@@ -59,6 +59,34 @@ export function normalizeCrawlUrl(rawUrl) {
 	}
 }
 
+export function getCrawlScope(rawUrl) {
+	try {
+		const parsed = new URL(normalizeCrawlUrl(rawUrl));
+		let pathPrefix = parsed.pathname || '/';
+		if (pathPrefix.length > 1 && pathPrefix.endsWith('/')) {
+			pathPrefix = pathPrefix.replace(/\/+$/, '');
+		}
+		return {
+			origin: parsed.origin,
+			pathPrefix,
+		};
+	} catch {
+		return null;
+	}
+}
+
+export function isUrlInCrawlScope(rawUrl, scope) {
+	if (!rawUrl || !scope?.origin) return false;
+	try {
+		const parsed = new URL(normalizeCrawlUrl(rawUrl));
+		if (parsed.origin !== scope.origin) return false;
+		if (scope.pathPrefix === '/') return true;
+		return parsed.pathname === scope.pathPrefix || parsed.pathname.startsWith(`${scope.pathPrefix}/`);
+	} catch {
+		return false;
+	}
+}
+
 export function getCrawledPageDocumentId(parentUrlId, pageUrl) {
 	return `${parentUrlId}_${Buffer.from(pageUrl).toString('base64url')}`;
 }
@@ -373,6 +401,15 @@ function errorMessage(err) {
 	return String(err?.message || err || 'Crawl failed');
 }
 
+function isCrawlableInScope(rawUrl, scope) {
+	return !shouldSkipCrawledUrl(rawUrl) && isUrlInCrawlScope(rawUrl, scope);
+}
+
+function skippedCrawlEntry(rawUrl, scope) {
+	const message = shouldSkipCrawledUrl(rawUrl) ? 'Skipped non-crawlable URL' : 'Skipped outside crawl scope';
+	return failureEntry(rawUrl, message, { failureType: 'skipped' });
+}
+
 /**
 * Crawl one step of a site and index results into Typesense.
 * Crawl frontier/visited state is stored as linked CrawlState documents so the
@@ -382,6 +419,7 @@ export async function crawlSite(urlDoc, deps = {}) {
 	const urlId = idString(urlDoc._id);
 	const hostId = urlDoc.host_id;
 	const projectId = idString(urlDoc.project);
+	const crawlScope = getCrawlScope(urlDoc.url);
 	const stepLimit = deps.stepLimit || getCrawlStepLimit();
 	const crawlerClass = deps.PlaywrightCrawler || PlaywrightCrawler;
 	const urlModel = deps.Url || Url;
@@ -404,10 +442,10 @@ export async function crawlSite(urlDoc, deps = {}) {
 		return 0;
 	}
 
-	const batch = queuedStates.map((state) => state.url).filter((url) => !shouldSkipCrawledUrl(url));
-	const skipped = queuedStates.filter((state) => shouldSkipCrawledUrl(state.url));
+	const batch = queuedStates.map((state) => state.url).filter((url) => isCrawlableInScope(url, crawlScope));
+	const skipped = queuedStates.filter((state) => !isCrawlableInScope(state.url, crawlScope));
 	for (const state of skipped) {
-		failedInRun.set(state.normalized_url, failureEntry(state.url, 'Skipped non-crawlable URL', { failureType: 'skipped' }));
+		failedInRun.set(state.normalized_url, skippedCrawlEntry(state.url, crawlScope));
 	}
 
 	const visited = await getVisitedUrlSet(urlDoc, crawlStateModel);
@@ -431,6 +469,11 @@ export async function crawlSite(urlDoc, deps = {}) {
 		async requestHandler({ request, page, enqueueLinks, response }) {
 			const currentUrl = request.loadedUrl || request.url;
 			const normalizedCurrent = normalizeCrawlUrl(currentUrl);
+			if (!isUrlInCrawlScope(currentUrl, crawlScope)) {
+				const normalizedRequest = normalizeCrawlUrl(request.url);
+				failedInRun.set(normalizedRequest, failureEntry(request.url, 'Skipped outside crawl scope', { failureType: 'skipped' }));
+				return;
+			}
 			const statusCode = response?.status?.() || null;
 			if (statusCode && statusCode >= 400) {
 				failedInRun.set(normalizedCurrent, failureEntryForStatus(currentUrl, statusCode));
@@ -465,7 +508,7 @@ export async function crawlSite(urlDoc, deps = {}) {
 			await enqueueLinks({
 				strategy: 'same-hostname',
 				transformRequestFunction: (req) => {
-					if (shouldSkipCrawledUrl(req.url)) return false;
+					if (!isCrawlableInScope(req.url, crawlScope)) return false;
 					const normalized = normalizeCrawlUrl(req.url);
 					if (failed.has(normalized)) return false;
 					if (failedInRun.has(normalized)) return false;

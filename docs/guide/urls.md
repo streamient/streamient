@@ -22,7 +22,7 @@ URLs are searchable across four fields: title, description, full text content, a
 
 Enable **crawl** on any URL to have Kumbukum periodically re-fetch and re-index the page content. This keeps your saved links up to date as web pages change over time. Crawling runs automatically on a daily schedule.
 
-For sites you want to index more deeply, full-site crawling follows internal links to capture multiple pages under the same domain.
+For pages you want to index more deeply, URL path crawling follows links under the saved URL path only.
 
 ### Project Assignment
 
@@ -44,4 +44,4 @@ Use the [Browser Extension](/guide/browser-extension/) to save the current page 
 
 When you save a URL, the content extractor (Cheerio-based) fetches the page and pulls out structured data. The extracted content is stored in MongoDB and indexed in Typesense with a vector embedding. If extraction fails (e.g., the page blocks requests), the URL is still saved with whatever metadata you provided.
 
-Crawl-enabled URLs are processed by a Playwright-based crawler that can navigate JavaScript-heavy pages and follow links across the site.
+Crawl-enabled URLs are processed by a Playwright-based crawler that can navigate JavaScript-heavy pages and follow links under the saved URL path.
