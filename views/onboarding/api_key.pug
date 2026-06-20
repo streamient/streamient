@@ -1,0 +1,142 @@
+extends ../auth_layout
+
+block head
+	title Add your AI key — Kumbukum
+	style.
+		#onb-key .input-group { flex-wrap: nowrap; }
+		#onb-key .input-group .form-control {
+			border-top-right-radius: 0 !important;
+			border-bottom-right-radius: 0 !important;
+		}
+		#onb-key .input-group .btn {
+			border: 1px solid #314179 !important;
+			border-left: 0 !important;
+			border-radius: 0 12px 12px 0 !important;
+			min-height: 48px;
+			padding: 0 18px;
+			color: #d4dcff !important;
+			background: rgba(15, 23, 50, 0.9) !important;
+		}
+		#onb-key .input-group .btn:hover {
+			background: rgba(16, 26, 54, 0.95) !important;
+			color: #fff !important;
+		}
+
+block body
+	.container
+		.row.justify-content-center.mt-5
+			.col-md-5.my-auto
+				.card.shadow
+					.card-body#onb-key
+						.text-center.mb-5
+							include ../includes/logo_white
+						h4.mb-1 Connect your AI key
+						.text-muted.mb-5 Kumbukum Free runs on your own key. Add OpenAI or Gemini (one is enough) to start.
+
+						#onb-error.alert.alert-danger.d-none.py-2
+
+						.mb-4
+							.text-muted.mb-2(for="onb-openai") OpenAI API key
+							.input-group.input-group-sm
+								input.form-control#onb-openai(type="password" autocomplete="off" placeholder="sk-...")
+								button.btn.btn-outline-secondary(type="button" data-verify="openai") Verify
+							.form-text#status-openai
+
+						.mb-5
+							.text-muted.mb-2(for="onb-gemini") Gemini API key
+							.input-group.input-group-sm
+								input.form-control#onb-gemini(type="password" autocomplete="off" placeholder="AIza...")
+								button.btn.btn-outline-secondary(type="button" data-verify="gemini") Verify
+							.form-text#status-gemini
+
+						.d-flex.justify-content-between.align-items-center
+							button.btn.btn-link.text-muted.px-0#onb-cancel(type="button") Cancel
+							button.btn.btn-primary#onb-save(type="button" disabled) Save and continue
+
+block scripts
+	script.
+		(function() {
+			var verified = { openai: false, gemini: false };
+			var fields = { openai: document.getElementById('onb-openai'), gemini: document.getElementById('onb-gemini') };
+			var saveBtn = document.getElementById('onb-save');
+			var errEl = document.getElementById('onb-error');
+
+			function showError(msg) {
+				errEl.textContent = msg;
+				errEl.classList.toggle('d-none', !msg);
+			}
+
+			function setStatus(provider, state, msg) {
+				var el = document.getElementById('status-' + provider);
+				el.className = 'form-text ' + (state === 'ok' ? 'text-success' : state === 'bad' ? 'text-danger' : 'text-muted');
+				el.textContent = msg || '';
+			}
+
+			function refreshSave() {
+				var anyVerified = verified.openai || verified.gemini;
+				// Every non-empty field must be verified valid; at least one verified.
+				var openaiOk = !fields.openai.value.trim() || verified.openai;
+				var geminiOk = !fields.gemini.value.trim() || verified.gemini;
+				saveBtn.disabled = !(anyVerified && openaiOk && geminiOk);
+			}
+
+			Object.keys(fields).forEach(function(provider) {
+				fields[provider].addEventListener('input', function() {
+					verified[provider] = false;
+					setStatus(provider, 'muted', '');
+					refreshSave();
+				});
+			});
+
+			document.querySelectorAll('[data-verify]').forEach(function(btn) {
+				btn.addEventListener('click', async function() {
+					var provider = btn.dataset.verify;
+					var key = fields[provider].value.trim();
+					if (!key) { setStatus(provider, 'bad', 'Enter an API key'); return; }
+					showError('');
+					btn.disabled = true;
+					setStatus(provider, 'muted', 'Verifying…');
+					try {
+						var res = await fetch('/api/v1/settings/byo-ai/verify', {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ provider: provider, key: key })
+						});
+						var data = await res.json();
+						verified[provider] = !!data.valid;
+						setStatus(provider, data.valid ? 'ok' : 'bad', data.valid ? '✓ Key is valid' : (data.error || 'Invalid key'));
+					} catch (e) {
+						verified[provider] = false;
+						setStatus(provider, 'bad', 'Verification failed');
+					} finally {
+						btn.disabled = false;
+						refreshSave();
+					}
+				});
+			});
+
+			saveBtn.addEventListener('click', async function() {
+				var payload = { global: {} };
+				if (verified.openai && fields.openai.value.trim()) payload.global.openai_api_key = fields.openai.value.trim();
+				if (verified.gemini && fields.gemini.value.trim()) payload.global.gemini_api_key = fields.gemini.value.trim();
+				if (!payload.global.openai_api_key && !payload.global.gemini_api_key) return;
+				saveBtn.disabled = true;
+				showError('');
+				try {
+					var res = await fetch('/api/v1/settings/byo-ai', {
+						method: 'PUT',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify(payload)
+					});
+					if (!res.ok) throw new Error('save failed');
+					window.location.href = '/dashboard';
+				} catch (e) {
+					saveBtn.disabled = false;
+					showError('Could not save your key. Please try again.');
+				}
+			});
+
+			document.getElementById('onb-cancel').addEventListener('click', function() {
+				fetch('/logout', { method: 'POST' }).then(function() { window.location.href = '/login'; });
+			});
+		})();

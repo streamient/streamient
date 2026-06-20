@@ -100,12 +100,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const name = document.getElementById('name').value.trim();
             const email = document.getElementById('email').value.trim();
             const is_active = document.getElementById('is-active').checked;
+            const plan = document.getElementById('plan').value;
 
             try {
                 const res = await fetch(`/admin/api/accounts/${id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, email, is_active }),
+                    body: JSON.stringify({ name, email, is_active, plan }),
                 });
                 const data = await res.json();
                 if (data.ok) {

@@ -19,6 +19,9 @@ const _chunk_overlap = 200;
 // Single shared collection for all tenants' conversation history.
 // Isolation is enforced via the conversation model_id, which encodes host + user.
 const CONVERSATION_STORE_COLLECTION = 'conversation_store';
+// Default Typesense conversation model per provider, used when falling back to a
+// provider the tenant has a key for (the configured model may be provider-specific).
+const TS_CONVERSATION_FALLBACK_MODELS = { openai: config.llm.openaiModel, google: config.llm.googleModel };
 const MISSING_IMPORT_RESULT_ERROR = 'Typesense import returned no result for this document';
 
 const _chunk_fields = {
@@ -1438,13 +1441,33 @@ export async function ensureConversationModel(hostId, userId, options = {}) {
 	const llmScope = normalizeLlmScope(options.llmScope);
 	const modelId = getConversationModelId(hostId, userId, llmScope);
 
-	// 1. Resolve model configuration
-	let tsModelName = config.llm.tsConversationModel || 'gemini-2.0-flash';
-	const tsProvider = config.llm.tsConversationProvider || 'google';
-	if (!tsModelName.includes('/')) {
-		tsModelName = `${tsProvider}/${tsModelName}`;
+	// 1. Resolve model configuration. Honor the BYO "one key is enough" rule:
+	//    prefer the configured provider/model, but fall back to the other provider
+	//    when its key isn't available — e.g. a Free (BYOK) tenant that supplied
+	//    only a Gemini key still gets a working conversation model instead of a
+	//    null OpenAI key (Typesense: "API key is not a string"). This mirrors the
+	//    LLM client's BYO_FALLBACK_ORDER used for chat/NL-search.
+	const configuredProvider = config.llm.tsConversationProvider || 'google';
+	const configuredModel = config.llm.tsConversationModel || TS_CONVERSATION_FALLBACK_MODELS[configuredProvider] || config.llm.googleModel;
+	const providerOrder = configuredProvider === 'openai' ? ['openai', 'google'] : ['google', 'openai'];
+
+	let apiKey = null;
+	let resolvedProvider = configuredProvider;
+	let resolvedModel = configuredModel;
+	for (const prov of providerOrder) {
+		const candidate = await resolveLlmApiKey({ hostId, provider: prov, scope: llmScope });
+		if (candidate) {
+			apiKey = candidate;
+			resolvedProvider = prov;
+			resolvedModel = prov === configuredProvider ? configuredModel : TS_CONVERSATION_FALLBACK_MODELS[prov];
+			break;
+		}
 	}
-	const apiKey = await resolveLlmApiKey({ hostId, provider: tsProvider, scope: llmScope });
+
+	let tsModelName = resolvedModel;
+	if (!tsModelName.includes('/')) {
+		tsModelName = `${resolvedProvider}/${tsModelName}`;
+	}
 	const desiredSignature = buildConversationModelSignature(tsModelName, apiKey);
 
 	if (syncedConvoModels.get(modelId) === desiredSignature) {

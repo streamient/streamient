@@ -5,11 +5,11 @@ import * as OtelRuntime from './otel_runtime.js';
 const PROVIDERS = {
 	openai: {
 		baseUrl: 'https://api.openai.com/v1',
-		defaultModel: 'gpt-4o',
+		defaultModel: config.llm.openaiModel,
 	},
 	google: {
 		baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
-		defaultModel: 'gemini-2.0-flash',
+		defaultModel: config.llm.googleModel,
 	},
 	groq: {
 		baseUrl: 'https://api.groq.com/openai/v1',
@@ -70,6 +70,21 @@ async function resolveProvider(providerName, options = {}) {
 	err.code = 'NO_AI_API_KEY';
 	err.status = 400;
 	throw err;
+}
+
+/**
+ * True when an LLM API key is resolvable for this host — a personal BYO key, or
+ * a managed/env key for Pro / active trial / self-hosted. Lets callers surface a
+ * friendly "add your key" message before attempting any LLM or Typesense call.
+ */
+export async function hasLlmApiKey({ hostId = null, provider, scope = 'global' } = {}) {
+	try {
+		await resolveProvider(provider, { hostId, scope });
+		return true;
+	} catch (err) {
+		if (err?.code === 'NO_AI_API_KEY') return false;
+		throw err;
+	}
 }
 
 /**

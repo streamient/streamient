@@ -29,18 +29,9 @@ each p in projects
 					span URLs
 				.ms-auto.section-link
 					span.section-count= pc.urls
-			if emailFeatureEnabled
-				.d-flex.align-items-center.py-1.pe-3.bg-hover-light.project-item-section.position-relative
-					a.stretched-link(href="/emails")
-					.pe-2.section-link
-						span Emails
-					.ms-auto.section-link
-						span.section-count= pc.emails
-			else
-				.d-flex.align-items-center.py-1.pe-3.project-item-section
-					.pe-2.section-link.text-muted
-						span
-							!= icon('lock', 'me-1')
-							| Emails (Pro)
-					if is_hosted
-						a.ms-auto.section-link.small(href="/settings/subscription") Upgrade
+			.d-flex.align-items-center.py-1.pe-3.bg-hover-light.project-item-section.position-relative
+				a.stretched-link(href="/emails")
+				.pe-2.section-link
+					span Emails
+				.ms-auto.section-link
+					span.section-count= pc.emails

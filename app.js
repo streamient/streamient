@@ -13,6 +13,7 @@ import { setupSocketIO } from './modules/socket.js';
 import { initTypesense } from './modules/typesense.js';
 import { initRedis } from './modules/redis.js';
 import { resolveTenant, backfillStarterPlan } from './modules/tenancy.js';
+import { resolveRequestHosted } from './config.js';
 import { installIconLocals } from './modules/icons.js';
 
 import { createApiLimiter } from './middleware/rate_limit.js';
@@ -166,6 +167,13 @@ app.use((req, res, next) => {
 });
 
 app.use(sessionMiddleware);
+
+// Per-request hosted (SaaS) detection from the Host header — app.k.lan / *.kumbukum.com
+// are hosted; bare k.lan is plain dev. Routes read req.isHosted instead of a global.
+app.use((req, res, next) => {
+	req.isHosted = resolveRequestHosted(req);
+	next();
+});
 
 app.use(resolveTenant);
 

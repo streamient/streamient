@@ -32,6 +32,7 @@ h4.mb-4 AI
 						label.form-label(for="byo-global-openai") OpenAI API key
 						.input-group.input-group-sm
 							input.form-control.form-control-sm#byo-global-openai(type="password" autocomplete="off" data-scope="global" data-field="openai_api_key" aria-describedby="byo-global-openai-help")
+							button.btn.btn-outline-secondary(type="button" data-verify-byo="global:openai_api_key") Verify
 							button.btn.btn-outline-secondary(type="button" data-clear-byo="global:openai_api_key") Clear
 						.form-text#byo-global-openai-help
 							span(data-status="global:openai_api_key") Loading...
@@ -39,6 +40,7 @@ h4.mb-4 AI
 						label.form-label(for="byo-global-gemini") Gemini API key
 						.input-group.input-group-sm
 							input.form-control.form-control-sm#byo-global-gemini(type="password" autocomplete="off" data-scope="global" data-field="gemini_api_key" aria-describedby="byo-global-gemini-help")
+							button.btn.btn-outline-secondary(type="button" data-verify-byo="global:gemini_api_key") Verify
 							button.btn.btn-outline-secondary(type="button" data-clear-byo="global:gemini_api_key") Clear
 						.form-text#byo-global-gemini-help
 							span(data-status="global:gemini_api_key") Loading...

@@ -12,8 +12,6 @@ import { createLogger } from '../modules/logger.js';
 
 const log = createLogger('web');
 
-const is_hosted = config.isHosted;
-
 const router = Router();
 
 router.use(requireAuth, requireTenant);
@@ -26,18 +24,27 @@ function requireRestrictedSettingsAccess(req, res, next) {
 	return res.redirect('/settings/profile');
 }
 
-function isByoAiSettingsAccessEnabled() {
+function isByoAiSettingsAccessEnabled(req) {
 	// All hosted plans can configure their own keys (Free is BYOK; Pro may
 	// override managed keys). Self-hosted uses env vars in production.
-	return is_hosted || config.env !== 'production';
+	return req.isHosted || config.env !== 'production';
 }
 
 function requireByoAiWebAccess(req, res, next) {
-	if (isByoAiSettingsAccessEnabled()) return next();
+	if (isByoAiSettingsAccessEnabled(req)) return next();
 	if (req.path.startsWith('/ajax/')) {
 		return res.status(403).send('<div class="alert alert-warning mb-0">BYO AI keys are configured through environment variables in self-hosted installs.</div>');
 	}
-	return res.redirect(is_hosted ? '/settings/subscription' : '/settings/profile');
+	return res.redirect(req.isHosted ? '/settings/subscription' : '/settings/profile');
+}
+
+// Email settings (auto-triage, spam guard) are part of the Pro Email Command Center.
+function requireEmailSettingsWebAccess(req, res, next) {
+	if (res.locals.email_feature_enabled) return next();
+	if (req.path.startsWith('/ajax/')) {
+		return res.status(403).send('<div class="alert alert-warning mb-0">Email settings are available on the Pro plan.</div>');
+	}
+	return res.redirect('/settings/subscription');
 }
 
 function getUsageTotals(projects, counts) {
@@ -77,6 +84,7 @@ router.use(async (req, res, next) => {
 	]);
 	const activeTenant = (req.accessibleTenants || []).find((item) => item.tenantId === req.tenantId) || null;
 	const plan = tenant?.plan || 'free';
+	const is_hosted = req.isHosted;
 	const proOnlyFeatureEnabled = hasProFeatureAccess(billingUser, plan, is_hosted);
 	// Free (BYOK) tenants with no managed AI must supply at least one key.
 	const hasByoKey = Boolean(
@@ -92,9 +100,14 @@ router.use(async (req, res, next) => {
 	res.locals.can_manage_restricted_settings = req.memberRole === 'owner' || req.memberRole === 'admin';
 	res.locals.accessible_tenants = req.accessibleTenants || [];
 	res.locals.active_tenant = activeTenant;
+	// email_feature_enabled = the Pro Email Command Center (AI triage, managed inbox).
+	// email_view_enabled = the project Emails section (ingest/view as knowledge) — Free.
 	res.locals.email_feature_enabled = proOnlyFeatureEnabled;
+	res.locals.email_view_enabled = true;
 	res.locals.git_sync_enabled = proOnlyFeatureEnabled;
-	res.locals.byo_ai_enabled = isByoAiSettingsAccessEnabled();
+	// Pro/trial/self-hosted get unlimited projects; Free is capped (hide the +).
+	res.locals.projects_unlimited = proOnlyFeatureEnabled;
+	res.locals.byo_ai_enabled = isByoAiSettingsAccessEnabled(req);
 	res.locals.needs_api_key = is_hosted && !proOnlyFeatureEnabled && !hasByoKey;
 	res.locals.host_id = req.host_id;
 	res.locals.ws_url = config.wsUrl;
@@ -113,7 +126,24 @@ router.use(async (req, res, next) => {
 
 // Note: Free is a permanent, fully-usable plan, so there is no global
 // subscription gate. Pro-only features (Email, Git Sync, managed AI) are gated
-// individually; Free users are nudged to add their own API key via needs_api_key.
+// individually.
+
+// Onboarding gate: hosted Free users with no AI key see only the key-entry page
+// until they add a key (or sign out). needs_api_key is per-request (false when the
+// request host isn't hosted), so these can register unconditionally.
+router.get('/onboarding/api-key', (req, res) => {
+	if (!res.locals.needs_api_key) return res.redirect('/dashboard');
+	res.render('onboarding/api_key', { title: 'Add your AI key' });
+});
+
+router.use((req, res, next) => {
+	if (!res.locals.needs_api_key) return next();
+	if (req.path === '/onboarding/api-key') return next();
+	if (req.path.startsWith('/ajax/')) {
+		return res.status(409).json({ error: 'API key required', redirect: '/onboarding/api-key' });
+	}
+	return res.redirect('/onboarding/api-key');
+});
 
 router.get('/dashboard', (req, res) => res.render('dashboard', { title: 'Dashboard' }));
 router.get('/notes', (req, res) => res.render('notes', { title: 'Notes' }));
@@ -129,14 +159,15 @@ router.get('/settings/security', (req, res) => res.render('settings/security', {
 router.get('/settings/team', (req, res) => res.render('settings/team', { title: 'My Team' }));
 router.get('/settings/tokens', (req, res) => res.render('settings/tokens', { title: 'Access Tokens' }));
 router.get('/settings/byo-ai', requireRestrictedSettingsAccess, requireByoAiWebAccess, (req, res) => res.render('settings/byo_ai', { title: 'AI' }));
-router.get('/settings/email', requireRestrictedSettingsAccess, requireByoAiWebAccess, (req, res) => res.render('settings/email', { title: 'Email settings' }));
+router.get('/settings/email', requireRestrictedSettingsAccess, requireByoAiWebAccess, requireEmailSettingsWebAccess, (req, res) => res.render('settings/email', { title: 'Email settings' }));
 router.get('/settings/typesense', requireRestrictedSettingsAccess, (req, res) => res.render('settings/typesense', { title: 'Typesense' }));
 router.get('/settings/usage', (req, res) => renderUsageSettings(req, res, 'settings/usage'));
 router.get('/settings/export', requireRestrictedSettingsAccess, (req, res) => res.render('settings/export', { title: 'Export' }));
 router.get('/settings/activity-logs', requireRestrictedSettingsAccess, (req, res) => res.render('settings/activity_logs', { title: 'Activity Logs' }));
-if (is_hosted) {
-	router.get('/settings/subscription', (req, res) => res.render('settings/subscription', { title: 'Subscription' }));
-}
+router.get('/settings/subscription', (req, res) => {
+	if (!req.isHosted) return res.redirect('/settings/profile');
+	res.render('settings/subscription', { title: 'Subscription' });
+});
 
 // ---- Ajax section partials (SPA navigation) ----
 
@@ -152,14 +183,15 @@ router.get('/ajax/section/settings/security', (req, res) => res.render('ajax/sec
 router.get('/ajax/section/settings/team', (req, res) => res.render('ajax/section/settings/team', { title: 'My Team' }));
 router.get('/ajax/section/settings/tokens', (req, res) => res.render('ajax/section/settings/tokens', { title: 'Access Tokens' }));
 router.get('/ajax/section/settings/byo-ai', requireRestrictedSettingsAccess, requireByoAiWebAccess, (req, res) => res.render('ajax/section/settings/byo_ai', { title: 'AI' }));
-router.get('/ajax/section/settings/email', requireRestrictedSettingsAccess, requireByoAiWebAccess, (req, res) => res.render('ajax/section/settings/email', { title: 'Email settings' }));
+router.get('/ajax/section/settings/email', requireRestrictedSettingsAccess, requireByoAiWebAccess, requireEmailSettingsWebAccess, (req, res) => res.render('ajax/section/settings/email', { title: 'Email settings' }));
 router.get('/ajax/section/settings/typesense', requireRestrictedSettingsAccess, (req, res) => res.render('ajax/section/settings/typesense', { title: 'Typesense' }));
 router.get('/ajax/section/settings/usage', (req, res) => renderUsageSettings(req, res, 'ajax/section/settings/usage'));
 router.get('/ajax/section/settings/export', requireRestrictedSettingsAccess, (req, res) => res.render('ajax/section/settings/export', { title: 'Export' }));
 router.get('/ajax/section/settings/activity-logs', requireRestrictedSettingsAccess, (req, res) => res.render('ajax/section/settings/activity_logs', { title: 'Activity Logs' }));
-if (is_hosted) {
-	router.get('/ajax/section/settings/subscription', (req, res) => res.render('ajax/section/settings/subscription', { title: 'Subscription' }));
-}
+router.get('/ajax/section/settings/subscription', (req, res) => {
+	if (!req.isHosted) return res.status(403).send('<div class="alert alert-warning mb-0">Subscriptions are managed on the hosted edition.</div>');
+	res.render('ajax/section/settings/subscription', { title: 'Subscription' });
+});
 
 // ---- Ajax partials ----
 
@@ -170,8 +202,8 @@ router.get('/ajax/project-list', async (req, res) => {
 		Tenant.findOne({ host_id: req.host_id }).select('plan').lean(),
 	]);
 	const plan = tenant?.plan || 'free';
-	const emailFeatureEnabled = hasProFeatureAccess(res.locals.billing_user, plan, is_hosted);
-	res.render('ajax/project_list', { projects, counts, activeProjectId: req.query.active || '', emailFeatureEnabled, is_hosted });
+	const emailFeatureEnabled = hasProFeatureAccess(res.locals.billing_user, plan, req.isHosted);
+	res.render('ajax/project_list', { projects, counts, activeProjectId: req.query.active || '', emailFeatureEnabled, emailViewEnabled: true, is_hosted: req.isHosted });
 });
 
 router.get('/ajax/project-overview/:id', async (req, res) => {
@@ -183,7 +215,7 @@ router.get('/ajax/project-overview/:id', async (req, res) => {
 		]);
 		if (!project) return res.status(404).send('');
 		const plan = tenant?.plan || 'free';
-		const proOnlyFeatureEnabled = hasProFeatureAccess(res.locals.billing_user, plan, is_hosted);
+		const proOnlyFeatureEnabled = hasProFeatureAccess(res.locals.billing_user, plan, req.isHosted);
 		const gitSyncEnabled = proOnlyFeatureEnabled;
 		const emailFeatureEnabled = proOnlyFeatureEnabled;
 		const emailForwardDomain = String(config.emailForwardDomain || '').trim().replace(/^@+/, '');
@@ -192,7 +224,7 @@ router.get('/ajax/project-overview/:id', async (req, res) => {
 		const pc = counts[project._id.toString()] || { notes: 0, memory: 0, urls: 0, emails: 0 };
 		const canDelete = !project.is_default && pc.notes === 0 && pc.memory === 0 && pc.urls === 0 && pc.emails === 0 && gitRepos.length === 0 && emailIdentityCount === 0;
 		const canManageProjectSettings = req.memberRole === 'owner' || req.memberRole === 'admin';
-		res.render('ajax/project_overview', { project, counts, gitSyncEnabled, emailFeatureEnabled, emailForwardDomain, gitRepos, canDelete, canManageProjectSettings, is_hosted });
+		res.render('ajax/project_overview', { project, counts, gitSyncEnabled, emailFeatureEnabled, emailViewEnabled: true, emailForwardDomain, gitRepos, canDelete, canManageProjectSettings, is_hosted: req.isHosted });
 	} catch (err) {
 		res.status(500).send('<div class="text-danger">Failed to load project</div>');
 	}
@@ -207,7 +239,7 @@ router.get('/ajax/project-settings/:id', requireRestrictedSettingsAccess, async 
 		if (!project) return res.status(404).send('<div class="alert alert-danger mb-0">Project not found.</div>');
 
 		const plan = tenant?.plan || 'free';
-		const proOnlyFeatureEnabled = hasProFeatureAccess(res.locals.billing_user, plan, is_hosted);
+		const proOnlyFeatureEnabled = hasProFeatureAccess(res.locals.billing_user, plan, req.isHosted);
 		const emailForwardDomain = String(config.emailForwardDomain || '').trim().replace(/^@+/, '');
 		const [gitRepos, emailIdentities] = await Promise.all([
 			proOnlyFeatureEnabled ? listGitRepos(req.host_id, req.params.id).catch(() => []) : [],
@@ -220,7 +252,7 @@ router.get('/ajax/project-settings/:id', requireRestrictedSettingsAccess, async 
 			gitSyncEnabled: proOnlyFeatureEnabled,
 			emailFeatureEnabled: proOnlyFeatureEnabled,
 			emailForwardDomain,
-			is_hosted,
+			is_hosted: req.isHosted,
 		});
 	} catch (err) {
 		log.error({ err, host_id: req.host_id, project_id: req.params.id }, 'Project settings modal error');

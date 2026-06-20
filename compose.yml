@@ -31,7 +31,7 @@ x-env: &env
   EMAIL_TRIAGE_MODEL_PROVIDER: openai
   OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
   GOOGLE_API_KEY: "${GOOGLE_API_KEY:-}"
-  APP_URL: http://k.lan:3000
+  APP_URL: http://app.k.lan
   MCP_BASE_URL: http://mcp.k.lan
   WS_URL: ""
   EMAIL_FORWARD_DOMAIN: "email.kumbukum.com"
@@ -132,11 +132,11 @@ services:
     working_dir: /opt/kumbukum/apps/mcp
     command: ["npm", "run", "start"]
     ports:
-      - 3002
+      - 3000
     environment:
       <<: *env
       KUMBUKUM_APP: mcp
-      PORT: 3002
+      PORT: 3000
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:3002/health"]
@@ -181,90 +181,6 @@ services:
         condition: service_completed_successfully
     networks:
       - hmnet16
-
-# mongodb:
-#     image: percona/percona-server-mongodb:6.0
-#     ports:
-#         - "27017"
-#     volumes:
-#         - mongo_data:/data/db
-#     command: mongod --setParameter perconaTelemetry=false --replSet rs0 --bind_ip_all
-#     environment:
-#         PERCONA_TELEMETRY_DISABLE: 1
-
-# mongo-init:
-#     image: percona/percona-server-mongodb:6.0
-#     depends_on:
-#         mongodb:
-#             condition: service_started
-#     volumes:
-#         - ./docker/mongo-init-replset.sh:/docker-entrypoint-initdb.d/init.sh:ro
-#     entrypoint: /bin/bash
-#     command: /docker-entrypoint-initdb.d/init.sh
-#     environment:
-#         PERCONA_TELEMETRY_DISABLE: 1
-#         MONGO_HOST: mongo
-
-# redis:
-#     image: redis:8
-#     command: redis-server --appendonly yes --port 6379 --save ""
-#     volumes:
-#         - redis_data:/data
-#     healthcheck:
-#         test: ["CMD", "redis-cli", "ping"]
-#         interval: 30s
-#         timeout: 10s
-#         retries: 3
-#         start_period: 30s
-
-# typesense:
-#     image: typesense/typesense:30.2
-#     ports:
-#         - "8108:8108"
-#     volumes:
-#         - typesense_data:/data
-#     command: --data-dir /data --api-key=kumbukum-dev-key
-
-# ── Mailpit (dev mail catcher) ──────────────────────────────
-# mailpit:
-#     image: axllent/mailpit:latest
-#     restart: unless-stopped
-#     ports:
-#         - "8025:8025"   # Web UI
-#     expose:
-#         - "1025"        # SMTP
-
-# caddy:
-#     image: caddy:latest
-#     cap_add:
-#         - NET_ADMIN
-#     ports:
-#         - "80:80"
-#         - "443:443"
-#         - "443:443/udp"
-#     volumes:
-#         - ./docker/config/caddy/Caddyfile:/etc/caddy/Caddyfile
-#         - caddy_data:/data
-#         - caddy_config:/config
-#         - /etc/hostname:/etc/hostname:ro
-#     depends_on:
-#         - app
-#         - redis
-#         - typesense
-#     dns:
-#         - 100.100.100.100
-
-# screenshot:
-#     image: ghcr.io/kumbukum/screenshot:latest
-#     restart: unless-stopped
-#     init: true
-#     ports:
-#         - 3000
-#     environment:
-#         PORT: 3000
-#     shm_size: '2g'
-#     hostname: screenshot
-
 
 volumes:
   node_modules:

@@ -48,6 +48,7 @@ async function createServer() {
 			tenantId: '507f1f77bcf86cd799439012',
 			host_id: 'host-1',
 		};
+		req.isHosted = config.isHosted;
 		next();
 	});
 	app.use('/api/v1', apiRoutes);

@@ -416,11 +416,26 @@ body.kk-template1 #project-list .section-active{
 }
 /* Full-bleed project card rows: hover/selected background spans the whole card */
 body.kk-template1 #project-list .project-item{
-  padding:0;
+  padding:0 0 8px;
   overflow:hidden;
 }
 body.kk-template1 #project-list .project-item-section{
   padding-left:12px;
+}
+/* Free sidebar: stretch the project card full-width within the padded panel,
+   and flush to the top when there is no "My Projects" header above it. */
+body.kk-template1 #sidebar #project-list{
+  margin-left:-12px;
+  margin-right:-12px;
+}
+body.kk-template1 #sidebar #project-list:first-child{
+  margin-top:-12px;
+}
+body.kk-template1 #project-list .project-item,
+body.kk-template1 #project-list > div{
+  border-left:0!important;
+  border-right:0!important;
+  border-radius:0!important;
 }
 /* Project header gear (settings) */
 body.kk-template1 #project-list .project-settings-gear{
@@ -442,10 +457,15 @@ body.kk-template1 #project-list .project-settings-gear .kk-icon{
   font-size:15px;
 }
 
+/* Global Trash: pinned flush to the bottom of the sidebar, full-bleed to match
+   the project card width (the dashed border stays). */
 body.kk-template1 #sidebar a.text-muted{
   display:block;
-  margin-top:8px;
-  padding:9px 10px;
+  margin-top:auto;
+  margin-left:-12px;
+  margin-right:-12px;
+  margin-bottom:-12px;
+  padding:9px 12px;
   border-radius:10px;
   border:1px dashed var(--line-dashed);
   color: var(--sidebar-link-text) !important;
@@ -721,9 +741,9 @@ body.kk-template1 .preview-container a{color:var(--link)!important}
 /* Right rail */
 body.kk-template1 #chat-sidebar h6{margin-bottom:10px}
 body.kk-template1 #chat-messages{
-  border:1px solid var(--line-2);
-  border-radius:10px;
-  background:var(--panel2b);
+  /* border:1px solid var(--line-2); */
+  /* border-radius:10px; */
+  /* background:var(--panel2b); */
   padding:10px;
 }
 
@@ -796,7 +816,7 @@ body.kk-template1 #sidebar {
   flex-direction: column;
 }
 body.kk-template1 #sidebar #project-list {
-  flex: 1 1 0;
+  flex: 0 1 auto;
   overflow-y: auto;
   min-height: 0;
 }

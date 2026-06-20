@@ -18,6 +18,7 @@ include ../../../includes/avatar
 		a.list-group-item.list-group-item-action(href="/settings/byo-ai" class=(title === 'AI' ? 'active' : ''))
 			!= icon('sparkle', 'me-2')
 			span AI
+	if can_manage_restricted_settings && email_feature_enabled
 		a.list-group-item.list-group-item-action(href="/settings/email" class=(title === 'Email settings' ? 'active' : ''))
 			!= icon('email', 'me-2')
 			span Email settings

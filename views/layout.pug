@@ -31,12 +31,6 @@ html(lang="en")
 					|  — viewing as #{impersonatingName}
 					button.btn.btn-sm.btn-outline-dark.ms-3#exit-impersonation Exit
 
-			if needs_api_key
-				.alert.alert-warning.text-center.mb-0.rounded-0.py-2(style="position:sticky;top:0;z-index:1059")
-					!= icon('key', 'me-2')
-					strong Add your AI key
-					|  — On the Free plan, connect your own OpenAI or Gemini API key to use AI features.
-					a.btn.btn-sm.btn-dark.ms-3(href="/settings/byo-ai") Add API key
 
 			nav.navbar.navbar-expand-lg.navbar-dark.bg-dark.sticky-top
 				.container-fluid
@@ -67,7 +61,7 @@ html(lang="en")
 										!= icon('creditCard', 'me-1')
 										span Start 7-day Pro trial
 							else if can_upgrade
-								a.btn.btn-outline-warning.btn-sm.me-3(href="/billing/checkout?plan=pro" style="padding-top:0.45rem;padding-bottom:0.45rem;")
+								a.btn.btn-outline-warning.btn-sm.me-3(href="/settings/subscription" style="padding-top:0.45rem;padding-bottom:0.45rem;")
 									!= icon('creditCard', 'me-1')
 									span Upgrade to Pro
 							if accessible_tenants && accessible_tenants.length > 1
@@ -107,14 +101,18 @@ html(lang="en")
 
 			.container-fluid.flex-grow-1
 				.row.h-100
-					aside.col-md-2.bg-light.p-3.sidebar#sidebar
+					aside.col-md-2.bg-light.p-0.sidebar#sidebar
 						block sidebar
-							.d-flex.justify-content-between.align-items-center.mb-3
-								h6.mb-0 My Projects
-								button.btn.btn-sm.btn-outline-primary#new-project-btn(title="New project")
-									!= icon('add')
+							if projects_unlimited
+								.d-flex.justify-content-between.align-items-center.mb-3.px-3.pt-3
+									h6.mb-0 My Projects
+									button.btn.btn-sm.btn-outline-primary#new-project-btn(title="New project")
+										!= icon('add')
 							#project-list
-							
+
+							if !projects_unlimited && is_hosted
+								a.d-block.text-center.small.my-3.px-3.text-primary(href="/settings/subscription") Need unlimited projects?
+
 							a.d-flex.align-items-center.text-decoration-none.text-muted.small(href="/trash")
 								!= icon('delete', 'ms-2')
 								span.ms-2 Global Trash

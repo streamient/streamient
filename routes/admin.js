@@ -126,7 +126,12 @@ router.get('/api/accounts/:id', async (req, res) => {
 
 router.put('/api/accounts/:id', async (req, res) => {
     try {
-        const { name, email, is_active } = req.body;
+        const { name, email, is_active, plan } = req.body;
+
+        if (plan !== undefined && !['free', 'pro'].includes(plan)) {
+            return res.status(400).json({ error: 'Invalid plan' });
+        }
+
         const update = {};
         if (name !== undefined) update.name = name.trim();
         if (email !== undefined) update.email = email.trim().toLowerCase();
@@ -135,12 +140,15 @@ router.put('/api/accounts/:id', async (req, res) => {
         const user = await User.findByIdAndUpdate(req.params.id, update, { returnDocument: 'after' });
         if (!user) return res.status(404).json({ error: 'Not found' });
 
-        // Sync is_active to tenant
-        if (is_active !== undefined && user.tenant) {
-            await Tenant.findByIdAndUpdate(user.tenant, { is_active: Boolean(is_active) });
+        // Sync is_active / plan to the tenant
+        if ((is_active !== undefined || plan !== undefined) && user.tenant) {
+            const tenantUpdate = {};
+            if (is_active !== undefined) tenantUpdate.is_active = Boolean(is_active);
+            if (plan !== undefined) tenantUpdate.plan = plan;
+            await Tenant.findByIdAndUpdate(user.tenant, tenantUpdate);
         }
 
-        res.json({ ok: true, account: user.toSafe() });
+        res.json({ ok: true, account: user.toSafe(), plan });
     } catch (err) {
         log.error({ err, account_id: req.params.id }, 'Admin update account error');
         res.status(500).json({ error: 'Failed to update account' });

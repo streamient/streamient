@@ -2,7 +2,7 @@
 	.d-flex.justify-content-between.align-items-center.mb-3
 		h4 Emails
 
-	if email_feature_enabled
+	if email_view_enabled
 		#batch-toolbar(data-type="emails")
 			.form-check.mb-2
 				input.form-check-input#select-all-cb(type="checkbox")
@@ -25,14 +25,4 @@
 					button.btn.btn-sm.batch-floating-close#batch-dismiss-btn(type="button")
 						!= icon('close')
 
-if !email_feature_enabled
-	.card.border-warning-subtle
-		.card-body
-			h5.mb-2
-				!= icon('lock', 'me-2')
-				| Email Ingestion (Pro)
-			p.text-muted.mb-2 In hosted edition, email ingestion and email project views are available on the Pro plan.
-			if is_hosted
-				a.btn.btn-sm.btn-outline-warning(href="/settings/subscription") Upgrade to Pro
-else
-	#emails-list.list-group
+#emails-list.list-group

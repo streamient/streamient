@@ -61,7 +61,11 @@ function parseRedisConfig() {
 export function isHostedHostname(hostname) {
 	if (!hostname) return false;
 	const normalized = hostname.toLowerCase();
-	return normalized === 'app.kumbukum.local' || normalized.endsWith('kumbukum.com');
+	// Hosted (SaaS) hostnames. Local dev: app.k.lan = hosted edition, while bare
+	// k.lan is the plain (self-hosted) dev. app.kumbukum.local is a legacy alias.
+	return normalized === 'app.kumbukum.local'
+		|| normalized === 'app.k.lan'
+		|| normalized.endsWith('kumbukum.com');
 }
 
 export function isHostedAppUrl(appUrl) {
@@ -70,6 +74,17 @@ export function isHostedAppUrl(appUrl) {
 	} catch {
 		return false;
 	}
+}
+
+// Per-request hosted detection from the request's Host (or X-Forwarded-Host behind
+// a proxy). Lets one dev instance serve a self-hosted host (k.lan) and a hosted
+// host (app.k.lan). Falls back to the X-Forwarded-Host header when proxied.
+export function resolveRequestHosted(req) {
+	if (!req) return false;
+	const forwarded = String(req.headers?.['x-forwarded-host'] || '').split(',')[0].trim();
+	const host = forwarded || req.headers?.host || req.hostname || '';
+	const hostname = String(host).split(':')[0];
+	return isHostedHostname(hostname);
 }
 
 export function parseSmtpServersFromEnv(env = process.env) {
@@ -133,6 +148,9 @@ const config = {
 	sessionSecret: process.env.SESSION_SECRET || 'change-me',
 	jwtSecret: process.env.JWT_SECRET || 'change-me',
 	appUrl,
+	// Deployment-level default (used outside HTTP requests — schedulers, services).
+	// Per-request hosted detection (req.isHosted) is derived from the Host header;
+	// see resolveRequestHosted / the middleware in app.js.
 	isHosted: isHostedAppUrl(appUrl),
 	mcpBaseUrl: (process.env.MCP_BASE_URL || 'http://localhost:3002').replace(/\/$/, ''),
 	wsUrl: process.env.WS_URL || '',
@@ -167,6 +185,11 @@ const config = {
 		// API keys per provider
 		googleApiKey: process.env.GOOGLE_API_KEY || '',
 		openaiApiKey: process.env.OPENAI_API_KEY || '',
+		// Per-provider default model — the fallback when a purpose-specific model
+		// (chat/nlSearch/tsConversation) is unset, and the model used for BYO key
+		// verification and provider fallback. Override per deployment via env.
+		openaiModel: process.env.OPENAI_MODEL || 'gpt-4o',
+		googleModel: process.env.GOOGLE_MODEL || 'gemini-2.5-flash',
 	},
 
 	// Rate-limit tiers. Pro is unlimited; free is also treated as unlimited

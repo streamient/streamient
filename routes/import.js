@@ -9,7 +9,7 @@ import { getBillingUserForHost, hasProFeatureAccess } from '../services/subscrip
 import * as emailIngestService from '../services/email_ingest_service.js';
 
 const router = Router();
-const is_hosted = new URL(config.appUrl).hostname.endsWith('kumbukum.com');
+const is_hosted = config.isHosted;
 
 function parseJsonBody(req) {
 	if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) return req.body;

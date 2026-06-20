@@ -111,5 +111,38 @@ script.
 			});
 		});
 
+		form.querySelectorAll('[data-verify-byo]').forEach(function(button) {
+			button.addEventListener('click', async function() {
+				var parts = button.dataset.verifyByo.split(':');
+				var scope = parts[0];
+				var field = parts[1];
+				var provider = field === 'openai_api_key' ? 'openai' : 'gemini';
+				var input = form.querySelector('input[data-scope="' + scope + '"][data-field="' + field + '"]');
+				var key = input ? input.value.trim() : '';
+				var statusEl = form.querySelector('[data-status="' + scope + ':' + field + '"]');
+				function setStatus(text, cls) {
+					if (!statusEl) return;
+					statusEl.textContent = text;
+					statusEl.className = cls;
+				}
+				button.disabled = true;
+				setStatus('Verifying…', 'text-muted');
+				try {
+					var body = { provider: provider };
+					if (key) body.key = key;
+					var data = await api('POST', '/settings/byo-ai/verify', body);
+					if (data && data.valid) {
+						setStatus('Key is valid', 'text-success');
+					} else {
+						setStatus((data && data.error) || 'Key is invalid', 'text-danger');
+					}
+				} catch (err) {
+					setStatus(err.message || 'Verification failed', 'text-danger');
+				} finally {
+					button.disabled = false;
+				}
+			});
+		});
+
 		loadSettings();
 	})();

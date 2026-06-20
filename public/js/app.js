@@ -857,6 +857,14 @@ async function openSettingsModal(path) {
 	}
 
 	var Modal = await ensureBootstrapModal();
+
+	// Avoid stacking modals: if the project-settings modal is open (e.g. an
+	// "Upgrade to Pro" link was clicked inside it), close it first.
+	var projModalEl = document.getElementById('projectSettingsModal');
+	if (projModalEl && projModalEl.classList.contains('show')) {
+		Modal.getInstance(projModalEl)?.hide();
+	}
+
 	titleEl.textContent = 'Settings';
 	bodyEl.innerHTML = renderSettingsLoading();
 	Modal.getOrCreateInstance(modalEl, { backdrop: 'static', keyboard: false }).show();

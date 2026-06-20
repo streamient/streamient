@@ -1,4 +1,4 @@
-import config, { isHostedAppUrl } from '../config.js';
+import config from '../config.js';
 import { Tenant } from '../modules/tenancy.js';
 import { encrypt, decrypt } from '../modules/encryption.js';
 import { hasProFeatureAccess, getBillingUserForHost } from './subscription_access_service.js';
@@ -198,11 +198,89 @@ export async function getAiInstructions(hostId) {
  * Returns `null` when a hosted Free tenant has no key configured, so the caller
  * surfaces a "add your API key" error instead of silently using our managed key.
  */
+/**
+ * Turn a failed provider response into a concise, user-facing reason. Distinguishes
+ * a rejected key from a depleted-credits/quota state so the verify result reflects
+ * whether the key can actually run AI (not just that it authenticates).
+ */
+async function describeProviderError(label, res) {
+	let detail = '';
+	try {
+		const data = await res.json();
+		detail = data?.error?.message || data?.error?.status || '';
+	} catch {
+		/* non-JSON body */
+	}
+	const hay = `${res.status} ${detail}`.toLowerCase();
+	if (/insufficient_quota|exceeded your current quota|\bquota\b|\bcredit|resource_exhausted|billing|prepayment/.test(hay)) {
+		return `${label} key has no remaining credits or quota`;
+	}
+	if (res.status === 401 || res.status === 403 || /api key not valid|invalid.*key|unauthor|permission_denied|api_key_invalid/.test(hay)) {
+		return `Invalid ${label} key`;
+	}
+	if (res.status === 429 || /rate.?limit/.test(hay)) {
+		return `${label} is rate-limiting right now — try again in a moment`;
+	}
+	return `${label} error (${res.status})${detail ? ': ' + detail.slice(0, 140) : ''}`;
+}
+
+/**
+ * Validate a user-supplied API key by making a minimal real generation call to the
+ * provider (1 output token). Unlike an auth-only models-list check, this also
+ * catches depleted credits / exhausted quota — so a key that authenticates but
+ * can't actually generate is reported invalid. Returns { valid, error? }. Used by
+ * the settings "Verify" button and the onboarding key-entry flow.
+ */
+export async function verifyProviderKey(provider, apiKey) {
+	const byoProvider = normalizeProvider(provider);
+	const key = typeof apiKey === 'string' ? apiKey.trim() : '';
+	if (!byoProvider) return { valid: false, error: 'Unknown provider' };
+	if (!key) return { valid: false, error: 'Enter an API key' };
+	try {
+		if (byoProvider === 'openai') {
+			const res = await fetch('https://api.openai.com/v1/chat/completions', {
+				method: 'POST',
+				headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+				body: JSON.stringify({ model: config.llm.openaiModel, messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 }),
+			});
+			if (res.ok) return { valid: true };
+			return { valid: false, error: await describeProviderError('OpenAI', res) };
+		}
+		// gemini
+		const res = await fetch(
+			`https://generativelanguage.googleapis.com/v1beta/models/${config.llm.googleModel}:generateContent?key=${encodeURIComponent(key)}`,
+			{
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ contents: [{ parts: [{ text: 'hi' }] }], generationConfig: { maxOutputTokens: 1 } }),
+			},
+		);
+		if (res.ok) return { valid: true };
+		return { valid: false, error: await describeProviderError('Gemini', res) };
+	} catch {
+		return { valid: false, error: 'Could not reach the provider' };
+	}
+}
+
+/**
+ * Return the tenant's own stored (decrypted) BYO key for a provider, or '' when
+ * none is set. Unlike resolveLlmApiKey this never falls back to managed/env keys
+ * — used to verify the key the user actually saved.
+ */
+export async function getStoredProviderKey(hostId, provider, scope = 'global') {
+	const byoProvider = normalizeProvider(provider);
+	if (!hostId || !byoProvider) return '';
+	const tenant = await Tenant.findOne({ host_id: hostId }).select('settings.byo_ai').lean();
+	if (!tenant) return '';
+	const value = getStoredValue(tenant, normalizeLlmScope(scope), byoProvider);
+	return value ? decryptStoredValue(value) : '';
+}
+
 export async function resolveLlmApiKey({ hostId = null, provider, scope = 'global' } = {}) {
 	const byoProvider = normalizeProvider(provider);
 	const fallback = envApiKey(provider);
 	if (!hostId || !byoProvider) return fallback;
-	const isHosted = isHostedAppUrl(config.appUrl);
+	const isHosted = config.isHosted;
 	if (!isHosted) return fallback;
 
 	const tenant = await Tenant.findOne({ host_id: hostId }).select('plan settings.byo_ai').lean();

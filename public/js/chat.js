@@ -272,6 +272,11 @@ async function loadProjectFilter() {
 			opt.textContent = p.name;
 			select.appendChild(opt);
 		});
+
+		// With a single project the "All projects" vs project distinction is
+		// meaningless (e.g. the Free plan), so hide the filter entirely.
+		const wrap = document.getElementById('chat-project-filter-wrap');
+		if (wrap) wrap.classList.toggle('d-none', projects.length <= 1);
 	} catch {
 		// silently fail
 	}

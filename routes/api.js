@@ -15,7 +15,7 @@ import * as urlService from '../services/url_service.js';
 import * as emailIngestService from '../services/email_ingest_service.js';
 import * as emailInternalNoteService from '../services/email_internal_note_service.js';
 import * as outgoingEmailService from '../services/outgoing_email_service.js';
-import { searchKnowledge, aiChatSearch, processChat, processChatStream } from '../services/ai_chat_service.js';
+import { searchKnowledge, aiChatSearch, processChat, processChatStream, friendlyChatError } from '../services/ai_chat_service.js';
 import { quickSearchKnowledge } from '../services/quick_search_service.js';
 import { listConversations, getConversationMessages, deleteConversation } from '../modules/typesense.js';
 import * as trashService from '../services/trash_service.js';
@@ -47,23 +47,22 @@ import { createLogger } from '../modules/logger.js';
 const log = createLogger('api');
 
 const router = Router();
-const is_hosted = config.isHosted;
 
 router.use(requireAuth, requireTenant);
 
-if (is_hosted) {
-	// Free is a permanent, fully-usable plan, so the API is not subscription-gated.
-	// We still resolve the billing user for per-feature gates and quota checks.
-	router.use(async (req, res, next) => {
+// Free is a permanent, fully-usable plan, so the API is not subscription-gated.
+// For hosted requests we resolve the billing user for per-feature gates and quotas.
+router.use(async (req, res, next) => {
+	if (req.isHosted) {
 		try {
 			req.billingUser = await getBillingUserForHost(req.host_id, req.userId);
 		} catch (err) {
 			log.error({ err, host_id: req.host_id }, 'Billing user resolution error');
 			req.billingUser = null;
 		}
-		next();
-	});
-}
+	}
+	next();
+});
 
 function auditCtx(req) {
 	return {
@@ -93,14 +92,14 @@ function requireProjectSettingsAccess(req, res, next) {
 	return res.status(403).json({ error: 'Project settings admin access is required' });
 }
 
-function isByoAiSettingsAccessEnabled() {
+function isByoAiSettingsAccessEnabled(req) {
 	// All hosted plans can configure their own keys (Free is BYOK; Pro may
 	// override managed keys). Self-hosted uses env vars in production.
-	return is_hosted || config.env !== 'production';
+	return req.isHosted || config.env !== 'production';
 }
 
 async function requireByoAiAccess(req, res, next) {
-	if (isByoAiSettingsAccessEnabled()) return next();
+	if (isByoAiSettingsAccessEnabled(req)) return next();
 	return res.status(403).json({ error: 'BYO AI keys are configured through environment variables in self-hosted installs' });
 }
 
@@ -108,7 +107,7 @@ async function requireByoAiAccess(req, res, next) {
 
 async function requireProjectQuota(req, res, next) {
 	const tenant = await Tenant.findOne({ host_id: req.host_id }).select('plan').lean();
-	const limits = effectiveResourceLimits(req.billingUser, tenant?.plan || 'free', is_hosted);
+	const limits = effectiveResourceLimits(req.billingUser, tenant?.plan || 'free', req.isHosted);
 	if (limits.projects) {
 		const count = await projectService.countActiveProjects(req.host_id);
 		if (isAtLimit(limits.projects, count)) {
@@ -124,7 +123,7 @@ async function requireProjectQuota(req, res, next) {
 
 async function requireUserQuota(req, res, next) {
 	const tenant = await Tenant.findOne({ host_id: req.host_id }).select('plan').lean();
-	const limits = effectiveResourceLimits(req.billingUser, tenant?.plan || 'free', is_hosted);
+	const limits = effectiveResourceLimits(req.billingUser, tenant?.plan || 'free', req.isHosted);
 	if (limits.users) {
 		const count = await teamService.countMembers(req.host_id);
 		if (isAtLimit(limits.users, count)) {
@@ -162,7 +161,7 @@ router.get('/projects/:id/settings', requireProjectSettingsAccess, async (req, r
 
 	const tenant = await Tenant.findOne({ host_id: req.host_id }).select('plan').lean();
 	const plan = tenant?.plan || 'free';
-	const proOnlyFeatureEnabled = hasProFeatureAccess(req.billingUser, plan, is_hosted);
+	const proOnlyFeatureEnabled = hasProFeatureAccess(req.billingUser, plan, req.isHosted);
 	const [gitRepos, emailIdentities] = await Promise.all([
 		proOnlyFeatureEnabled ? gitSyncService.listGitRepos(req.host_id, req.params.id).catch(() => []) : [],
 		proOnlyFeatureEnabled ? emailIdentityService.listEmailIdentities(req.host_id, req.params.id).catch(() => []) : [],
@@ -183,7 +182,7 @@ router.get('/projects/:id/settings', requireProjectSettingsAccess, async (req, r
 router.get('/features', async (req, res) => {
 	const tenant = await Tenant.findOne({ host_id: req.host_id }).select('plan').lean();
 	const plan = tenant?.plan || 'free';
-	const proOnlyFeatureEnabled = hasProFeatureAccess(req.billingUser, plan, is_hosted);
+	const proOnlyFeatureEnabled = hasProFeatureAccess(req.billingUser, plan, req.isHosted);
 	res.json({ features: { email_ingest: proOnlyFeatureEnabled, git_sync: proOnlyFeatureEnabled } });
 });
 
@@ -219,21 +218,21 @@ router.delete('/projects/:id', requireProjectSettingsAccess, async (req, res) =>
 async function requireGitSyncAccess(req, res, next) {
 	const tenant = await Tenant.findOne({ host_id: req.host_id }).select('plan').lean();
 	const plan = tenant?.plan || 'free';
-	const enabled = hasProFeatureAccess(req.billingUser, plan, is_hosted);
+	const enabled = hasProFeatureAccess(req.billingUser, plan, req.isHosted);
 	if (!enabled) {
 		return res.status(403).json({ error: 'Git Sync is available on the Pro plan' });
 	}
 	next();
 }
 
-async function getEmailFeatureAccess(host_id, user = null) {
-	if (!is_hosted) return true;
+async function getEmailFeatureAccess(host_id, user = null, isHosted = false) {
+	if (!isHosted) return true;
 	const tenant = await Tenant.findOne({ host_id }).select('plan').lean();
-	return hasProFeatureAccess(user, tenant?.plan || 'free', is_hosted);
+	return hasProFeatureAccess(user, tenant?.plan || 'free', isHosted);
 }
 
 async function requireEmailFeatureAccess(req, res, next) {
-	const enabled = await getEmailFeatureAccess(req.host_id, req.billingUser);
+	const enabled = await getEmailFeatureAccess(req.host_id, req.billingUser, req.isHosted);
 	if (!enabled) {
 		return res.status(403).json({ error: 'Email ingestion is available on the Pro plan' });
 	}
@@ -444,7 +443,9 @@ router.get('/memories/tags/suggest', async (req, res) => {
 
 // ---- Emails ----
 
-router.get('/emails', requireEmailFeatureAccess, async (req, res) => {
+// ---- Project emails (read/ingest = Free; AI/triage/compose = Pro below) ----
+
+router.get('/emails', async (req, res) => {
 	const emails = await emailIngestService.listEmails(req.host_id, req.query.project, {
 		page: parseInt(req.query.page, 10) || 1,
 		limit: parseInt(req.query.limit, 10) || 50,
@@ -456,7 +457,7 @@ router.get('/emails', requireEmailFeatureAccess, async (req, res) => {
 	res.json({ emails: emails.map(decorateEmailForClient) });
 });
 
-router.get('/emails/ids', requireEmailFeatureAccess, async (req, res) => {
+router.get('/emails/ids', async (req, res) => {
 	const ids = await emailIngestService.listEmailIds(req.host_id, req.query.project, {
 		mailbox: req.query.mailbox,
 		label: req.query.label,
@@ -465,7 +466,7 @@ router.get('/emails/ids', requireEmailFeatureAccess, async (req, res) => {
 	res.json({ ids });
 });
 
-router.get('/email-labels', requireEmailFeatureAccess, async (req, res) => {
+router.get('/email-labels', async (req, res) => {
 	const data = await emailIngestService.listEmailLabels(req.host_id, {
 		project: req.query.project,
 		mailbox: req.query.mailbox,
@@ -474,7 +475,7 @@ router.get('/email-labels', requireEmailFeatureAccess, async (req, res) => {
 	res.json(data);
 });
 
-router.post('/emails', requireEmailFeatureAccess, async (req, res) => {
+router.post('/emails', async (req, res) => {
 	try {
 		const email = await emailIngestService.ingestEmail(req.userId, req.host_id, req.body, auditCtx(req));
 		res.status(201).json({ email });
@@ -534,13 +535,13 @@ router.get('/emails/:id/triage-status', requireEmailFeatureAccess, async (req, r
 	res.json({ status });
 });
 
-router.get('/emails/:id', requireEmailFeatureAccess, async (req, res) => {
+router.get('/emails/:id', async (req, res) => {
 	const email = await emailIngestService.getEmail(req.host_id, req.params.id);
 	if (!email) return res.status(404).json({ error: 'Email not found' });
 	res.json({ email: decorateEmailForClient(email) });
 });
 
-router.get('/emails/:id/thread', requireEmailFeatureAccess, async (req, res) => {
+router.get('/emails/:id/thread', async (req, res) => {
 	const order = req.query.order === 'desc' ? 'desc' : 'asc';
 	const include = String(req.query.include || '').split(',').map((item) => item.trim()).filter(Boolean);
 	const thread = await emailIngestService.getEmailThread(req.host_id, req.params.id, { order });
@@ -549,13 +550,13 @@ router.get('/emails/:id/thread', requireEmailFeatureAccess, async (req, res) => 
 	res.json(payload);
 });
 
-router.get('/emails/:id/internal-notes', requireEmailFeatureAccess, async (req, res) => {
+router.get('/emails/:id/internal-notes', async (req, res) => {
 	const notes = await emailInternalNoteService.listEmailInternalNotes(req.host_id, req.params.id);
 	if (!notes) return res.status(404).json({ error: 'Email not found' });
 	res.json({ notes });
 });
 
-router.post('/emails/:id/internal-notes', requireEmailFeatureAccess, async (req, res) => {
+router.post('/emails/:id/internal-notes', async (req, res) => {
 	try {
 		const note = await emailInternalNoteService.createEmailInternalNote(req.userId, req.host_id, req.params.id, req.body || {}, auditCtx(req));
 		if (!note) return res.status(404).json({ error: 'Email not found' });
@@ -565,7 +566,7 @@ router.post('/emails/:id/internal-notes', requireEmailFeatureAccess, async (req,
 	}
 });
 
-router.put('/emails/:id/internal-notes/:noteId', requireEmailFeatureAccess, async (req, res) => {
+router.put('/emails/:id/internal-notes/:noteId', async (req, res) => {
 	try {
 		const note = await emailInternalNoteService.updateEmailInternalNote(req.host_id, req.params.id, req.params.noteId, req.body || {}, auditCtx(req));
 		if (!note) return res.status(404).json({ error: 'Internal note not found' });
@@ -575,7 +576,7 @@ router.put('/emails/:id/internal-notes/:noteId', requireEmailFeatureAccess, asyn
 	}
 });
 
-router.delete('/emails/:id/internal-notes/:noteId', requireEmailFeatureAccess, async (req, res) => {
+router.delete('/emails/:id/internal-notes/:noteId', async (req, res) => {
 	try {
 		const note = await emailInternalNoteService.deleteEmailInternalNote(req.host_id, req.params.id, req.params.noteId, auditCtx(req), req.query.client_request_id);
 		if (!note) return res.status(404).json({ error: 'Internal note not found' });
@@ -642,13 +643,13 @@ router.post('/emails/ai', requireEmailFeatureAccess, async (req, res) => {
 	}
 });
 
-router.put('/emails/:id', requireEmailFeatureAccess, async (req, res) => {
+router.put('/emails/:id', async (req, res) => {
 	const email = await emailIngestService.updateEmail(req.host_id, req.params.id, req.body, auditCtx(req));
 	if (!email) return res.status(404).json({ error: 'Email not found' });
 	res.json({ email: await emailIngestService.buildEmailRealtimePayload(req.host_id, email) });
 });
 
-router.delete('/emails/spam', requireEmailFeatureAccess, async (req, res) => {
+router.delete('/emails/spam', async (req, res) => {
 	try {
 		if (req.query.confirm !== 'true') return res.status(400).json({ error: 'confirm=true required' });
 
@@ -666,13 +667,13 @@ router.post('/emails/:id/reset-triage', requireEmailFeatureAccess, async (req, r
 	res.json({ email: await emailIngestService.buildEmailRealtimePayload(req.host_id, email) });
 });
 
-router.delete('/emails/:id', requireEmailFeatureAccess, async (req, res) => {
+router.delete('/emails/:id', async (req, res) => {
 	const email = await emailIngestService.deleteEmail(req.host_id, req.params.id, auditCtx(req));
 	if (!email) return res.status(404).json({ error: 'Email not found' });
 	res.json({ message: 'Email deleted' });
 });
 
-router.post('/emails/search', requireEmailFeatureAccess, async (req, res) => {
+router.post('/emails/search', async (req, res) => {
 	const results = await emailIngestService.searchEmails(req.host_id, req.body.query, req.body.options);
 	res.json({ results });
 });
@@ -1156,11 +1157,25 @@ router.get('/settings/byo-ai', requireRestrictedSettingsAccess, requireByoAiAcce
 		const settings = await byoAiService.getByoAiSettings(req.host_id);
 		// managed_ai = whether our turnkey keys back this tenant when no personal
 		// key is set (Pro / active trial / self-hosted). Free has no fallback.
-		settings.managed_ai = hasProFeatureAccess(req.billingUser, tenant?.plan || 'free', is_hosted);
+		settings.managed_ai = hasProFeatureAccess(req.billingUser, tenant?.plan || 'free', req.isHosted);
 		res.json({ settings });
 	} catch (err) {
 		log.error({ err }, 'BYO AI settings read error');
 		res.status(500).json({ error: 'Failed to load BYO AI settings' });
+	}
+});
+
+router.post('/settings/byo-ai/verify', requireRestrictedSettingsAccess, requireByoAiAccess, async (req, res) => {
+	try {
+		const provider = req.body?.provider;
+		// Verify the typed key if provided, otherwise the one already saved.
+		let key = typeof req.body?.key === 'string' ? req.body.key.trim() : '';
+		if (!key) key = await byoAiService.getStoredProviderKey(req.host_id, provider);
+		const result = await byoAiService.verifyProviderKey(provider, key);
+		res.json(result);
+	} catch (err) {
+		log.error({ err }, 'BYO AI key verify error');
+		res.status(400).json({ valid: false, error: 'Verification failed' });
 	}
 });
 
@@ -1239,7 +1254,7 @@ router.post('/chat', createChatLimiter(), async (req, res) => {
 		});
 	} catch (err) {
 		log.error({ err, host_id: req.host_id }, 'AI Chat error');
-		res.status(500).json({ error: 'AI Chat failed' });
+		res.status(500).json({ error: friendlyChatError(err) });
 	}
 });
 
@@ -1299,7 +1314,7 @@ router.post('/chat/stream', createChatLimiter(), async (req, res) => {
 		});
 	} catch (err) {
 		log.error({ err, host_id: req.host_id }, 'AI Chat stream error');
-		sendSSE('error', { error: 'AI Chat failed' });
+		sendSSE('error', { error: friendlyChatError(err) });
 	}
 
 	res.end();
@@ -1368,7 +1383,7 @@ router.post('/chat/search', async (req, res) => {
 		}
 	} catch (err) {
 		log.error({ err }, 'AI Chat (legacy) error');
-		res.status(500).json({ error: 'AI Chat failed' });
+		res.status(500).json({ error: friendlyChatError(err) });
 	}
 });
 

@@ -7,7 +7,8 @@
       button.btn.btn-sm.btn-outline-secondary#clear-chat(title="New conversation")
         != icon('add')
 
-  .mb-2
+  //- Project filter is hidden when the account has a single project (chat.js)
+  .mb-2.d-none#chat-project-filter-wrap
     select.form-select.form-select-sm#chat-project-filter
       option(value="") All projects
       //- Populated dynamically by chat.js

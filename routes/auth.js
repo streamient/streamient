@@ -9,12 +9,10 @@ import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail } from 
 import { buildHostedTrialFields } from '../services/billing_service.js';
 import { sendMagicLink, isMagicLinkValid, verifyMagicLink } from '../services/magic_link_service.js';
 import * as passkeyService from '../services/passkey_service.js';
-import config from '../config.js';
 import { createLogger } from '../modules/logger.js';
 
 const log = createLogger('auth');
 
-const is_hosted = config.isHosted;
 import { createDefaultProject } from '../services/project_service.js';
 import { PendingSignup } from '../model/pending_signup.js';
 import { isSysadminCredentials, requireSysadmin } from '../middleware/sysadmin.js';

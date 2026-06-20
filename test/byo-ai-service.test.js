@@ -43,6 +43,7 @@ describe('BYO AI service', () => {
 	const originalFindOneAndUpdate = Tenant.findOneAndUpdate;
 	const originalEncryptionKey = config.gitEncryptionKey;
 	const originalAppUrl = config.appUrl;
+	const originalIsHosted = config.isHosted;
 	const originalGoogleKey = config.llm.googleApiKey;
 	const originalOpenAiKey = config.llm.openaiApiKey;
 	let tenant;
@@ -50,6 +51,7 @@ describe('BYO AI service', () => {
 	beforeEach(() => {
 		config.gitEncryptionKey = '12345678901234567890123456789012';
 		config.appUrl = 'https://app.kumbukum.com';
+		config.isHosted = true;
 		config.llm.googleApiKey = 'env-gemini';
 		config.llm.openaiApiKey = 'env-openai';
 		tenant = { host_id: 'host-1', plan: 'pro', settings: { byo_ai: baseByoAi(), ai_instructions: baseAiInstructions(), email: {} } };
@@ -76,6 +78,7 @@ describe('BYO AI service', () => {
 		Tenant.findOneAndUpdate = originalFindOneAndUpdate;
 		config.gitEncryptionKey = originalEncryptionKey;
 		config.appUrl = originalAppUrl;
+		config.isHosted = originalIsHosted;
 		config.llm.googleApiKey = originalGoogleKey;
 		config.llm.openaiApiKey = originalOpenAiKey;
 	});
@@ -146,7 +149,7 @@ describe('BYO AI service', () => {
 
 		// Self-hosted always uses env keys regardless of stored keys.
 		tenant.plan = 'pro';
-		config.appUrl = 'http://localhost:3000';
+		config.isHosted = false;
 		assert.equal(
 			await resolveLlmApiKey({ hostId: 'host-1', provider: 'openai', scope: 'global' }),
 			'env-openai',

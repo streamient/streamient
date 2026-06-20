@@ -24,6 +24,14 @@ block content
 								input.form-check-input#is-active(type="checkbox" checked=account.is_active)
 								label.form-check-label(for="is-active") Account Active
 
+						- const currentPlan = (account.tenant && account.tenant.plan) || 'free'
+						.mb-3
+							label.form-label(for="plan") Plan
+							select.form-select#plan
+								option(value="free" selected=currentPlan === 'free') Free
+								option(value="pro" selected=currentPlan === 'pro') Pro
+							.form-text Manually overrides the account's plan. Pro unlocks unlimited projects/users and managed AI.
+
 						.row.mb-3
 							.col-md-6
 								label.form-label Last Login

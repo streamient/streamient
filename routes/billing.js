@@ -64,7 +64,7 @@ router.get('/billing/checkout', requireAuth, requireTenant, async (req, res) => 
 // Start the in-app 7-day no-card Pro trial (once per account).
 router.post('/billing/trial', requireAuth, requireTenant, async (req, res) => {
     try {
-        if (!config.isHosted) return res.redirect('/settings/subscription');
+        if (!req.isHosted) return res.redirect('/settings/subscription');
 
         const billingUser = await getBillingUserForHost(req.host_id, req.userId);
         if (!billingUser) return res.redirect('/login');

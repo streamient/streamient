@@ -1,5 +1,5 @@
 import { searchAll, conversationSearch, getCollectionCounts } from '../modules/typesense.js';
-import { nlSearchCompletion, chatModelCompletion, parseStreamChunks, getChatProviderName } from '../modules/llm_client.js';
+import { nlSearchCompletion, chatModelCompletion, parseStreamChunks, getChatProviderName, hasLlmApiKey } from '../modules/llm_client.js';
 import * as noteService from './note_service.js';
 import * as memoryService from './memory_service.js';
 import * as urlService from './url_service.js';
@@ -8,6 +8,34 @@ import { listProjects } from './project_service.js';
 import { createLogger } from '../modules/logger.js';
 
 const log = createLogger('ai-chat');
+
+// Shown when a hosted Free (BYOK) tenant has no API key — avoids a cryptic
+// provider/Typesense failure ("API key is not a string") deep in the pipeline.
+const NO_AI_KEY_ANSWER =
+	"AI chat needs an API key to work. You're on the **Free plan** (bring your own key) — add your own OpenAI or Gemini API key in **Settings → AI** to enable chat and search, or upgrade to **Pro** for managed AI.";
+
+function noAiKeyResult(conversationId = null) {
+	return { answer: NO_AI_KEY_ANSWER, results: [], action: null, conversationId: conversationId || null, displayIn: 'chat' };
+}
+
+/**
+ * Map a deep provider/Typesense error to a concise, user-safe message for the
+ * chat UI, so users see the real cause (e.g. depleted credits, a rejected key)
+ * instead of an opaque "AI Chat failed". Falls back to the generic message.
+ */
+export function friendlyChatError(err) {
+	const msg = String(err?.message || '');
+	if (/credits?\s+are\s+depleted|RESOURCE_EXHAUSTED|insufficient_quota|\bquota\b/i.test(msg)) {
+		return 'Your AI provider reports no remaining credits or quota for this API key. Add billing to your OpenAI/Gemini key in Settings → AI, or upgrade to Pro for managed AI.';
+	}
+	if (/API key not valid|api[\s_-]?key\b.*(invalid|not a string)|invalid\b.*api[\s_-]?key|PERMISSION_DENIED|unauthor|\b401\b|\b403\b/i.test(msg)) {
+		return 'Your AI API key was rejected by the provider. Re-check it in Settings → AI.';
+	}
+	if (/rate[\s_-]?limit|\b429\b/i.test(msg)) {
+		return 'The AI provider is rate-limiting requests right now. Please try again in a moment.';
+	}
+	return 'AI Chat failed';
+}
 
 // ────────────────────────────────────────────────────────────────────
 // Intent Classification (using lightweight NL_SEARCH_MODEL)
@@ -140,6 +168,11 @@ export function normalizeIntentForConversationFollowup(intent, query, conversati
  * @returns {{ answer: string, results: object, action: object|null, conversationId: string, displayIn: 'panel'|'chat' }}
  */
 export async function processChat({ hostId, userId, query, conversationId, projectId, includeEmails = true, ctx = {} }) {
+	// Free (BYOK) tenants with no key configured: short-circuit with guidance.
+	if (!(await hasLlmApiKey({ hostId }))) {
+		return noAiKeyResult(conversationId);
+	}
+
 	// Classify intent
 	const classifiedIntent = await classifyIntent(hostId, query);
 	const intent = normalizeIntentForConversationFollowup(classifiedIntent, query, conversationId);
@@ -171,6 +204,12 @@ export async function processChat({ hostId, userId, query, conversationId, proje
  * If answer is set, the response is already complete (no streaming needed).
  */
 export async function processChatStream({ hostId, userId, query, conversationId, projectId, includeEmails = true, ctx = {} }) {
+	// Free (BYOK) tenants with no key configured: short-circuit with guidance
+	// (the non-stream answer path renders it as a normal assistant message).
+	if (!(await hasLlmApiKey({ hostId }))) {
+		return { stream: null, answer: NO_AI_KEY_ANSWER, metadata: { results: [], action: null, conversationId: conversationId || null, displayIn: 'chat' } };
+	}
+
 	const classifiedIntent = await classifyIntent(hostId, query);
 	const intent = normalizeIntentForConversationFollowup(classifiedIntent, query, conversationId);
 	const llmScope = getLlmScopeForIntent(intent);

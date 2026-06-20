@@ -11,6 +11,12 @@ include ../../../includes/avatar
 					!= icon('shieldWarning', 'me-2')
 					| Team admin access is required to manage members for this account.
 			else
+				if is_hosted && !projects_unlimited
+					.alert.alert-info.d-flex.align-items-center.mb-4
+						!= icon('users', 'me-2')
+						div
+							strong Free plan: up to 5 users.
+							a.ms-1(href="/settings/subscription") Upgrade to unlimited users
 				.row.g-4
 					.col-lg-5
 						.card.mb-4
