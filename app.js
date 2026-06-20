@@ -12,7 +12,7 @@ import { connectDB } from './db.js';
 import { setupSocketIO } from './modules/socket.js';
 import { initTypesense } from './modules/typesense.js';
 import { initRedis } from './modules/redis.js';
-import { resolveTenant } from './modules/tenancy.js';
+import { resolveTenant, backfillStarterPlan } from './modules/tenancy.js';
 import { installIconLocals } from './modules/icons.js';
 
 import { createApiLimiter } from './middleware/rate_limit.js';
@@ -228,6 +228,7 @@ async function start() {
 	await backfillForwardedSentReplies();
 	await backfillGitSyncMode();
 	await backfillTypesenseTrashFields();
+	await backfillStarterPlan();
 	await initRedis();
 	await initTypesense();
 

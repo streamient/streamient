@@ -114,18 +114,6 @@ At least one API key is required for AI chat to function.
 | `SYSADMIN_EMAIL` | System admin email. If set, a sysadmin account is provisioned on startup | No | — |
 | `SYSADMIN_PASSWORD` | System admin password | No | — |
 
-### Billing (Stripe)
-
-These are only needed if you enable subscription billing (Cloud deployments).
-
-| Variable | Description | Required | Default |
-| --- | --- | --- | --- |
-| `STRIPE_SECRET_KEY` | Stripe secret key | No | — |
-| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret | No | — |
-| `STRIPE_PRICE_ID` | Stripe price ID for the subscription plan | No | — |
-| `STRIPE_PORTAL_CONFIG_ID` | Stripe customer portal configuration ID | No | — |
-| `STRIPE_TRIAL_DAYS` | Free trial period in days | No | `7` |
-
 ### Analytics (OpenPanel)
 
 | Variable | Description | Required | Default |

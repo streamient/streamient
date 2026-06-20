@@ -99,14 +99,7 @@ View your storage usage dashboard showing total counts of:
 == Cloud
 ## Subscription
 
-View and manage your subscription status:
-
-- **Trialing** — Shows trial end date
-- **Active** — Your subscription is current
-- **Past Due** — Payment issue; a grace period is provided
-- **Canceled** — Subscription has been canceled
-
-Click **Manage Subscription** to open the Stripe billing portal where you can update payment methods, view invoices, or cancel.
+Manage your plan from **Settings > Subscription**. See the [Billing](/cloud/billing) guide for plans, trials, and invoices.
 
 == Self-Hosted
 The Subscription section is not available on self-hosted installations.

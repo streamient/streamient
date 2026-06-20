@@ -46,6 +46,16 @@ export async function listTeamMembers(host_id) {
 	return members.map(formatTeamMember).sort(sortTeamMembers);
 }
 
+/**
+ * Count users on a tenant. The owner is represented as a TenantMember (role
+ * `owner`), but that membership row is created lazily, so treat the count as at
+ * least 1 to be safe.
+ */
+export async function countMembers(host_id) {
+	const count = await TenantMember.countDocuments({ host_id });
+	return Math.max(count, 1);
+}
+
 export async function createTeamMember(userId, host_id, data, ctx = {}) {
 	const tenant = await Tenant.findOne({ host_id, is_active: true });
 	if (!tenant) throw new Error('Tenant not found');

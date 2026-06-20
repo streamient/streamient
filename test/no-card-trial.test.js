@@ -43,31 +43,20 @@ describe('no-card trial signup and billing helpers', () => {
 		assert.equal(params.return_url, BILLING_SUBSCRIPTION_URL);
 	});
 
-	it('uses legacy Stripe price ID as the Starter checkout fallback', () => {
-		const original = {
-			priceId: config.stripe.priceId,
-			starterPriceId: config.stripe.starterPriceId,
-			proPriceId: config.stripe.proPriceId,
-		};
-		config.stripe.priceId = 'price_legacy';
-		config.stripe.starterPriceId = '';
+	it('always resolves the Pro price for checkout (Pro is the only paid plan)', () => {
+		const original = config.stripe.proPriceId;
 		config.stripe.proPriceId = 'price_pro';
-
 		try {
-			assert.equal(resolveCheckoutPriceId('starter'), 'price_legacy');
-			assert.equal(resolveCheckoutPriceId('pro'), 'price_pro');
+			assert.equal(resolveCheckoutPriceId(), 'price_pro');
 		} finally {
-			config.stripe.priceId = original.priceId;
-			config.stripe.starterPriceId = original.starterPriceId;
-			config.stripe.proPriceId = original.proPriceId;
+			config.stripe.proPriceId = original;
 		}
 	});
 
-	it('defaults Checkout to Starter unless Pro is explicitly requested', () => {
-		assert.equal(resolveCheckoutPlan(), 'starter');
-		assert.equal(resolveCheckoutPlan('starter'), 'starter');
+	it('always resolves the Pro plan for checkout', () => {
+		assert.equal(resolveCheckoutPlan(), 'pro');
+		assert.equal(resolveCheckoutPlan('free'), 'pro');
 		assert.equal(resolveCheckoutPlan('pro'), 'pro');
-		assert.equal(resolveCheckoutPlan('enterprise'), 'starter');
 	});
 
 	it('clears no-card trial lock fields when Stripe subscription state is applied', () => {
@@ -85,7 +74,7 @@ describe('no-card trial signup and billing helpers', () => {
 });
 
 describe('no-card trial scheduler lifecycle', () => {
-	it('sends separate reminders, expires trials, and deletes abandoned no-card tenants', async () => {
+	it('sends separate reminders and downgrades expired trials to Free (no tenant deletion)', async () => {
 		const now = new Date('2026-01-01T09:00:00.000Z');
 		const threeDayUser = {
 			_id: 'user-3d',
@@ -105,22 +94,8 @@ describe('no-card trial scheduler lifecycle', () => {
 			name: 'Expired',
 			trial_ends_at: new Date(now.getTime() - 60 * 1000),
 		};
-		const deleteUser = {
-			_id: 'user-delete',
-			email: 'delete@example.com',
-			host_id: 'host-delete',
-			tenant: 'tenant-delete',
-			trial_ends_at: new Date(now.getTime() - 4 * 24 * 60 * 60 * 1000),
-		};
-		const duplicateHostUser = {
-			_id: 'user-delete-2',
-			email: 'delete2@example.com',
-			host_id: 'host-delete',
-			tenant: 'tenant-delete',
-			trial_ends_at: deleteUser.trial_ends_at,
-		};
 
-		const findResponses = [[threeDayUser], [twentyFourHourUser], [expiredUser], [deleteUser, duplicateHostUser]];
+		const findResponses = [[threeDayUser], [twentyFourHourUser], [expiredUser]];
 		const findQueries = [];
 		const updateOneCalls = [];
 		const userModel = {
@@ -136,7 +111,6 @@ describe('no-card trial scheduler lifecycle', () => {
 		const threeDayEmails = [];
 		const twentyFourHourEmails = [];
 		const expiredEmails = [];
-		const deletedTenants = [];
 
 		const summary = await runTrialLifecycle({
 			now,
@@ -144,7 +118,6 @@ describe('no-card trial scheduler lifecycle', () => {
 			send3DayEmail: async (email) => threeDayEmails.push(email),
 			send24HourEmail: async (email) => twentyFourHourEmails.push(email),
 			sendExpiredEmail: async (email) => expiredEmails.push(email),
-			deleteTenant: async (hostId, tenantId) => deletedTenants.push({ hostId, tenantId }),
 		});
 
 		assert.deepEqual(threeDayEmails, ['three@example.com']);
@@ -155,9 +128,9 @@ describe('no-card trial scheduler lifecycle', () => {
 		assert.equal(updateOneCalls[2].update.$set.subscription_status, 'trial_expired');
 		assert.equal(updateOneCalls[2].update.$set.trial_locked_at, now);
 		assert.equal(findQueries[2].trial_locked_at, null);
-		assert.equal(findQueries[3].subscription_status.$ne, 'active');
-		assert.deepEqual(deletedTenants, [{ hostId: 'host-delete', tenantId: 'tenant-delete' }]);
-		assert.deepEqual(summary, { reminders_3d: 1, reminders_24h: 1, expired: 1, deleted: 1 });
+		// No deletion phase: only three find() calls (3d, 24h, expired).
+		assert.equal(findQueries.length, 3);
+		assert.deepEqual(summary, { reminders_3d: 1, reminders_24h: 1, expired: 1 });
 	});
 });
 
@@ -255,7 +228,8 @@ describe('subscription product access', () => {
 
 		assert.equal(hasProFeatureAccess(trialUser, 'free', true, now), true);
 		assert.equal(hasProFeatureAccess(expiredTrialUser, 'free', true, now), false);
-		assert.equal(hasProFeatureAccess({ subscription_status: 'active' }, 'starter', true, now), false);
+		assert.equal(hasProFeatureAccess({ subscription_status: 'incomplete' }, 'free', true, now), false);
+		assert.equal(hasProFeatureAccess({ subscription_status: 'active' }, 'pro', true, now), true);
 		assert.equal(hasProFeatureAccess(null, 'free', false, now), true);
 	});
 

@@ -9,7 +9,6 @@ import { Email } from '../model/email.js';
 import { sendTrialEnding3DayEmail, sendTrialEnding24HourEmail, sendTrialExpiredEmail } from '../services/email_service.js';
 import { cleanupExpiredExports } from '../services/export_service.js';
 import { runScheduledSync } from '../services/git_sync_service.js';
-import { deleteTenantData } from '../services/account_cleanup_service.js';
 import { removeLinksForItem } from '../services/graph_service.js';
 import { createLogger } from './logger.js';
 
@@ -31,12 +30,10 @@ export async function runTrialLifecycle({
 	send3DayEmail = sendTrialEnding3DayEmail,
 	send24HourEmail = sendTrialEnding24HourEmail,
 	sendExpiredEmail = sendTrialExpiredEmail,
-	deleteTenant = deleteTenantData,
 } = {}) {
 	const threeDaysFromNow = new Date(now.getTime() + 3 * DAY_MS);
 	const fourDaysFromNow = new Date(now.getTime() + 4 * DAY_MS);
 	const tomorrow = new Date(now.getTime() + DAY_MS);
-	const deletionCutoff = new Date(now.getTime() - 3 * DAY_MS);
 
 	const threeDayUsers = await userModel.find({
 		trial_source: 'no_card',
@@ -82,6 +79,8 @@ export async function runTrialLifecycle({
 	let expired = 0;
 	for (const user of expiredUsers) {
 		try {
+			// Trial over → drop to Free. The account persists (no tenant deletion);
+			// Pro features re-lock automatically since status is no longer 'trialing'.
 			await userModel.updateOne({ _id: user._id }, { $set: { subscription_status: 'trial_expired', trial_locked_at: now } });
 			const endDate = new Date(user.trial_ends_at).toLocaleDateString();
 			await sendExpiredEmail(user.email, user.name, endDate);
@@ -91,30 +90,10 @@ export async function runTrialLifecycle({
 		}
 	}
 
-	const deletionCandidates = await userModel.find({
-		trial_source: 'no_card',
-		subscription_status: { $ne: 'active' },
-		trial_ends_at: { $lte: deletionCutoff },
-	});
-
-	let deleted = 0;
-	const seenHosts = new Set();
-	for (const user of deletionCandidates) {
-		if (!user.host_id || seenHosts.has(user.host_id)) continue;
-		seenHosts.add(user.host_id);
-		try {
-			await deleteTenant(user.host_id, user.tenant);
-			deleted++;
-		} catch (err) {
-			log.error({ err, host_id: user.host_id }, 'Trial cleanup failed');
-		}
-	}
-
 	return {
 		reminders_3d: reminders3d,
 		reminders_24h: reminders24h,
 		expired,
-		deleted,
 	};
 }
 
@@ -199,11 +178,11 @@ export function startScheduler() {
 		}
 	});
 
-	// Trial lifecycle: reminders, expiry lock, and abandoned trial cleanup.
+	// Trial lifecycle: reminders and expiry (downgrade to Free; no deletion).
 	new Cron('0 9 * * *', async () => {
 		try {
 			const summary = await runTrialLifecycle();
-			log.info({ reminders_3d: summary.reminders_3d, reminders_24h: summary.reminders_24h, expired: summary.expired, deleted: summary.deleted }, 'Trial lifecycle run complete');
+			log.info({ reminders_3d: summary.reminders_3d, reminders_24h: summary.reminders_24h, expired: summary.expired }, 'Trial lifecycle run complete');
 		} catch (err) {
 			log.error({ err }, 'Trial lifecycle error');
 		}

@@ -6,23 +6,34 @@ import config from '../config.js';
 export const BILLING_SUBSCRIPTION_URL = 'https://app.kumbukum.com/settings/subscription';
 
 /**
- * Resolve plan name from a Stripe subscription's price ID.
- * Falls back to 'starter' if no matching price is configured.
+ * Build the no-card 7-day Pro trial fields. Applied via the in-app
+ * "Start Pro trial" action (POST /billing/trial), not at signup.
+ */
+export function buildHostedTrialFields(now = new Date(), trialDays = config.stripe.trialDays) {
+    return {
+        subscription_status: 'trialing',
+        trial_source: 'no_card',
+        trial_ends_at: new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000),
+    };
+}
+
+/**
+ * Resolve tenant plan from a Stripe subscription. Pro is the only paid plan, so
+ * an entitled (active/trialing/past_due) subscription maps to 'pro'; anything
+ * else (canceled/unpaid/incomplete) drops to 'free'.
  */
 function resolvePlanFromSubscription(subscription) {
-    const priceId = subscription.items?.data?.[0]?.price?.id;
-    if (priceId === config.stripe.proPriceId) return 'pro';
-    if (priceId === config.stripe.starterPriceId || priceId === config.stripe.priceId) return 'starter';
-    return 'starter';
+    const status = subscription?.status;
+    const entitled = status === 'active' || status === 'trialing' || status === 'past_due';
+    return entitled ? 'pro' : 'free';
 }
 
-export function resolveCheckoutPriceId(plan = 'starter') {
-	if (plan === 'pro') return config.stripe.proPriceId;
-	return config.stripe.starterPriceId || config.stripe.priceId;
+export function resolveCheckoutPriceId() {
+	return config.stripe.proPriceId;
 }
 
-export function resolveCheckoutPlan(requestedPlan = 'starter') {
-	return requestedPlan === 'pro' ? 'pro' : 'starter';
+export function resolveCheckoutPlan() {
+	return 'pro';
 }
 
 export async function applySubscriptionToUser(userId, subscription, stripeCustomerId = undefined) {
@@ -75,14 +86,13 @@ export function buildSubscriptionUserUpdate(subscription, stripeCustomerId = und
 }
 
 /**
- * Create a Stripe Checkout session for a paid subscription.
- * Accepts an optional plan ('starter' or 'pro'); defaults to 'starter'.
+ * Create a Stripe Checkout session for the Pro subscription.
  * Returns the Checkout URL to redirect the user to.
  */
-export async function createCheckoutSession(user, plan = 'starter') {
-    const priceId = resolveCheckoutPriceId(plan);
+export async function createCheckoutSession(user) {
+    const priceId = resolveCheckoutPriceId();
     if (!priceId) {
-        throw new Error(`Stripe price ID is not configured for plan: ${plan}`);
+        throw new Error('Stripe price ID is not configured for the Pro plan (STRIPE_PRO_PRICE_ID).');
     }
     const stripe = getStripe();
 
@@ -165,7 +175,7 @@ export async function handleWebhook(rawBody, sig) {
                 user.trial_reminder_24h_sent_at = null;
                 user.trial_locked_at = null;
                 await user.save();
-                await Tenant.findOneAndUpdate({ host_id: user.host_id }, { plan: 'starter' });
+                await Tenant.findOneAndUpdate({ host_id: user.host_id }, { plan: 'free' });
             }
             break;
         }

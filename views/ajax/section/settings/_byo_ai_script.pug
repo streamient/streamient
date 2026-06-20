@@ -13,14 +13,22 @@ script.
 		}
 
 		function renderStatus(settings) {
+			var managed = !!settings?.managed_ai;
 			form.querySelectorAll('[data-status]').forEach(function(el) {
 				var parts = el.dataset.status.split(':');
 				var scope = parts[0];
 				var field = parts[1];
 				var configured = !!settings?.[scope]?.[field]?.configured;
-				el.textContent = configured ? 'Custom key configured' : 'Using environment default';
+				if (configured) {
+					el.textContent = 'Custom key configured';
+				} else if (managed) {
+					el.textContent = 'Using managed AI';
+				} else {
+					el.textContent = 'No key set — required to use AI';
+				}
 				el.classList.toggle('text-success', configured);
-				el.classList.toggle('text-muted', !configured);
+				el.classList.toggle('text-warning', !configured && !managed);
+				el.classList.toggle('text-muted', !configured && managed);
 			});
 			form.querySelectorAll('[data-instruction-scope]').forEach(function(el) {
 				el.value = settings?.instructions?.[el.dataset.instructionScope] || '';
@@ -90,7 +98,7 @@ script.
 				var parts = button.dataset.clearByo.split(':');
 				var scope = parts[0];
 				var field = parts[1];
-				var confirmed = await confirmAction('Clear API key', 'This will remove the custom key and use the fallback key.');
+				var confirmed = await confirmAction('Clear API key', 'This will remove the saved key from this account.');
 				if (!confirmed) return;
 
 				try {

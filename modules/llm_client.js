@@ -35,23 +35,41 @@ function applyTokenLimit(body, providerName, model, maxTokens) {
 	return body;
 }
 
+// BYOK provider fallback order: try the requested provider first, then the
+// other user-facing provider. This makes "bring your own OpenAI OR Gemini key"
+// work — a tenant only needs one key, whichever provider it's for.
+const BYO_FALLBACK_ORDER = {
+	openai: ['openai', 'google'],
+	google: ['google', 'openai'],
+	gemini: ['google', 'openai'],
+};
+
 /**
  * Resolve provider name and API key.
  * Accepts an explicit provider string or falls back to config.llm.chatProvider.
+ * If the requested provider has no key but the other provider does, it switches
+ * (the caller should then use the resolved provider's default model).
  */
 async function resolveProvider(providerName, options = {}) {
-	const name = providerName || config.llm.chatProvider || 'google';
-	const provider = PROVIDERS[name];
-	if (!provider) throw new Error(`Unknown LLM provider: ${name}`);
+	const requested = providerName || config.llm.chatProvider || 'google';
+	if (!PROVIDERS[requested]) throw new Error(`Unknown LLM provider: ${requested}`);
+	const candidates = BYO_FALLBACK_ORDER[requested] || [requested];
 
-	const apiKey = await resolveLlmApiKey({
-		hostId: options.hostId,
-		provider: name,
-		scope: options.scope,
-	});
-	if (!apiKey) throw new Error(`API key not configured for provider: ${name}`);
+	for (const name of candidates) {
+		const provider = PROVIDERS[name];
+		if (!provider) continue;
+		const apiKey = await resolveLlmApiKey({
+			hostId: options.hostId,
+			provider: name,
+			scope: options.scope,
+		});
+		if (apiKey) return { name, provider, apiKey, switched: name !== requested };
+	}
 
-	return { name, provider, apiKey };
+	const err = new Error('No AI API key is configured. Add your OpenAI or Gemini API key in Settings → AI to enable AI features.');
+	err.code = 'NO_AI_API_KEY';
+	err.status = 400;
+	throw err;
 }
 
 /**
@@ -67,8 +85,11 @@ async function resolveProvider(providerName, options = {}) {
  *   scope     - LLM key scope: global or email
  */
 export async function chatCompletion({ messages, stream = false, provider: providerOverride, model: modelOverride, maxTokens = 4096, hostId = null, scope = 'global' }) {
-	const { name, provider, apiKey } = await resolveProvider(providerOverride, { hostId, scope });
-	const model = modelOverride || provider.defaultModel;
+	const { name, provider, apiKey, switched } = await resolveProvider(providerOverride, { hostId, scope });
+	// When we fell back to a different provider than requested, the configured
+	// model override was for the original provider — use the resolved provider's
+	// default model instead.
+	const model = (switched ? '' : modelOverride) || provider.defaultModel;
 
 	return OtelRuntime.createCustomSpan('gen_ai.chat.completion', async (span) => {
 		span.setAttribute('gen_ai.system', name);

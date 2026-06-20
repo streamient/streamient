@@ -26,14 +26,16 @@ function requireRestrictedSettingsAccess(req, res, next) {
 	return res.redirect('/settings/profile');
 }
 
-function isByoAiSettingsAccessEnabled(plan) {
-	return (is_hosted && plan === 'pro') || (!is_hosted && config.env !== 'production');
+function isByoAiSettingsAccessEnabled() {
+	// All hosted plans can configure their own keys (Free is BYOK; Pro may
+	// override managed keys). Self-hosted uses env vars in production.
+	return is_hosted || config.env !== 'production';
 }
 
 function requireByoAiWebAccess(req, res, next) {
-	if (isByoAiSettingsAccessEnabled(res.locals.plan)) return next();
+	if (isByoAiSettingsAccessEnabled()) return next();
 	if (req.path.startsWith('/ajax/')) {
-		return res.status(403).send('<div class="alert alert-warning mb-0">BYO AI is available on the Pro plan.</div>');
+		return res.status(403).send('<div class="alert alert-warning mb-0">BYO AI keys are configured through environment variables in self-hosted installs.</div>');
 	}
 	return res.redirect(is_hosted ? '/settings/subscription' : '/settings/profile');
 }
@@ -70,12 +72,17 @@ router.use(async (req, res, next) => {
 	const [user, projects, tenant, billingUser] = await Promise.all([
 		User.findById(req.userId),
 		listProjects(req.host_id),
-		Tenant.findOne({ host_id: req.host_id }).select('plan').lean(),
+		Tenant.findOne({ host_id: req.host_id }).select('plan settings.byo_ai').lean(),
 		getBillingUserForHost(req.host_id, req.userId),
 	]);
 	const activeTenant = (req.accessibleTenants || []).find((item) => item.tenantId === req.tenantId) || null;
 	const plan = tenant?.plan || 'free';
 	const proOnlyFeatureEnabled = hasProFeatureAccess(billingUser, plan, is_hosted);
+	// Free (BYOK) tenants with no managed AI must supply at least one key.
+	const hasByoKey = Boolean(
+		tenant?.settings?.byo_ai?.global?.openai_api_key ||
+		tenant?.settings?.byo_ai?.global?.gemini_api_key,
+	);
 	res.locals.user = user;
 	res.locals.billing_user = billingUser;
 	res.locals.projects = projects;
@@ -87,7 +94,8 @@ router.use(async (req, res, next) => {
 	res.locals.active_tenant = activeTenant;
 	res.locals.email_feature_enabled = proOnlyFeatureEnabled;
 	res.locals.git_sync_enabled = proOnlyFeatureEnabled;
-	res.locals.byo_ai_enabled = isByoAiSettingsAccessEnabled(plan);
+	res.locals.byo_ai_enabled = isByoAiSettingsAccessEnabled();
+	res.locals.needs_api_key = is_hosted && !proOnlyFeatureEnabled && !hasByoKey;
 	res.locals.host_id = req.host_id;
 	res.locals.ws_url = config.wsUrl;
 	res.locals.impersonating = req.session.impersonating || false;
@@ -95,26 +103,17 @@ router.use(async (req, res, next) => {
 	res.locals.is_hosted = is_hosted;
 	res.locals.is_trialing = is_hosted && billingUser?.subscription_status === 'trialing' && billingUser?.trial_source === 'no_card' && hasProductAccess(billingUser);
 	res.locals.trial_ends_text = res.locals.is_trialing ? formatTrialEndsIn(billingUser) : '';
+	// Free, never-trialed accounts can start the one-time in-app Pro trial.
+	const billingStatus = billingUser?.subscription_status || 'incomplete';
+	res.locals.trial_available = is_hosted && plan !== 'pro' && billingStatus === 'incomplete' && !billingUser?.trial_ends_at;
+	res.locals.can_upgrade = is_hosted && plan !== 'pro' && !res.locals.is_trialing;
 	res.locals.hide_chat_sidebar = req.path === '/settings' || req.path.startsWith('/settings/');
 	next();
 });
 
-// ---- Subscription gate (hosted edition only) ----
-// Users without an active/trialing subscription get redirected to checkout.
-if (is_hosted) {
-	router.use((req, res, next) => {
-		const billingUser = res.locals.billing_user;
-		if (!billingUser) return next();
-
-		// Settings/subscription page is always accessible so users can manage billing
-		if (req.path.startsWith('/settings/subscription')) return next();
-
-		if (hasProductAccess(billingUser)) return next();
-
-		// Everything else — redirect to checkout
-		return res.redirect('/billing/checkout');
-	});
-}
+// Note: Free is a permanent, fully-usable plan, so there is no global
+// subscription gate. Pro-only features (Email, Git Sync, managed AI) are gated
+// individually; Free users are nudged to add their own API key via needs_api_key.
 
 router.get('/dashboard', (req, res) => res.render('dashboard', { title: 'Dashboard' }));
 router.get('/notes', (req, res) => res.render('notes', { title: 'Notes' }));

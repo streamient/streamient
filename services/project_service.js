@@ -33,6 +33,10 @@ export async function listProjects(host_id) {
 	return Project.find({ host_id, is_active: true }).sort({ is_default: -1, name: 1 });
 }
 
+export async function countActiveProjects(host_id) {
+	return Project.countDocuments({ host_id, is_active: true });
+}
+
 export async function getProject(host_id, projectId) {
 	return Project.findOne({ _id: projectId, host_id });
 }

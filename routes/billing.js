@@ -1,8 +1,11 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { requireTenant } from '../modules/tenancy.js';
-import { BILLING_SUBSCRIPTION_URL, applySubscriptionToUser, createCheckoutSession, createPortalSession, handleWebhook, resolveCheckoutPlan, resolveCheckoutPriceId } from '../services/billing_service.js';
+import { BILLING_SUBSCRIPTION_URL, applySubscriptionToUser, createCheckoutSession, createPortalSession, handleWebhook, resolveCheckoutPriceId, buildHostedTrialFields } from '../services/billing_service.js';
 import { getBillingUserForHost } from '../services/subscription_access_service.js';
+import { User } from '../model/user.js';
+import { Tenant } from '../modules/tenancy.js';
+import config from '../config.js';
 import express from 'express';
 import { createLogger } from '../modules/logger.js';
 
@@ -40,15 +43,14 @@ router.get('/billing/checkout', requireAuth, requireTenant, async (req, res) => 
             return res.redirect('/dashboard');
         }
 
-        const plan = resolveCheckoutPlan(req.query.plan);
-        if (!resolveCheckoutPriceId(plan)) {
+        if (!resolveCheckoutPriceId()) {
             return res.status(500).render('billing/checkout_cancel', {
                 title: 'Billing Setup Missing',
-                message: `Stripe price ID is not configured for the ${plan} plan.`,
+                message: 'Stripe price ID is not configured for the Pro plan.',
             });
         }
 
-        const checkoutUrl = await createCheckoutSession(billingUser, plan);
+        const checkoutUrl = await createCheckoutSession(billingUser);
         res.redirect(checkoutUrl);
     } catch (err) {
         log.error({ err, user_id: req.userId }, 'Checkout error');
@@ -56,6 +58,44 @@ router.get('/billing/checkout', requireAuth, requireTenant, async (req, res) => 
             title: 'Checkout Error',
             message: 'Something went wrong starting checkout. Please try again.',
         });
+    }
+});
+
+// Start the in-app 7-day no-card Pro trial (once per account).
+router.post('/billing/trial', requireAuth, requireTenant, async (req, res) => {
+    try {
+        if (!config.isHosted) return res.redirect('/settings/subscription');
+
+        const billingUser = await getBillingUserForHost(req.host_id, req.userId);
+        if (!billingUser) return res.redirect('/login');
+
+        const tenant = await Tenant.findOne({ host_id: req.host_id }).select('plan').lean();
+        const status = billingUser.subscription_status || 'incomplete';
+
+        // Already entitled (paid or trialing) → nothing to do.
+        if (tenant?.plan === 'pro' || status === 'active' || status === 'trialing' || status === 'past_due') {
+            return res.redirect('/dashboard');
+        }
+
+        // Trial is one-time: any prior trial/subscription history disqualifies.
+        const usedTrialBefore = Boolean(billingUser.trial_ends_at) || status === 'trial_expired' || status === 'canceled' || status === 'unpaid';
+        if (usedTrialBefore) {
+            return res.redirect('/settings/subscription?trial=used');
+        }
+
+        await User.findByIdAndUpdate(billingUser._id, {
+            $set: {
+                ...buildHostedTrialFields(),
+                trial_reminder_3d_sent_at: null,
+                trial_reminder_24h_sent_at: null,
+                trial_locked_at: null,
+            },
+        });
+
+        res.redirect('/dashboard?trial=started');
+    } catch (err) {
+        log.error({ err, user_id: req.userId }, 'Start trial error');
+        res.redirect('/settings/subscription');
     }
 });
 

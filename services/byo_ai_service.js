@@ -1,6 +1,7 @@
-import config from '../config.js';
+import config, { isHostedAppUrl } from '../config.js';
 import { Tenant } from '../modules/tenancy.js';
 import { encrypt, decrypt } from '../modules/encryption.js';
+import { hasProFeatureAccess, getBillingUserForHost } from './subscription_access_service.js';
 
 export const BYO_AI_SCOPES = ['global', 'email'];
 export const BYO_AI_PROVIDERS = ['openai', 'gemini'];
@@ -184,24 +185,43 @@ export async function getAiInstructions(hostId) {
 	};
 }
 
+/**
+ * Resolve the API key to use for an LLM call.
+ *
+ * New pricing model:
+ *  - Free plan = Bring Your Own Key. The tenant's own key is used for any plan
+ *    (incl. Free); there is NO fallback to our managed (env) keys for Free.
+ *  - Pro / active trial = Turnkey managed AI. Falls back to our env keys when
+ *    no personal key is set (Pro users may still override with their own key).
+ *  - Self-hosted = env keys only.
+ *
+ * Returns `null` when a hosted Free tenant has no key configured, so the caller
+ * surfaces a "add your API key" error instead of silently using our managed key.
+ */
 export async function resolveLlmApiKey({ hostId = null, provider, scope = 'global' } = {}) {
 	const byoProvider = normalizeProvider(provider);
 	const fallback = envApiKey(provider);
 	if (!hostId || !byoProvider) return fallback;
-	const isHosted = new URL(config.appUrl).hostname.endsWith('kumbukum.com');
+	const isHosted = isHostedAppUrl(config.appUrl);
 	if (!isHosted) return fallback;
 
 	const tenant = await Tenant.findOne({ host_id: hostId }).select('plan settings.byo_ai').lean();
 	if (!tenant) return fallback;
-	if (tenant.plan !== 'pro') return fallback;
 
+	// 1. Prefer the tenant's own BYO key (the Free BYOK path; also a Pro override).
 	const normalizedScope = normalizeLlmScope(scope);
 	const searchScopes = normalizedScope === 'email' ? ['email', 'global'] : ['global'];
-
 	for (const candidateScope of searchScopes) {
 		const value = getStoredValue(tenant, candidateScope, byoProvider);
 		if (value) return decryptStoredValue(value);
 	}
 
-	return fallback;
+	// 2. No personal key: managed (turnkey) fallback only for plans that include
+	//    managed AI — Pro or an active trial.
+	if (tenant.plan === 'pro') return fallback;
+	const billingUser = await getBillingUserForHost(hostId);
+	if (hasProFeatureAccess(billingUser, tenant.plan, isHosted)) return fallback;
+
+	// 3. Free plan without a key: no managed fallback.
+	return null;
 }

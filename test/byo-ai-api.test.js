@@ -222,15 +222,17 @@ describe('BYO AI API', () => {
 		}
 	});
 
-	it('blocks non-Pro hosted accounts', async () => {
-		tenant.plan = 'starter';
+	it('allows hosted Free accounts to configure their own (BYOK) keys', async () => {
+		tenant.plan = 'free';
 		const server = await createServer();
 		try {
 			const response = await request(server, 'GET', '/settings/byo-ai');
 			const json = await response.json();
 
-			assert.equal(response.status, 403);
-			assert.match(json.error, /Pro plan/);
+			assert.equal(response.status, 200);
+			assert.equal(json.settings.global.openai_api_key.configured, false);
+			// Free without managed AI → no env fallback.
+			assert.equal(json.settings.managed_ai, false);
 		} finally {
 			await new Promise((resolve) => server.close(resolve));
 		}

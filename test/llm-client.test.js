@@ -2,11 +2,12 @@ import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import config from '../config.js';
-import { emailAiCompletion, emailTriageCompletion } from '../modules/llm_client.js';
+import { chatCompletion, emailAiCompletion, emailTriageCompletion } from '../modules/llm_client.js';
 
 describe('LLM client email model routing', () => {
 	const originalFetch = globalThis.fetch;
 	const originalAppUrl = config.appUrl;
+	const originalGoogleKey = config.llm.googleApiKey;
 	const originalOpenAiKey = config.llm.openaiApiKey;
 	const originalEmailAiModel = config.llm.emailAiModel;
 	const originalEmailAiProvider = config.llm.emailAiProvider;
@@ -34,6 +35,7 @@ describe('LLM client email model routing', () => {
 	afterEach(() => {
 		globalThis.fetch = originalFetch;
 		config.appUrl = originalAppUrl;
+		config.llm.googleApiKey = originalGoogleKey;
 		config.llm.openaiApiKey = originalOpenAiKey;
 		config.llm.emailAiModel = originalEmailAiModel;
 		config.llm.emailAiProvider = originalEmailAiProvider;
@@ -61,6 +63,22 @@ describe('LLM client email model routing', () => {
 		});
 
 		assert.equal(requests[0].body.model, 'email-triage-model');
+	});
+
+	it('falls back to the other provider and its default model when the requested provider has no key', async () => {
+		config.llm.googleApiKey = '';
+		config.llm.openaiApiKey = 'env-openai';
+
+		const content = await chatCompletion({
+			provider: 'google',
+			model: 'gemini-2.5-pro',
+			messages: [{ role: 'user', content: 'hi' }],
+		});
+
+		assert.equal(content, 'ok');
+		assert.match(requests[0].url, /api\.openai\.com/);
+		assert.equal(requests[0].body.model, 'gpt-4o');
+		assert.equal(requests[0].options.headers.Authorization, 'Bearer env-openai');
 	});
 
 	it('uses max_completion_tokens for OpenAI GPT-5 email models', async () => {

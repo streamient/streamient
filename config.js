@@ -169,16 +169,21 @@ const config = {
 		openaiApiKey: process.env.OPENAI_API_KEY || '',
 	},
 
+	// Rate-limit tiers. Pro is unlimited; free is also treated as unlimited
+	// (free is BYOK, so AI cost is not ours). See middleware/rate_limit.js.
 	plans: {
-		starter: { apiRpm: 60, chatDaily: 50, mcpRpm: 120 },
 		pro: { apiRpm: 0, chatDaily: 0, mcpRpm: 0 },
+	},
+
+	// Hard resource limits per plan. 0 = unlimited.
+	planLimits: {
+		free: { projects: 1, users: 5 },
+		pro: { projects: 0, users: 0 },
 	},
 
 	stripe: {
 		secretKey: process.env.STRIPE_SECRET_KEY || '',
 		webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
-		priceId: process.env.STRIPE_PRICE_ID || '',
-		starterPriceId: process.env.STRIPE_STARTER_PRICE_ID || '',
 		proPriceId: process.env.STRIPE_PRO_PRICE_ID || '',
 		portalConfigId: process.env.STRIPE_PORTAL_CONFIG_ID || '',
 		trialDays: parseInt(process.env.STRIPE_TRIAL_DAYS, 10) || 7,

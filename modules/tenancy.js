@@ -8,7 +8,7 @@ const tenantSchema = new mongoose.Schema(
 		name: { type: String, required: true },
 		owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 		is_active: { type: Boolean, default: true },
-		plan: { type: String, enum: ['free', 'starter', 'pro'], default: 'free' },
+		plan: { type: String, enum: ['free', 'pro'], default: 'free' },
 		settings: {
 			timezone: { type: String, default: 'UTC' },
 			byo_ai: {
@@ -37,6 +37,20 @@ const tenantSchema = new mongoose.Schema(
 );
 
 export const Tenant = mongoose.model('Tenant', tenantSchema);
+
+/**
+ * One-off migration: the legacy `starter` plan has been removed. Convert any
+ * stray `plan: 'starter'` tenants to `free` so they don't fail enum validation
+ * on the next save. (There are no paying starter subscribers.)
+ */
+export async function backfillStarterPlan() {
+	const result = await Tenant.updateMany(
+		{ plan: 'starter' },
+		{ $set: { plan: 'free' } },
+		{ timestamps: false },
+	);
+	return { migrated: result?.modifiedCount || 0 };
+}
 
 function mapAccessibleTenant(user, membership) {
 	const tenant = membership.tenant;

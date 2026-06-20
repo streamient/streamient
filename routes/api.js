@@ -38,7 +38,7 @@ import * as oauthService from '../services/oauth_service.js';
 import * as teamService from '../services/team_service.js';
 import * as byoAiService from '../services/byo_ai_service.js';
 import { createChatLimiter } from '../middleware/rate_limit.js';
-import { getBillingUserForHost, hasProductAccess, hasProFeatureAccess } from '../services/subscription_access_service.js';
+import { getBillingUserForHost, hasProFeatureAccess, effectiveResourceLimits, isAtLimit } from '../services/subscription_access_service.js';
 import { decorateEmailForClient } from '../modules/email_display.js';
 import config from '../config.js';
 import crypto from 'node:crypto';
@@ -52,19 +52,16 @@ const is_hosted = config.isHosted;
 router.use(requireAuth, requireTenant);
 
 if (is_hosted) {
+	// Free is a permanent, fully-usable plan, so the API is not subscription-gated.
+	// We still resolve the billing user for per-feature gates and quota checks.
 	router.use(async (req, res, next) => {
 		try {
-			const billingUser = await getBillingUserForHost(req.host_id, req.userId);
-			req.billingUser = billingUser;
-			if (hasProductAccess(billingUser)) return next();
-			return res.status(402).json({
-				error: 'Subscription required',
-				redirect_to: '/settings/subscription',
-			});
+			req.billingUser = await getBillingUserForHost(req.host_id, req.userId);
 		} catch (err) {
-			log.error({ err, host_id: req.host_id }, 'Subscription access check error');
-			return res.status(500).json({ error: 'Subscription access check failed' });
+			log.error({ err, host_id: req.host_id }, 'Billing user resolution error');
+			req.billingUser = null;
 		}
+		next();
 	});
 }
 
@@ -96,19 +93,49 @@ function requireProjectSettingsAccess(req, res, next) {
 	return res.status(403).json({ error: 'Project settings admin access is required' });
 }
 
-function isByoAiSettingsAccessEnabled(plan) {
-	return (is_hosted && plan === 'pro') || (!is_hosted && config.env !== 'production');
+function isByoAiSettingsAccessEnabled() {
+	// All hosted plans can configure their own keys (Free is BYOK; Pro may
+	// override managed keys). Self-hosted uses env vars in production.
+	return is_hosted || config.env !== 'production';
 }
 
 async function requireByoAiAccess(req, res, next) {
-	const tenant = await Tenant.findOne({ host_id: req.host_id }).select('plan').lean();
-	const plan = tenant?.plan || 'free';
-	if (isByoAiSettingsAccessEnabled(plan)) return next();
+	if (isByoAiSettingsAccessEnabled()) return next();
+	return res.status(403).json({ error: 'BYO AI keys are configured through environment variables in self-hosted installs' });
+}
 
-	if (!is_hosted && config.env === 'production') {
-		return res.status(403).json({ error: 'BYO AI keys are configured through environment variables in self-hosted installs' });
+// ---- Plan resource limits (Free: 1 project / 5 users; Pro & trial: unlimited) ----
+
+async function requireProjectQuota(req, res, next) {
+	const tenant = await Tenant.findOne({ host_id: req.host_id }).select('plan').lean();
+	const limits = effectiveResourceLimits(req.billingUser, tenant?.plan || 'free', is_hosted);
+	if (limits.projects) {
+		const count = await projectService.countActiveProjects(req.host_id);
+		if (isAtLimit(limits.projects, count)) {
+			return res.status(403).json({
+				error: `Free plan is limited to ${limits.projects} project${limits.projects === 1 ? '' : 's'}. Upgrade to Pro for unlimited projects.`,
+				code: 'PLAN_LIMIT',
+				limit: 'projects',
+			});
+		}
 	}
-	return res.status(403).json({ error: 'BYO AI is available on the Pro plan' });
+	next();
+}
+
+async function requireUserQuota(req, res, next) {
+	const tenant = await Tenant.findOne({ host_id: req.host_id }).select('plan').lean();
+	const limits = effectiveResourceLimits(req.billingUser, tenant?.plan || 'free', is_hosted);
+	if (limits.users) {
+		const count = await teamService.countMembers(req.host_id);
+		if (isAtLimit(limits.users, count)) {
+			return res.status(403).json({
+				error: `Free plan is limited to ${limits.users} users. Upgrade to Pro for unlimited users.`,
+				code: 'PLAN_LIMIT',
+				limit: 'users',
+			});
+		}
+	}
+	next();
 }
 
 // ---- Projects ----
@@ -118,7 +145,7 @@ router.get('/projects', async (req, res) => {
 	res.json({ projects });
 });
 
-router.post('/projects', async (req, res) => {
+router.post('/projects', requireProjectQuota, async (req, res) => {
 	const project = await projectService.createProject(req.userId, req.host_id, req.body, auditCtx(req));
 	res.status(201).json({ project });
 });
@@ -1125,7 +1152,11 @@ router.post('/reindex', requireRestrictedSettingsAccess, async (req, res) => {
 
 router.get('/settings/byo-ai', requireRestrictedSettingsAccess, requireByoAiAccess, async (req, res) => {
 	try {
+		const tenant = await Tenant.findOne({ host_id: req.host_id }).select('plan').lean();
 		const settings = await byoAiService.getByoAiSettings(req.host_id);
+		// managed_ai = whether our turnkey keys back this tenant when no personal
+		// key is set (Pro / active trial / self-hosted). Free has no fallback.
+		settings.managed_ai = hasProFeatureAccess(req.billingUser, tenant?.plan || 'free', is_hosted);
 		res.json({ settings });
 	} catch (err) {
 		log.error({ err }, 'BYO AI settings read error');
@@ -1472,7 +1503,7 @@ router.get('/team/members', requireTeamManager, async (req, res) => {
 	}
 });
 
-router.post('/team/members', requireTeamManager, async (req, res) => {
+router.post('/team/members', requireTeamManager, requireUserQuota, async (req, res) => {
 	try {
 		const member = await teamService.createTeamMember(req.userId, req.host_id, req.body, auditCtx(req));
 		res.status(201).json({ member });

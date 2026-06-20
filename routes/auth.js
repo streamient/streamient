@@ -5,7 +5,8 @@ import { User } from '../model/user.js';
 import { createTenant, initializeSessionTenant } from '../modules/tenancy.js';
 import { ensureCollections } from '../modules/typesense.js';
 import { generateToken } from '../middleware/auth.js';
-import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail, sendTrialSignupNotificationEmail } from '../services/email_service.js';
+import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail } from '../services/email_service.js';
+import { buildHostedTrialFields } from '../services/billing_service.js';
 import { sendMagicLink, isMagicLinkValid, verifyMagicLink } from '../services/magic_link_service.js';
 import * as passkeyService from '../services/passkey_service.js';
 import config from '../config.js';
@@ -20,13 +21,8 @@ import { isSysadminCredentials, requireSysadmin } from '../middleware/sysadmin.j
 
 const router = Router();
 
-export function buildHostedTrialFields(now = new Date(), trialDays = config.stripe.trialDays) {
-	return {
-		subscription_status: 'trialing',
-		trial_source: 'no_card',
-		trial_ends_at: new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000),
-	};
-}
+// Re-exported for backward compatibility (now defined in billing_service.js).
+export { buildHostedTrialFields };
 
 async function hydrateSessionForUser(req, user, preferredTenantId = null, preferredHostId = null) {
 	req.session.userId = user._id.toString();
@@ -156,17 +152,9 @@ router.post('/verify', async (req, res) => {
 		user.tenant = tenant._id;
 		user.host_id = tenant.host_id;
 		user.is_active = true;
-		let createdHostedTrial = false;
-		if (is_hosted) {
-			Object.assign(user, buildHostedTrialFields());
-			createdHostedTrial = true;
-		}
+		// New accounts start on the permanent Free plan. The 7-day Pro trial is now
+		// an in-app opt-in (POST /billing/trial), not an automatic signup trial.
 		await user.save();
-		if (createdHostedTrial) {
-			sendTrialSignupNotificationEmail(user.email).catch((e) =>
-				log.warn({ err: e, email: user.email }, 'Trial signup notification email failed'),
-			);
-		}
 
 		ensureCollections(tenant.host_id).catch((e) =>
 			log.warn({ err: e, host_id: tenant.host_id }, 'Typesense collection setup deferred'),

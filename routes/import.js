@@ -5,6 +5,7 @@ import config from '../config.js';
 import { Project } from '../model/project.js';
 import { EmailIdentity } from '../model/email_identity.js';
 import { Tenant } from '../modules/tenancy.js';
+import { getBillingUserForHost, hasProFeatureAccess } from '../services/subscription_access_service.js';
 import * as emailIngestService from '../services/email_ingest_service.js';
 
 const router = Router();
@@ -192,8 +193,11 @@ async function isProjectBccReply(project, email, recipient, payload) {
 
 async function emailForwardingEnabled(host_id) {
 	if (!is_hosted) return true;
-	const tenant = await Tenant.findOne({ host_id }).select('plan').lean();
-	return tenant?.plan === 'pro';
+	const [tenant, billingUser] = await Promise.all([
+		Tenant.findOne({ host_id }).select('plan').lean(),
+		getBillingUserForHost(host_id),
+	]);
+	return hasProFeatureAccess(billingUser, tenant?.plan || 'free', is_hosted);
 }
 
 router.post('/email', raw({ type: () => true, limit: '25mb' }), async (req, res) => {

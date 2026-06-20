@@ -130,24 +130,36 @@ describe('BYO AI service', () => {
 		assert.equal(key, 'custom-gemini');
 	});
 
-	it('ignores stored keys outside hosted Pro runtime resolution', async () => {
+	it('uses stored keys for any hosted plan (BYOK), env keys when self-hosted', async () => {
 		await updateByoAiSettings('host-1', {
 			global: {
 				openai_api_key: 'global-openai',
 			},
 		});
 
-		tenant.plan = 'starter';
+		// Free plan on hosted now uses the tenant's own key (Bring Your Own Key).
+		tenant.plan = 'free';
 		assert.equal(
 			await resolveLlmApiKey({ hostId: 'host-1', provider: 'openai', scope: 'global' }),
-			'env-openai',
+			'global-openai',
 		);
 
+		// Self-hosted always uses env keys regardless of stored keys.
 		tenant.plan = 'pro';
 		config.appUrl = 'http://localhost:3000';
 		assert.equal(
 			await resolveLlmApiKey({ hostId: 'host-1', provider: 'openai', scope: 'global' }),
 			'env-openai',
+		);
+	});
+
+	it('returns null for a hosted Free tenant with no key (no managed fallback)', async () => {
+		// Mocked tenant has no owner, so getBillingUserForHost resolves to no
+		// billing user → Free with no key → no managed fallback → null.
+		tenant.plan = 'free';
+		assert.equal(
+			await resolveLlmApiKey({ hostId: 'host-1', provider: 'openai', scope: 'global' }),
+			null,
 		);
 	});
 
