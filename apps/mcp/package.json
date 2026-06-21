@@ -9,7 +9,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "start": "node --import ./tracing.js --optimize_for_size --max-old-space-size=4096 server.js --http"
+    "start": "node --import ./tracing.js server.js --http"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

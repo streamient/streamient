@@ -9,7 +9,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "start": "node --optimize_for_size --max-old-space-size=4096 --import ./tracing.js app.js",
+    "start": "node --import ./tracing.js app.js",
     "build": "node build.js",
     "dev": "nodemon --max-old-space-size=4096 --trace-warnings --import ./tracing.js app.js",
     "test": "node --test --test-force-exit test/*.test.js test/**/*.test.js",
