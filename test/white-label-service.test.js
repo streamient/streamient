@@ -79,6 +79,12 @@ describe('white-label service', () => {
 		);
 	});
 
+	it('does not treat Docker service hostnames as custom domains', () => {
+		assert.equal(whiteLabelService.shouldResolveWhiteLabelHost('app'), false);
+		assert.equal(whiteLabelService.shouldResolveWhiteLabelHost('kumbukum-app-1'), false);
+		assert.equal(whiteLabelService.shouldResolveWhiteLabelHost('brand.example.com'), true);
+	});
+
 	it('allows Free accounts to upload top navigation logo but not login logo', async () => {
 		const source = path.join(tempDir, 'source.png');
 		await sharp({

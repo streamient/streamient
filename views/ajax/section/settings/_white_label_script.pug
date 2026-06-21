@@ -70,10 +70,12 @@ script.
 
 			var loginLogoLocked = !state.can_use_login_logo;
 			toggle('white-label-login-logo-locked', loginLogoLocked);
+			toggle('white-label-login-logo-plan', loginLogoLocked);
 			setDisabled('[data-white-label-file="login_logo"], [data-white-label-delete="login_logo"]', loginLogoLocked);
 
 			var domainLocked = !state.can_use_custom_domain;
 			toggle('white-label-domain-locked', domainLocked);
+			toggle('white-label-domain-plan', domainLocked);
 			toggle('white-label-cloudflare-warning', state.can_use_custom_domain && !state.cloudflare_configured);
 			setDisabled('#white-label-domain', domainLocked);
 

@@ -6,6 +6,8 @@ import config from '../config.js';
 import { User } from '../model/user.js';
 import { Tenant } from '../modules/tenancy.js';
 import { TenantMember } from '../model/tenant_member.js';
+import { Project } from '../model/project.js';
+import { resolveWhiteLabelRequest } from '../services/white_label_service.js';
 
 function setPath(obj, key, value) {
 	const parts = key.split('.');
@@ -21,6 +23,7 @@ async function createServer() {
 	const { default: apiRoutes } = await import(`../routes/api.js?white_label_api_test=${Date.now()}_${Math.random()}`);
 	const app = express();
 	app.use(express.json());
+	app.use(resolveWhiteLabelRequest);
 	app.use((req, res, next) => {
 		req.session = {
 			userId: '507f1f77bcf86cd799439011',
@@ -34,11 +37,11 @@ async function createServer() {
 	return app.listen(0);
 }
 
-async function request(server, method, route, body) {
+async function request(server, method, route, body, headers = {}) {
 	const { port } = server.address();
 	return fetch(`http://127.0.0.1:${port}/api/v1${route}`, {
 		method,
-		headers: { 'content-type': 'application/json' },
+		headers: { 'content-type': 'application/json', ...headers },
 		body: body ? JSON.stringify(body) : undefined,
 	});
 }
@@ -53,8 +56,10 @@ describe('White-label API', () => {
 	const originalTenantFindOneAndUpdate = Tenant.findOneAndUpdate;
 	const originalTenantMemberFind = TenantMember.find;
 	const originalTenantMemberFindOneAndUpdate = TenantMember.findOneAndUpdate;
+	const originalProjectFind = Project.find;
 	let tenant;
 	let memberRole;
+	let projects;
 
 	beforeEach(() => {
 		config.appUrl = 'https://app.kumbukum.com';
@@ -77,6 +82,14 @@ describe('White-label API', () => {
 				},
 			},
 		};
+		projects = [{
+			_id: 'project-1',
+			host_id: 'host-1',
+			name: 'Default',
+			color: '#7C6AF7',
+			is_default: true,
+			is_active: true,
+		}];
 
 		User.findById = () => ({
 			select: async () => ({
@@ -114,6 +127,9 @@ describe('White-label API', () => {
 				}),
 			};
 		};
+		Project.find = () => ({
+			sort: async () => projects,
+		});
 	});
 
 	afterEach(() => {
@@ -126,6 +142,21 @@ describe('White-label API', () => {
 		Tenant.findOneAndUpdate = originalTenantFindOneAndUpdate;
 		TenantMember.find = originalTenantMemberFind;
 		TenantMember.findOneAndUpdate = originalTenantMemberFindOneAndUpdate;
+		Project.find = originalProjectFind;
+	});
+
+	it('lets API project listing run behind Docker internal app host', async () => {
+		const server = await createServer();
+		try {
+			const response = await request(server, 'GET', '/projects', undefined, { host: 'app:3000', 'x-forwarded-host': 'app:3000' });
+			const json = await response.json();
+
+			assert.equal(response.status, 200);
+			assert.equal(json.projects.length, 1);
+			assert.equal(json.projects[0].name, 'Default');
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
 	});
 
 	it('lets Free account admins load white-label settings without domain access', async () => {

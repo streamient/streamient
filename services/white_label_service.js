@@ -462,6 +462,7 @@ function isLocalHostname(hostname) {
 
 export function shouldResolveWhiteLabelHost(hostname) {
 	if (!hostname) return false;
+	if (!hostname.includes('.')) return false;
 	if (isLocalHostname(hostname)) return false;
 	if (isHostedHostname(hostname)) return false;
 	return true;
