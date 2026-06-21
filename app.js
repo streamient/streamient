@@ -30,7 +30,7 @@ import adminRoutes from './routes/admin.js';
 import billingRoutes from './routes/billing.js';
 import healthRoutes from './routes/health.js';
 import importRoutes from './routes/import.js';
-import { backfillEmailTriageState, backfillForwardedSentReplies } from './services/email_ingest_service.js';
+import { backfillEmailTriageState, backfillForwardedSentReplies, backfillTerminalEmailLabels } from './services/email_ingest_service.js';
 import { backfillGitSyncMode } from './services/git_sync_service.js';
 import { backfillTypesenseTrashFields } from './services/typesense_backfill_service.js';
 import { getWhiteLabelAssetsDir, resolveWhiteLabelRequest } from './services/white_label_service.js';
@@ -237,6 +237,7 @@ OtelRuntime.setupExpressErrorHandler(app);
 async function start() {
 	await connectDB();
 	await backfillEmailTriageState();
+	await backfillTerminalEmailLabels();
 	await backfillForwardedSentReplies();
 	await backfillGitSyncMode();
 	await backfillTypesenseTrashFields();

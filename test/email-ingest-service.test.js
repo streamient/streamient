@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailIds, listEmailLabels, parseTriageResult, triageInboxEmails, startEmailTriageRun, getEmailTriageRun, backfillEmailTriageState, backfillForwardedSentReplies, askEmailAi, askEmailListAi, buildEmailAiTypesenseFilter, buildTriageContext, parseEmailAiQuery, resetEmailTriage, updateEmail, emptySpam, parseEmailReplySuggestionsResult, suggestEmailReplies, suggestFromEmailAddresses, matchesEmailFilter, applyProjectEmailFilterToInbox, buildEmailRealtimePayload, addSendersToSpamGuard } from '../services/email_ingest_service.js';
+import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailIds, listEmailLabels, parseTriageResult, triageInboxEmails, startEmailTriageRun, getEmailTriageRun, backfillEmailTriageState, backfillTerminalEmailLabels, backfillForwardedSentReplies, askEmailAi, askEmailListAi, buildEmailAiTypesenseFilter, buildTriageContext, parseEmailAiQuery, resetEmailTriage, updateEmail, deleteEmail, emptySpam, parseEmailReplySuggestionsResult, suggestEmailReplies, suggestFromEmailAddresses, matchesEmailFilter, applyProjectEmailFilterToInbox, buildEmailRealtimePayload, addSendersToSpamGuard } from '../services/email_ingest_service.js';
 import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
 import { EmailIdentity } from '../model/email_identity.js';
@@ -83,6 +83,7 @@ describe('Email ingest service', () => {
 			assert.equal(updateQuery.mailbox, 'inbox');
 			assert.equal(updateQuery.triaged, false);
 			assert.equal(updatePayload.in_trash, true);
+			assert.deepEqual(updatePayload.labels, []);
 			assert.ok(updatePayload.trashed_at instanceof Date);
 		} finally {
 			Project.findOne = originalProjectFindOne;
@@ -440,7 +441,7 @@ describe('Email ingest service', () => {
 			assert.equal(createdPayload.triage_mailbox_action, 'spam');
 			assert.equal(createdPayload.triage_status, 'complete');
 			assert.equal(createdPayload.in_trash, false);
-			assert.deepEqual(createdPayload.labels, ['spam', 'triaged']);
+			assert.deepEqual(createdPayload.labels, []);
 			assert.equal(autoTriageQueried, false);
 		} finally {
 			Email.findOne = originalFindOne;
@@ -1359,6 +1360,7 @@ describe('Email ingest service', () => {
 				in_reply_to: 'older@example.com',
 				references: ['root@example.com', 'older@example.com'],
 				mailbox: 'inbox',
+				labels: ['reply-required', 'custom-work'],
 				in_trash: false,
 				updatedAt: '2026-06-04T12:00:00.000Z',
 			},
@@ -1370,6 +1372,7 @@ describe('Email ingest service', () => {
 				in_reply_to: 'root@example.com',
 				references: ['root@example.com'],
 				mailbox: 'inbox',
+				labels: ['waiting'],
 				in_trash: false,
 				updatedAt: '2026-06-04T11:00:00.000Z',
 			},
@@ -1381,6 +1384,7 @@ describe('Email ingest service', () => {
 				in_reply_to: 'newest@example.com',
 				references: ['root@example.com', 'older@example.com', 'newest@example.com'],
 				mailbox: 'sent',
+				labels: ['reply-required'],
 				in_trash: false,
 				updatedAt: '2026-06-04T12:30:00.000Z',
 			},
@@ -1392,6 +1396,7 @@ describe('Email ingest service', () => {
 				in_reply_to: '',
 				references: [],
 				mailbox: 'inbox',
+				labels: ['human-do'],
 				in_trash: false,
 				updatedAt: '2026-06-04T10:00:00.000Z',
 			},
@@ -1399,7 +1404,7 @@ describe('Email ingest service', () => {
 		const indexedIds = [];
 
 		function clone(doc) {
-			return doc ? { ...doc, references: [...(doc.references || [])] } : null;
+			return doc ? { ...doc, references: [...(doc.references || [])], labels: [...(doc.labels || [])] } : null;
 		}
 
 		function matchesThreadQuery(doc, query) {
@@ -1454,9 +1459,13 @@ describe('Email ingest service', () => {
 			});
 
 			assert.equal(updated.mailbox, 'archived');
+			assert.deepEqual(updated.labels, []);
 			assert.equal(docs.find((doc) => doc._id === 'inbox-newest').mailbox, 'archived');
+			assert.deepEqual(docs.find((doc) => doc._id === 'inbox-newest').labels, []);
 			assert.equal(docs.find((doc) => doc._id === 'inbox-older').mailbox, 'archived');
+			assert.deepEqual(docs.find((doc) => doc._id === 'inbox-older').labels, []);
 			assert.equal(docs.find((doc) => doc._id === 'sent-reply').mailbox, 'sent');
+			assert.deepEqual(docs.find((doc) => doc._id === 'sent-reply').labels, ['reply-required']);
 			assert.deepEqual(indexedIds.sort(), ['inbox-newest', 'inbox-older']);
 
 			const inbox = await listEmails('host-1', 'project-1', { mailbox: 'inbox' });
@@ -1469,6 +1478,9 @@ describe('Email ingest service', () => {
 
 			await updateEmail('host-1', 'sent-reply', { mailbox: 'archived' }, { skipSideEffects: true });
 			assert.equal(docs.find((doc) => doc._id === 'sent-reply').mailbox, 'sent');
+
+			await updateEmail('host-1', 'inbox-newest', { labels: ['custom-return'] }, { skipSideEffects: true });
+			assert.deepEqual(docs.find((doc) => doc._id === 'inbox-newest').labels, []);
 		} finally {
 			Email.findOne = originalFindOne;
 			Email.find = originalFind;
@@ -1668,6 +1680,7 @@ describe('Email ingest service', () => {
 			references: [],
 			from: ['Spammer <spam@example.com>'],
 			mailbox: 'inbox',
+			labels: ['reply-required', 'custom-inbox'],
 			in_trash: false,
 			updatedAt: '2026-06-04T10:00:00.000Z',
 		};
@@ -1696,11 +1709,12 @@ describe('Email ingest service', () => {
 		};
 
 		try {
-			const updated = await updateEmail('host-1', 'manual-spam-1', { mailbox: 'spam' }, {
+			const updated = await updateEmail('host-1', 'manual-spam-1', { mailbox: 'spam', labels: ['custom-request'] }, {
 				skipSideEffects: true,
 			});
 
 			assert.equal(updated.mailbox, 'spam');
+			assert.deepEqual(updated.labels, []);
 			assert.equal(spamGuardUpdate, null);
 
 			Tenant.findOne = () => ({
@@ -1789,6 +1803,7 @@ describe('Email ingest service', () => {
 			references: [],
 			from: ['Spammer <spam@example.com>'],
 			mailbox: 'spam',
+			labels: ['spam', 'custom-spam'],
 			in_trash: false,
 			updatedAt: '2026-06-04T10:00:00.000Z',
 		};
@@ -1822,6 +1837,7 @@ describe('Email ingest service', () => {
 			});
 
 			assert.equal(updated.mailbox, 'archived');
+			assert.deepEqual(updated.labels, []);
 			assert.equal(spamGuardUpdate.query.host_id, 'host-1');
 			assert.equal(spamGuardUpdate.update.$set['settings.email.spam_guard'], 'existing@example.com\nexample.com\nsubject contains: status update\nnoreply@');
 		} finally {
@@ -2135,6 +2151,31 @@ describe('Email ingest service', () => {
 		}
 	});
 
+	it('backfills labels off terminal email states', async () => {
+		const originalUpdateMany = Email.updateMany;
+		let updateCall = null;
+
+		Email.updateMany = async (query, update, options) => {
+			updateCall = { query, update, options };
+			return { modifiedCount: 3 };
+		};
+
+		try {
+			const result = await backfillTerminalEmailLabels();
+
+			assert.deepEqual(result, { labels: 3 });
+			assert.deepEqual(updateCall.query.labels, { $exists: true, $ne: [] });
+			assert.deepEqual(updateCall.query.$or, [
+				{ in_trash: true },
+				{ mailbox: { $in: ['archived', 'spam'] } },
+			]);
+			assert.deepEqual(updateCall.update, { $set: { labels: [], is_indexed: false } });
+			assert.deepEqual(updateCall.options, { timestamps: false });
+		} finally {
+			Email.updateMany = originalUpdateMany;
+		}
+	});
+
 	it('backfills forwarded BCC reply threads from configured identities', async () => {
 		const originalIdentityFind = EmailIdentity.find;
 		const originalFindOne = Email.findOne;
@@ -2280,6 +2321,39 @@ describe('Email ingest service', () => {
 			EmailDraft.updateMany = originalDraftUpdateMany;
 			GraphLink.deleteMany = originalGraphDeleteMany;
 		}
+		});
+
+		it('moves emails to trash with labels cleared', async () => {
+			const originalFindOneAndUpdate = Email.findOneAndUpdate;
+			const originalGraphDeleteMany = GraphLink.deleteMany;
+			let queryPayload = null;
+			let updatePayload = null;
+
+			Email.findOneAndUpdate = async (query, update) => {
+				queryPayload = query;
+				updatePayload = update.$set;
+				return { _id: query._id, host_id: query.host_id, mailbox: 'inbox', labels: ['reply-required'], ...update.$set };
+			};
+			GraphLink.deleteMany = async () => ({ deletedCount: 1 });
+
+			try {
+				const result = await deleteEmail('host-1', 'trash-email-1', {
+					skipSideEffects: true,
+					indexEmailFn: async () => {},
+					updateEmailIndexStateFn: async () => {},
+				});
+
+				assert.equal(result.in_trash, true);
+				assert.deepEqual(result.labels, []);
+				assert.deepEqual(queryPayload, { _id: 'trash-email-1', host_id: 'host-1', in_trash: { $ne: true } });
+				assert.equal(updatePayload.in_trash, true);
+				assert.deepEqual(updatePayload.labels, []);
+				assert.ok(updatePayload.trashed_at instanceof Date);
+				assert.equal(updatePayload.is_indexed, false);
+			} finally {
+				Email.findOneAndUpdate = originalFindOneAndUpdate;
+				GraphLink.deleteMany = originalGraphDeleteMany;
+			}
 		});
 
 		it('permanently empties tenant spam emails and cleans related indexes', async () => {
@@ -2588,6 +2662,7 @@ describe('Email ingest service', () => {
 				const originalFindOneAndUpdate = Email.findOneAndUpdate;
 				const originalTenantFindOne = Tenant.findOne;
 				const originalTenantUpdateOne = Tenant.updateOne;
+				let updatePayload = null;
 
 				EmailLabel.bulkWrite = async () => ({});
 				EmailLabel.find = () => ({
@@ -2612,7 +2687,10 @@ describe('Email ingest service', () => {
 						}),
 					}),
 				});
-				Email.findOneAndUpdate = async (query, update) => ({ _id: query._id, ...update.$set });
+				Email.findOneAndUpdate = async (query, update) => {
+					updatePayload = update.$set;
+					return { _id: query._id, ...update.$set };
+				};
 				Tenant.findOne = () => ({
 					select: () => ({
 						lean: async () => ({
@@ -2642,6 +2720,8 @@ describe('Email ingest service', () => {
 
 					assert.equal(result.triaged, 1);
 					assert.equal(result.results[0].mailbox, 'spam');
+					assert.deepEqual(updatePayload.labels, []);
+					assert.equal(updatePayload.triage_primary_action, 'spam');
 					assert.equal(spamGuardUpdate.query.host_id, 'host-1');
 					assert.equal(spamGuardUpdate.update.$set['settings.email.spam_guard'], 'existing@example.com\ndeals@spam.test');
 				} finally {
@@ -2735,6 +2815,7 @@ describe('Email ingest service', () => {
 				const originalFindOneAndUpdate = Email.findOneAndUpdate;
 				const originalTenantFindOne = Tenant.findOne;
 				const progress = [];
+				const updates = [];
 
 				EmailLabel.bulkWrite = async () => ({});
 				EmailLabel.find = () => ({
@@ -2752,7 +2833,10 @@ describe('Email ingest service', () => {
 						}),
 					}),
 				});
-				Email.findOneAndUpdate = async (query, update) => ({ _id: query._id, labels: [], mailbox: 'archived', ...update.$set });
+				Email.findOneAndUpdate = async (query, update) => {
+					updates.push(update.$set);
+					return { _id: query._id, labels: [], mailbox: 'archived', ...update.$set };
+				};
 				Tenant.findOne = () => ({
 					select: () => ({
 						lean: async () => ({ settings: { ai_instructions: {} } }),
@@ -2773,6 +2857,9 @@ describe('Email ingest service', () => {
 					});
 
 					assert.equal(result.processed, 2);
+					assert.deepEqual(updates.map((update) => update.labels), [[], []]);
+					assert.deepEqual(updates.map((update) => update.mailbox), ['archived', 'archived']);
+					assert.deepEqual(updates.map((update) => update.triage_primary_action), ['no-action', 'no-action']);
 					assert.deepEqual(progress, [
 						{ processed: 1, triaged: 1, errors: 0, total: 2 },
 						{ processed: 2, triaged: 2, errors: 0, total: 2 },

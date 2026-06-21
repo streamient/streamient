@@ -1380,7 +1380,7 @@ const swaggerSpec = {
             put: {
                 tags: ['Emails'],
                 summary: 'Update an email',
-	                description: 'When mailbox is updated, related non-sent, non-trash inbound thread emails are moved to the same mailbox.',
+	                description: 'When mailbox is updated, related non-sent, non-trash inbound thread emails are moved to the same mailbox. Moving to archived or spam clears all labels on affected emails.',
                 parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
 	                requestBody: {
 	                    required: true,
@@ -1394,6 +1394,7 @@ const swaggerSpec = {
             delete: {
                 tags: ['Emails'],
                 summary: 'Delete an email',
+                description: 'Moves the email to trash and clears all labels.',
                 parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
                 responses: {
                     200: { description: 'Deleted', content: { 'application/json': { schema: { type: 'object', properties: { message: { type: 'string' } } } } } },
@@ -1950,6 +1951,7 @@ const swaggerSpec = {
             post: {
                 tags: ['Batch'],
                 summary: 'Batch delete items',
+                description: 'For emails, moves each email to trash and clears all labels.',
                 requestBody: {
                     required: true,
                     content: { 'application/json': { schema: { type: 'object', properties: { type: { type: 'string', enum: ['notes', 'memories', 'urls', 'emails'] }, ids: { type: 'array', items: { type: 'string' } }, all: { type: 'boolean', description: 'When true, delete all items of the given type (ids is ignored)' }, filterProject: { type: 'string', description: 'Filter by project ID when all=true' } }, required: ['type'] } } },

@@ -3946,7 +3946,7 @@
           "Emails"
         ],
         "summary": "Update an email",
-        "description": "When mailbox is updated, related non-sent, non-trash inbound thread emails are moved to the same mailbox.",
+        "description": "When mailbox is updated, related non-sent, non-trash inbound thread emails are moved to the same mailbox. Moving to archived or spam clears all labels on affected emails.",
         "parameters": [
           {
             "name": "id",
@@ -4063,6 +4063,7 @@
           "Emails"
         ],
         "summary": "Delete an email",
+        "description": "Moves the email to trash and clears all labels.",
         "parameters": [
           {
             "name": "id",
@@ -6015,6 +6016,7 @@
           "Batch"
         ],
         "summary": "Batch delete items",
+        "description": "For emails, moves each email to trash and clears all labels.",
         "requestBody": {
           "required": true,
           "content": {

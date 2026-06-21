@@ -54,6 +54,7 @@ const DEFAULT_EMAIL_LABEL_ORDER = new Map(DEFAULT_EMAIL_LABELS.map((label, index
 const HIDDEN_EMAIL_LABEL_SLUGS = new Set(['triaged']);
 const PRIMARY_TRIAGE_LABELS = ['reply-required', 'human-do', 'waiting', 'no-action', 'spam'];
 const TRIAGE_ACTIONS = PRIMARY_TRIAGE_LABELS;
+const TERMINAL_LABEL_CLEAR_MAILBOXES = new Set(['archived', 'spam']);
 const MAX_DRAFT_RECIPIENTS = 10;
 const MAILBOX_ACTIONS = ['none', 'keep-inbox', 'archive', 'spam'];
 const TRIAGE_STATUSES = ['pending', 'complete', 'failed'];
@@ -279,6 +280,14 @@ function normalizeSlug(value) {
 function normalizeLabels(labels = []) {
 	if (!Array.isArray(labels)) return [];
 	return [...new Set(labels.map(normalizeSlug).filter(Boolean))];
+}
+
+function isTerminalLabelClearState(mailbox, inTrash = false) {
+	return Boolean(inTrash) || TERMINAL_LABEL_CLEAR_MAILBOXES.has(normalizeMailbox(mailbox));
+}
+
+function labelsForEmailState(labels = [], mailbox = 'inbox', inTrash = false) {
+	return isTerminalLabelClearState(mailbox, inTrash) ? [] : normalizeLabels(labels);
 }
 
 function normalizeMailbox(mailbox) {
@@ -574,11 +583,10 @@ async function applyAccountSpamGuard(host_id, normalized, data = {}) {
 		return data;
 	}
 
-	const labels = [...new Set([...normalizeLabels(data.labels || []), 'spam', 'triaged'])];
 	return {
 		...data,
 		mailbox: 'spam',
-		labels,
+		labels: [],
 		triaged: true,
 		triaged_at: data.triaged_at || new Date(),
 		triage_summary: data.triage_summary || 'Matched account spam guard.',
@@ -644,6 +652,7 @@ export async function applyProjectEmailFilterToInbox(host_id, projectId, ctx = {
 		{
 			$set: {
 				in_trash: true,
+				labels: [],
 				trashed_at: new Date(),
 				is_indexed: false,
 			},
@@ -892,7 +901,7 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 		...normalized,
 		source: emailData.source === 'emailforwarding' ? 'emailforwarding' : 'api',
 		mailbox: normalizeMailbox(emailData.mailbox),
-		labels: normalizeLabels(emailData.labels),
+		labels: labelsForEmailState(emailData.labels, emailData.mailbox, emailData.in_trash),
 		triaged: normalizeTriaged(emailData.triaged, Boolean(emailData.triaged_at)),
 		triaged_at: emailData.triaged_at || null,
 		triage_summary: String(emailData.triage_summary || ''),
@@ -1512,9 +1521,11 @@ async function updateRelatedThreadMailboxes(host_id, emailId, mailbox, selectedE
 	});
 
 	for (const email of related) {
+		const set = { mailbox, is_indexed: false };
+		if (isTerminalLabelClearState(mailbox)) set.labels = [];
 		const updated = await Email.findOneAndUpdate(
 			{ _id: email._id, host_id, in_trash: { $ne: true }, mailbox: { $ne: 'sent' } },
-			{ $set: { mailbox, is_indexed: false } },
+			{ $set: set },
 			{ returnDocument: 'after' },
 		);
 		if (updated) {
@@ -1562,8 +1573,11 @@ export async function updateEmail(host_id, emailId, data, ctx = {}) {
 	update.is_indexed = false;
 
 	const hasMailboxUpdate = data.mailbox !== undefined;
-	const before = (ctx.user_id || hasMailboxUpdate) ? await Email.findOne({ _id: emailId, host_id }).lean() : null;
+	const hasLabelUpdate = data.labels !== undefined;
+	const before = (ctx.user_id || hasMailboxUpdate || hasLabelUpdate) ? await Email.findOne({ _id: emailId, host_id }).lean() : null;
 	if (hasMailboxUpdate && (before?.mailbox || 'inbox') === 'sent') delete update.mailbox;
+	const targetMailbox = update.mailbox !== undefined ? update.mailbox : before?.mailbox;
+	if ((update.mailbox !== undefined || update.labels !== undefined) && isTerminalLabelClearState(targetMailbox, before?.in_trash === true)) update.labels = [];
 	const shouldUpdateThreadMailbox = update.mailbox !== undefined;
 	const email = await Email.findOneAndUpdate(
 		{ _id: emailId, host_id },
@@ -1650,7 +1664,7 @@ export async function resetEmailTriage(host_id, emailId, ctx = {}) {
 export async function deleteEmail(host_id, emailId, ctx = {}) {
 	const email = await Email.findOneAndUpdate(
 		{ _id: emailId, host_id, in_trash: { $ne: true } },
-		{ $set: { in_trash: true, trashed_at: new Date(), is_indexed: false } },
+		{ $set: { in_trash: true, labels: [], trashed_at: new Date(), is_indexed: false } },
 		{ returnDocument: 'after' },
 	);
 	if (email) {
@@ -2325,6 +2339,23 @@ export async function backfillEmailTriageState() {
 	};
 }
 
+export async function backfillTerminalEmailLabels() {
+	const result = await Email.updateMany(
+		{
+			labels: { $exists: true, $ne: [] },
+			$or: [
+				{ in_trash: true },
+				{ mailbox: { $in: [...TERMINAL_LABEL_CLEAR_MAILBOXES] } },
+			],
+		},
+		{ $set: { labels: [], is_indexed: false } },
+		{ timestamps: false },
+	);
+	const modified = result?.modifiedCount || 0;
+	if (modified > 0) log.info({ updates: modified }, 'Terminal email labels backfilled');
+	return { labels: modified };
+}
+
 export async function backfillForwardedSentReplies() {
 	const forwardDomain = String(config.emailForwardDomain || '').trim().replace(/^@+/, '').toLowerCase();
 	if (!forwardDomain) return { sent_replies: 0 };
@@ -2925,12 +2956,12 @@ export async function triageInboxEmails(host_id, userId, options = {}) {
 				],
 			});
 			const triage = parseTriageResult(content);
-			const labels = [...new Set([...(email.labels || []), ...triage.labels])];
 			const targetMailbox = triage.mailbox_action === 'archive'
 				? 'archived'
 				: triage.mailbox_action === 'spam'
 					? 'spam'
 					: email.mailbox || 'inbox';
+			const labels = labelsForEmailState([...new Set([...(email.labels || []), ...triage.labels])], targetMailbox);
 			const draft = await upsertTriageDraft(host_id, userId, email, triage);
 			const linkedCount = await createTriageLinks(host_id, userId, email, triage.related_context, { skipSideEffects: options.skipSideEffects });
 			const updated = await Email.findOneAndUpdate(
