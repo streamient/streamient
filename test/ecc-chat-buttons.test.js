@@ -100,4 +100,18 @@ describe('ECC Email AI prompt buttons', () => {
 		assert.ok(!resetSelectedTriage.includes('activeMailbox = \'inbox\';'));
 		assert.ok(!resetSelectedTriage.includes('activeLabel = \'\';'));
 	});
+
+	it('does not confirm reversible move-to-trash actions', () => {
+		const chatJs = fs.readFileSync(new URL('../public/js/chat.js', import.meta.url), 'utf8');
+		const batchJs = fs.readFileSync(new URL('../public/js/batch.js', import.meta.url), 'utf8');
+		const eccJs = fs.readFileSync(new URL('../public/js/ecc.js', import.meta.url), 'utf8');
+		const trashSelected = functionBlock(eccJs, 'trashSelected');
+
+		assert.ok(!chatJs.includes('confirmAction(\'Move to Trash\''));
+		assert.ok(!batchJs.includes('confirmAction(\'Move to Trash\''));
+		assert.ok(!trashSelected.includes('confirmAction(\'Move to Trash\''));
+		assert.ok(chatJs.includes('showSuccess(\'Moved to trash\');'));
+		assert.ok(batchJs.includes('showSuccess(count + \' moved to trash\');'));
+		assert.ok(trashSelected.includes('showSuccess(ids.length + \' moved to trash\');'));
+	});
 });

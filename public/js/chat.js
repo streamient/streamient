@@ -1394,8 +1394,6 @@ function initResultModalHandlers() {
 	// Delete
 	document.getElementById('rm-delete-btn')?.addEventListener('click', async () => {
 		if (!rmCurrentId || !rmCurrentType) return;
-		const confirmed = await confirmAction('Move to Trash', 'This item will be moved to trash.');
-		if (!confirmed) return;
 
 		try {
 			const typeEndpoints = { notes: 'notes', memory: 'memories', urls: 'urls' };

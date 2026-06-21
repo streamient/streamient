@@ -2715,8 +2715,6 @@
 		}
 		var ids = getSelectedIds();
 		if (!ids.length) return;
-		var confirmed = await confirmAction('Move to Trash', ids.length + ' email(s) will be moved to trash.');
-		if (!confirmed) return;
 		try {
 			await api('POST', '/batch/delete', { type: 'emails', ids: ids });
 			showSuccess(ids.length + ' moved to trash');

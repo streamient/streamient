@@ -145,8 +145,6 @@
 	async function onDelete() {
 		var count = getActionCount();
 		if (!count) return;
-		var confirmed = await confirmAction('Move to Trash', count + ' item(s) will be moved to trash.');
-		if (!confirmed) return;
 		await api('POST', '/batch/delete', buildBatchBody());
 		showSuccess(count + ' moved to trash');
 		resetBatch();
