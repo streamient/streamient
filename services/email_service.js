@@ -89,8 +89,12 @@ function renderTemplate(template, variables) {
 	return result;
 }
 
-export async function sendVerificationEmail(email, token, name) {
-	const url = `${config.appUrl}/verify?token=${encodeURIComponent(token)}`;
+function buildUrl(baseUrl, path) {
+	return `${String(baseUrl || config.appUrl).replace(/\/$/, '')}${path}`;
+}
+
+export async function sendVerificationEmail(email, token, name, baseUrl = null) {
+	const url = buildUrl(baseUrl, `/verify?token=${encodeURIComponent(token)}`);
 	const { subject, html } = await resolveTemplate('verification');
 	return sendMail({
 		to: email,
@@ -99,8 +103,8 @@ export async function sendVerificationEmail(email, token, name) {
 	});
 }
 
-export async function sendPasswordResetEmail(email, token) {
-	const url = `${config.appUrl}/reset-password?token=${encodeURIComponent(token)}`;
+export async function sendPasswordResetEmail(email, token, baseUrl = null) {
+	const url = buildUrl(baseUrl, `/reset-password?token=${encodeURIComponent(token)}`);
 	const { subject, html } = await resolveTemplate('password_reset');
 	return sendMail({
 		to: email,
@@ -109,8 +113,8 @@ export async function sendPasswordResetEmail(email, token) {
 	});
 }
 
-export async function sendMagicLinkEmail(email, token) {
-	const url = `${config.appUrl}/magic?token=${encodeURIComponent(token)}`;
+export async function sendMagicLinkEmail(email, token, baseUrl = null) {
+	const url = buildUrl(baseUrl, `/magic?token=${encodeURIComponent(token)}`);
 	const { subject, html } = await resolveTemplate('magic_link');
 	return sendMail({
 		to: email,

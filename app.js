@@ -33,6 +33,7 @@ import importRoutes from './routes/import.js';
 import { backfillEmailTriageState, backfillForwardedSentReplies } from './services/email_ingest_service.js';
 import { backfillGitSyncMode } from './services/git_sync_service.js';
 import { backfillTypesenseTrashFields } from './services/typesense_backfill_service.js';
+import { getWhiteLabelAssetsDir, resolveWhiteLabelRequest } from './services/white_label_service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -154,6 +155,7 @@ app.use('/static', (req, res, next) => {
     next();
 });
 app.use('/static', express.static(path.join(__dirname, 'public'), _static_cache_control));
+app.use('/white-label-assets', express.static(getWhiteLabelAssetsDir(), _static_cache_control));
 
 // No cache for dynamic content
 app.use((req, res, next) => {
@@ -168,10 +170,12 @@ app.use((req, res, next) => {
 
 app.use(sessionMiddleware);
 
+app.use(resolveWhiteLabelRequest);
+
 // Per-request hosted (SaaS) detection from the Host header — app.k.lan / *.kumbukum.com
 // are hosted; bare k.lan is plain dev. Routes read req.isHosted instead of a global.
 app.use((req, res, next) => {
-	req.isHosted = resolveRequestHosted(req);
+	req.isHosted = Boolean(req.whiteLabelHostId) || resolveRequestHosted(req);
 	next();
 });
 

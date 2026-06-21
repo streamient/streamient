@@ -25,12 +25,15 @@ block content
 							!= icon('email', 'me-2')
 							span Email settings
 				if can_manage_restricted_settings
+					a.list-group-item.list-group-item-action(href="/settings/white-label" class=(title === 'White-label' ? 'active' : ''))
+						!= icon('palette', 'me-2')
+						span White-label
 					a.list-group-item.list-group-item-action(href="/settings/typesense" class=(title === 'Typesense' ? 'active' : ''))
 						!= icon('search', 'me-2')
-						| Search index
+						span Search index
 				a.list-group-item.list-group-item-action(href="/settings/usage" class=(title === 'Usage' ? 'active' : ''))
 					!= icon('barChart', 'me-2')
-					| Usage
+					span Usage
 				if can_manage_restricted_settings
 					a.list-group-item.list-group-item-action(href="/settings/export" class=(title === 'Export' ? 'active' : ''))
 						!= icon('upload', 'me-2')

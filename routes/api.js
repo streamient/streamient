@@ -37,6 +37,7 @@ import * as emailIdentityService from '../services/email_identity_service.js';
 import * as oauthService from '../services/oauth_service.js';
 import * as teamService from '../services/team_service.js';
 import * as byoAiService from '../services/byo_ai_service.js';
+import * as whiteLabelService from '../services/white_label_service.js';
 import { createChatLimiter } from '../middleware/rate_limit.js';
 import { getBillingUserForHost, hasProFeatureAccess, effectiveResourceLimits, isAtLimit } from '../services/subscription_access_service.js';
 import { decorateEmailForClient } from '../modules/email_display.js';
@@ -90,6 +91,17 @@ function requireRestrictedSettingsAccess(req, res, next) {
 function requireProjectSettingsAccess(req, res, next) {
 	if (teamService.canManageTeam(req.memberRole)) return next();
 	return res.status(403).json({ error: 'Project settings admin access is required' });
+}
+
+function sendWhiteLabelError(res, err, fallback = 'White-label settings failed') {
+	const status = err?.status || 500;
+	const payload = {
+		error: err?.message || fallback,
+	};
+	if (err?.code) payload.code = err.code;
+	if (err?.details) payload.details = err.details;
+	if (err?.settings) payload.settings = err.settings;
+	return res.status(status).json(payload);
 }
 
 function isByoAiSettingsAccessEnabled(req) {
@@ -1186,6 +1198,108 @@ router.put('/settings/byo-ai', requireRestrictedSettingsAccess, requireByoAiAcce
 	} catch (err) {
 		log.error({ err }, 'BYO AI settings update error');
 		res.status(400).json({ error: err.message || 'Failed to update BYO AI settings' });
+	}
+});
+
+// ---- White-label Settings ----
+
+router.get('/settings/white-label', requireRestrictedSettingsAccess, async (req, res) => {
+	try {
+		const settings = await whiteLabelService.getSettings(req.host_id, {
+			billingUser: req.billingUser,
+			isHosted: req.isHosted,
+		});
+		res.json({ settings });
+	} catch (err) {
+		log.error({ err, host_id: req.host_id }, 'White-label settings read error');
+		sendWhiteLabelError(res, err, 'Failed to load white-label settings');
+	}
+});
+
+router.put('/settings/white-label', requireRestrictedSettingsAccess, async (req, res) => {
+	try {
+		const settings = await whiteLabelService.updateSettings(req.host_id, req.body || {}, {
+			billingUser: req.billingUser,
+			isHosted: req.isHosted,
+		});
+		res.json({ settings });
+	} catch (err) {
+		log.error({ err, host_id: req.host_id }, 'White-label settings update error');
+		sendWhiteLabelError(res, err, 'Failed to update white-label settings');
+	}
+});
+
+router.post('/settings/white-label/domain/verify', requireRestrictedSettingsAccess, async (req, res) => {
+	try {
+		const settings = await whiteLabelService.verifyDomain(req.host_id, {
+			billingUser: req.billingUser,
+			isHosted: req.isHosted,
+		});
+		res.json({ settings });
+	} catch (err) {
+		log.error({ err, host_id: req.host_id }, 'White-label domain verify error');
+		sendWhiteLabelError(res, err, 'Failed to verify custom domain');
+	}
+});
+
+router.post('/settings/white-label/domain/refresh', requireRestrictedSettingsAccess, async (req, res) => {
+	try {
+		const settings = await whiteLabelService.refreshDomain(req.host_id, {
+			billingUser: req.billingUser,
+			isHosted: req.isHosted,
+		});
+		res.json({ settings });
+	} catch (err) {
+		log.error({ err, host_id: req.host_id }, 'White-label domain refresh error');
+		sendWhiteLabelError(res, err, 'Failed to refresh custom domain');
+	}
+});
+
+router.post('/settings/white-label/assets/:kind', requireRestrictedSettingsAccess, async (req, res) => {
+	let uploadedPath = '';
+	try {
+		const uploadDir = await whiteLabelService.ensureWhiteLabelTempDir();
+		const form = formidable({
+			uploadDir,
+			keepExtensions: true,
+			maxFileSize: whiteLabelService.MAX_ASSET_FILE_SIZE,
+			allowEmptyFiles: false,
+			minFileSize: 1,
+			multiples: false,
+			filename: (name, ext) => `${crypto.randomUUID()}${ext}`,
+		});
+
+		const [, files] = await form.parse(req);
+		const fileList = files.file ? (Array.isArray(files.file) ? files.file : [files.file]) : [];
+		const file = fileList.find((entry) => entry?.filepath);
+		if (!file) {
+			return res.status(400).json({ error: 'No file uploaded', code: 'ASSET_REQUIRED' });
+		}
+		uploadedPath = file.filepath;
+
+		const settings = await whiteLabelService.uploadAsset(req.host_id, req.params.kind, file, {
+			billingUser: req.billingUser,
+			isHosted: req.isHosted,
+		});
+		res.json({ settings });
+	} catch (err) {
+		log.error({ err, host_id: req.host_id, kind: req.params.kind }, 'White-label asset upload error');
+		sendWhiteLabelError(res, err, 'Failed to upload white-label asset');
+	} finally {
+		if (uploadedPath) fs.unlink(uploadedPath, () => {});
+	}
+});
+
+router.delete('/settings/white-label/assets/:kind', requireRestrictedSettingsAccess, async (req, res) => {
+	try {
+		const settings = await whiteLabelService.deleteAsset(req.host_id, req.params.kind, {
+			billingUser: req.billingUser,
+			isHosted: req.isHosted,
+		});
+		res.json({ settings });
+	} catch (err) {
+		log.error({ err, host_id: req.host_id, kind: req.params.kind }, 'White-label asset delete error');
+		sendWhiteLabelError(res, err, 'Failed to delete white-label asset');
 	}
 });
 

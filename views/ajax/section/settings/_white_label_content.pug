@@ -1,0 +1,87 @@
+h4.mb-4 White-label
+
+#white-label-settings
+	.card.mb-5
+		.card-body
+			.d-flex.align-items-center.justify-content-between.mb-3
+				div
+					h6.mb-1 Brand assets
+					.text-muted.small Top navigation logo best size 130px x 24px. Favicon is rendered as PNG.
+			.row.g-4
+				.col-md-6
+					.border.rounded.p-3.h-100
+						h6.mb-3 Top navigation logo
+						.d-flex.align-items-center.mb-3(style="min-height:48px")
+							img.img-fluid.kk-white-label-preview.d-none#white-label-logo-preview(src="" alt="Top navigation logo preview")
+							span.text-muted.small#white-label-logo-empty No logo uploaded
+						.mb-3
+							label.form-label(for="white-label-logo-file") Logo image
+							input.form-control.form-control-sm#white-label-logo-file(type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/x-icon" data-white-label-file="logo")
+						.d-flex.justify-content-end
+							button.btn.btn-outline-danger.btn-sm(type="button" data-white-label-delete="logo") Remove
+				.col-md-6
+					.border.rounded.p-3.h-100
+						h6.mb-3 Favicon
+						.d-flex.align-items-center.mb-3(style="min-height:48px")
+							img.kk-white-label-favicon-preview.d-none#white-label-favicon-preview(src="" alt="Favicon preview")
+							span.text-muted.small#white-label-favicon-empty No favicon uploaded
+						.mb-3
+							label.form-label(for="white-label-favicon-file") Favicon image
+							input.form-control.form-control-sm#white-label-favicon-file(type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/x-icon" data-white-label-file="favicon")
+						.d-flex.justify-content-end
+							button.btn.btn-outline-danger.btn-sm(type="button" data-white-label-delete="favicon") Remove
+
+	.card.mb-5
+		.card-body
+			.d-flex.align-items-center.justify-content-between.mb-3
+				div
+					h6.mb-1 Login logo
+					.text-muted.small Available on Pro accounts and custom domains.
+				span.badge.text-bg-warning#white-label-login-logo-plan Pro
+			#white-label-login-logo-locked.alert.alert-warning.d-none Login logo is available on the Pro plan.
+			.row.g-4
+				.col-md-6
+					.border.rounded.p-3.h-100
+						.d-flex.align-items-center.mb-3(style="min-height:64px")
+							img.img-fluid.kk-white-label-login-preview.d-none#white-label-login-logo-preview(src="" alt="Login logo preview")
+							span.text-muted.small#white-label-login-logo-empty No login logo uploaded
+						.mb-3
+							label.form-label(for="white-label-login-logo-file") Login logo image
+							input.form-control.form-control-sm#white-label-login-logo-file(type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/x-icon" data-white-label-file="login_logo")
+						.d-flex.justify-content-end
+							button.btn.btn-outline-danger.btn-sm(type="button" data-white-label-delete="login_logo") Remove
+
+	.card
+		.card-body
+			.d-flex.align-items-center.justify-content-between.mb-3
+				div
+					h6.mb-1 Custom domain
+					.text-muted.small Add a CNAME record, then verify to provision SSL through Cloudflare.
+				span.badge.text-bg-warning#white-label-domain-plan Pro
+			#white-label-domain-locked.alert.alert-warning.d-none Custom domains are available on the Pro plan.
+			#white-label-cloudflare-warning.alert.alert-warning.d-none Cloudflare custom hostname provisioning is not configured.
+			form#white-label-domain-form
+				.mb-3
+					label.form-label(for="white-label-domain") Domain
+					input.form-control.form-control-sm#white-label-domain(type="text" autocomplete="off")
+				.table-responsive.mb-3
+					table.table.table-sm.align-middle.mb-0
+						thead
+							tr
+								th Type
+								th Name
+								th Value
+								th.text-end Action
+						tbody
+							tr
+								td CNAME
+								td#white-label-domain-name -
+								td#white-label-cname-target -
+								td.text-end
+									button.btn.btn-outline-primary.btn-sm#white-label-domain-verify(type="button") Verify
+				.d-flex.align-items-center.mb-3
+					span.badge.text-bg-secondary#white-label-domain-status Not configured
+					span.small.text-muted.ms-3#white-label-domain-detail
+					button.btn.btn-outline-secondary.btn-sm.ms-auto#white-label-domain-refresh(type="button") Refresh
+				.d-flex.justify-content-end.mb-5
+					button.btn.btn-primary.btn-sm#white-label-domain-save(type="submit") Save domain

@@ -4,7 +4,8 @@ html(lang="en")
 		meta(charset="UTF-8")
 		meta(name="viewport" content="width=device-width, initial-scale=1")
 		title #{title || 'Kumbukum'}
-		link(href='/static/images/favicon.ico' rel="shortcut icon")
+		- const __wlFavicon = typeof white_label !== 'undefined' && white_label && white_label.favicon_url ? white_label.favicon_url : '/static/images/favicon.ico'
+		link(href=__wlFavicon rel="shortcut icon")
 		link(href=`/static/v-${v}/css/vendor.css` rel="stylesheet")
 		link(href=`/static/v-${v}/css/app.css` rel="stylesheet")
 		link(href=`/static/v-${v}/css/kumbukum-login-split-production.css` rel="stylesheet")

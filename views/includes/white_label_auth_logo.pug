@@ -1,0 +1,6 @@
+- const __wlAuth = typeof white_label !== 'undefined' ? white_label : null
+- const __wlAuthLogo = __wlAuth && (__wlAuth.login_logo_url || __wlAuth.logo_url)
+if __wlAuthLogo
+	img.img-fluid.kk-white-label-auth-logo(src=__wlAuthLogo alt="Logo")
+else
+	include logo_white

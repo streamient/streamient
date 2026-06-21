@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "/api/v1",
+      "url": "https://your-instance.example.com/api/v1",
       "description": "API v1"
     }
   ],
@@ -72,6 +72,95 @@
             "type": "string"
           },
           "is_primary": {
+            "type": "boolean"
+          }
+        }
+      },
+      "WhiteLabelAsset": {
+        "type": "object",
+        "nullable": true,
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "mime_type": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "width": {
+            "type": "integer"
+          },
+          "height": {
+            "type": "integer"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "WhiteLabelSettings": {
+        "type": "object",
+        "properties": {
+          "logo": {
+            "$ref": "#/components/schemas/WhiteLabelAsset"
+          },
+          "favicon": {
+            "$ref": "#/components/schemas/WhiteLabelAsset"
+          },
+          "login_logo": {
+            "$ref": "#/components/schemas/WhiteLabelAsset"
+          },
+          "logo_url": {
+            "type": "string"
+          },
+          "favicon_url": {
+            "type": "string"
+          },
+          "login_logo_url": {
+            "type": "string"
+          },
+          "dns_name_custom": {
+            "type": "string"
+          },
+          "dns_verified": {
+            "type": "boolean"
+          },
+          "ssl_ready": {
+            "type": "boolean"
+          },
+          "cloudflare_status": {
+            "type": "string"
+          },
+          "cloudflare_ssl_status": {
+            "type": "string"
+          },
+          "dns_checked_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "cloudflare_checked_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "last_error": {
+            "type": "string"
+          },
+          "cname_target": {
+            "type": "string"
+          },
+          "cloudflare_configured": {
+            "type": "boolean"
+          },
+          "can_use_custom_domain": {
+            "type": "boolean"
+          },
+          "can_use_login_logo": {
             "type": "boolean"
           }
         }
@@ -6696,6 +6785,343 @@
           },
           "403": {
             "description": "Hosted Pro account admin access required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/settings/white-label": {
+      "get": {
+        "tags": [
+          "Settings"
+        ],
+        "summary": "Get white-label settings",
+        "description": "Returns account white-label branding and custom domain status. Requires owner/admin access.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "settings": {
+                      "$ref": "#/components/schemas/WhiteLabelSettings"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Account admin access required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Settings"
+        ],
+        "summary": "Update white-label settings",
+        "description": "Updates Pro custom domain configuration. Asset uploads use the asset endpoints.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "dns_name_custom": {
+                    "type": "string",
+                    "description": "Custom login/app domain. Empty string clears it."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "settings": {
+                      "$ref": "#/components/schemas/WhiteLabelSettings"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid white-label payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Account admin or Pro access required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Custom domain already mapped",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/settings/white-label/domain/verify": {
+      "post": {
+        "tags": [
+          "Settings"
+        ],
+        "summary": "Verify white-label custom domain",
+        "description": "Checks the CNAME target and provisions or refreshes the Cloudflare Custom Hostname. Requires owner/admin and Pro access.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "settings": {
+                      "$ref": "#/components/schemas/WhiteLabelSettings"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "DNS or Cloudflare configuration issue",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Account admin or Pro access required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/settings/white-label/domain/refresh": {
+      "post": {
+        "tags": [
+          "Settings"
+        ],
+        "summary": "Refresh white-label custom domain status",
+        "description": "Refreshes Cloudflare Custom Hostname and SSL status. Requires owner/admin and Pro access.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "settings": {
+                      "$ref": "#/components/schemas/WhiteLabelSettings"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "DNS or Cloudflare configuration issue",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Account admin or Pro access required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/settings/white-label/assets/{kind}": {
+      "post": {
+        "tags": [
+          "Settings"
+        ],
+        "summary": "Upload white-label asset",
+        "description": "Uploads and normalizes a white-label image to PNG. `logo` and `favicon` are available on Free. `login_logo` requires Pro.",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "logo",
+                "favicon",
+                "login_logo"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "settings": {
+                      "$ref": "#/components/schemas/WhiteLabelSettings"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid image upload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Account admin or Pro access required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Settings"
+        ],
+        "summary": "Remove white-label asset",
+        "description": "Removes a white-label asset. `login_logo` requires Pro.",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "logo",
+                "favicon",
+                "login_logo"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "settings": {
+                      "$ref": "#/components/schemas/WhiteLabelSettings"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Account admin or Pro access required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown asset kind",
             "content": {
               "application/json": {
                 "schema": {

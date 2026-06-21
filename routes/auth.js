@@ -2,7 +2,7 @@ import { Router } from 'express';
 import crypto from 'node:crypto';
 import { generateSecret, verifySync, generateURI } from 'otplib';
 import { User } from '../model/user.js';
-import { createTenant, initializeSessionTenant } from '../modules/tenancy.js';
+import { applyTenantContextToSession, createTenant, initializeSessionTenant } from '../modules/tenancy.js';
 import { ensureCollections } from '../modules/typesense.js';
 import { generateToken } from '../middleware/auth.js';
 import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail } from '../services/email_service.js';
@@ -24,12 +24,24 @@ export { buildHostedTrialFields };
 
 async function hydrateSessionForUser(req, user, preferredTenantId = null, preferredHostId = null) {
 	req.session.userId = user._id.toString();
-	return initializeSessionTenant(
+	const targetHostId = req.whiteLabelHostId || preferredHostId || user.host_id || null;
+	const targetTenantId = req.whiteLabelHostId ? null : (preferredTenantId || user.tenant?.toString() || null);
+	const context = await initializeSessionTenant(
 		req.session,
 		user._id.toString(),
-		preferredTenantId || user.tenant?.toString() || null,
-		preferredHostId || user.host_id || null,
+		targetTenantId,
+		targetHostId,
 	);
+	if (req.whiteLabelHostId && context?.activeTenant?.host_id !== req.whiteLabelHostId) {
+		delete req.session.userId;
+		delete req.session.lastLoginRecordedAt;
+		applyTenantContextToSession(req.session, null);
+		return {
+			activeTenant: null,
+			accessibleTenants: context?.accessibleTenants || [],
+		};
+	}
+	return context;
 }
 
 async function recordSuccessfulLogin(req, userOrId) {
@@ -52,6 +64,15 @@ function consumePostAuthRedirect(req, fallback = '/dashboard') {
 		delete req.session.oauthLoginReturnTo;
 	}
 	return redirectTo;
+}
+
+function getRequestBaseUrl(req) {
+	const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+	const protocol = forwardedProto || req.protocol || 'http';
+	const forwardedHost = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim();
+	const host = forwardedHost || req.headers.host;
+	if (!host) return null;
+	return `${protocol}://${host}`;
 }
 
 // ---- Registration (email confirmation required before account creation) ----
@@ -265,7 +286,7 @@ router.post('/forgot-password', async (req, res) => {
 			user.password_reset_token = resetToken;
 			user.password_reset_expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 			await user.save();
-			sendPasswordResetEmail(email, resetToken).catch((e) =>
+			sendPasswordResetEmail(email, resetToken, getRequestBaseUrl(req)).catch((e) =>
 				log.warn({ err: e, email }, 'Password reset email failed'),
 			);
 		}
@@ -421,7 +442,7 @@ router.post('/magic-link', async (req, res) => {
 		const { email } = req.body;
 		if (!email) return res.status(400).json({ error: 'email required' });
 
-		await sendMagicLink(email);
+		await sendMagicLink(email, getRequestBaseUrl(req));
 		res.json({ message: 'If an account exists, a login link has been sent.' });
 	} catch (err) {
 		log.error({ err, email: req.body?.email }, 'Magic link error');

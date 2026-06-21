@@ -34,6 +34,7 @@ const ICON_GLYPHS = {
 	lock: 'lock',
 	notebook: 'menu_book',
 	openInNew: 'open_in_new',
+	palette: 'palette',
 	question: 'help',
 	quote: 'format_quote',
 	remove: 'remove',

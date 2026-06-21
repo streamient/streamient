@@ -35,6 +35,11 @@ x-env: &env
   MCP_BASE_URL: http://mcp.k.lan
   WS_URL: ""
   EMAIL_FORWARD_DOMAIN: "email.kumbukum.com"
+  WHITE_LABEL_ASSETS_DIR: "${WHITE_LABEL_ASSETS_DIR:-assets/white-label}"
+  WHITE_LABEL_CNAME_TARGET: "${WHITE_LABEL_CNAME_TARGET:-app.k.lan}"
+  WHITE_LABEL_ENFORCE_CUSTOM_DOMAINS: "${WHITE_LABEL_ENFORCE_CUSTOM_DOMAINS:-false}"
+  CLOUDFLARE_API_TOKEN: "${CLOUDFLARE_API_TOKEN:-}"
+  CLOUDFLARE_ZONE_ID: "${CLOUDFLARE_ZONE_ID:-}"
   API_BASE_URL: http://kumbukum-app-1:3000
   SCREENSHOT_URL: ${DEV_SCREENSHOT_URL:-http://screenshot:3000}
   SCREENSHOT_SECRET: "${SCREENSHOT_SECRET:-change-me-screenshot-secret}" # openssl rand -hex 32

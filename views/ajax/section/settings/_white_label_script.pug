@@ -1,0 +1,230 @@
+script.
+	(function() {
+		var root = document.getElementById('white-label-settings');
+		if (!root || root.__whiteLabelBound) return;
+		root.__whiteLabelBound = true;
+
+		var state = {};
+
+		function setText(id, value) {
+			var el = document.getElementById(id);
+			if (el) el.textContent = value || '';
+		}
+
+		function toggle(id, show) {
+			var el = document.getElementById(id);
+			if (el) el.classList.toggle('d-none', !show);
+		}
+
+		function setPreview(kind, url) {
+			var previewId = kind === 'favicon' ? 'white-label-favicon-preview' : (kind === 'login_logo' ? 'white-label-login-logo-preview' : 'white-label-logo-preview');
+			var emptyId = kind === 'favicon' ? 'white-label-favicon-empty' : (kind === 'login_logo' ? 'white-label-login-logo-empty' : 'white-label-logo-empty');
+			var preview = document.getElementById(previewId);
+			if (preview) {
+				preview.src = url || '';
+				preview.classList.toggle('d-none', !url);
+			}
+			toggle(emptyId, !url);
+		}
+
+		function setDisabled(selector, disabled) {
+			root.querySelectorAll(selector).forEach(function(el) {
+				el.disabled = disabled;
+			});
+		}
+
+		function getDomainInput() {
+			return document.getElementById('white-label-domain');
+		}
+
+		function getDomainDraft() {
+			var input = getDomainInput();
+			return input ? input.value.trim() : '';
+		}
+
+		function setButtonDisabled(id, disabled) {
+			var button = document.getElementById(id);
+			if (button) button.disabled = disabled;
+		}
+
+		function renderDnsExample(domain) {
+			setText('white-label-domain-name', domain || 'Your domain');
+			setText('white-label-cname-target', state.cname_target || 'Not configured');
+		}
+
+		function updateDomainControls() {
+			var domainLocked = !state.can_use_custom_domain;
+			var savedDomain = state.dns_name_custom || '';
+			var draftDomain = getDomainDraft();
+			var dirtyDomain = draftDomain !== savedDomain;
+			setButtonDisabled('white-label-domain-save', domainLocked);
+			setButtonDisabled('white-label-domain-refresh', domainLocked || !savedDomain);
+			setButtonDisabled('white-label-domain-verify', domainLocked || !savedDomain || dirtyDomain);
+		}
+
+		function render(settings) {
+			state = settings || {};
+			setPreview('logo', state.logo_url);
+			setPreview('favicon', state.favicon_url);
+			setPreview('login_logo', state.login_logo_url);
+
+			var loginLogoLocked = !state.can_use_login_logo;
+			toggle('white-label-login-logo-locked', loginLogoLocked);
+			setDisabled('[data-white-label-file="login_logo"], [data-white-label-delete="login_logo"]', loginLogoLocked);
+
+			var domainLocked = !state.can_use_custom_domain;
+			toggle('white-label-domain-locked', domainLocked);
+			toggle('white-label-cloudflare-warning', state.can_use_custom_domain && !state.cloudflare_configured);
+			setDisabled('#white-label-domain', domainLocked);
+
+			var domainInput = getDomainInput();
+			if (domainInput && document.activeElement !== domainInput) domainInput.value = state.dns_name_custom || '';
+			renderDnsExample(getDomainDraft());
+
+			var status = 'Not configured';
+			var detail = '';
+			var cls = 'badge ';
+			if (state.dns_name_custom) {
+				if (state.ssl_ready) {
+					status = 'Active';
+					cls += 'text-bg-success';
+				} else if (state.dns_verified) {
+					status = 'DNS verified';
+					cls += 'text-bg-info';
+					detail = state.cloudflare_status || state.cloudflare_ssl_status || 'Waiting for SSL';
+				} else {
+					status = 'Needs verification';
+					cls += 'text-bg-warning';
+					detail = state.last_error || '';
+				}
+			} else {
+				cls += 'text-bg-secondary';
+			}
+			var statusEl = document.getElementById('white-label-domain-status');
+			if (statusEl) {
+				statusEl.className = cls;
+				statusEl.textContent = status;
+			}
+			setText('white-label-domain-detail', detail);
+			updateDomainControls();
+		}
+
+		async function loadSettings() {
+			try {
+				var data = await api('GET', '/settings/white-label');
+				render(data.settings || {});
+			} catch (err) {
+				showError(err.message);
+			}
+		}
+
+		async function uploadAsset(kind, file) {
+			var formData = new FormData();
+			formData.append('file', file);
+			var res = await fetch('/api/v1/settings/white-label/assets/' + kind, {
+				method: 'POST',
+				body: formData,
+			});
+			if (res.status === 401) return redirectToLogin();
+			if (isLoginRedirect(res)) return redirectToLogin();
+			var data = await res.json().catch(function() {
+				return { error: res.statusText };
+			});
+			if (!res.ok) throw new Error(data.error || 'Upload failed');
+			render(data.settings || {});
+		}
+
+		root.querySelectorAll('[data-white-label-file]').forEach(function(input) {
+			input.addEventListener('change', async function() {
+				var kind = input.dataset.whiteLabelFile;
+				var file = input.files && input.files[0];
+				if (!kind || !file) return;
+				input.disabled = true;
+				try {
+					await uploadAsset(kind, file);
+					showSuccess('Asset uploaded');
+				} catch (err) {
+					showError(err.message);
+				} finally {
+					input.value = '';
+					input.disabled = false;
+					render(state);
+				}
+			});
+		});
+
+		root.querySelectorAll('[data-white-label-delete]').forEach(function(button) {
+			button.addEventListener('click', async function() {
+				var kind = button.dataset.whiteLabelDelete;
+				var confirmed = await confirmAction('Remove asset', 'This will remove the uploaded white-label asset.');
+				if (!confirmed) return;
+				button.disabled = true;
+				try {
+					var data = await api('DELETE', '/settings/white-label/assets/' + kind);
+					render(data.settings || {});
+					showSuccess('Asset removed');
+				} catch (err) {
+					showError(err.message);
+				} finally {
+					button.disabled = false;
+					render(state);
+				}
+			});
+		});
+
+		var domainForm = document.getElementById('white-label-domain-form');
+		var domainInput = getDomainInput();
+		domainInput?.addEventListener('input', function() {
+			renderDnsExample(getDomainDraft());
+			updateDomainControls();
+		});
+
+		domainForm?.addEventListener('submit', async function(e) {
+			e.preventDefault();
+			try {
+				var data = await api('PUT', '/settings/white-label', {
+					dns_name_custom: domainInput ? domainInput.value.trim() : '',
+				});
+				if (domainInput) domainInput.value = data.settings?.dns_name_custom || '';
+				render(data.settings || {});
+				showSuccess('Domain saved');
+			} catch (err) {
+				showError(err.message);
+			}
+		});
+
+		document.getElementById('white-label-domain-verify')?.addEventListener('click', async function() {
+			try {
+				var savedDomain = state.dns_name_custom || '';
+				if (!savedDomain) {
+					showError('Save a domain before verification');
+					return;
+				}
+				if (getDomainDraft() !== savedDomain) {
+					showError('Save domain before verification');
+					return;
+				}
+				var data = await api('POST', '/settings/white-label/domain/verify', {});
+				render(data.settings || {});
+				showSuccess('Domain verification started');
+			} catch (err) {
+				if (err.settings) render(err.settings);
+				showError(err.message);
+				if (!err.settings) loadSettings();
+			}
+		});
+
+		document.getElementById('white-label-domain-refresh')?.addEventListener('click', async function() {
+			try {
+				var data = await api('POST', '/settings/white-label/domain/refresh', {});
+				render(data.settings || {});
+				showSuccess('Domain status refreshed');
+			} catch (err) {
+				if (err.settings) render(err.settings);
+				showError(err.message);
+				if (!err.settings) loadSettings();
+			}
+		});
+
+		loadSettings();
+	})();

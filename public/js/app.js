@@ -21,8 +21,10 @@ async function api(method, path, body) {
 	if (res.status === 401) return redirectToLogin();
 	if (isLoginRedirect(res)) return redirectToLogin();
 	if (!res.ok) {
-		const err = await res.json().catch(() => ({ error: res.statusText }));
-		throw new Error(err.error || 'Request failed');
+		const payload = await res.json().catch(() => ({ error: res.statusText }));
+		const err = new Error(payload.error || 'Request failed');
+		Object.assign(err, payload);
+		throw err;
 	}
 	return res.json();
 }
@@ -306,6 +308,7 @@ var ROUTES = {
 	'/settings/tokens': { title: 'API Tokens', partial: '/ajax/section/settings/tokens' },
 	'/settings/byo-ai': { title: 'AI', partial: '/ajax/section/settings/byo-ai' },
 	'/settings/email': { title: 'Email settings', partial: '/ajax/section/settings/email' },
+	'/settings/white-label': { title: 'White-label', partial: '/ajax/section/settings/white-label' },
 	'/settings/typesense': { title: 'Search', partial: '/ajax/section/settings/typesense' },
 	'/settings/usage': { title: 'Usage', partial: '/ajax/section/settings/usage' },
 	'/settings/export': { title: 'Export', partial: '/ajax/section/settings/export' },

@@ -2,12 +2,12 @@ import { MagicLink } from '../model/magic_link.js';
 import { sendMagicLinkEmail } from './email_service.js';
 import { User } from '../model/user.js';
 
-export async function sendMagicLink(email) {
+export async function sendMagicLink(email, baseUrl = null) {
 	const user = await User.findOne({ email, is_active: true });
 	if (!user) return; // silent fail to prevent enumeration
 
 	const link = await MagicLink.generate(user._id);
-	await sendMagicLinkEmail(email, link.token);
+	await sendMagicLinkEmail(email, link.token, baseUrl);
 }
 
 export async function isMagicLinkValid(token) {

@@ -106,6 +106,10 @@ h5 {
   filter: brightness(1.06);
 }
 
+.logo-form img.kk-white-label-auth-logo {
+  filter: none;
+}
+
 
 
 /* Reorder: quick buttons on top */

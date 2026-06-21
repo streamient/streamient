@@ -7,6 +7,7 @@ import { listProjects, getProject, getProjectCounts } from '../services/project_
 import { listGitRepos } from '../services/git_sync_service.js';
 import { listEmailIdentities } from '../services/email_identity_service.js';
 import { formatTrialEndsIn, getBillingUserForHost, hasProductAccess, hasProFeatureAccess } from '../services/subscription_access_service.js';
+import { serializeWhiteLabelSettings } from '../services/white_label_service.js';
 import config from '../config.js';
 import { createLogger } from '../modules/logger.js';
 
@@ -79,7 +80,7 @@ router.use(async (req, res, next) => {
 	const [user, projects, tenant, billingUser] = await Promise.all([
 		User.findById(req.userId),
 		listProjects(req.host_id),
-		Tenant.findOne({ host_id: req.host_id }).select('plan settings.byo_ai').lean(),
+		Tenant.findOne({ host_id: req.host_id }).select('plan settings.byo_ai settings.white_label').lean(),
 		getBillingUserForHost(req.host_id, req.userId),
 	]);
 	const activeTenant = (req.accessibleTenants || []).find((item) => item.tenantId === req.tenantId) || null;
@@ -105,6 +106,7 @@ router.use(async (req, res, next) => {
 	res.locals.email_feature_enabled = proOnlyFeatureEnabled;
 	res.locals.email_view_enabled = true;
 	res.locals.git_sync_enabled = proOnlyFeatureEnabled;
+	res.locals.white_label = serializeWhiteLabelSettings(tenant || {}, { canUsePro: proOnlyFeatureEnabled });
 	// Pro/trial/self-hosted get unlimited projects; Free is capped (hide the +).
 	res.locals.projects_unlimited = proOnlyFeatureEnabled;
 	res.locals.byo_ai_enabled = isByoAiSettingsAccessEnabled(req);
@@ -160,6 +162,7 @@ router.get('/settings/team', (req, res) => res.render('settings/team', { title: 
 router.get('/settings/tokens', (req, res) => res.render('settings/tokens', { title: 'Access Tokens' }));
 router.get('/settings/byo-ai', requireRestrictedSettingsAccess, requireByoAiWebAccess, (req, res) => res.render('settings/byo_ai', { title: 'AI' }));
 router.get('/settings/email', requireRestrictedSettingsAccess, requireByoAiWebAccess, requireEmailSettingsWebAccess, (req, res) => res.render('settings/email', { title: 'Email settings' }));
+router.get('/settings/white-label', requireRestrictedSettingsAccess, (req, res) => res.render('settings/white_label', { title: 'White-label' }));
 router.get('/settings/typesense', requireRestrictedSettingsAccess, (req, res) => res.render('settings/typesense', { title: 'Typesense' }));
 router.get('/settings/usage', (req, res) => renderUsageSettings(req, res, 'settings/usage'));
 router.get('/settings/export', requireRestrictedSettingsAccess, (req, res) => res.render('settings/export', { title: 'Export' }));
@@ -184,6 +187,7 @@ router.get('/ajax/section/settings/team', (req, res) => res.render('ajax/section
 router.get('/ajax/section/settings/tokens', (req, res) => res.render('ajax/section/settings/tokens', { title: 'Access Tokens' }));
 router.get('/ajax/section/settings/byo-ai', requireRestrictedSettingsAccess, requireByoAiWebAccess, (req, res) => res.render('ajax/section/settings/byo_ai', { title: 'AI' }));
 router.get('/ajax/section/settings/email', requireRestrictedSettingsAccess, requireByoAiWebAccess, requireEmailSettingsWebAccess, (req, res) => res.render('ajax/section/settings/email', { title: 'Email settings' }));
+router.get('/ajax/section/settings/white-label', requireRestrictedSettingsAccess, (req, res) => res.render('ajax/section/settings/white_label', { title: 'White-label' }));
 router.get('/ajax/section/settings/typesense', requireRestrictedSettingsAccess, (req, res) => res.render('ajax/section/settings/typesense', { title: 'Typesense' }));
 router.get('/ajax/section/settings/usage', (req, res) => renderUsageSettings(req, res, 'ajax/section/settings/usage'));
 router.get('/ajax/section/settings/export', requireRestrictedSettingsAccess, (req, res) => res.render('ajax/section/settings/export', { title: 'Export' }));

@@ -4,7 +4,8 @@ html(lang="en")
 		meta(charset="UTF-8")
 		meta(name="viewport" content="width=device-width, initial-scale=1")
 		title #{title || 'Kumbukum'}
-		link(href='/static/images/favicon.ico' rel="shortcut icon")
+		- const __wlFavicon = typeof white_label !== 'undefined' && white_label && white_label.favicon_url ? white_label.favicon_url : '/static/images/favicon.ico'
+		link(href=__wlFavicon rel="shortcut icon")
 		script.
 			(function () {
 				try {
@@ -35,10 +36,14 @@ html(lang="en")
 			nav.navbar.navbar-expand-lg.navbar-dark.bg-dark.sticky-top
 				.container-fluid
 					a.navbar-brand(href="/dashboard")
-						span.kk-logo-dark
-							include includes/logo_white
-						span.kk-logo-light
-							include includes/logo_black
+						- const __wlTopNavLogo = typeof white_label !== 'undefined' && white_label && white_label.logo_url ? white_label.logo_url : ''
+						if __wlTopNavLogo
+							img.kk-white-label-navbar-logo(src=__wlTopNavLogo alt="Logo")
+						else
+							span.kk-logo-dark
+								include includes/logo_white
+							span.kk-logo-light
+								include includes/logo_black
 					nav.kk-topnav
 						a.kk-navbtn(href="/dashboard" class={active: page !== 'graph' && page !== 'ecc'}) Projects
 						a.kk-navbtn(href="/graph" class={active: page === 'graph'}) Graph

@@ -42,6 +42,16 @@ docker compose -f compose.prod.yml up -d
 | `SERVER_MODE` | Run mode: omit for full app, `ws` for WebSocket-only, `scheduler` for background jobs | No | — |
 | `SOCKET_REDIS` | Separate Redis URL for Socket.IO adapter (if different from `REDIS_URL`) | No | Uses `REDIS_URL` |
 
+### White-Label / Custom Domains
+
+| Variable | Description | Required | Default |
+| --- | --- | --- | --- |
+| `WHITE_LABEL_ASSETS_DIR` | Persistent storage path for uploaded logos and favicons | No | `assets/white-label` |
+| `WHITE_LABEL_CNAME_TARGET` | CNAME target customers must point custom domains to | No | `APP_URL` hostname |
+| `WHITE_LABEL_ENFORCE_CUSTOM_DOMAINS` | Return 403 for unknown custom domains on hosted deployments | No | `true` in hosted production |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare API token for Custom Hostnames | Pro custom domains | — |
+| `CLOUDFLARE_ZONE_ID` | Cloudflare zone ID for Custom Hostnames | Pro custom domains | — |
+
 ### Database
 
 | Variable | Description | Required | Default |

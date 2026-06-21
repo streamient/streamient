@@ -2,6 +2,19 @@ import mongoose from 'mongoose';
 import { User } from '../model/user.js';
 import { TenantMember } from '../model/tenant_member.js';
 
+const whiteLabelAssetSchema = new mongoose.Schema(
+	{
+		url: { type: String, default: '' },
+		storage_key: { type: String, default: '' },
+		mime_type: { type: String, default: '' },
+		size: { type: Number, default: 0 },
+		width: { type: Number, default: 0 },
+		height: { type: Number, default: 0 },
+		updated_at: { type: Date, default: null },
+	},
+	{ _id: false },
+);
+
 const tenantSchema = new mongoose.Schema(
 	{
 		host_id: { type: String, required: true, unique: true, index: true },
@@ -31,9 +44,33 @@ const tenantSchema = new mongoose.Schema(
 				send_draft_emails_automatically: { type: Boolean, default: false },
 				spam_guard: { type: String, default: '' },
 			},
+			white_label: {
+				logo: { type: whiteLabelAssetSchema, default: null },
+				favicon: { type: whiteLabelAssetSchema, default: null },
+				login_logo: { type: whiteLabelAssetSchema, default: null },
+				dns_name_custom: { type: String, default: '' },
+				dns_verified: { type: Boolean, default: false },
+				ssl_ready: { type: Boolean, default: false },
+				cloudflare_custom_hostname_id: { type: String, default: '' },
+				cloudflare_status: { type: String, default: '' },
+				cloudflare_ssl_status: { type: String, default: '' },
+				dns_checked_at: { type: Date, default: null },
+				cloudflare_checked_at: { type: Date, default: null },
+				last_error: { type: String, default: '' },
+			},
 		},
 	},
 	{ timestamps: true },
+);
+
+tenantSchema.index(
+	{ 'settings.white_label.dns_name_custom': 1 },
+	{
+		unique: true,
+		partialFilterExpression: {
+			'settings.white_label.dns_name_custom': { $type: 'string', $gt: '' },
+		},
+	},
 );
 
 export const Tenant = mongoose.model('Tenant', tenantSchema);
@@ -164,7 +201,7 @@ export async function initializeSessionTenant(session, userId, preferredTenantId
 }
 
 export function resolveTenant(req, res, next) {
-	if (req.path.startsWith('/login') || req.path.startsWith('/signup') || req.path.startsWith('/static') || req.path.startsWith('/admin') || req.path.startsWith('/sysadmin')) {
+	if (req.path.startsWith('/login') || req.path.startsWith('/signup') || req.path.startsWith('/static') || req.path.startsWith('/white-label-assets') || req.path.startsWith('/admin') || req.path.startsWith('/sysadmin')) {
 		return next();
 	}
 

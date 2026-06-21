@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import config from '../config.js';
 import { User } from '../model/user.js';
 import { verifyMcpBridgeToken } from '../modules/oauth.js';
-import { ensureOwnerMembershipForUser, initializeSessionTenant, resolveActiveTenantContext } from '../modules/tenancy.js';
+import { applyTenantContextToSession, ensureOwnerMembershipForUser, initializeSessionTenant, resolveActiveTenantContext } from '../modules/tenancy.js';
 import * as OtelRuntime from '../modules/otel_runtime.js';
 
 async function applyTenantContext(req, userId, preferredTenantId = null, preferredHostId = null, updateSession = false) {
@@ -24,12 +24,23 @@ export async function requireAuth(req, res, next) {
 	if (req.session?.userId) {
 		req.userId = req.session.userId;
 		req.authMethod = 'session';
-		const ok = await applyTenantContext(req, req.userId, req.session.tenantId, req.session.host_id, true);
+		const preferredTenantId = req.whiteLabelHostId ? null : req.session.tenantId;
+		const preferredHostId = req.whiteLabelHostId || req.session.host_id;
+		const ok = await applyTenantContext(req, req.userId, preferredTenantId, preferredHostId, true);
 		if (!ok) {
 			if (!req.originalUrl.startsWith('/api/') && req.accepts('html')) {
 				return res.status(403).render('auth/login', { error: 'Your account does not have access to any active teams yet.' });
 			}
 			return res.status(403).json({ error: 'No active account access found' });
+		}
+		if (req.whiteLabelHostId && req.host_id !== req.whiteLabelHostId) {
+			delete req.session.userId;
+			delete req.session.lastLoginRecordedAt;
+			applyTenantContextToSession(req.session, null);
+			if (!req.originalUrl.startsWith('/api/') && req.accepts('html')) {
+				return res.status(403).render('auth/login', { error: 'Your account does not have access to this branded account.' });
+			}
+			return res.status(403).json({ error: 'No access to this branded account' });
 		}
 		if (!req.session.lastLoginRecordedAt) {
 			const timestamp = new Date();
@@ -58,8 +69,11 @@ export async function requireAuth(req, res, next) {
 			}
 
 			req.userId = payload.userId || payload.sub;
-			const ok = await applyTenantContext(req, req.userId, payload.tenantId, payload.host_id, false);
+			const preferredTenantId = req.whiteLabelHostId ? null : payload.tenantId;
+			const preferredHostId = req.whiteLabelHostId || payload.host_id;
+			const ok = await applyTenantContext(req, req.userId, preferredTenantId, preferredHostId, false);
 			if (!ok) return res.status(401).json({ error: 'Token is not valid for any active account' });
+			if (req.whiteLabelHostId && req.host_id !== req.whiteLabelHostId) return res.status(403).json({ error: 'Token is not valid for this branded account' });
 			return next();
 		} catch {
 			return res.status(401).json({ error: 'Invalid token' });
@@ -78,8 +92,11 @@ export async function requireAuth(req, res, next) {
 			req.authMethod = 'token';
 			const matched = user.access_tokens.find((t) => t.token === accessToken);
 			if (matched) req.tokenLabel = matched.name;
-			const ok = await applyTenantContext(req, req.userId, user.tenant?.toString(), user.host_id, false);
+			const preferredTenantId = req.whiteLabelHostId ? null : user.tenant?.toString();
+			const preferredHostId = req.whiteLabelHostId || user.host_id;
+			const ok = await applyTenantContext(req, req.userId, preferredTenantId, preferredHostId, false);
 			if (!ok) return res.status(401).json({ error: 'Token is not valid for any active account' });
+			if (req.whiteLabelHostId && req.host_id !== req.whiteLabelHostId) return res.status(403).json({ error: 'Token is not valid for this branded account' });
 			return next();
 		}
 	}

@@ -401,6 +401,7 @@ body.kk-template1 #projectSettingsModal .modal-header .btn-close {
 body.kk-template1 #settingsModal .modal-body,
 body.kk-template1 #projectSettingsModal .modal-body {
 	min-height: 72vh;
+	padding-bottom: 5rem;
 	background: var(--panel) !important;
 	color: var(--text) !important;
 }
@@ -1675,6 +1676,37 @@ small,
 .navbar-brand img {
 	max-height: 20px;
 	margin-left: 0.3rem;
+}
+
+.kk-white-label-navbar-logo {
+	max-width: 130px;
+	max-height: 24px;
+	width: auto;
+	height: auto;
+	object-fit: contain;
+}
+
+.kk-white-label-preview {
+	max-width: 260px;
+	max-height: 48px;
+	width: auto;
+	height: auto;
+	object-fit: contain;
+}
+
+.kk-white-label-favicon-preview {
+	width: 32px;
+	height: 32px;
+	object-fit: contain;
+}
+
+.kk-white-label-login-preview,
+.kk-white-label-auth-logo {
+	max-width: 260px;
+	max-height: 80px;
+	width: auto;
+	height: auto;
+	object-fit: contain;
 }
 
 /* Ghost-style source search field */

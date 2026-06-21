@@ -76,8 +76,8 @@ After saving a URL, use `create_link` to connect it to related notes or memories
 ## Development
 - Use Docker compose only
 - pnpm as package manager
+- Development host is http://k.lan, MCP on https://mcp.k.lan
 - To sign into the app you can use nitai@fastmail.com and the localhost:8025 (mailpit) to retrieve the magic link
-- The local URL is http://k.lan
 
 ## Design
 - Forms: Right align: submit/save button, Left align: cancel/abort

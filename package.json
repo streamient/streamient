@@ -81,6 +81,7 @@
     "bcryptjs": "^3.0.3",
     "bootstrap": "^5.3.8",
     "cheerio": "^1.2.0",
+    "cloudflare": "^6.4.0",
     "connect-mongo": "^6.0.0",
     "cookie-parser": "^1.4.7",
     "crawlee": "^3.17.0",

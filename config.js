@@ -137,6 +137,14 @@ const smtpServers = parseSmtpServersFromEnv();
 const primarySmtp = smtpServers[0] || {};
 const appUrl = process.env.APP_URL || 'http://localhost:3000';
 
+function getAppUrlHostname(value) {
+	try {
+		return new URL(value).hostname;
+	} catch {
+		return '';
+	}
+}
+
 const config = {
 	env: process.env.NODE_ENV || 'development',
 	port: parseInt(process.env.PORT, 10) || 3000,
@@ -166,6 +174,17 @@ const config = {
 		servers: smtpServers,
 	},
 	emailForwardDomain: process.env.EMAIL_FORWARD_DOMAIN || '',
+	whiteLabel: {
+		assetsDir: process.env.WHITE_LABEL_ASSETS_DIR || 'assets/white-label',
+		cnameTarget: process.env.WHITE_LABEL_CNAME_TARGET || getAppUrlHostname(appUrl),
+		enforceCustomDomains: process.env.WHITE_LABEL_ENFORCE_CUSTOM_DOMAINS
+			? process.env.WHITE_LABEL_ENFORCE_CUSTOM_DOMAINS === 'true'
+			: (process.env.NODE_ENV === 'production' && isHostedAppUrl(appUrl)),
+		cloudflare: {
+			apiToken: process.env.CLOUDFLARE_API_TOKEN || '',
+			zoneId: process.env.CLOUDFLARE_ZONE_ID || '',
+		},
+	},
 
 	llm: {
 		// Main conversational model (richer, for analysis & actions)
