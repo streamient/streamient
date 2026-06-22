@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailIds, listEmailLabels, parseTriageResult, triageInboxEmails, startEmailTriageRun, getEmailTriageRun, backfillEmailTriageState, backfillTerminalEmailLabels, backfillForwardedSentReplies, askEmailAi, askEmailListAi, buildEmailAiTypesenseFilter, buildTriageContext, parseEmailAiQuery, resetEmailTriage, updateEmail, deleteEmail, emptySpam, parseEmailReplySuggestionsResult, suggestEmailReplies, suggestFromEmailAddresses, matchesEmailFilter, applyProjectEmailFilterToInbox, buildEmailRealtimePayload, addSendersToSpamGuard, buildEmailCountsPayload } from '../services/email_ingest_service.js';
+import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailIds, listEmailLabels, listEmailTriageStatuses, parseTriageResult, triageInboxEmails, startEmailTriageRun, getEmailTriageRun, backfillEmailTriageState, backfillTerminalEmailLabels, backfillForwardedSentReplies, askEmailAi, askEmailListAi, buildEmailAiTypesenseFilter, buildTriageContext, parseEmailAiQuery, resetEmailTriage, updateEmail, deleteEmail, emptySpam, parseEmailReplySuggestionsResult, suggestEmailReplies, suggestFromEmailAddresses, matchesEmailFilter, applyProjectEmailFilterToInbox, buildEmailRealtimePayload, addSendersToSpamGuard, buildEmailCountsPayload } from '../services/email_ingest_service.js';
 import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
 import { EmailIdentity } from '../model/email_identity.js';
@@ -1129,14 +1129,18 @@ describe('Email ingest service', () => {
 
 	it('lists default ECC inbox as untriaged emails across projects', async () => {
 		let findQuery = null;
+		let findSort = null;
 		const originalFind = Email.find;
 
 		Email.find = (query) => {
 			findQuery = query;
 			return {
-				sort: () => ({
-					lean: async () => [],
-				}),
+				sort: (sortArg) => {
+					findSort = sortArg;
+					return {
+						lean: async () => [],
+					};
+				},
 			};
 		};
 
@@ -1148,6 +1152,7 @@ describe('Email ingest service', () => {
 			assert.equal(findQuery.mailbox, 'inbox');
 			assert.equal(findQuery.in_trash, false);
 			assert.equal(findQuery.triaged, false);
+			assert.deepEqual(findSort, { createdAt: -1, updatedAt: -1 });
 		} finally {
 			Email.find = originalFind;
 		}
@@ -1195,7 +1200,7 @@ describe('Email ingest service', () => {
 			assert.equal(searchCalls[0].type, 'emails');
 			assert.equal(searchCalls[0].query, '*');
 			assert.equal(searchCalls[0].options.queryBy, 'subject');
-			assert.equal(searchCalls[0].options.extra.sort_by, 'updated_at:desc');
+			assert.equal(searchCalls[0].options.extra.sort_by, 'created_at:desc,updated_at:desc');
 			assert.equal(searchCalls[0].options.extra.group_by, 'thread_key');
 			assert.match(searchCalls[0].options.filter_by, /project_id:=`project-1`/);
 			assert.match(searchCalls[0].options.filter_by, /mailbox:=`inbox`/);
@@ -1997,6 +2002,36 @@ describe('Email ingest service', () => {
 			assert.match(searchCalls[0].options.filter_by, /project_id:=`project-1`/);
 			assert.match(searchCalls[0].options.filter_by, /mailbox:=`inbox`/);
 			assert.equal(searchCalls[0].options.extra.group_by, 'thread_key');
+		} finally {
+			Email.find = originalFind;
+		}
+	});
+
+	it('listEmailTriageStatuses sorts by email date descending', async () => {
+		const originalFind = Email.find;
+		let findSort = null;
+
+		Email.find = () => ({
+			sort: (sortArg) => {
+				findSort = sortArg;
+				return {
+					skip: () => ({
+						limit: () => ({
+							lean: async () => [
+								{ _id: 'newer-created', message_id: 'newer@example.com', createdAt: '2026-06-22T10:00:00.000Z', updatedAt: '2026-06-22T10:00:00.000Z' },
+								{ _id: 'older-updated', message_id: 'older@example.com', createdAt: '2026-06-21T10:00:00.000Z', updatedAt: '2026-06-22T12:00:00.000Z' },
+							],
+						}),
+					}),
+				};
+			},
+		});
+
+		try {
+			const statuses = await listEmailTriageStatuses('host-1', { mailbox: 'inbox' });
+
+			assert.deepEqual(findSort, { createdAt: -1, updatedAt: -1 });
+			assert.deepEqual(statuses.map((status) => status.email_id), ['newer-created', 'older-updated']);
 		} finally {
 			Email.find = originalFind;
 		}

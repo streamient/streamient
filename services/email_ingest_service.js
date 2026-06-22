@@ -132,6 +132,8 @@ const EMAIL_LIST_INCLUDE_FIELDS = [
 ].join(',');
 const EMAIL_LIST_TYPESENSE_PAGE_SIZE = 250;
 const EMAIL_LIST_TYPESENSE_GROUP_MAX = 100000;
+const EMAIL_DATE_SORT = { createdAt: -1, updatedAt: -1 };
+const EMAIL_TYPESENSE_DATE_SORT = 'created_at:desc,updated_at:desc';
 
 function canonicalMessageId(value) {
 	const raw = String(value || '').trim();
@@ -1220,7 +1222,7 @@ async function listEmailsFromMongo(host_id, projectId, filters = {}) {
 	const safeLimit = Math.max(1, parseInt(filters.limit, 10) || 50);
 
 	const emails = await Email.find(query)
-		.sort({ updatedAt: -1 })
+		.sort(EMAIL_DATE_SORT)
 		.lean();
 	const collapsed = collapseEmailsByThread(emails);
 	const withLatest = await attachLatestThreadEmails(host_id, projectId, collapsed);
@@ -1291,7 +1293,7 @@ async function searchEmailListTypesense(host_id, projectId, filters = {}, option
 		exclude_fields: 'embedding',
 		group: false,
 		extra: {
-			sort_by: 'updated_at:desc',
+			sort_by: EMAIL_TYPESENSE_DATE_SORT,
 			group_by: 'thread_key',
 			group_limit: 1,
 			group_missing_values: false,
@@ -1482,7 +1484,7 @@ export async function listEmailTriageStatuses(host_id, {
 		triage_run_id,
 	});
 	const emails = await Email.find(query)
-		.sort({ updatedAt: -1 })
+		.sort(EMAIL_DATE_SORT)
 		.skip((page - 1) * limit)
 		.limit(limit)
 		.lean();

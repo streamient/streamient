@@ -1231,7 +1231,7 @@ const swaggerSpec = {
             get: {
                 tags: ['Emails'],
                 summary: 'List emails',
-                description: 'Typesense-backed mailbox results grouped by thread_key. Mongo is used for detail, thread, and write paths only.',
+                description: 'Typesense-backed mailbox results grouped by thread_key and ordered by email created date descending. Mongo is used for detail, thread, and write paths only.',
                 parameters: [
                     { $ref: '#/components/parameters/page' },
                     { $ref: '#/components/parameters/limit' },
@@ -1274,7 +1274,7 @@ const swaggerSpec = {
             get: {
                 tags: ['Emails'],
                 summary: 'List email IDs for current view',
-                description: 'Typesense-backed ID list grouped by thread_key using the same mailbox, label, triage, and project filters as /emails.',
+                description: 'Typesense-backed ID list grouped by thread_key using the same mailbox, label, triage, project filters, and created-date ordering as /emails.',
                 parameters: [
                     { $ref: '#/components/parameters/project' },
 	                    { name: 'mailbox', in: 'query', schema: { type: 'string', enum: ['inbox', 'archived', 'sent', 'spam', 'trash'] } },
@@ -1290,7 +1290,7 @@ const swaggerSpec = {
             get: {
                 tags: ['Emails'],
                 summary: 'List email triage statuses',
-                description: 'Returns compact triage status records. Use include=email,draft to retrieve the full source email and generated triage draft in the same response.',
+                description: 'Returns compact triage status records ordered by email created date descending. Use include=email,draft to retrieve the full source email and generated triage draft in the same response.',
                 parameters: [
                     { $ref: '#/components/parameters/page' },
                     { $ref: '#/components/parameters/limit' },
