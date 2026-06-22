@@ -30,7 +30,7 @@ import adminRoutes from './routes/admin.js';
 import billingRoutes from './routes/billing.js';
 import healthRoutes from './routes/health.js';
 import importRoutes from './routes/import.js';
-import { backfillEmailTriageState, backfillForwardedSentReplies, backfillTerminalEmailLabels } from './services/email_ingest_service.js';
+import { backfillEmailTriageState, backfillForwardedSentReplies, backfillTerminalEmailLabels, buildEmailCountsPayload } from './services/email_ingest_service.js';
 import { backfillGitSyncMode } from './services/git_sync_service.js';
 import { backfillTypesenseTrashFields } from './services/typesense_backfill_service.js';
 import { getWhiteLabelAssetsDir, resolveWhiteLabelRequest } from './services/white_label_service.js';
@@ -265,7 +265,9 @@ async function start() {
 		log.info({ mode: SERVER_MODE, port: config.port, env: config.env }, `Kumbukum ${SERVER_MODE} running on port ${config.port}`);
 	});
 
-	await setupSocketIO(server, sessionMiddleware);
+	await setupSocketIO(server, sessionMiddleware, {
+		emailCountsHandler: (host_id, options) => buildEmailCountsPayload(host_id, options),
+	});
 }
 
 process.on('unhandledRejection', (reason, promise) => {

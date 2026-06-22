@@ -38,16 +38,7 @@
 	var aiMessagesEl;
 	var aiInputEl;
 	var aiSendBtn;
-	var triageModalEl;
-	var triageModalStatus;
-	var triageModalDetail;
-	var triageModalProgress;
-	var triageModalProcessed;
-	var triageModalTotal;
-	var triageModalTriaged;
-	var triageModalErrors;
-	var triageModalClose;
-	var triageSpinner;
+	var triageNavStatus;
 	var activeMailbox = 'inbox';
 	var activeLabel = '';
 	var selectedProject = '';
@@ -616,12 +607,6 @@
 			return '/email-drafts' + (params.length ? '?' + params.join('&') : '');
 		}
 
-	function labelsPath() {
-		var params = [];
-		if (selectedProject) params.push('project=' + encodeURIComponent(selectedProject));
-		return '/email-labels' + (params.length ? '?' + params.join('&') : '');
-	}
-
 	function viewIdsPath() {
 		var params = [];
 		if (selectedProject) params.push('project=' + encodeURIComponent(selectedProject));
@@ -635,6 +620,10 @@
 			if (activeMailbox === 'inbox') params.push('triaged=false');
 		}
 		return '/emails/ids' + (params.length ? '?' + params.join('&') : '');
+	}
+
+	function requestEmailCounts() {
+		window.dispatchEvent(new CustomEvent('email-counts:request', { detail: { project: selectedProject || '' } }));
 	}
 
 	async function loadViewIds() {
@@ -1252,52 +1241,17 @@
 		});
 	}
 
-	function renderLabelButton(label) {
-		var active = activeLabel === label.slug ? ' active' : '';
-		return '<button type="button" class="list-group-item list-group-item-action d-flex align-items-center' + active + '" data-label="' + escapeHtml(label.slug) + '">'
-			+ '<span class="ecc-label-dot me-2" style="background:' + escapeHtml(label.color || '#6c757d') + '"></span>'
-			+ '<span class="ecc-label-name text-truncate">' + escapeHtml(label.name) + '</span>'
-			+ '<span class="badge text-bg-secondary ms-auto">' + (label.count || 0) + '</span>'
-			+ '</button>';
-	}
-
-	function renderLabelSection(title, labels) {
-		if (!labels.length) return '';
-		return '<div class="ecc-label-section" data-label-section="' + escapeHtml(title.toLowerCase()) + '">'
-			+ '<h6 class="mb-2">' + escapeHtml(title) + '</h6>'
-			+ '<div class="list-group">'
-			+ labels.map(renderLabelButton).join('')
-			+ '</div>'
-			+ '</div>';
-	}
-
-	function renderLabels(labels) {
+	function renderLabelCounts(labels) {
 		if (!labelsEl) return;
-		if (!labels.length) {
-			labelsEl.innerHTML = '<div class="list-group-item text-muted small">No labels configured.</div>';
-			return;
-		}
-		var labelBySlug = {};
-		labels.forEach(function (label) {
-			labelBySlug[label.slug] = label;
+		var counts = {};
+		(labels || []).forEach(function (label) {
+			counts[label.slug] = label.count || 0;
 		});
-		var knownLabels = new Set(ECC_ACTION_LABELS.concat(ECC_STATUS_LABELS));
-		var actionLabels = ECC_ACTION_LABELS.map(function (slug) { return labelBySlug[slug]; }).filter(Boolean);
-		var statusLabels = ECC_STATUS_LABELS.map(function (slug) { return labelBySlug[slug]; }).filter(Boolean);
-		var customLabels = labels.filter(function (label) { return !knownLabels.has(label.slug); });
-		labelsEl.innerHTML = [
-			renderLabelSection('Actions', actionLabels),
-			renderLabelSection('Status', statusLabels),
-			renderLabelSection('Custom', customLabels),
-		].filter(Boolean).join('') || '<div class="list-group-item text-muted small">No labels configured.</div>';
 		labelsEl.querySelectorAll('[data-label]').forEach(function (button) {
-			button.addEventListener('click', function () {
-				activeLabel = button.dataset.label || '';
-				activeMailbox = '';
-				pendingEmailId = '';
-				writeUrlState('');
-				loadAll();
-			});
+			var slug = button.dataset.label || '';
+			button.classList.toggle('active', activeLabel === slug);
+			var badge = button.querySelector('.badge');
+			if (badge) badge.textContent = counts[slug] || 0;
 		});
 	}
 
@@ -1310,6 +1264,30 @@
 			var badge = button.querySelector('.badge');
 			if (badge) badge.textContent = mailbox.count || 0;
 		});
+	}
+
+	function renderTriageNavStatus() {
+		if (!triageNavStatus) return;
+		if (!triageProgress?.running) {
+			triageNavStatus.classList.add('d-none');
+			return;
+		}
+		var total = Math.max(triageProgress.total || 0, triageProgress.processed || 0);
+		var text = 'Triage: ' + Math.max(total - (triageProgress.processed || 0), 0) + ' remaining';
+		triageNavStatus.textContent = text;
+		triageNavStatus.classList.remove('d-none');
+	}
+
+	function applyEmailCountsPayload(payload) {
+		if (!payload) return;
+		if (String(payload.project || '') !== String(selectedProject || '')) return;
+		renderMailboxes(payload.mailboxes || []);
+		renderLabelCounts(payload.labels || []);
+		renderTriageNavStatus();
+	}
+
+	function handleEmailCountsUpdated(event) {
+		applyEmailCountsPayload(event.detail || {});
 	}
 
 		function emailMatchesCurrentView(email) {
@@ -2792,12 +2770,6 @@
 		}
 	}
 
-	async function loadLabels() {
-		var data = await api('GET', labelsPath());
-		renderMailboxes(data.mailboxes || []);
-		renderLabels(data.labels || []);
-	}
-
 	async function loadEmails() {
 		if (!listEl) return;
 		var seq = ++emailLoadSeq;
@@ -2871,7 +2843,8 @@
 
 	async function loadAll() {
 		try {
-			await Promise.all([loadLabels(), loadEmails()]);
+			requestEmailCounts();
+			await loadEmails();
 		} catch (err) {
 			if (listEl) listEl.innerHTML = '<div class="list-group-item text-danger">' + escapeHtml(err.message) + '</div>';
 		}
@@ -3047,7 +3020,7 @@
 			if (eccCountsTimer) clearTimeout(eccCountsTimer);
 			eccCountsTimer = setTimeout(function () {
 				eccCountsTimer = null;
-				loadLabels().catch(() => {});
+				requestEmailCounts();
 			}, 300);
 		}
 
@@ -3150,35 +3123,10 @@
 
 		function renderTriageProgress() {
 			if (!triageProgress) return;
-			var total = Math.max(triageProgress.total || 0, triageProgress.processed || 0);
-			var pct = total > 0 ? Math.min(100, Math.round((triageProgress.processed / total) * 100)) : 0;
-			if (triageModalProcessed) triageModalProcessed.textContent = triageProgress.processed;
-			if (triageModalTotal) triageModalTotal.textContent = total;
-			if (triageModalTriaged) triageModalTriaged.textContent = triageProgress.triaged;
-			if (triageModalErrors) triageModalErrors.textContent = triageProgress.errors;
-			if (triageModalProgress) {
-				triageModalProgress.style.width = pct + '%';
-				triageModalProgress.setAttribute('aria-valuenow', String(pct));
-			}
-			if (triageModalStatus) {
-				var statusText = 'Processing inbox';
-				if (triageProgress.status === 'queued') statusText = 'Queued';
-				if (triageProgress.waiting && triageProgress.running) statusText = 'Waiting for server updates';
-				if (triageProgress.status === 'failed') statusText = 'Triage failed';
-				if (triageProgress.status === 'completed') statusText = 'Triage complete';
-				triageModalStatus.textContent = statusText;
-			}
-			if (triageModalDetail) {
-				var runText = triageRunId ? ' Run: ' + triageRunId : '';
-				triageModalDetail.textContent = triageProgress.running
-					? triageProgress.processed + ' of ' + total + ' processed.' + runText
-					: triageProgress.triaged + ' triaged, ' + triageProgress.errors + ' errors.' + runText;
-			}
-			if (triageSpinner) triageSpinner.classList.toggle('d-none', !triageProgress.running);
-			if (triageModalClose) triageModalClose.disabled = triageProgress.running;
+			renderTriageNavStatus();
 		}
 
-		async function showTriageModal(total, runId) {
+		function startTriageProgress(total, runId) {
 			triageRunId = runId;
 			triageProgress = {
 				total: total || 0,
@@ -3193,9 +3141,6 @@
 				runDriven: false,
 			};
 			renderTriageProgress();
-			if (!triageModalEl) return;
-			const { Modal } = await import('/static/js/vendor.js');
-			Modal.getOrCreateInstance(triageModalEl).show();
 		}
 
 		function stopTriageRunPolling() {
@@ -3248,7 +3193,7 @@
 				showError((run.errors[0] || {}).error || 'Inbox triage failed. Run: ' + triageRunId);
 			} else {
 				showSuccess('Triaged ' + (run?.triaged || 0) + ' email' + (run?.triaged === 1 ? '' : 's'));
-				setTimeout(hideTriageModal, 900);
+				scheduleEccCountsRefresh();
 			}
 		}
 
@@ -3287,12 +3232,6 @@
 			renderTriageProgress();
 		}
 
-		async function hideTriageModal() {
-			if (!triageModalEl) return;
-			const { Modal } = await import('/static/js/vendor.js');
-			Modal.getOrCreateInstance(triageModalEl).hide();
-		}
-
 		function updateTriageProgressFromEmail(email) {
 			if (!triageProgress || !triageRunId || !email || email.triage_run_id !== triageRunId) return;
 			if (!['complete', 'failed'].includes(email.triage_status)) return;
@@ -3322,7 +3261,7 @@
 			triageBtn.innerHTML = kkIcon('sync', 'me-1') + 'Triaging...';
 			var runId = newRunId();
 			try {
-				await showTriageModal(getMailboxCount('inbox'), runId);
+				startTriageProgress(getMailboxCount('inbox'), runId);
 				var payload = { run_id: runId };
 				if (selectedProject) payload.project = selectedProject;
 				var result = await api('POST', '/emails/triage-inbox', payload);
@@ -3385,16 +3324,7 @@
 		aiPanel = document.getElementById('ecc-ai-panel');
 		aiSubtitle = document.getElementById('ecc-ai-subtitle');
 		openEmailBtn = document.getElementById('ecc-open-email-btn');
-		triageModalEl = document.getElementById('ecc-triage-modal');
-		triageModalStatus = document.getElementById('ecc-triage-modal-status');
-		triageModalDetail = document.getElementById('ecc-triage-modal-detail');
-		triageModalProgress = document.getElementById('ecc-triage-modal-progress');
-		triageModalProcessed = document.getElementById('ecc-triage-modal-processed');
-		triageModalTotal = document.getElementById('ecc-triage-modal-total');
-		triageModalTriaged = document.getElementById('ecc-triage-modal-triaged');
-		triageModalErrors = document.getElementById('ecc-triage-modal-errors');
-		triageModalClose = document.getElementById('ecc-triage-modal-close');
-		triageSpinner = document.getElementById('ecc-triage-spinner');
+		triageNavStatus = document.getElementById('ecc-triage-nav-status');
 		activeMailbox = 'inbox';
 		activeLabel = '';
 		selectedProject = '';
@@ -3413,11 +3343,21 @@
 		renderEmailAi(null);
 		renderMoveActions();
 		updateActionBar();
+		renderTriageNavStatus();
 
 		mailboxesEl?.querySelectorAll('[data-mailbox]').forEach(function (button) {
 			button.addEventListener('click', function () {
 				activeMailbox = button.dataset.mailbox || 'inbox';
 				activeLabel = '';
+				pendingEmailId = '';
+				writeUrlState('');
+				loadAll();
+			});
+		});
+		labelsEl?.querySelectorAll('[data-label]').forEach(function (button) {
+			button.addEventListener('click', function () {
+				activeLabel = button.dataset.label || '';
+				activeMailbox = '';
 				pendingEmailId = '';
 				writeUrlState('');
 				loadAll();
@@ -3468,6 +3408,8 @@
 		addWindowListener('email:created', handleEmailSocketEvent);
 		addWindowListener('email:updated', handleEmailSocketEvent);
 		addWindowListener('email-triage:run-updated', handleTriageRunEvent);
+		addWindowListener('email-counts:updated', handleEmailCountsUpdated);
+		addWindowListener('email-counts:socket-ready', requestEmailCounts);
 		addWindowListener('email:deleted', handleEmailDeleted);
 		addWindowListener('email-draft:created', handleDraftSocketEvent);
 		addWindowListener('email-draft:updated', handleDraftSocketEvent);
@@ -3498,6 +3440,7 @@
 		windowListeners.length = 0;
 		if (eccInfiniteScroll) eccInfiniteScroll.destroy();
 		eccInfiniteScroll = null;
+		if (triageNavStatus) triageNavStatus.classList.add('d-none');
 		listEl = null;
 		mailboxesEl = null;
 		labelsEl = null;
@@ -3532,16 +3475,7 @@
 		aiPanel = null;
 		aiSubtitle = null;
 		openEmailBtn = null;
-		triageModalEl = null;
-		triageModalStatus = null;
-		triageModalDetail = null;
-		triageModalProgress = null;
-		triageModalProcessed = null;
-		triageModalTotal = null;
-		triageModalTriaged = null;
-		triageModalErrors = null;
-		triageModalClose = null;
-		triageSpinner = null;
+		triageNavStatus = null;
 		aiMessagesEl = null;
 		aiInputEl = null;
 		aiSendBtn = null;

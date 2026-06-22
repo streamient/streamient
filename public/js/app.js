@@ -589,7 +589,7 @@ function bindProjectSettingsModal(projectId, activeTab) {
 		applyEmailFilterBtn.innerHTML = kkIcon('sync', 'me-1') + 'Applying...';
 		renderEmailFilterApplyModal({
 			status: 'Saving filter',
-			detail: 'Preparing ECC inbox scan.',
+			detail: 'Preparing project inbox and label scan.',
 			processed: 0,
 			moved: 0,
 			running: true,
@@ -602,7 +602,7 @@ function bindProjectSettingsModal(projectId, activeTab) {
 			await api('PUT', `/projects/${projectId}`, { email_filter });
 			renderEmailFilterApplyModal({
 				status: 'Applying filters',
-				detail: 'Checking ECC inbox.',
+				detail: 'Checking project inbox and labeled emails.',
 				processed: 0,
 				moved: 0,
 				running: true,
@@ -1054,8 +1054,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 	// ── Socket.IO: live count updates ──
 	if (typeof io === 'function' && typeof __host_id === 'string' && __host_id) {
 		const socket = io(__ws_url || undefined, { 'transports': ['websocket'], 'reconnection': true, 'autoConnect': true, 'timeout': 40000, 'withCredentials': true, 'reconnectionAttempts': 50, 'reconnectionDelay': 1000, 'reconnectionDelayMax': 10000, 'forceNew': false });
+		window.__kkSocket = socket;
 		socket.on('connect', () => {
 			socket.emit('subscribe', `tenant:${__host_id}`);
+			window.dispatchEvent(new CustomEvent('email-counts:socket-ready'));
 		});
 		socket.on('reindex:status', (data) => {
 			window.__lastReindexStatus = data || {};
@@ -1085,6 +1087,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 		socket.on('email-triage:run-updated', (data) => {
 			window.dispatchEvent(new CustomEvent('email-triage:run-updated', { detail: data || {} }));
 		});
+		socket.on('email-counts:updated', (data) => {
+			window.dispatchEvent(new CustomEvent('email-counts:updated', { detail: data || {} }));
+		});
+		window.addEventListener('email-counts:request', (event) => {
+			socket.emit('email-counts:request', event.detail || {});
+		});
+		window.dispatchEvent(new CustomEvent('email-counts:socket-ready'));
 	}
 
 	// ── Same-tab CRUD: refresh counts immediately when items change via modals / batch ──

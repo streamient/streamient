@@ -55,6 +55,7 @@ const DEFAULT_EMAIL_LABEL_ORDER = new Map(DEFAULT_EMAIL_LABELS.map((label, index
 const HIDDEN_EMAIL_LABEL_SLUGS = new Set(['triaged']);
 const PRIMARY_TRIAGE_LABELS = ['reply-required', 'human-do', 'waiting', 'marketing', 'no-action', 'spam'];
 const TRIAGE_ACTIONS = PRIMARY_TRIAGE_LABELS;
+const VISIBLE_EMAIL_LABELS = DEFAULT_EMAIL_LABELS.filter((label) => !HIDDEN_EMAIL_LABEL_SLUGS.has(label.slug));
 const TERMINAL_LABEL_CLEAR_MAILBOXES = new Set(['archived', 'spam']);
 const MAX_DRAFT_RECIPIENTS = 10;
 const MAILBOX_ACTIONS = ['none', 'keep-inbox', 'archive', 'spam'];
@@ -62,6 +63,7 @@ const TRIAGE_STATUSES = ['pending', 'complete', 'failed'];
 const TRIAGE_STATUS_INCLUDES = ['email', 'draft'];
 const LINKABLE_CONTEXT_TYPES = ['notes', 'memory', 'urls', 'emails'];
 const TRIAGE_RUN_EVENT = 'email-triage:run-updated';
+const EMAIL_FILTER_TYPESENSE_INCLUDE_FIELDS = 'id,source_id,from,subject,mailbox,labels';
 const DEFAULT_EMAIL_TRIAGE_INSTRUCTIONS = [
 	'Classify email by the next operational action.',
 	'Use reply-required when a human should answer the sender.',
@@ -602,6 +604,54 @@ async function applyAccountSpamGuard(host_id, normalized, data = {}) {
 	};
 }
 
+function emailFilterCandidateFromTypesenseDocument(document = {}) {
+	const id = stringifyObjectId(document.source_id || document.id);
+	if (!id) return null;
+	return {
+		_id: id,
+		from: document.from || [],
+		subject: document.subject || '',
+		mailbox: document.mailbox || 'inbox',
+		labels: Array.isArray(document.labels) ? document.labels : [],
+	};
+}
+
+async function listProjectEmailFilterCandidatesFromTypesense(host_id, projectId, ctx = {}) {
+	const listFn = ctx.listDocumentsFn || listDocuments;
+	const projectFilter = `project_id:=${exactTypesenseValue(projectId)}`;
+	const baseFilter = `${projectFilter} && in_trash:=false`;
+	const filters = [
+		`${baseFilter} && mailbox:=inbox`,
+		...DEFAULT_EMAIL_LABELS.map((label) => `${baseFilter} && labels:=${exactTypesenseValue(label.slug)}`),
+	];
+	const candidates = new Map();
+
+	for (const filter_by of filters) {
+		let page = 1;
+		while (true) {
+			const result = await listFn(host_id, 'emails', {
+				page,
+				perPage: EMAIL_LIST_TYPESENSE_PAGE_SIZE,
+				filter_by,
+				include_fields: EMAIL_FILTER_TYPESENSE_INCLUDE_FIELDS,
+				group_by: 'source_id',
+				group_limit: 1,
+				group_max_candidates: EMAIL_LIST_TYPESENSE_GROUP_MAX,
+				sort_by: 'updated_at:desc',
+			});
+			const documents = emailListDocumentsFromResult(result);
+			for (const document of documents) {
+				const candidate = emailFilterCandidateFromTypesenseDocument(document);
+				if (candidate && !candidates.has(candidate._id)) candidates.set(candidate._id, candidate);
+			}
+			if (documents.length < EMAIL_LIST_TYPESENSE_PAGE_SIZE) break;
+			page += 1;
+		}
+	}
+
+	return [...candidates.values()];
+}
+
 export async function applyProjectEmailFilterToInbox(host_id, projectId, ctx = {}) {
 	const project = await Project.findOne({ _id: projectId, host_id }).select('_id email_filter').lean();
 	if (!project) return null;
@@ -618,13 +668,7 @@ export async function applyProjectEmailFilterToInbox(host_id, projectId, ctx = {
 		};
 	}
 
-	const candidates = await Email.find({
-		host_id,
-		project: projectId,
-		in_trash: { $ne: true },
-		mailbox: 'inbox',
-		triaged: false,
-	}).select('_id from subject').lean();
+	const candidates = await listProjectEmailFilterCandidatesFromTypesense(host_id, stringifyObjectId(project._id), ctx);
 	const matched = candidates.filter((email) => matchesEmailFilter(filterText, {
 		from: email.from || [],
 		subject: email.subject || '',
@@ -647,9 +691,6 @@ export async function applyProjectEmailFilterToInbox(host_id, projectId, ctx = {
 			_id: { $in: ids },
 			host_id,
 			project: projectId,
-			in_trash: { $ne: true },
-			mailbox: 'inbox',
-			triaged: false,
 		},
 		{
 			$set: {
@@ -663,13 +704,14 @@ export async function applyProjectEmailFilterToInbox(host_id, projectId, ctx = {
 	const moved = result?.modifiedCount ?? result?.nModified ?? ids.length;
 
 	if (!ctx.skipSideEffects) {
-		const updatedEmails = await Email.find({ _id: { $in: ids }, host_id }).lean();
-		await indexEmailsNow(host_id, updatedEmails, emailIndexOptions(ctx));
+		const updatedEmails = await Email.find({ _id: { $in: ids }, host_id, project: projectId }).lean();
+		await removeEmailsFromIndexNow(host_id, ids, emailIndexOptions(ctx));
 		await Promise.all(updatedEmails.map(async (email) => {
 			const id = stringifyObjectId(email._id);
 			removeLinksForItem(host_id, id).catch((err) => log.error({ err, host_id, email_id: id }, 'Remove links error'));
-			await emitEmailCreatedOrUpdated(host_id, 'email:updated', email);
+			await emitEmailCreatedOrUpdated(host_id, 'email:updated', email, { emitCounts: false, thread: [email] });
 		}));
+		emitToTenant(host_id, 'counts:refresh', { project: stringifyObjectId(project._id) });
 		invalidateGraphCache(host_id).catch(() => {});
 		if (ctx.user_id) {
 			audit.log({
@@ -790,7 +832,7 @@ export async function buildEmailRealtimePayload(host_id, email, options = {}) {
 export async function emitEmailCreatedOrUpdated(host_id, event, email, options = {}) {
 	const payload = await buildEmailRealtimePayload(host_id, email, options);
 	emitToTenant(host_id, event, payload);
-	emitToTenant(host_id, 'counts:refresh');
+	if (options.emitCounts !== false) emitToTenant(host_id, 'counts:refresh');
 	return payload;
 }
 
@@ -1459,32 +1501,31 @@ export async function getEmailTriageRun(host_id, runId) {
 	return formatEmailTriageRun(run);
 }
 
-export async function listEmailLabels(host_id, filters = {}) {
-	const labels = await ensureDefaultEmailLabels(host_id);
-	const visibleLabels = labels.filter((label) => !HIDDEN_EMAIL_LABEL_SLUGS.has(label.slug));
+export async function buildEmailCountsPayload(host_id, filters = {}) {
 	const projectId = filters.project || null;
 	const countOptions = {
-		useTypesense: Boolean(filters.useTypesense),
 		countFn: filters.countFn,
 	};
+	const draftCountFn = filters.draftCountFn || EmailDraft.countDocuments.bind(EmailDraft);
 
 	const [mailboxCounts, labelCounts] = await Promise.all([
 		Promise.all([
-			countEmailThreadsForView(host_id, projectId, { mailbox: 'inbox', triaged: false }, countOptions),
-			countEmailThreadsForView(host_id, projectId, { mailbox: 'archived' }, countOptions),
-			countEmailThreadsForView(host_id, projectId, { mailbox: 'sent' }, countOptions),
-			countEmailThreadsForView(host_id, projectId, { mailbox: 'spam' }, countOptions),
-			EmailDraft.countDocuments({ host_id, status: { $nin: ['discarded', 'ready'] }, ...(projectId ? { project: projectId } : {}) }),
-			countEmailThreadsForView(host_id, projectId, { mailbox: 'trash' }, countOptions),
+			countEmailThreadsByTypesense(host_id, projectId, { mailbox: 'inbox', triaged: false }, countOptions),
+			countEmailThreadsByTypesense(host_id, projectId, { mailbox: 'archived' }, countOptions),
+			countEmailThreadsByTypesense(host_id, projectId, { mailbox: 'sent' }, countOptions),
+			countEmailThreadsByTypesense(host_id, projectId, { mailbox: 'spam' }, countOptions),
+			draftCountFn({ host_id, status: 'draft', ...(projectId ? { project: projectId } : {}) }),
+			countEmailThreadsByTypesense(host_id, projectId, { mailbox: 'trash' }, countOptions),
 		]),
-		Promise.all(visibleLabels.map(async (label) => ({
+		Promise.all(VISIBLE_EMAIL_LABELS.map(async (label) => ({
 			slug: label.slug,
-			count: await countEmailThreadsForView(host_id, projectId, { label: label.slug }, countOptions),
+			count: await countEmailThreadsByTypesense(host_id, projectId, { label: label.slug }, countOptions),
 		}))),
 	]);
 
 	const labelCountMap = Object.fromEntries(labelCounts.map((item) => [item.slug, item.count]));
 	return {
+		project: projectId || '',
 		mailboxes: [
 			{ slug: 'inbox', name: 'Inbox', count: mailboxCounts[0] },
 			{ slug: 'archived', name: 'Archived', count: mailboxCounts[1] },
@@ -1493,15 +1534,18 @@ export async function listEmailLabels(host_id, filters = {}) {
 			{ slug: 'drafts', name: 'Drafts', count: mailboxCounts[4] },
 			{ slug: 'trash', name: 'Trash', count: mailboxCounts[5] },
 		],
-		labels: visibleLabels.map((label) => ({
-			_id: label._id,
+		labels: VISIBLE_EMAIL_LABELS.map((label) => ({
 			slug: label.slug,
 			name: label.name,
 			color: label.color,
-			is_system: label.is_system,
+			is_system: true,
 			count: labelCountMap[label.slug] || 0,
 		})),
 	};
+}
+
+export async function listEmailLabels(host_id, filters = {}) {
+	return buildEmailCountsPayload(host_id, filters);
 }
 
 export async function getEmail(host_id, emailId) {

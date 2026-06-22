@@ -770,6 +770,41 @@ const swaggerSpec = {
 	                },
 	            },
 	        },
+	        '/projects/{id}/email-filter/apply': {
+	            post: {
+	                tags: ['Projects'],
+	                summary: 'Apply project email filter',
+	                description: 'Applies saved project email filter rules to project inbox and labeled emails. Candidate selection uses Typesense; MongoDB updates are limited to matched email IDs.',
+	                parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+	                responses: {
+	                    200: {
+	                        description: 'OK',
+	                        content: {
+	                            'application/json': {
+	                                schema: {
+	                                    type: 'object',
+	                                    properties: {
+	                                        result: {
+	                                            type: 'object',
+	                                            properties: {
+	                                                project: { type: 'string' },
+	                                                filter_configured: { type: 'boolean' },
+	                                                processed: { type: 'integer' },
+	                                                matched: { type: 'integer' },
+	                                                moved: { type: 'integer' },
+	                                                email_ids: { type: 'array', items: { type: 'string' } },
+	                                            },
+	                                        },
+	                                    },
+	                                },
+	                            },
+	                        },
+	                    },
+	                    403: { description: 'Owner/admin or email feature access required', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+	                    404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+	                },
+	            },
+	        },
 
 	        // ---- Account / Team ----
         '/account/tenants': {

@@ -11,6 +11,7 @@ const log = createLogger('socket');
 let io;
 let bridgePublisher;
 let bridgeSubscriber;
+let emailCountsHandler;
 
 const TENANT_EVENT_BRIDGE_CHANNEL = 'tenant-events';
 
@@ -42,6 +43,26 @@ function emitToTenantRoom(host_id, event, data) {
 	}
 }
 
+function subscribedTenantId(socket) {
+	for (const room of socket.rooms || []) {
+		const match = String(room || '').match(/^tenant:(.+)$/);
+		if (match) return match[1];
+	}
+	return '';
+}
+
+function emitEmailCounts(host_id, options = {}) {
+	if (!host_id || !emailCountsHandler) return;
+	emailCountsHandler(host_id, options)
+		.then((payload) => {
+			if (!payload) return;
+			emitToTenantRoom(host_id, 'email-counts:updated', payload);
+		})
+		.catch((err) => {
+			log.warn({ err, host_id }, 'Socket.IO email counts refresh failed');
+		});
+}
+
 async function ensureBridgePublisher() {
 	if (!config.socketRedis) return null;
 	if (bridgePublisher) return bridgePublisher;
@@ -63,6 +84,7 @@ async function setupTenantEventBridge() {
 			const payload = JSON.parse(message);
 			if (!payload?.host_id || !payload?.event) return;
 			emitToTenantRoom(payload.host_id, payload.event, payload.data);
+			if (payload.event === 'counts:refresh') emitEmailCounts(payload.host_id, payload.data || {});
 		} catch (err) {
 			log.warn({ err }, 'Socket.IO bridge payload error');
 		}
@@ -87,8 +109,9 @@ export function getIO() {
 	return io;
 }
 
-export async function setupSocketIO(httpServer, sessionMiddleware) {
+export async function setupSocketIO(httpServer, sessionMiddleware, handlers = {}) {
 	return OtelRuntime.createCustomSpan('socketio.setup', async (span) => {
+		emailCountsHandler = handlers.emailCountsHandler || emailCountsHandler;
 		span.setAttribute('server.mode', process.env.SERVER_MODE || 'app');
 		span.setAttribute('service.app', process.env.KUMBUKUM_APP || 'web');
 		span.setAttribute('socket.redis.enabled', !!config.socketRedis);
@@ -146,6 +169,18 @@ export async function setupSocketIO(httpServer, sessionMiddleware) {
 				});
 			});
 
+			socket.on('email-counts:request', (payload = {}) => {
+				const host_id = subscribedTenantId(socket);
+				if (!host_id || !emailCountsHandler) return;
+				emailCountsHandler(host_id, { project: payload?.project || '' })
+					.then((counts) => {
+						if (counts) socket.emit('email-counts:updated', counts);
+					})
+					.catch((err) => {
+						log.warn({ err, host_id }, 'Socket.IO email counts request failed');
+					});
+			});
+
 			socket.on('disconnect', () => {
 				OtelRuntime.createCustomSpan('socketio.disconnect', (disconnectSpan) => {
 					disconnectSpan.setAttribute('socket.id', socket.id);
@@ -169,6 +204,7 @@ export async function setupSocketIO(httpServer, sessionMiddleware) {
 export function emitToTenant(host_id, event, data) {
 	if (io) {
 		emitToTenantRoom(host_id, event, data);
+		if (event === 'counts:refresh') emitEmailCounts(host_id, data || {});
 		return;
 	}
 

@@ -396,7 +396,7 @@ describe('Project settings API', () => {
 		}
 	});
 
-	it('lets project admins apply saved email filters to the project inbox', async () => {
+	it('lets project admins apply saved email filters to project inbox and labeled emails', async () => {
 		const server = await createServer();
 		try {
 			const response = await request(server, 'POST', '/projects/project-1/email-filter/apply', {});

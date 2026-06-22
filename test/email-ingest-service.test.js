@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailIds, listEmailLabels, parseTriageResult, triageInboxEmails, startEmailTriageRun, getEmailTriageRun, backfillEmailTriageState, backfillTerminalEmailLabels, backfillForwardedSentReplies, askEmailAi, askEmailListAi, buildEmailAiTypesenseFilter, buildTriageContext, parseEmailAiQuery, resetEmailTriage, updateEmail, deleteEmail, emptySpam, parseEmailReplySuggestionsResult, suggestEmailReplies, suggestFromEmailAddresses, matchesEmailFilter, applyProjectEmailFilterToInbox, buildEmailRealtimePayload, addSendersToSpamGuard } from '../services/email_ingest_service.js';
+import { parseEmailInput, parseForwardedEmailInput, ingestEmail, ingestForwardedEmail, getEmailThread, getEmailThreadDraft, listEmails, listEmailIds, listEmailLabels, parseTriageResult, triageInboxEmails, startEmailTriageRun, getEmailTriageRun, backfillEmailTriageState, backfillTerminalEmailLabels, backfillForwardedSentReplies, askEmailAi, askEmailListAi, buildEmailAiTypesenseFilter, buildTriageContext, parseEmailAiQuery, resetEmailTriage, updateEmail, deleteEmail, emptySpam, parseEmailReplySuggestionsResult, suggestEmailReplies, suggestFromEmailAddresses, matchesEmailFilter, applyProjectEmailFilterToInbox, buildEmailRealtimePayload, addSendersToSpamGuard, buildEmailCountsPayload } from '../services/email_ingest_service.js';
 import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
 import { EmailIdentity } from '../model/email_identity.js';
@@ -40,12 +40,12 @@ describe('Email ingest service', () => {
 		assert.equal(matchesEmailFilter('subject:', { from: ['friend@good.com'], subject: 'subject only' }), false);
 	});
 
-	it('applies project email filters to untriaged project inbox emails', async () => {
+	it('applies project email filters from Typesense inbox and label candidates', async () => {
 		const originalProjectFindOne = Project.findOne;
-		const originalEmailFind = Email.find;
 		const originalEmailUpdateMany = Email.updateMany;
 		let updateQuery = null;
 		let updatePayload = null;
+		const typeSenseFilters = [];
 
 		Project.findOne = () => ({
 			select: () => ({
@@ -55,15 +55,6 @@ describe('Email ingest service', () => {
 				}),
 			}),
 		});
-		Email.find = () => ({
-			select: () => ({
-				lean: async () => [
-					{ _id: { toString: () => 'email-1' }, from: ['hello@noisy.com'], subject: 'Newsletter' },
-					{ _id: { toString: () => 'email-2' }, from: ['ops@example.com'], subject: 'Deploy failed overnight' },
-					{ _id: { toString: () => 'email-3' }, from: ['friend@example.com'], subject: 'Hello' },
-				],
-			}),
-		});
 		Email.updateMany = async (query, update) => {
 			updateQuery = query;
 			updatePayload = update.$set;
@@ -71,7 +62,32 @@ describe('Email ingest service', () => {
 		};
 
 		try {
-			const result = await applyProjectEmailFilterToInbox('host-1', 'project-1', { skipSideEffects: true });
+			const listDocumentsFn = async (host_id, type, options) => {
+				assert.equal(host_id, 'host-1');
+				assert.equal(type, 'emails');
+				typeSenseFilters.push(options.filter_by);
+				assert.equal(options.include_fields, 'id,source_id,from,subject,mailbox,labels');
+				assert.equal(options.group_by, 'source_id');
+				if (options.filter_by.includes('mailbox:=inbox')) {
+					return {
+						hits: [
+							{ document: { source_id: 'email-1', from: ['hello@noisy.com'], subject: 'Newsletter', mailbox: 'inbox', labels: [] } },
+							{ document: { source_id: 'email-3', from: ['friend@example.com'], subject: 'Hello', mailbox: 'inbox', labels: [] } },
+						],
+						found: 2,
+					};
+				}
+				if (options.filter_by.includes('labels:=`reply-required`')) {
+					return {
+						hits: [
+							{ document: { source_id: 'email-2', from: ['ops@example.com'], subject: 'Deploy failed overnight', mailbox: 'archived', labels: ['reply-required'] } },
+						],
+						found: 1,
+					};
+				}
+				return { hits: [], found: 0 };
+			};
+			const result = await applyProjectEmailFilterToInbox('host-1', 'project-1', { skipSideEffects: true, listDocumentsFn });
 
 			assert.equal(result.processed, 3);
 			assert.equal(result.matched, 2);
@@ -80,16 +96,44 @@ describe('Email ingest service', () => {
 			assert.deepEqual(updateQuery._id.$in, ['email-1', 'email-2']);
 			assert.equal(updateQuery.host_id, 'host-1');
 			assert.equal(updateQuery.project, 'project-1');
-			assert.equal(updateQuery.mailbox, 'inbox');
-			assert.equal(updateQuery.triaged, false);
+			assert.equal(updateQuery.mailbox, undefined);
+			assert.equal(updateQuery.triaged, undefined);
+			assert.equal(updateQuery.in_trash, undefined);
+			assert.ok(!JSON.stringify(updateQuery).includes('$ne'));
 			assert.equal(updatePayload.in_trash, true);
 			assert.deepEqual(updatePayload.labels, []);
 			assert.ok(updatePayload.trashed_at instanceof Date);
+			assert.ok(typeSenseFilters.some((filter) => filter === 'project_id:=`project-1` && in_trash:=false && mailbox:=inbox'));
+			assert.ok(typeSenseFilters.some((filter) => filter === 'project_id:=`project-1` && in_trash:=false && labels:=`reply-required`'));
+			assert.ok(typeSenseFilters.some((filter) => filter === 'project_id:=`project-1` && in_trash:=false && labels:=`triaged`'));
 		} finally {
 			Project.findOne = originalProjectFindOne;
-			Email.find = originalEmailFind;
 			Email.updateMany = originalEmailUpdateMany;
 		}
+	});
+
+	it('builds ECC email counts from Typesense label and mailbox counts', async () => {
+		const filters = [];
+		const result = await buildEmailCountsPayload('host-1', {
+			project: 'project-1',
+			countFn: async (host_id, type, options) => {
+				assert.equal(host_id, 'host-1');
+				assert.equal(type, 'emails');
+				filters.push(options.filter_by);
+				return { found: options.filter_by.includes('labels:=`reply-required`') ? 7 : 3 };
+			},
+			draftCountFn: async (query) => {
+				assert.deepEqual(query, { host_id: 'host-1', status: 'draft', project: 'project-1' });
+				return 2;
+			},
+		});
+
+		assert.equal(result.project, 'project-1');
+		assert.equal(result.mailboxes.find((mailbox) => mailbox.slug === 'inbox')?.count, 3);
+		assert.equal(result.mailboxes.find((mailbox) => mailbox.slug === 'drafts')?.count, 2);
+		assert.equal(result.labels.find((label) => label.slug === 'reply-required')?.count, 7);
+		assert.ok(filters.some((filter) => filter === 'project_id:=`project-1` && in_trash:=false && mailbox:=`inbox` && triaged:=false'));
+		assert.ok(filters.some((filter) => filter === 'project_id:=`project-1` && in_trash:=false && labels:=`reply-required`'));
 	});
 
 	it('normalizes parsed payload fields', async () => {
@@ -1979,121 +2023,45 @@ describe('Email ingest service', () => {
 		}
 	});
 
-	it('lists default email labels in beginner-friendly order and hides internal done label', async () => {
-		let bulkOps = [];
-		const originalBulkWrite = EmailLabel.bulkWrite;
-		const originalLabelFind = EmailLabel.find;
-		const originalEmailCountDocuments = Email.countDocuments;
-		const originalEmailFind = Email.find;
-		const originalDraftCountDocuments = EmailDraft.countDocuments;
-
-		EmailLabel.bulkWrite = async (ops) => {
-			bulkOps = ops;
-			return {};
-		};
-		EmailLabel.find = () => ({
-			sort: () => ({
-				lean: async () => [
-					{ _id: 'waiting', slug: 'waiting', name: 'Waiting', color: '#0d6efd', is_system: true },
-					{ _id: 'triaged', slug: 'triaged', name: 'Done', color: '#198754', is_system: true },
-					{ _id: 'human-do', slug: 'human-do', name: 'Human Do', color: '#fd7e14', is_system: true },
-					{ _id: 'reply-required', slug: 'reply-required', name: 'Review', color: '#dc3545', is_system: true },
-					{ _id: 'marketing', slug: 'marketing', name: 'Marketing', color: '#6f42c1', is_system: true },
-					{ _id: 'no-action', slug: 'no-action', name: 'No action', color: '#6c757d', is_system: true },
-					{ _id: 'spam', slug: 'spam', name: 'Spam', color: '#212529', is_system: true },
-				],
-			}),
+	it('lists static ECC labels in beginner-friendly order and hides internal done label', async () => {
+		const result = await listEmailLabels('host-1', {
+			countFn: async () => ({ found: 0 }),
+			draftCountFn: async () => 0,
 		});
-		Email.countDocuments = async () => 0;
-		Email.find = () => ({
-			select: () => ({
-				lean: async () => [
-					{ _id: 'sent-1', message_id: 'sent-1@example.com', in_reply_to: 'root@example.com', references: ['root@example.com'] },
-					{ _id: 'sent-2', message_id: 'sent-2@example.com', in_reply_to: 'root@example.com', references: ['root@example.com'] },
-				],
-			}),
-		});
-		EmailDraft.countDocuments = async () => 0;
 
-		try {
-			const result = await listEmailLabels('host-1');
-
-			assert.deepEqual(result.labels.map((label) => label.name), ['Review', 'Human Do', 'Waiting', 'Marketing', 'Spam', 'No action']);
-			assert.ok(!result.labels.some((label) => label.slug === 'triaged'));
-			assert.equal(result.mailboxes.find((mailbox) => mailbox.slug === 'sent').count, 1);
-			assert.equal(bulkOps.find((op) => op.updateOne.filter.slug === 'reply-required').updateOne.update.$set.name, 'Review');
-			assert.equal(bulkOps.find((op) => op.updateOne.filter.slug === 'marketing').updateOne.update.$set.name, 'Marketing');
-			assert.equal(bulkOps.find((op) => op.updateOne.filter.slug === 'triaged').updateOne.update.$set.name, 'Done');
-		} finally {
-			EmailLabel.bulkWrite = originalBulkWrite;
-			EmailLabel.find = originalLabelFind;
-			Email.countDocuments = originalEmailCountDocuments;
-			Email.find = originalEmailFind;
-			EmailDraft.countDocuments = originalDraftCountDocuments;
-		}
+		assert.deepEqual(result.labels.map((label) => label.name), ['Review', 'Human Do', 'Waiting', 'Marketing', 'Spam', 'No action']);
+		assert.ok(!result.labels.some((label) => label.slug === 'triaged'));
+		assert.ok(result.labels.every((label) => label.is_system === true));
 	});
 
-	it('counts mailbox threads with collapse for archived messages', async () => {
-		const originalBulkWrite = EmailLabel.bulkWrite;
-		const originalLabelFind = EmailLabel.find;
-		const originalEmailFind = Email.find;
-		const originalDraftCountDocuments = EmailDraft.countDocuments;
-
-		EmailLabel.bulkWrite = async () => ({});
-		EmailLabel.find = () => ({
-			sort: () => ({
-				lean: async () => [],
-			}),
+	it('requests archived mailbox counts from Typesense thread grouping', async () => {
+		const countFilters = [];
+		const result = await listEmailLabels('host-1', {
+			countFn: async (hostId, type, options) => {
+				countFilters.push(options);
+				assert.equal(hostId, 'host-1');
+				assert.equal(type, 'emails');
+				assert.equal(options.group_by, 'thread_key');
+				return { found: options.filter_by.includes('mailbox:=`archived`') ? 2 : 0 };
+			},
+			draftCountFn: async () => 0,
 		});
-		Email.find = (query) => ({
-			select: () => ({
-				lean: async () => {
-					if (query.mailbox !== 'archived') return [];
-					return [
-						{ _id: 'archived-1', message_id: 'archived-1@example.com', in_reply_to: 'root@example.com', references: ['root@example.com'], updatedAt: '2026-01-01T10:00:00.000Z' },
-						{ _id: 'archived-2', message_id: 'archived-2@example.com', in_reply_to: 'archived-1@example.com', references: ['root@example.com', 'archived-1@example.com'], updatedAt: '2026-01-01T11:00:00.000Z' },
-						{ _id: 'archived-3', message_id: 'archived-3@example.com', in_reply_to: '', references: [], updatedAt: '2026-01-01T09:00:00.000Z' },
-					];
-				},
-			}),
-		});
-		EmailDraft.countDocuments = async () => 0;
 
-		try {
-			const result = await listEmailLabels('host-1');
-			assert.equal(result.mailboxes.find((mailbox) => mailbox.slug === 'archived').count, 2);
-		} finally {
-			EmailLabel.bulkWrite = originalBulkWrite;
-			EmailLabel.find = originalLabelFind;
-			Email.find = originalEmailFind;
-			EmailDraft.countDocuments = originalDraftCountDocuments;
-		}
+		assert.equal(result.mailboxes.find((mailbox) => mailbox.slug === 'archived').count, 2);
+		assert.ok(countFilters.some((options) => options.filter_by === 'in_trash:=false && mailbox:=`archived`'));
 	});
 
 	it('uses Typesense counts for ECC mailbox and label badges without Mongo fallback', async () => {
-		const originalBulkWrite = EmailLabel.bulkWrite;
-		const originalLabelFind = EmailLabel.find;
 		const originalEmailFind = Email.find;
-		const originalDraftCountDocuments = EmailDraft.countDocuments;
 		const countFilters = [];
 
-		EmailLabel.bulkWrite = async () => ({});
-		EmailLabel.find = () => ({
-			sort: () => ({
-				lean: async () => [
-					{ _id: 'reply-required', slug: 'reply-required', name: 'Review', color: '#dc3545', is_system: true },
-				],
-			}),
-		});
 		Email.find = () => {
 			throw new Error('unexpected Mongo email count scan');
 		};
-		EmailDraft.countDocuments = async () => 3;
 
 		try {
 			const result = await listEmailLabels('host-1', {
 				project: 'project-1',
-				useTypesense: true,
 				countFn: async (hostId, type, options) => {
 					countFilters.push(options.filter_by);
 					assert.equal(hostId, 'host-1');
@@ -2107,6 +2075,7 @@ describe('Email ingest service', () => {
 					if (options.filter_by.includes('labels:=`reply-required`')) return { found: 4 };
 					return { found: 1 };
 				},
+				draftCountFn: async () => 3,
 			});
 
 			assert.equal(result.mailboxes.find((mailbox) => mailbox.slug === 'inbox').count, 11);
@@ -2115,10 +2084,7 @@ describe('Email ingest service', () => {
 			assert.equal(result.labels.find((label) => label.slug === 'reply-required').count, 4);
 			assert.ok(countFilters.every((filter) => filter.includes('project_id:=`project-1`')));
 		} finally {
-			EmailLabel.bulkWrite = originalBulkWrite;
-			EmailLabel.find = originalLabelFind;
 			Email.find = originalEmailFind;
-			EmailDraft.countDocuments = originalDraftCountDocuments;
 		}
 	});
 

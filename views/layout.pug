@@ -48,6 +48,7 @@ html(lang="en")
 						a.kk-navbtn(href="/dashboard" class={active: page !== 'graph' && page !== 'ecc'}) Projects
 						a.kk-navbtn(href="/graph" class={active: page === 'graph'}) Graph
 						a.kk-navbtn(href="/ecc" class={active: page === 'ecc'}) Email
+						span.kk-triage-nav-status.d-none#ecc-triage-nav-status Triage: 0 remaining
 					.ms-auto.d-flex.align-items-center.kk-navbar-actions
 						.kk-global-search
 							button.kk-global-search-trigger#kk-global-search-trigger(type="button" aria-haspopup="dialog" aria-controls="kk-search-palette")

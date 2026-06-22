@@ -812,7 +812,11 @@ small,
 	flex: 0 0 auto;
 }
 
-.ecc-label-section + .ecc-label-section {
+#ecc-labels .ecc-label-section:first-child {
+	margin-top: 0;
+}
+
+#ecc-labels .ecc-label-section + .ecc-label-section {
 	margin-top: 1.5rem;
 }
 

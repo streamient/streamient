@@ -69,14 +69,37 @@ describe('ECC Email AI prompt buttons', () => {
 		const appCss = fs.readFileSync(new URL('../public/css/app.css', import.meta.url), 'utf8');
 
 		assert.ok(eccPug.includes('#ecc-labels'));
+		assert.ok(eccPug.includes('data-label-section="actions"'));
+		assert.ok(eccPug.includes('data-label-section="status"'));
+		assert.ok(eccPug.includes('data-label="reply-required"'));
 		assert.ok(!eccPug.includes('h6.mb-2 Labels'));
 		assert.ok(eccJs.includes("var ECC_ACTION_LABELS = ['reply-required', 'human-do', 'waiting', 'marketing'];"));
 		assert.ok(eccJs.includes("var ECC_STATUS_LABELS = ['spam', 'no-action'];"));
-		assert.ok(eccJs.includes("renderLabelSection('Actions', actionLabels)"));
-		assert.ok(eccJs.includes("renderLabelSection('Status', statusLabels)"));
-		assert.ok(eccJs.includes("renderLabelSection('Custom', customLabels)"));
-		assert.ok(appCss.includes('.ecc-label-section + .ecc-label-section'));
+		assert.ok(eccJs.includes('function renderLabelCounts(labels)'));
+		assert.ok(!eccJs.includes('/email-labels'));
+		assert.ok(appCss.includes('#ecc-labels .ecc-label-section:first-child'));
+		assert.ok(appCss.includes('#ecc-labels .ecc-label-section + .ecc-label-section'));
 		assert.ok(appCss.includes('margin-top: 1.5rem;'));
+	});
+
+	it('uses top-nav triage status and socket counts instead of the old triage modal and label fetch', () => {
+		const layoutPug = fs.readFileSync(new URL('../views/layout.pug', import.meta.url), 'utf8');
+		const eccPug = fs.readFileSync(new URL('../views/ajax/section/ecc.pug', import.meta.url), 'utf8');
+		const eccJs = fs.readFileSync(new URL('../public/js/ecc.js', import.meta.url), 'utf8');
+		const appJs = fs.readFileSync(new URL('../public/js/app.js', import.meta.url), 'utf8');
+
+		assert.ok(layoutPug.includes('#ecc-triage-nav-status'));
+		assert.ok(!eccPug.includes('#ecc-triage-modal'));
+		assert.ok(eccJs.includes('function renderTriageNavStatus()'));
+		assert.ok(eccJs.includes('Triage: '));
+		assert.ok(eccJs.includes("triageNavStatus.classList.add('d-none')"));
+		assert.ok(eccJs.includes('!triageProgress?.running'));
+		assert.ok(!eccJs.includes('Triage failed'));
+		assert.ok(eccJs.includes('email-counts:request'));
+		assert.ok(eccJs.includes('email-counts:updated'));
+		assert.ok(appJs.includes("socket.on('email-counts:updated'"));
+		assert.ok(appJs.includes("socket.emit('email-counts:request'"));
+		assert.ok(!eccJs.includes('getOrCreateInstance(triageModalEl'));
 	});
 
 	it('does not render selected-message legacy move controls in ECC detail', () => {
