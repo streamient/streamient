@@ -832,6 +832,16 @@ small,
 	box-shadow: inset 3px 0 0 var(--bs-primary);
 }
 
+.ecc-email-item.is-pending {
+	cursor: wait;
+	opacity: 0.65;
+	pointer-events: none;
+}
+
+.ecc-email-item.is-pending .ecc-email-select {
+	cursor: wait;
+}
+
 .ecc-email-label {
 	border: 1px solid var(--bs-border-color);
 	background: #fff;

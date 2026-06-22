@@ -119,21 +119,40 @@ describe('ECC Email AI prompt buttons', () => {
 		assert.ok(eccJs.includes('selectedIds.delete(item.dataset.id || \'\');'));
 	});
 
-	it('does not full-reload ECC email lists after bulk move, trash, or reset', () => {
+	it('uses optimistic ECC email actions instead of waiting for API completion UI updates', () => {
 		const eccJs = fs.readFileSync(new URL('../public/js/ecc.js', import.meta.url), 'utf8');
 		const moveSelected = functionBlock(eccJs, 'moveSelected');
 		const trashSelected = functionBlock(eccJs, 'trashSelected');
 		const resetSelectedTriage = functionBlock(eccJs, 'resetSelectedTriage');
 
-		assert.ok(moveSelected.includes('applyEmailSocketUpdate(result?.email || result);'));
+		assert.ok(eccJs.includes('async function runOptimisticEmailAction(options)'));
+		assert.ok(eccJs.includes('function markPendingEmailActionIds(ids)'));
+		assert.ok(eccJs.includes("item.classList.toggle('is-pending', pending);"));
+		assert.ok(eccJs.includes('completePendingEmailActionFromEmail(email);'));
+		assert.ok(eccJs.includes('scheduleEmailUpdateFallback'));
+		assert.ok(eccJs.includes('scheduleEmailRemoveFallback'));
+
+		assert.ok(moveSelected.includes('runOptimisticEmailAction({'));
+		assert.ok(moveSelected.includes('pendingLabel: \'Moving\''));
+		assert.ok(moveSelected.includes('scheduleEmailUpdateFallback(result.succeededIds, result.emails);'));
+		assert.ok(!moveSelected.includes('applyEmailSocketUpdate(result?.email || result);'));
+		assert.ok(!moveSelected.includes('clearSelection();'));
 		assert.ok(!moveSelected.includes('await loadLabels();'));
 		assert.ok(!moveSelected.includes('loadAll()'));
 
-		assert.ok(trashSelected.includes('ids.forEach(removeEmailFromList);'));
+		assert.ok(trashSelected.includes('runOptimisticEmailAction({'));
+		assert.ok(trashSelected.includes('pendingLabel: \'Trashing\''));
+		assert.ok(trashSelected.includes('scheduleEmailRemoveFallback(result.succeededIds);'));
+		assert.ok(!trashSelected.includes('ids.forEach(removeEmailFromList);'));
+		assert.ok(!trashSelected.includes('clearSelection();'));
 		assert.ok(!trashSelected.includes('await loadLabels();'));
 		assert.ok(!trashSelected.includes('loadAll()'));
 
-		assert.ok(resetSelectedTriage.includes('applyEmailSocketUpdate(result?.email || result);'));
+		assert.ok(resetSelectedTriage.includes('runOptimisticEmailAction({'));
+		assert.ok(resetSelectedTriage.includes('pendingLabel: \'Resetting\''));
+		assert.ok(resetSelectedTriage.includes('scheduleEmailUpdateFallback(result.succeededIds, result.emails);'));
+		assert.ok(!resetSelectedTriage.includes('applyEmailSocketUpdate(result?.email || result);'));
+		assert.ok(!resetSelectedTriage.includes('clearSelection();'));
 		assert.ok(!resetSelectedTriage.includes('await loadLabels();'));
 		assert.ok(!resetSelectedTriage.includes('loadAll()'));
 		assert.ok(!resetSelectedTriage.includes('activeMailbox = \'inbox\';'));
@@ -151,6 +170,6 @@ describe('ECC Email AI prompt buttons', () => {
 		assert.ok(!trashSelected.includes('confirmAction(\'Move to Trash\''));
 		assert.ok(chatJs.includes('showSuccess(\'Moved to trash\');'));
 		assert.ok(batchJs.includes('showSuccess(count + \' moved to trash\');'));
-		assert.ok(trashSelected.includes('showSuccess(ids.length + \' moved to trash\');'));
+		assert.ok(trashSelected.includes('result.succeededIds.length + \' moved to trash\''));
 	});
 });

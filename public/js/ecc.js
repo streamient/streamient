@@ -78,6 +78,10 @@
 	var triagePollTimer = null;
 	var triageProgressWaitTimer = null;
 	var triageBtnOriginalHtml = '';
+	var pendingEmailActionIds = new Set();
+	var emailActionBusy = false;
+	var pendingEmailActionLabel = '';
+	var pendingEmailActionCount = 0;
 	var INTERNAL_NOTE_PREVIEW_LIMIT = 150;
 	var REPLY_SUGGESTIONS_AUTO_CLOSE_MS = 45000;
 	var MAILBOX_ACTIONS = [
@@ -635,6 +639,202 @@
 		return Array.from(selectedIds);
 	}
 
+	function normalizeEmailActionIds(ids) {
+		var seen = new Set();
+		return (ids || []).map(function (id) {
+			return String(id || '');
+		}).filter(function (id) {
+			if (!id || seen.has(id)) return false;
+			seen.add(id);
+			return true;
+		});
+	}
+
+	function emailItemForId(id) {
+		if (!listEl || !id) return null;
+		return listEl.querySelector('.ecc-email-item[data-id="' + CSS.escape(String(id)) + '"]');
+	}
+
+	function setEmailItemPending(item, pending) {
+		if (!item) return;
+		item.classList.toggle('is-pending', pending);
+		if (pending) {
+			item.setAttribute('aria-busy', 'true');
+		} else {
+			item.removeAttribute('aria-busy');
+		}
+		var checkbox = item.querySelector('.ecc-email-select');
+		if (checkbox) checkbox.disabled = pending;
+	}
+
+	function selectedIncludesPendingEmailAction() {
+		return Array.from(selectedIds).some(function (id) {
+			return pendingEmailActionIds.has(String(id || ''));
+		});
+	}
+
+	function syncPendingEmailActionItems() {
+		if (!listEl) return;
+		listEl.querySelectorAll('.ecc-email-item').forEach(function (item) {
+			var id = String(item.dataset.id || '');
+			var pending = pendingEmailActionIds.has(id);
+			setEmailItemPending(item, pending);
+			if (pending) {
+				selectedIds.add(id);
+				var checkbox = item.querySelector('.ecc-email-select');
+				if (checkbox) checkbox.checked = true;
+				item.classList.add('is-selected');
+			}
+		});
+	}
+
+	function markPendingEmailActionIds(ids) {
+		normalizeEmailActionIds(ids).forEach(function (id) {
+			pendingEmailActionIds.add(id);
+			selectedIds.add(id);
+			var item = emailItemForId(id);
+			if (!item) return;
+			var checkbox = item.querySelector('.ecc-email-select');
+			if (checkbox) checkbox.checked = true;
+			item.classList.add('is-selected');
+			setEmailItemPending(item, true);
+		});
+		updateActionBar();
+	}
+
+	function clearPendingEmailActionIds(ids, options) {
+		var keepSelected = Boolean(options?.keepSelected);
+		normalizeEmailActionIds(ids).forEach(function (id) {
+			pendingEmailActionIds.delete(id);
+			if (!keepSelected) selectedIds.delete(id);
+			var item = emailItemForId(id);
+			if (!item) return;
+			setEmailItemPending(item, false);
+			var checkbox = item.querySelector('.ecc-email-select');
+			if (checkbox) checkbox.checked = keepSelected && selectedIds.has(id);
+			item.classList.toggle('is-selected', keepSelected && selectedIds.has(id));
+		});
+		if (!pendingEmailActionIds.size && !emailActionBusy) {
+			pendingEmailActionLabel = '';
+			pendingEmailActionCount = 0;
+		}
+		updateActionBar();
+		showEmptyEmailsIfNeeded();
+	}
+
+	function emailActionIdsFromSocketEmail(email) {
+		return normalizeEmailActionIds([emailId(email)].concat((email?.thread_source_ids || []).map(String)));
+	}
+
+	function completePendingEmailActionFromEmail(email) {
+		clearPendingEmailActionIds(emailActionIdsFromSocketEmail(email));
+	}
+
+	function actionButtonBusyStart(button, label) {
+		if (!button) return null;
+		var state = {
+			button: button,
+			html: button.innerHTML,
+			disabled: button.disabled,
+		};
+		button.disabled = true;
+		button.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>' + escapeHtml(label || 'Working');
+		return state;
+	}
+
+	function actionButtonBusyStop(state) {
+		if (!state?.button?.isConnected) return;
+		state.button.innerHTML = state.html;
+		state.button.disabled = state.disabled;
+	}
+
+	function emailActionResultFromSettled(ids, settled) {
+		var succeededIds = [];
+		var failedIds = [];
+		var emails = [];
+		settled.forEach(function (result, index) {
+			var id = ids[index];
+			if (result.status === 'fulfilled') {
+				succeededIds.push(id);
+				var email = result.value?.email || result.value;
+				if (email) emails.push(email);
+			} else {
+				failedIds.push(id);
+			}
+		});
+		return { succeededIds: succeededIds, failedIds: failedIds, emails: emails };
+	}
+
+	function scheduleEmailActionFallback(ids, callback) {
+		var pendingIds = normalizeEmailActionIds(ids);
+		if (!pendingIds.length) return;
+		window.setTimeout(function () {
+			var stillPending = pendingIds.filter(function (id) {
+				return pendingEmailActionIds.has(id);
+			});
+			if (!stillPending.length) return;
+			callback(stillPending);
+		}, 800);
+	}
+
+	function scheduleEmailUpdateFallback(ids, emails) {
+		var fallbackEmails = (emails || []).filter(Boolean);
+		scheduleEmailActionFallback(ids, function (stillPending) {
+			fallbackEmails.forEach(function (email) {
+				var actionIds = emailActionIdsFromSocketEmail(email);
+				if (!actionIds.some(function (id) { return stillPending.includes(id); })) return;
+				applyEmailSocketUpdate(email);
+				mergeEmailIntoCurrentDetail(email);
+				completePendingEmailActionFromEmail(email);
+			});
+		});
+	}
+
+	function scheduleEmailRemoveFallback(ids) {
+		scheduleEmailActionFallback(ids, function (stillPending) {
+			stillPending.forEach(removeEmailFromList);
+			clearPendingEmailActionIds(stillPending);
+		});
+	}
+
+	async function runOptimisticEmailAction(options) {
+		var ids = normalizeEmailActionIds(options?.ids || []);
+		if (!ids.length || emailActionBusy) return null;
+		emailActionBusy = true;
+		pendingEmailActionLabel = options.pendingLabel || 'Working';
+		pendingEmailActionCount = ids.length;
+		var buttonState = actionButtonBusyStart(options.button, options.buttonLabel || pendingEmailActionLabel);
+		markPendingEmailActionIds(ids);
+		if (options.returnToList) backToListView();
+		try {
+			var result = await options.run(ids);
+			if (typeof options.reconcile === 'function') options.reconcile(result, ids);
+			if (typeof options.successMessage === 'function') {
+				var message = options.successMessage(result, ids);
+				if (message) showSuccess(message);
+			} else if (options.successMessage) {
+				showSuccess(options.successMessage);
+			}
+			if (result?.failedIds?.length) {
+				clearPendingEmailActionIds(result.failedIds, { keepSelected: true });
+				showError(result.failedIds.length + ' email action(s) failed');
+			}
+			return result;
+		} catch (err) {
+			clearPendingEmailActionIds(ids, { keepSelected: true });
+			showError(err.message || options.errorMessage || 'Email action failed');
+			return null;
+		} finally {
+			emailActionBusy = false;
+			actionButtonBusyStop(buttonState);
+			if (!pendingEmailActionIds.size) {
+				pendingEmailActionLabel = '';
+				pendingEmailActionCount = 0;
+			}
+			updateActionBar();
+		}
+	}
+
 	function resetSelectionState() {
 		selectedIds.clear();
 		selectAllAcrossView = false;
@@ -678,7 +878,7 @@
 		}).length;
 		var allSelected = enabled && selectedCount === checkboxes.length;
 		selectAllBtn.classList.toggle('d-none', !enabled);
-		selectAllBtn.disabled = !enabled;
+		selectAllBtn.disabled = !enabled || emailActionBusy;
 		selectAllBtn.classList.toggle('active', allSelected);
 		selectAllBtn.setAttribute('aria-pressed', allSelected ? 'true' : 'false');
 		selectAllBtn.title = activeMailbox === 'drafts' ? 'Select all visible drafts' : 'Select all visible emails';
@@ -714,15 +914,26 @@
 	function updateActionBar() {
 		if (!actionBar || !actionCount) return;
 		var isDraftMailbox = activeMailbox === 'drafts';
-		actionCount.textContent = selectAllAcrossView
-			? ('All ' + viewTotalCount + ' selected')
-			: (selectedIds.size + ' selected');
-		actionBar.classList.toggle('d-none', detailActive || selectedIds.size === 0);
-		actionBar.classList.toggle('d-flex', !detailActive && selectedIds.size > 0);
+		var showActionBar = !detailActive && (selectedIds.size > 0 || emailActionBusy);
+		if (emailActionBusy && pendingEmailActionLabel) {
+			actionCount.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>' + escapeHtml(pendingEmailActionLabel + ' ' + pendingEmailActionCount);
+		} else {
+			actionCount.textContent = selectAllAcrossView
+				? ('All ' + viewTotalCount + ' selected')
+				: (selectedIds.size + ' selected');
+		}
+		actionBar.classList.toggle('d-none', !showActionBar);
+		actionBar.classList.toggle('d-flex', showActionBar);
 		moveActionsEl?.classList.toggle('d-none', isDraftMailbox);
 		resetTriageBtn?.classList.toggle('d-none', isDraftMailbox);
+		var disableEmailActions = emailActionBusy || selectedIncludesPendingEmailAction();
+		moveActionsEl?.querySelectorAll('.ecc-move-target').forEach(function (button) {
+			button.disabled = disableEmailActions;
+		});
+		if (resetTriageBtn) resetTriageBtn.disabled = disableEmailActions;
 		if (trashBtn) {
 			trashBtn.classList.toggle('d-none', activeMailbox === 'trash' && !isDraftMailbox);
+			trashBtn.disabled = disableEmailActions;
 			var trashText = trashBtn.querySelector('.ecc-trash-text');
 			if (trashText) trashText.textContent = isDraftMailbox ? 'Delete' : 'Trash';
 			trashBtn.title = isDraftMailbox ? 'Delete selected drafts' : 'Move selected emails to trash';
@@ -744,8 +955,8 @@
 				+ '</button>';
 		}).join('');
 		moveActionsEl.querySelectorAll('.ecc-move-target').forEach(function (button) {
-			button.addEventListener('click', function () {
-				moveSelected(button.dataset.mailbox || 'inbox');
+			button.addEventListener('click', function (event) {
+				moveSelected(button.dataset.mailbox || 'inbox', event.currentTarget);
 			});
 		});
 	}
@@ -804,46 +1015,65 @@
 		}
 	}
 
-	async function moveCurrentEmail(mailbox) {
+	async function moveCurrentEmail(mailbox, button) {
 		var email = selectedEmail;
 		if (!email?._id) return;
 		var target = MAILBOX_ACTIONS.find(function (item) { return item.slug === mailbox; });
 		if (!target) return;
 		var id = emailId(email);
-		try {
-			if (email.in_trash) {
-				await api('POST', '/trash/batch/restore', {
-					items: [{ type: 'emails', id: email._id }],
-				});
-			}
-			await api('PUT', '/emails/' + email._id, { mailbox: mailbox });
-			showSuccess('Email moved to ' + target.name);
-			// Optimistically drop the moved email from the list, return to it, and
-			// let the socket-driven update (email:updated -> applyEmailSocketUpdate)
-			// reconcile once Typesense re-indexes. Avoid an immediate list reload,
-			// which would re-read stale Typesense data and re-show the moved email.
-			removeEmailFromList(id);
-			backToListView();
-		} catch (err) {
-			showError(err.message || 'Failed to move email');
-		}
+		await runOptimisticEmailAction({
+			ids: [id],
+			pendingLabel: 'Moving',
+			buttonLabel: 'Moving',
+			button: button,
+			returnToList: true,
+			errorMessage: 'Failed to move email',
+			run: async function (ids) {
+				if (email.in_trash) {
+					await api('POST', '/trash/batch/restore', {
+						items: ids.map(function (emailIdValue) { return { type: 'emails', id: emailIdValue }; }),
+					});
+				}
+				var settled = await Promise.allSettled(ids.map(function (emailIdValue) {
+					return api('PUT', '/emails/' + encodeURIComponent(emailIdValue), { mailbox: mailbox });
+				}));
+				return emailActionResultFromSettled(ids, settled);
+			},
+			reconcile: function (result) {
+				scheduleEmailUpdateFallback(result.succeededIds, result.emails);
+			},
+			successMessage: function (result) {
+				return result.succeededIds.length ? 'Email moved to ' + target.name : '';
+			},
+		});
 	}
 
-	async function trashCurrentEmail() {
+	async function trashCurrentEmail(button) {
 		var email = selectedEmail;
 		if (!email?._id || email.in_trash === true) return;
 		var id = emailId(email);
-		try {
-			// Reuse the same trash mechanism the list view uses.
-			await api('POST', '/batch/delete', { type: 'emails', ids: [email._id] });
-			showSuccess('Email moved to trash');
-			// Optimistically drop from the list and return to it; the socket-driven
-			// update reconciles once Typesense re-indexes (no stale list reload).
-			removeEmailFromList(id);
-			backToListView();
-		} catch (err) {
-			showError(err.message || 'Failed to move email to trash');
-		}
+		await runOptimisticEmailAction({
+			ids: [id],
+			pendingLabel: 'Trashing',
+			buttonLabel: 'Trashing',
+			button: button,
+			returnToList: true,
+			errorMessage: 'Failed to move email to trash',
+			run: async function (ids) {
+				var result = await api('POST', '/batch/delete', { type: 'emails', ids: ids });
+				return {
+					succeededIds: (result.deleted || 0) >= ids.length ? ids : [],
+					failedIds: (result.deleted || 0) >= ids.length ? [] : ids,
+					deleted: result.deleted || 0,
+				};
+			},
+			reconcile: function (result) {
+				if (result.succeededIds.length) scheduleEmailRemoveFallback(result.succeededIds);
+			},
+			successMessage: function (result) {
+				return result.succeededIds.length ? 'Email moved to trash' : '';
+			},
+		});
 	}
 
 	function renderVisibleLabels(email) {
@@ -856,6 +1086,7 @@
 	}
 
 	function setEmailSelected(checkbox, selected) {
+		if (!checkbox || checkbox.disabled) return;
 		var item = checkbox.closest('.ecc-email-item');
 		checkbox.checked = selected;
 		if (selected) {
@@ -880,10 +1111,14 @@
 		}
 		var checkboxes = getEmailCheckboxes();
 		if (!checkboxes.length) return;
-		var allSelected = checkboxes.every(function (checkbox) {
+		var selectable = checkboxes.filter(function (checkbox) {
+			return !checkbox.disabled;
+		});
+		if (!selectable.length) return;
+		var allSelected = selectable.every(function (checkbox) {
 			return selectedIds.has(checkbox.value);
 		});
-		checkboxes.forEach(function (checkbox) {
+		selectable.forEach(function (checkbox) {
 			setEmailSelected(checkbox, !allSelected);
 		});
 		updateActionBar();
@@ -929,9 +1164,11 @@
 		if (!checkbox) return;
 		checkbox.addEventListener('click', function (event) {
 			event.stopPropagation();
+			if (checkbox.disabled) return;
 			pendingShiftRange = (event.shiftKey && eccLastChecked && eccLastChecked !== checkbox) ? eccLastChecked : null;
 		});
 		checkbox.addEventListener('change', function () {
+			if (checkbox.disabled) return;
 			if (selectAllAcrossView) {
 				demoteAcrossSelectionToVisible();
 				pendingShiftRange = null;
@@ -1383,6 +1620,7 @@
 			listEl.querySelectorAll('.ecc-email-item').forEach(function (button) {
 				bindEmailItem(button);
 			});
+			syncPendingEmailActionItems();
 			updateActionBar();
 		}
 
@@ -2239,8 +2477,8 @@
 				if (!email.in_trash && currentMailbox === target.slug) return;
 				var btn = textNode('button', 'btn btn-outline-secondary btn-sm', target.label);
 				btn.type = 'button';
-				btn.addEventListener('click', function () {
-					moveCurrentEmail(target.slug);
+				btn.addEventListener('click', function (event) {
+					moveCurrentEmail(target.slug, event.currentTarget);
 				});
 				detailActionsEl.appendChild(btn);
 			});
@@ -2248,7 +2486,9 @@
 			if (email.in_trash !== true) {
 				var trashButton = textNode('button', 'btn btn-outline-danger btn-sm', 'Trash');
 				trashButton.type = 'button';
-				trashButton.addEventListener('click', trashCurrentEmail);
+				trashButton.addEventListener('click', function (event) {
+					trashCurrentEmail(event.currentTarget);
+				});
 				detailActionsEl.appendChild(trashButton);
 			}
 		}
@@ -2689,28 +2929,36 @@
 		});
 	}
 
-	async function moveSelected(mailbox) {
+	async function moveSelected(mailbox, button) {
 		var ids = getSelectedIds();
 		if (!ids.length) return;
 		var target = MAILBOX_ACTIONS.find(function (item) { return item.slug === mailbox; });
 		if (!target) return;
-		try {
-			if (activeMailbox === 'trash') {
-				await api('POST', '/trash/batch/restore', {
-					items: ids.map(function (id) { return { type: 'emails', id: id }; }),
-				});
-			}
-			var results = await Promise.all(ids.map(function (id) {
-				return api('PUT', '/emails/' + id, { mailbox: mailbox });
-			}));
-			showSuccess(ids.length + ' moved to ' + target.name);
-			clearSelection();
-			results.forEach(function (result) {
-				applyEmailSocketUpdate(result?.email || result);
-			});
-		} catch (err) {
-			showError(err.message || 'Failed to move emails');
-		}
+		var sourceMailbox = activeMailbox;
+		await runOptimisticEmailAction({
+			ids: ids,
+			pendingLabel: 'Moving',
+			buttonLabel: 'Moving',
+			button: button,
+			errorMessage: 'Failed to move emails',
+			run: async function (actionIds) {
+				if (sourceMailbox === 'trash') {
+					await api('POST', '/trash/batch/restore', {
+						items: actionIds.map(function (id) { return { type: 'emails', id: id }; }),
+					});
+				}
+				var settled = await Promise.allSettled(actionIds.map(function (id) {
+					return api('PUT', '/emails/' + encodeURIComponent(id), { mailbox: mailbox });
+				}));
+				return emailActionResultFromSettled(actionIds, settled);
+			},
+			reconcile: function (result) {
+				scheduleEmailUpdateFallback(result.succeededIds, result.emails);
+			},
+			successMessage: function (result) {
+				return result.succeededIds.length ? result.succeededIds.length + ' moved to ' + target.name : '';
+			},
+		});
 	}
 
 	async function trashSelected() {
@@ -2720,14 +2968,28 @@
 		}
 		var ids = getSelectedIds();
 		if (!ids.length) return;
-		try {
-			await api('POST', '/batch/delete', { type: 'emails', ids: ids });
-			showSuccess(ids.length + ' moved to trash');
-			clearSelection();
-			ids.forEach(removeEmailFromList);
-		} catch (err) {
-			showError(err.message || 'Failed to move emails to trash');
-		}
+		await runOptimisticEmailAction({
+			ids: ids,
+			pendingLabel: 'Trashing',
+			buttonLabel: 'Trashing',
+			button: trashBtn,
+			errorMessage: 'Failed to move emails to trash',
+			run: async function (actionIds) {
+				var result = await api('POST', '/batch/delete', { type: 'emails', ids: actionIds });
+				var deleted = result.deleted || 0;
+				return {
+					succeededIds: deleted >= actionIds.length ? actionIds : [],
+					failedIds: deleted >= actionIds.length ? [] : actionIds,
+					deleted: deleted,
+				};
+			},
+			reconcile: function (result) {
+				if (result.succeededIds.length) scheduleEmailRemoveFallback(result.succeededIds);
+			},
+			successMessage: function (result) {
+				return result.succeededIds.length ? result.succeededIds.length + ' moved to trash' : '';
+			},
+		});
 	}
 
 	async function deleteSelectedDrafts() {
@@ -2756,18 +3018,25 @@
 		if (!ids.length) return;
 		var confirmed = await confirmAction('Reset Triage', ids.length + ' email(s) will move to inbox and lose all triage labels.');
 		if (!confirmed) return;
-		try {
-			var results = await Promise.all(ids.map(function (id) {
-				return api('POST', '/emails/' + id + '/reset-triage', {});
-			}));
-			showSuccess(ids.length + ' reset to inbox');
-			clearSelection();
-			results.forEach(function (result) {
-				applyEmailSocketUpdate(result?.email || result);
-			});
-		} catch (err) {
-			showError(err.message || 'Failed to reset triage');
-		}
+		await runOptimisticEmailAction({
+			ids: ids,
+			pendingLabel: 'Resetting',
+			buttonLabel: 'Resetting',
+			button: resetTriageBtn,
+			errorMessage: 'Failed to reset triage',
+			run: async function (actionIds) {
+				var settled = await Promise.allSettled(actionIds.map(function (id) {
+					return api('POST', '/emails/' + encodeURIComponent(id) + '/reset-triage', {});
+				}));
+				return emailActionResultFromSettled(actionIds, settled);
+			},
+			reconcile: function (result) {
+				scheduleEmailUpdateFallback(result.succeededIds, result.emails);
+			},
+			successMessage: function (result) {
+				return result.succeededIds.length ? result.succeededIds.length + ' reset to inbox' : '';
+			},
+		});
 	}
 
 	async function loadEmails() {
@@ -2803,6 +3072,7 @@
 			bindEmailItem(item);
 			listEl.appendChild(item);
 		});
+		syncPendingEmailActionItems();
 	}
 
 	async function loadMoreEmails() {
@@ -3041,6 +3311,7 @@
 			applyEmailSocketUpdate(email);
 			mergeEmailIntoCurrentDetail(email);
 			updateTriageProgressFromEmail(email);
+			completePendingEmailActionFromEmail(email);
 		}
 
 		function handleDraftSocketEvent(event) {
@@ -3118,7 +3389,9 @@
 		}
 
 		function handleEmailDeleted(event) {
-			removeEmailFromList(emailId(event.detail || {}));
+			var id = emailId(event.detail || {});
+			removeEmailFromList(id);
+			clearPendingEmailActionIds([id]);
 		}
 
 		function renderTriageProgress() {
