@@ -647,6 +647,7 @@
               "reply-required",
               "human-do",
               "waiting",
+              "marketing",
               "no-action",
               "spam"
             ]
@@ -1126,6 +1127,7 @@
               "reply-required",
               "human-do",
               "waiting",
+              "marketing",
               "no-action",
               "spam"
             ]
@@ -3591,6 +3593,7 @@
                 "reply-required",
                 "human-do",
                 "waiting",
+                "marketing",
                 "no-action",
                 "spam"
               ]

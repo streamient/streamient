@@ -26,7 +26,7 @@ const emailSchema = new mongoose.Schema(
 			triaged_at: { type: Date, default: null },
 			triage_summary: { type: String, default: '' },
 			triage_reason: { type: String, default: '' },
-			triage_primary_action: { type: String, enum: ['', 'reply-required', 'human-do', 'waiting', 'no-action', 'spam'], default: '' },
+				triage_primary_action: { type: String, enum: ['', 'reply-required', 'human-do', 'waiting', 'marketing', 'no-action', 'spam'], default: '' },
 			triage_confidence: { type: Number, default: null },
 			triage_action_points: [{
 				_id: false,

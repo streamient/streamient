@@ -63,6 +63,22 @@ describe('ECC Email AI prompt buttons', () => {
 		assert.ok(!eccJs.includes('class="dropdown-item ecc-move-target"'));
 	});
 
+	it('renders ECC triage labels in Actions and Status groups', () => {
+		const eccPug = fs.readFileSync(new URL('../views/ajax/section/ecc.pug', import.meta.url), 'utf8');
+		const eccJs = fs.readFileSync(new URL('../public/js/ecc.js', import.meta.url), 'utf8');
+		const appCss = fs.readFileSync(new URL('../public/css/app.css', import.meta.url), 'utf8');
+
+		assert.ok(eccPug.includes('#ecc-labels'));
+		assert.ok(!eccPug.includes('h6.mb-2 Labels'));
+		assert.ok(eccJs.includes("var ECC_ACTION_LABELS = ['reply-required', 'human-do', 'waiting', 'marketing'];"));
+		assert.ok(eccJs.includes("var ECC_STATUS_LABELS = ['spam', 'no-action'];"));
+		assert.ok(eccJs.includes("renderLabelSection('Actions', actionLabels)"));
+		assert.ok(eccJs.includes("renderLabelSection('Status', statusLabels)"));
+		assert.ok(eccJs.includes("renderLabelSection('Custom', customLabels)"));
+		assert.ok(appCss.includes('.ecc-label-section + .ecc-label-section'));
+		assert.ok(appCss.includes('margin-top: 1.5rem;'));
+	});
+
 	it('does not render selected-message legacy move controls in ECC detail', () => {
 		const eccJs = fs.readFileSync(new URL('../public/js/ecc.js', import.meta.url), 'utf8');
 

@@ -27,7 +27,7 @@ The model returns a structured JSON object that's stored on the email record:
 
 | Field | Meaning |
 | --- | --- |
-| `primary_action` | One of `reply-required`, `human-do`, `waiting`, `no-action`, `spam`. |
+| `primary_action` | One of `reply-required`, `human-do`, `waiting`, `marketing`, `no-action`, `spam`. |
 | `labels` | System label slugs to apply (always includes `primary_action` and `triaged`). |
 | `summary` | Short description (up to ~500 chars) shown in the right panel. |
 | `reason` | Why the AI picked this classification (up to ~1000 chars). |
@@ -42,7 +42,7 @@ The model returns a structured JSON object that's stored on the email record:
 Based on the result, Kumbukum updates the email and its surroundings without asking:
 
 - **Marks the email as triaged**, stores all of the fields above, and sets `triage_status` to `complete`.
-- **Moves the email** per `mailbox_action`: `no-action` → archived, `spam` → spam, everything else stays in the inbox.
+- **Moves the email** per `mailbox_action`: `no-action` → archived, `spam` → spam, `marketing` and other active labels stay in the inbox but are hidden from the main Inbox once triaged.
 - **Applies labels** — for inbox tasks, merges the AI's label list with whatever was already on the email (deduped). Terminal moves to archived or spam clear labels.
 - **Creates a draft** when `primary_action` is `reply-required` — a new `EmailDraft` is created (or an existing triage‑generated one is updated) using the AI's `draft_reply`. The draft is marked `generated_by_triage: true` so you can tell it apart from drafts you wrote yourself.
 - **Creates graph links** labeled `triage-context` between the email and each item in `related_context`, so the connection shows up in the [Knowledge Graph](/guide/graph).
@@ -66,6 +66,7 @@ Triage uses a fixed set of system labels stored as `EmailLabel` records with `is
 - `reply-required`
 - `human-do`
 - `waiting`
+- `marketing`
 - `no-action`
 - `spam`
 - `triaged` (hidden in the UI; used as a marker, not a label you filter on)

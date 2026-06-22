@@ -958,6 +958,16 @@ describe('Email ingest service', () => {
 		assert.equal(intent.search_text, '');
 	});
 
+	it('parses Marketing as an Email AI triage status filter', () => {
+		const intent = parseEmailAiQuery('show marketing emails');
+		const filter = buildEmailAiTypesenseFilter({}, intent);
+
+		assert.equal(intent.status, 'marketing');
+		assert.equal(intent.search_text, '');
+		assert.match(filter, /labels:=`marketing`/);
+		assert.match(filter, /triage_primary_action:=`marketing`/);
+	});
+
 	it('builds Typesense filters from current ECC scope and Email AI intent', () => {
 		const filter = buildEmailAiTypesenseFilter(
 			{ project: 'project-1', mailbox: 'inbox', triaged: false },
@@ -1988,6 +1998,7 @@ describe('Email ingest service', () => {
 					{ _id: 'triaged', slug: 'triaged', name: 'Done', color: '#198754', is_system: true },
 					{ _id: 'human-do', slug: 'human-do', name: 'Human Do', color: '#fd7e14', is_system: true },
 					{ _id: 'reply-required', slug: 'reply-required', name: 'Review', color: '#dc3545', is_system: true },
+					{ _id: 'marketing', slug: 'marketing', name: 'Marketing', color: '#6f42c1', is_system: true },
 					{ _id: 'no-action', slug: 'no-action', name: 'No action', color: '#6c757d', is_system: true },
 					{ _id: 'spam', slug: 'spam', name: 'Spam', color: '#212529', is_system: true },
 				],
@@ -2007,10 +2018,11 @@ describe('Email ingest service', () => {
 		try {
 			const result = await listEmailLabels('host-1');
 
-			assert.deepEqual(result.labels.map((label) => label.name), ['Review', 'Human Do', 'Waiting', 'Spam', 'No action']);
+			assert.deepEqual(result.labels.map((label) => label.name), ['Review', 'Human Do', 'Waiting', 'Marketing', 'Spam', 'No action']);
 			assert.ok(!result.labels.some((label) => label.slug === 'triaged'));
 			assert.equal(result.mailboxes.find((mailbox) => mailbox.slug === 'sent').count, 1);
 			assert.equal(bulkOps.find((op) => op.updateOne.filter.slug === 'reply-required').updateOne.update.$set.name, 'Review');
+			assert.equal(bulkOps.find((op) => op.updateOne.filter.slug === 'marketing').updateOne.update.$set.name, 'Marketing');
 			assert.equal(bulkOps.find((op) => op.updateOne.filter.slug === 'triaged').updateOne.update.$set.name, 'Done');
 		} finally {
 			EmailLabel.bulkWrite = originalBulkWrite;
@@ -2478,6 +2490,15 @@ describe('Email ingest service', () => {
 			assert.throws(() => parseTriageResult('{"primary_action":"unknown"}'), /primary_action/);
 		});
 
+		it('drops draft replies for Marketing triage results', () => {
+			const triage = parseTriageResult('{"primary_action":"marketing","labels":["marketing"],"summary":"Marketing outreach","reason":"Benign sales pitch","confidence":0.7,"action_points":[],"related_context":[],"draft_reply":{"body_text":"No thanks"},"mailbox_action":"keep-inbox"}');
+
+			assert.equal(triage.primary_action, 'marketing');
+			assert.deepEqual(triage.labels, ['marketing', 'triaged']);
+			assert.equal(triage.draft_reply, null);
+			assert.equal(triage.mailbox_action, 'keep-inbox');
+		});
+
 		it('builds project-scoped triage context without falling back when project records exist', async () => {
 			const searchCalls = [];
 			const context = await buildTriageContext('host-1', {
@@ -2648,230 +2669,322 @@ describe('Email ingest service', () => {
 				Email.find = originalEmailFind;
 				Email.findOneAndUpdate = originalFindOneAndUpdate;
 				EmailDraft.findOneAndUpdate = originalDraftFindOneAndUpdate;
-			GraphLink.updateOne = originalGraphUpdateOne;
+				GraphLink.updateOne = originalGraphUpdateOne;
 				Tenant.findOne = originalTenantFindOne;
 			}
 		});
 
-			it('adds sender to spam guard when inbox triage identifies spam', async () => {
-				const emailId = { toString: () => 'email-spam-triage-1' };
-				let spamGuardUpdate = null;
-				const originalBulkWrite = EmailLabel.bulkWrite;
-				const originalLabelFind = EmailLabel.find;
-				const originalEmailFind = Email.find;
-				const originalFindOneAndUpdate = Email.findOneAndUpdate;
-				const originalTenantFindOne = Tenant.findOne;
-				const originalTenantUpdateOne = Tenant.updateOne;
-				let updatePayload = null;
+		it('adds sender to spam guard when inbox triage identifies spam', async () => {
+			const emailId = { toString: () => 'email-spam-triage-1' };
+			let spamGuardUpdate = null;
+			const originalBulkWrite = EmailLabel.bulkWrite;
+			const originalLabelFind = EmailLabel.find;
+			const originalEmailFind = Email.find;
+			const originalFindOneAndUpdate = Email.findOneAndUpdate;
+			const originalDraftFindOneAndUpdate = EmailDraft.findOneAndUpdate;
+			const originalTenantFindOne = Tenant.findOne;
+			const originalTenantUpdateOne = Tenant.updateOne;
+			let updatePayload = null;
 
-				EmailLabel.bulkWrite = async () => ({});
-				EmailLabel.find = () => ({
-					sort: () => ({
-						lean: async () => [],
+			EmailLabel.bulkWrite = async () => ({});
+			EmailLabel.find = () => ({
+				sort: () => ({
+					lean: async () => [],
+				}),
+			});
+			Email.find = () => ({
+				sort: () => ({
+					limit: () => ({
+						lean: async () => [{
+							_id: emailId,
+							subject: 'Cheap offer',
+							from: ['Deals <deals@spam.test>'],
+							to: ['team@example.com'],
+							text_content: 'Buy now',
+							labels: [],
+							mailbox: 'inbox',
+							project: 'project-1',
+							owner: userId,
+						}],
 					}),
-				});
-				Email.find = () => ({
-					sort: () => ({
-						limit: () => ({
-							lean: async () => [{
-								_id: emailId,
-								subject: 'Cheap offer',
-								from: ['Deals <deals@spam.test>'],
-								to: ['team@example.com'],
-								text_content: 'Buy now',
-								labels: [],
-								mailbox: 'inbox',
-								project: 'project-1',
-								owner: userId,
-							}],
-						}),
-					}),
-				});
-				Email.findOneAndUpdate = async (query, update) => {
-					updatePayload = update.$set;
-					return { _id: query._id, ...update.$set };
-				};
-				Tenant.findOne = () => ({
-					select: () => ({
-						lean: async () => ({
-							settings: {
-								email: {
-									spam_guard: 'existing@example.com',
-								},
-								ai_instructions: {},
+				}),
+			});
+			Email.findOneAndUpdate = async (query, update) => {
+				updatePayload = update.$set;
+				return { _id: query._id, ...update.$set };
+			};
+			EmailDraft.findOneAndUpdate = async () => {
+				throw new Error('spam triage must not create drafts');
+			};
+			Tenant.findOne = () => ({
+				select: () => ({
+					lean: async () => ({
+						settings: {
+							email: {
+								spam_guard: 'existing@example.com',
 							},
-						}),
-					}),
-				});
-				Tenant.updateOne = async (query, update) => {
-					spamGuardUpdate = { query, update };
-					return { modifiedCount: 1 };
-				};
-
-				try {
-					const result = await triageInboxEmails('host-1', userId, {
-						run_id: 'client-run-spam',
-						skipSideEffects: true,
-						searchKnowledgeFn: async () => ({}),
-						getThreadFn: async () => [],
-						getConnectionsFn: async () => ({ links: [], tag_connections: [] }),
-						completionFn: async () => '{"primary_action":"spam","labels":["spam"],"summary":"Spam offer","reason":"Unwanted offer","confidence":0.9,"action_points":[],"related_context":[],"mailbox_action":"spam"}',
-					});
-
-					assert.equal(result.triaged, 1);
-					assert.equal(result.results[0].mailbox, 'spam');
-					assert.deepEqual(updatePayload.labels, []);
-					assert.equal(updatePayload.triage_primary_action, 'spam');
-					assert.equal(spamGuardUpdate.query.host_id, 'host-1');
-					assert.equal(spamGuardUpdate.update.$set['settings.email.spam_guard'], 'existing@example.com\ndeals@spam.test');
-				} finally {
-					EmailLabel.bulkWrite = originalBulkWrite;
-					EmailLabel.find = originalLabelFind;
-					Email.find = originalEmailFind;
-					Email.findOneAndUpdate = originalFindOneAndUpdate;
-					Tenant.findOne = originalTenantFindOne;
-					Tenant.updateOne = originalTenantUpdateOne;
-				}
-			});
-
-			it('returns processed errors when all inbox triage attempts fail', async () => {
-				const emailId = { toString: () => 'email-err-1' };
-				let updatePayload = null;
-				const originalBulkWrite = EmailLabel.bulkWrite;
-				const originalLabelFind = EmailLabel.find;
-				const originalEmailFind = Email.find;
-				const originalFindOneAndUpdate = Email.findOneAndUpdate;
-				const originalTenantFindOne = Tenant.findOne;
-
-				EmailLabel.bulkWrite = async () => ({});
-				EmailLabel.find = () => ({
-					sort: () => ({
-						lean: async () => [],
-					}),
-				});
-				Email.find = () => ({
-					sort: () => ({
-						limit: () => ({
-							lean: async () => [{
-								_id: emailId,
-								subject: 'Broken provider',
-								from: ['sender@example.com'],
-								to: ['team@example.com'],
-								text_content: 'Please triage me',
-								labels: [],
-								mailbox: 'inbox',
-								project: 'project-1',
-								owner: userId,
-							}],
-						}),
-					}),
-				});
-				Email.findOneAndUpdate = async (query, update) => {
-					assert.equal(query._id, emailId);
-					updatePayload = update.$set;
-					return { _id: emailId, ...update.$set };
-				};
-				Tenant.findOne = () => ({
-					select: () => ({
-						lean: async () => ({ settings: { ai_instructions: {} } }),
-					}),
-				});
-
-				try {
-					const result = await triageInboxEmails('host-1', userId, {
-						run_id: 'client-run-failed',
-						skipSideEffects: true,
-						searchKnowledgeFn: async () => ({}),
-						getThreadFn: async () => [],
-						getConnectionsFn: async () => ({ links: [], tag_connections: [] }),
-						completionFn: async ({ scope }) => {
-							assert.equal(scope, 'email');
-							throw new Error('Provider unavailable');
+							ai_instructions: {},
 						},
-					});
+					}),
+				}),
+			});
+			Tenant.updateOne = async (query, update) => {
+				spamGuardUpdate = { query, update };
+				return { modifiedCount: 1 };
+			};
 
-					assert.equal(result.run_id, 'client-run-failed');
-					assert.equal(result.processed, 1);
-					assert.equal(result.triaged, 0);
-					assert.equal(result.errors.length, 1);
-					assert.equal(result.errors[0].error, 'Provider unavailable');
-					assert.equal(updatePayload.triage_status, 'failed');
-					assert.equal(updatePayload.triage_error, 'Provider unavailable');
-					assert.equal(updatePayload.triage_run_id, 'client-run-failed');
-					assert.equal(updatePayload.is_indexed, false);
-				} finally {
-					EmailLabel.bulkWrite = originalBulkWrite;
-					EmailLabel.find = originalLabelFind;
-					Email.find = originalEmailFind;
-					Email.findOneAndUpdate = originalFindOneAndUpdate;
-					Tenant.findOne = originalTenantFindOne;
-				}
+			try {
+				const result = await triageInboxEmails('host-1', userId, {
+					run_id: 'client-run-spam',
+					skipSideEffects: true,
+					searchKnowledgeFn: async () => ({}),
+					getThreadFn: async () => [],
+					getConnectionsFn: async () => ({ links: [], tag_connections: [] }),
+					completionFn: async () => '{"primary_action":"spam","labels":["spam"],"summary":"Spam offer","reason":"Unwanted offer","confidence":0.9,"action_points":[],"related_context":[],"mailbox_action":"spam"}',
+				});
+
+				assert.equal(result.triaged, 1);
+				assert.equal(result.results[0].mailbox, 'spam');
+				assert.deepEqual(updatePayload.labels, []);
+				assert.equal(updatePayload.triage_primary_action, 'spam');
+				assert.equal(spamGuardUpdate.query.host_id, 'host-1');
+				assert.equal(spamGuardUpdate.update.$set['settings.email.spam_guard'], 'existing@example.com\ndeals@spam.test');
+			} finally {
+				EmailLabel.bulkWrite = originalBulkWrite;
+				EmailLabel.find = originalLabelFind;
+				Email.find = originalEmailFind;
+				Email.findOneAndUpdate = originalFindOneAndUpdate;
+				EmailDraft.findOneAndUpdate = originalDraftFindOneAndUpdate;
+				Tenant.findOne = originalTenantFindOne;
+				Tenant.updateOne = originalTenantUpdateOne;
+			}
+		});
+
+		it('keeps Marketing triage in inbox without creating drafts', async () => {
+			const emailId = { toString: () => 'email-marketing-triage-1' };
+			const originalBulkWrite = EmailLabel.bulkWrite;
+			const originalLabelFind = EmailLabel.find;
+			const originalEmailFind = Email.find;
+			const originalFindOneAndUpdate = Email.findOneAndUpdate;
+			const originalDraftFindOneAndUpdate = EmailDraft.findOneAndUpdate;
+			const originalTenantFindOne = Tenant.findOne;
+			let updatePayload = null;
+			let prompt = '';
+
+			EmailLabel.bulkWrite = async () => ({});
+			EmailLabel.find = () => ({
+				sort: () => ({
+					lean: async () => [],
+				}),
+			});
+			Email.find = () => ({
+				sort: () => ({
+					limit: () => ({
+						lean: async () => [{
+							_id: emailId,
+							subject: 'Checking in',
+							from: ['Vendor <vendor@example.com>'],
+							to: ['team@example.com'],
+							text_content: 'Quick question: would a product demo be useful?',
+							labels: [],
+							mailbox: 'inbox',
+							project: 'project-1',
+							owner: userId,
+						}],
+					}),
+				}),
+			});
+			Email.findOneAndUpdate = async (query, update) => {
+				assert.equal(query._id, emailId);
+				updatePayload = update.$set;
+				return { _id: emailId, ...update.$set };
+			};
+			EmailDraft.findOneAndUpdate = async () => {
+				throw new Error('marketing triage must not create drafts');
+			};
+			Tenant.findOne = () => ({
+				select: () => ({
+					lean: async () => ({ settings: { ai_instructions: {} } }),
+				}),
 			});
 
-			it('reports inbox triage progress after each processed email', async () => {
-				const originalBulkWrite = EmailLabel.bulkWrite;
-				const originalLabelFind = EmailLabel.find;
-				const originalEmailFind = Email.find;
-				const originalFindOneAndUpdate = Email.findOneAndUpdate;
-				const originalTenantFindOne = Tenant.findOne;
-				const progress = [];
-				const updates = [];
-
-				EmailLabel.bulkWrite = async () => ({});
-				EmailLabel.find = () => ({
-					sort: () => ({
-						lean: async () => [],
-					}),
-				});
-				Email.find = () => ({
-					sort: () => ({
-						limit: () => ({
-							lean: async () => [
-								{ _id: { toString: () => 'email-1' }, subject: 'First', from: ['a@example.com'], to: ['team@example.com'], text_content: 'A', labels: [], mailbox: 'inbox', project: 'project-1', owner: userId },
-								{ _id: { toString: () => 'email-2' }, subject: 'Second', from: ['b@example.com'], to: ['team@example.com'], text_content: 'B', labels: [], mailbox: 'inbox', project: 'project-1', owner: userId },
-							],
-						}),
-					}),
-				});
-				Email.findOneAndUpdate = async (query, update) => {
-					updates.push(update.$set);
-					return { _id: query._id, labels: [], mailbox: 'archived', ...update.$set };
-				};
-				Tenant.findOne = () => ({
-					select: () => ({
-						lean: async () => ({ settings: { ai_instructions: {} } }),
-					}),
+			try {
+				const result = await triageInboxEmails('host-1', userId, {
+					run_id: 'client-run-marketing',
+					skipSideEffects: true,
+					searchKnowledgeFn: async () => ({}),
+					getThreadFn: async () => [],
+					getConnectionsFn: async () => ({ links: [], tag_connections: [] }),
+					completionFn: async ({ messages }) => {
+						prompt = messages[1].content;
+						return '{"primary_action":"marketing","labels":["marketing"],"summary":"Sales outreach","reason":"Benign vendor pitch","confidence":0.83,"action_points":[],"related_context":[],"draft_reply":{"body_text":"Tell me more"},"mailbox_action":"keep-inbox"}';
+					},
 				});
 
-				try {
-					const result = await triageInboxEmails('host-1', userId, {
-						run_id: 'progress-run-1',
-						skipSideEffects: true,
-						searchKnowledgeFn: async () => ({}),
-						getThreadFn: async () => [],
-						getConnectionsFn: async () => ({ links: [], tag_connections: [] }),
-						completionFn: async () => '{"primary_action":"no-action","labels":["no-action"],"summary":"FYI","reason":"No action","confidence":0.8,"action_points":[],"related_context":[],"mailbox_action":"archive"}',
-						onProgress: async (state) => {
-							progress.push({ processed: state.processed, triaged: state.triaged, errors: state.errors.length, total: state.total });
-						},
-					});
+				assert.match(prompt, /Use marketing with mailbox_action keep-inbox/);
+				assert.equal(result.triaged, 1);
+				assert.equal(result.drafted, 0);
+				assert.equal(result.results[0].mailbox, 'inbox');
+				assert.equal(result.results[0].draft_id, null);
+				assert.deepEqual(updatePayload.labels, ['marketing', 'triaged']);
+				assert.equal(updatePayload.mailbox, 'inbox');
+				assert.equal(updatePayload.triaged, true);
+				assert.equal(updatePayload.triage_primary_action, 'marketing');
+				assert.equal(updatePayload.triage_mailbox_action, 'keep-inbox');
+				assert.equal(updatePayload.triage_draft_id, null);
+			} finally {
+				EmailLabel.bulkWrite = originalBulkWrite;
+				EmailLabel.find = originalLabelFind;
+				Email.find = originalEmailFind;
+				Email.findOneAndUpdate = originalFindOneAndUpdate;
+				EmailDraft.findOneAndUpdate = originalDraftFindOneAndUpdate;
+				Tenant.findOne = originalTenantFindOne;
+			}
+		});
 
-					assert.equal(result.processed, 2);
-					assert.deepEqual(updates.map((update) => update.labels), [[], []]);
-					assert.deepEqual(updates.map((update) => update.mailbox), ['archived', 'archived']);
-					assert.deepEqual(updates.map((update) => update.triage_primary_action), ['no-action', 'no-action']);
-					assert.deepEqual(progress, [
-						{ processed: 1, triaged: 1, errors: 0, total: 2 },
-						{ processed: 2, triaged: 2, errors: 0, total: 2 },
-					]);
-				} finally {
-					EmailLabel.bulkWrite = originalBulkWrite;
-					EmailLabel.find = originalLabelFind;
-					Email.find = originalEmailFind;
-					Email.findOneAndUpdate = originalFindOneAndUpdate;
-					Tenant.findOne = originalTenantFindOne;
-				}
+		it('returns processed errors when all inbox triage attempts fail', async () => {
+			const emailId = { toString: () => 'email-err-1' };
+			let updatePayload = null;
+			const originalBulkWrite = EmailLabel.bulkWrite;
+			const originalLabelFind = EmailLabel.find;
+			const originalEmailFind = Email.find;
+			const originalFindOneAndUpdate = Email.findOneAndUpdate;
+			const originalTenantFindOne = Tenant.findOne;
+
+			EmailLabel.bulkWrite = async () => ({});
+			EmailLabel.find = () => ({
+				sort: () => ({
+					lean: async () => [],
+				}),
 			});
+			Email.find = () => ({
+				sort: () => ({
+					limit: () => ({
+						lean: async () => [{
+							_id: emailId,
+							subject: 'Broken provider',
+							from: ['sender@example.com'],
+							to: ['team@example.com'],
+							text_content: 'Please triage me',
+							labels: [],
+							mailbox: 'inbox',
+							project: 'project-1',
+							owner: userId,
+						}],
+					}),
+				}),
+			});
+			Email.findOneAndUpdate = async (query, update) => {
+				assert.equal(query._id, emailId);
+				updatePayload = update.$set;
+				return { _id: emailId, ...update.$set };
+			};
+			Tenant.findOne = () => ({
+				select: () => ({
+					lean: async () => ({ settings: { ai_instructions: {} } }),
+				}),
+			});
+
+			try {
+				const result = await triageInboxEmails('host-1', userId, {
+					run_id: 'client-run-failed',
+					skipSideEffects: true,
+					searchKnowledgeFn: async () => ({}),
+					getThreadFn: async () => [],
+					getConnectionsFn: async () => ({ links: [], tag_connections: [] }),
+					completionFn: async ({ scope }) => {
+						assert.equal(scope, 'email');
+						throw new Error('Provider unavailable');
+					},
+				});
+
+				assert.equal(result.run_id, 'client-run-failed');
+				assert.equal(result.processed, 1);
+				assert.equal(result.triaged, 0);
+				assert.equal(result.errors.length, 1);
+				assert.equal(result.errors[0].error, 'Provider unavailable');
+				assert.equal(updatePayload.triage_status, 'failed');
+				assert.equal(updatePayload.triage_error, 'Provider unavailable');
+				assert.equal(updatePayload.triage_run_id, 'client-run-failed');
+				assert.equal(updatePayload.is_indexed, false);
+			} finally {
+				EmailLabel.bulkWrite = originalBulkWrite;
+				EmailLabel.find = originalLabelFind;
+				Email.find = originalEmailFind;
+				Email.findOneAndUpdate = originalFindOneAndUpdate;
+				Tenant.findOne = originalTenantFindOne;
+			}
+		});
+
+		it('reports inbox triage progress after each processed email', async () => {
+			const originalBulkWrite = EmailLabel.bulkWrite;
+			const originalLabelFind = EmailLabel.find;
+			const originalEmailFind = Email.find;
+			const originalFindOneAndUpdate = Email.findOneAndUpdate;
+			const originalDraftFindOneAndUpdate = EmailDraft.findOneAndUpdate;
+			const originalTenantFindOne = Tenant.findOne;
+			const progress = [];
+			const updates = [];
+
+			EmailLabel.bulkWrite = async () => ({});
+			EmailLabel.find = () => ({
+				sort: () => ({
+					lean: async () => [],
+				}),
+			});
+			Email.find = () => ({
+				sort: () => ({
+					limit: () => ({
+						lean: async () => [
+							{ _id: { toString: () => 'email-1' }, subject: 'First', from: ['a@example.com'], to: ['team@example.com'], text_content: 'A', labels: [], mailbox: 'inbox', project: 'project-1', owner: userId },
+							{ _id: { toString: () => 'email-2' }, subject: 'Second', from: ['b@example.com'], to: ['team@example.com'], text_content: 'B', labels: [], mailbox: 'inbox', project: 'project-1', owner: userId },
+						],
+					}),
+				}),
+			});
+			Email.findOneAndUpdate = async (query, update) => {
+				updates.push(update.$set);
+				return { _id: query._id, labels: [], mailbox: 'archived', ...update.$set };
+			};
+			EmailDraft.findOneAndUpdate = async () => {
+				throw new Error('no-action triage must not create drafts');
+			};
+			Tenant.findOne = () => ({
+				select: () => ({
+					lean: async () => ({ settings: { ai_instructions: {} } }),
+				}),
+			});
+
+			try {
+				const result = await triageInboxEmails('host-1', userId, {
+					run_id: 'progress-run-1',
+					skipSideEffects: true,
+					searchKnowledgeFn: async () => ({}),
+					getThreadFn: async () => [],
+					getConnectionsFn: async () => ({ links: [], tag_connections: [] }),
+					completionFn: async () => '{"primary_action":"no-action","labels":["no-action"],"summary":"FYI","reason":"No action","confidence":0.8,"action_points":[],"related_context":[],"mailbox_action":"archive"}',
+					onProgress: async (state) => {
+						progress.push({ processed: state.processed, triaged: state.triaged, errors: state.errors.length, total: state.total });
+					},
+				});
+
+				assert.equal(result.processed, 2);
+				assert.deepEqual(updates.map((update) => update.labels), [[], []]);
+				assert.deepEqual(updates.map((update) => update.mailbox), ['archived', 'archived']);
+				assert.deepEqual(updates.map((update) => update.triage_primary_action), ['no-action', 'no-action']);
+				assert.deepEqual(progress, [
+					{ processed: 1, triaged: 1, errors: 0, total: 2 },
+					{ processed: 2, triaged: 2, errors: 0, total: 2 },
+				]);
+			} finally {
+				EmailLabel.bulkWrite = originalBulkWrite;
+				EmailLabel.find = originalLabelFind;
+				Email.find = originalEmailFind;
+				Email.findOneAndUpdate = originalFindOneAndUpdate;
+				EmailDraft.findOneAndUpdate = originalDraftFindOneAndUpdate;
+				Tenant.findOne = originalTenantFindOne;
+			}
+		});
 
 			it('starts and reads persisted async inbox triage runs', async () => {
 				const originalCountDocuments = Email.countDocuments;

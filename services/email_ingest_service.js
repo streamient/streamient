@@ -34,6 +34,7 @@ const DEFAULT_EMAIL_LABELS = [
 	{ slug: 'reply-required', name: 'Review', color: '#dc3545' },
 	{ slug: 'human-do', name: 'Human Do', color: '#fd7e14' },
 	{ slug: 'waiting', name: 'Waiting', color: '#0d6efd' },
+	{ slug: 'marketing', name: 'Marketing', color: '#6f42c1' },
 	{ slug: 'spam', name: 'Spam', color: '#212529' },
 	{ slug: 'no-action', name: 'No action', color: '#6c757d' },
 	{ slug: 'triaged', name: 'Done', color: '#198754' },
@@ -52,7 +53,7 @@ function emailIndexOptions(ctx = {}) {
 const SYSTEM_LABEL_SLUGS = DEFAULT_EMAIL_LABELS.map((label) => label.slug);
 const DEFAULT_EMAIL_LABEL_ORDER = new Map(DEFAULT_EMAIL_LABELS.map((label, index) => [label.slug, index]));
 const HIDDEN_EMAIL_LABEL_SLUGS = new Set(['triaged']);
-const PRIMARY_TRIAGE_LABELS = ['reply-required', 'human-do', 'waiting', 'no-action', 'spam'];
+const PRIMARY_TRIAGE_LABELS = ['reply-required', 'human-do', 'waiting', 'marketing', 'no-action', 'spam'];
 const TRIAGE_ACTIONS = PRIMARY_TRIAGE_LABELS;
 const TERMINAL_LABEL_CLEAR_MAILBOXES = new Set(['archived', 'spam']);
 const MAX_DRAFT_RECIPIENTS = 10;
@@ -66,8 +67,9 @@ const DEFAULT_EMAIL_TRIAGE_INSTRUCTIONS = [
 	'Use reply-required when a human should answer the sender.',
 	'Use human-do when work is required outside a reply.',
 	'Use waiting when the team is blocked on someone else.',
+	'Use marketing for benign unsolicited commercial outreach, newsletters, sales pitches, vendor fluff, and marketing follow-ups; keep it in inbox and never draft a reply.',
 	'Use no-action for receipts, notifications, confirmations, and FYI messages.',
-	'Use spam only for unwanted or suspicious messages.',
+	'Use spam for deceptive, suspicious, bulk, link insertion, backlink, SEO, contact-list sales, data-list sales, or other unwanted commercial schemes.',
 	'Create draft_reply only for reply-required emails. Never send emails.',
 ].join(' ');
 const DEFAULT_EMAIL_AI_INSTRUCTIONS = [
@@ -1793,6 +1795,7 @@ function findEmailAiStatus(query) {
 		['reply-required', /\breply[-\s]?required\b|\breview\b/],
 		['human-do', /\bhuman[-\s]?do\b|\bto[-\s]?do\b|\baction required\b/],
 		['waiting', /\bwaiting\b/],
+		['marketing', /\bmarketing\b|\bsales\b|\bnewsletter\b/],
 		['no-action', /\bno[-\s]?action\b|\bfyi\b/],
 		['spam', /\bspam\b/],
 	];
@@ -1818,7 +1821,7 @@ function normalizeEmailAiSearchText(query, intent) {
 		.replace(/\b(show|find|search|list|get|give|display|me|all|emails?|messages?|from|to|cc|bcc|about|with|containing|that|mention|mentions|how many|count|number of|total|summari[sz]e|summary|this mailbox|this view|in this view)\b/gi, ' ')
 		.replace(/\b(are|is|was|were|be|in|the|a|an|current)\b/gi, ' ')
 		.replace(/[?!.,;:]+/g, ' ')
-		.replace(/\breply[-\s]?required\b|\bhuman[-\s]?do\b|\bno[-\s]?action\b|\bwaiting\b|\bspam\b|\binbox\b|\barchive(d)?\b|\bsent\b|\btrash(ed)?\b/gi, ' ')
+		.replace(/\breply[-\s]?required\b|\bhuman[-\s]?do\b|\bno[-\s]?action\b|\bwaiting\b|\bmarketing\b|\bspam\b|\binbox\b|\barchive(d)?\b|\bsent\b|\btrash(ed)?\b/gi, ' ')
 		.replace(/\s+/g, ' ')
 		.trim();
 	return text;
@@ -2717,10 +2720,14 @@ function buildTriagePrompt(email, instructions, context) {
 		'Required shape: {"primary_action":"reply-required","labels":["reply-required"],"summary":"short summary","reason":"short reason","confidence":0.8,"action_points":[{"text":"what to do","type":"reply"}],"related_context":[{"item_type":"notes","item_id":"id","title":"title","reason":"why relevant"}],"draft_reply":{"to":["sender@example.com"],"cc":[],"bcc":[],"subject":"Re: subject","body_text":"draft"},"mailbox_action":"keep-inbox"}.',
 		`Allowed labels: ${SYSTEM_LABEL_SLUGS.join(', ')}.`,
 		`primary_action must be exactly one of ${TRIAGE_ACTIONS.join(', ')}.`,
-		'Always include exactly one best action label from reply-required, human-do, waiting, no-action, spam.',
+		'Always include exactly one best action label from reply-required, human-do, waiting, marketing, no-action, spam.',
 		'Do not include triaged; it will be added automatically.',
 		'Use draft_reply only when primary_action is reply-required. Never send email.',
 		'Use related_context only for context IDs shown below.',
+		'First decide sender intent. Do not classify unsolicited commercial outreach as reply-required just because it asks for a reply, pricing, sample data, details, confirmation, or interest.',
+		'Use marketing with mailbox_action keep-inbox for benign marketing, sales outreach, newsletters, vendor pitches, and commercial follow-ups that do not need a reply.',
+		'Use spam with mailbox_action spam for deceptive, suspicious, bulk, link insertion, backlink, SEO, contact-list sales, data-list sales, or other unwanted commercial schemes.',
+		'Use no-action with mailbox_action archive for receipts, notifications, confirmations, system messages, and FYI messages.',
 		'Use mailbox_action archive for no-action, spam for spam, and keep-inbox otherwise unless custom instructions clearly require a different internal move.',
 		`Default triage instructions:\n${DEFAULT_EMAIL_TRIAGE_INSTRUCTIONS}`,
 		instructions.global ? `Global instructions:\n${instructions.global}` : '',

@@ -94,7 +94,7 @@
 		{ slug: 'archived', name: 'Archived' },
 		{ slug: 'spam', name: 'Spam' },
 	];
-	var SYSTEM_TRIAGE_LABELS = ['reply-required', 'human-do', 'waiting', 'no-action', 'triaged', 'spam'];
+	var SYSTEM_TRIAGE_LABELS = ['reply-required', 'human-do', 'waiting', 'marketing', 'no-action', 'triaged', 'spam'];
 	// Triage status labels shown (and removable) in the email detail. Mirrors the
 	// default labels in services/email_ingest_service.js (excludes the hidden
 	// "triaged"/Done flag). Order matches the left-nav label order.
@@ -102,9 +102,12 @@
 		{ slug: 'reply-required', name: 'Review', color: '#dc3545' },
 		{ slug: 'human-do', name: 'Human Do', color: '#fd7e14' },
 		{ slug: 'waiting', name: 'Waiting', color: '#0d6efd' },
+		{ slug: 'marketing', name: 'Marketing', color: '#6f42c1' },
 		{ slug: 'spam', name: 'Spam', color: '#212529' },
 		{ slug: 'no-action', name: 'No action', color: '#6c757d' },
 	];
+	var ECC_ACTION_LABELS = ['reply-required', 'human-do', 'waiting', 'marketing'];
+	var ECC_STATUS_LABELS = ['spam', 'no-action'];
 	var DRAFT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 	var DRAFT_RECIPIENT_SEARCH_MIN = 2;
 	var EMAIL_PAGE_SIZE = 50;
@@ -1249,20 +1252,44 @@
 		});
 	}
 
+	function renderLabelButton(label) {
+		var active = activeLabel === label.slug ? ' active' : '';
+		return '<button type="button" class="list-group-item list-group-item-action d-flex align-items-center' + active + '" data-label="' + escapeHtml(label.slug) + '">'
+			+ '<span class="ecc-label-dot me-2" style="background:' + escapeHtml(label.color || '#6c757d') + '"></span>'
+			+ '<span class="ecc-label-name text-truncate">' + escapeHtml(label.name) + '</span>'
+			+ '<span class="badge text-bg-secondary ms-auto">' + (label.count || 0) + '</span>'
+			+ '</button>';
+	}
+
+	function renderLabelSection(title, labels) {
+		if (!labels.length) return '';
+		return '<div class="ecc-label-section" data-label-section="' + escapeHtml(title.toLowerCase()) + '">'
+			+ '<h6 class="mb-2">' + escapeHtml(title) + '</h6>'
+			+ '<div class="list-group">'
+			+ labels.map(renderLabelButton).join('')
+			+ '</div>'
+			+ '</div>';
+	}
+
 	function renderLabels(labels) {
 		if (!labelsEl) return;
 		if (!labels.length) {
 			labelsEl.innerHTML = '<div class="list-group-item text-muted small">No labels configured.</div>';
 			return;
 		}
-		labelsEl.innerHTML = labels.map(function (label) {
-			var active = activeLabel === label.slug ? ' active' : '';
-			return '<button type="button" class="list-group-item list-group-item-action d-flex align-items-center' + active + '" data-label="' + escapeHtml(label.slug) + '">'
-				+ '<span class="ecc-label-dot me-2" style="background:' + escapeHtml(label.color || '#6c757d') + '"></span>'
-				+ '<span class="ecc-label-name text-truncate">' + escapeHtml(label.name) + '</span>'
-				+ '<span class="badge text-bg-secondary ms-auto">' + (label.count || 0) + '</span>'
-				+ '</button>';
-		}).join('');
+		var labelBySlug = {};
+		labels.forEach(function (label) {
+			labelBySlug[label.slug] = label;
+		});
+		var knownLabels = new Set(ECC_ACTION_LABELS.concat(ECC_STATUS_LABELS));
+		var actionLabels = ECC_ACTION_LABELS.map(function (slug) { return labelBySlug[slug]; }).filter(Boolean);
+		var statusLabels = ECC_STATUS_LABELS.map(function (slug) { return labelBySlug[slug]; }).filter(Boolean);
+		var customLabels = labels.filter(function (label) { return !knownLabels.has(label.slug); });
+		labelsEl.innerHTML = [
+			renderLabelSection('Actions', actionLabels),
+			renderLabelSection('Status', statusLabels),
+			renderLabelSection('Custom', customLabels),
+		].filter(Boolean).join('') || '<div class="list-group-item text-muted small">No labels configured.</div>';
 		labelsEl.querySelectorAll('[data-label]').forEach(function (button) {
 			button.addEventListener('click', function () {
 				activeLabel = button.dataset.label || '';

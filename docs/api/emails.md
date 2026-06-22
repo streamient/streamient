@@ -111,7 +111,7 @@ Common query parameters:
 | `mailbox` | `inbox`, `archived`, `sent`, `spam`, or `trash`. |
 | `triaged` | `true` or `false`. |
 | `status` | `pending`, `complete`, or `failed`. Comma-separated values accepted. |
-| `primary_action` | `reply-required`, `human-do`, `waiting`, `no-action`, or `spam`. Comma-separated values accepted. |
+| `primary_action` | `reply-required`, `human-do`, `waiting`, `marketing`, `no-action`, or `spam`. Comma-separated values accepted. |
 | `run_id` | Triage run correlation ID. |
 | `include` | Optional embedded payloads: `email`, `draft`, or `email,draft`. |
 

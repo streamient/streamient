@@ -812,6 +812,10 @@ small,
 	flex: 0 0 auto;
 }
 
+.ecc-label-section + .ecc-label-section {
+	margin-top: 1.5rem;
+}
+
 .ecc-email-item.is-active {
 	background: var(--bs-light);
 }
