@@ -2850,12 +2850,19 @@ async function runQueuedEmailTriage(host_id, userId, runId, options = {}) {
 	}
 }
 
+function normalizeEmailTriageLimit(value) {
+	const parsed = parseInt(value, 10);
+	if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+	return parsed;
+}
+
 export async function startEmailTriageRun(host_id, userId, options = {}) {
-	const limit = Math.min(parseInt(options.limit, 10) || 25, 100);
+	const limit = normalizeEmailTriageLimit(options.limit);
 	const projectId = options.project || null;
 	const runId = String(options.run_id || '').trim() || crypto.randomUUID();
 	const query = buildEmailListQuery(host_id, projectId, { mailbox: 'inbox', triaged: false });
-	const total = Math.min(await Email.countDocuments(query), limit);
+	const count = await Email.countDocuments(query);
+	const total = limit ? Math.min(count, limit) : count;
 	const run = await EmailTriageRun.create({
 		run_id: runId,
 		host_id,
@@ -2900,7 +2907,7 @@ export async function startEmailTriageRun(host_id, userId, options = {}) {
 
 export async function triageInboxEmails(host_id, userId, options = {}) {
 	await ensureDefaultEmailLabels(host_id);
-	const limit = Math.min(parseInt(options.limit, 10) || 25, 100);
+	const limit = normalizeEmailTriageLimit(options.limit);
 	const projectId = options.project || null;
 	const query = buildEmailListQuery(host_id, projectId, { mailbox: 'inbox', triaged: false });
 	if (options.email_id) query._id = options.email_id;

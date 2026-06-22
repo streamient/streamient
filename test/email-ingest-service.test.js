@@ -2884,12 +2884,16 @@ describe('Email ingest service', () => {
 				const originalTenantFindOne = Tenant.findOne;
 				const updates = [];
 				let currentRun = null;
+				let findLimit = null;
 
-				Email.countDocuments = async () => 24;
+				Email.countDocuments = async () => 125;
 				Email.find = () => ({
 					sort: () => ({
-						limit: () => ({
-							lean: async () => [],
+						limit: (limit) => ({
+							lean: async () => {
+								findLimit = limit;
+								return [];
+							},
 						}),
 					}),
 				});
@@ -2921,13 +2925,13 @@ describe('Email ingest service', () => {
 				try {
 					const queued = await startEmailTriageRun('host-1', userId, {
 						run_id: 'async-run-1',
-						limit: 25,
 						member_role: 'member',
 						tenant_id: 'tenant-1',
 						skipSideEffects: true,
 					});
 					assert.equal(queued.status, 'queued');
-					assert.equal(queued.total, 24);
+					assert.equal(queued.total, 125);
+					assert.equal(queued.limit, 0);
 					assert.equal(queued.member_role, 'member');
 
 					await new Promise((resolve) => setImmediate(resolve));
@@ -2936,6 +2940,8 @@ describe('Email ingest service', () => {
 					const stored = await getEmailTriageRun('host-1', 'async-run-1');
 					assert.equal(stored.status, 'completed');
 					assert.equal(stored.processed, 0);
+					assert.equal(stored.limit, 0);
+					assert.equal(findLimit, 0);
 					assert.deepEqual(updates, ['running', 'completed']);
 				} finally {
 					Email.countDocuments = originalCountDocuments;
@@ -2945,6 +2951,50 @@ describe('Email ingest service', () => {
 					EmailTriageRun.create = originalRunCreate;
 					EmailTriageRun.findOne = originalRunFindOne;
 					EmailTriageRun.findOneAndUpdate = originalRunFindOneAndUpdate;
+					Tenant.findOne = originalTenantFindOne;
+				}
+			});
+
+			it('honors explicit inbox triage limits', async () => {
+				const originalBulkWrite = EmailLabel.bulkWrite;
+				const originalLabelFind = EmailLabel.find;
+				const originalEmailFind = Email.find;
+				const originalTenantFindOne = Tenant.findOne;
+				let findLimit = null;
+
+				EmailLabel.bulkWrite = async () => ({});
+				EmailLabel.find = () => ({
+					sort: () => ({
+						lean: async () => [],
+					}),
+				});
+				Email.find = () => ({
+					sort: () => ({
+						limit: (limit) => {
+							findLimit = limit;
+							return {
+								lean: async () => [],
+							};
+						},
+					}),
+				});
+				Tenant.findOne = () => ({
+					select: () => ({
+						lean: async () => ({ settings: { ai_instructions: {} } }),
+					}),
+				});
+
+				try {
+					const result = await triageInboxEmails('host-1', userId, {
+						limit: 25,
+						skipSideEffects: true,
+					});
+					assert.equal(result.processed, 0);
+					assert.equal(findLimit, 25);
+				} finally {
+					Email.find = originalEmailFind;
+					EmailLabel.bulkWrite = originalBulkWrite;
+					EmailLabel.find = originalLabelFind;
 					Tenant.findOne = originalTenantFindOne;
 				}
 			});

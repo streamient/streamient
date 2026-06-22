@@ -8,7 +8,7 @@ const emailTriageRunSchema = new mongoose.Schema(
 		tenant_id: { type: String, default: '' },
 		member_role: { type: String, default: '' },
 		project: { type: String, default: '' },
-		limit: { type: Number, default: 25 },
+		limit: { type: Number, default: 0 },
 		status: { type: String, enum: ['queued', 'running', 'completed', 'failed'], default: 'queued', index: true },
 		total: { type: Number, default: 0 },
 		processed: { type: Number, default: 0 },

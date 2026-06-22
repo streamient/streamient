@@ -5058,8 +5058,7 @@
                   },
                   "limit": {
                     "type": "integer",
-                    "default": 25,
-                    "maximum": 100
+                    "description": "Optional positive cap. Omit or use 0 to triage all matching inbox emails."
                   },
                   "run_id": {
                     "type": "string",

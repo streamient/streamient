@@ -1702,7 +1702,7 @@ const swaggerSpec = {
                                 type: 'object',
                                 properties: {
                                     project: { type: 'string', description: 'Optional project filter' },
-                                    limit: { type: 'integer', default: 25, maximum: 100 },
+                                    limit: { type: 'integer', description: 'Optional positive cap. Omit or use 0 to triage all matching inbox emails.' },
                                     run_id: { type: 'string', description: 'Optional client-generated triage run ID for correlating socket progress events' },
                                 },
                             },

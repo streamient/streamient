@@ -153,10 +153,12 @@ Body:
 ```json
 {
 	"project": "optional-project-id",
-	"limit": 25,
+	"limit": 0,
 	"run_id": "client-run-id"
 }
 ```
+
+Omit `limit` or set it to `0` to triage all matching inbox emails. Use a positive `limit` only when intentionally capping a run.
 
 Use the returned `run_id`, `email_id`, or original `message_id` with the triage status endpoints to poll completion from external systems.
 

@@ -963,11 +963,12 @@ describe('Email draft API', () => {
 
 	it('queues inbox triage asynchronously for account members and exposes run status', async () => {
 		let currentRun = null;
+		let findLimit = null;
 		Email.countDocuments = async (query) => {
 			assert.equal(query.host_id, 'host-1');
 			assert.equal(query.mailbox, 'inbox');
 			assert.equal(query.triaged, false);
-			return 24;
+			return 125;
 		};
 		EmailTriageRun.create = async (doc) => {
 			currentRun = { ...doc, createdAt: new Date(), updatedAt: new Date() };
@@ -990,8 +991,11 @@ describe('Email draft API', () => {
 		});
 		Email.find = () => ({
 			sort: () => ({
-				limit: () => ({
-					lean: async () => [],
+				limit: (limit) => ({
+					lean: async () => {
+						findLimit = limit;
+						return [];
+					},
 				}),
 			}),
 		});
@@ -1017,13 +1021,14 @@ describe('Email draft API', () => {
 
 		const server = await createServer();
 		try {
-			const response = await request(server, 'POST', '/emails/triage-inbox', { run_id: 'api-run-1', limit: 25 });
+			const response = await request(server, 'POST', '/emails/triage-inbox', { run_id: 'api-run-1' });
 			const json = await readJson(response);
 
 			assert.equal(response.status, 202);
 			assert.equal(json.run_id, 'api-run-1');
 			assert.equal(json.status, 'queued');
-			assert.equal(json.total, 24);
+			assert.equal(json.total, 125);
+			assert.equal(json.run.limit, 0);
 			assert.equal(json.run.member_role, 'member');
 
 			await new Promise((resolve) => setImmediate(resolve));
@@ -1035,6 +1040,8 @@ describe('Email draft API', () => {
 			assert.equal(statusResponse.status, 200);
 			assert.equal(statusJson.run.status, 'completed');
 			assert.equal(statusJson.run.processed, 0);
+			assert.equal(statusJson.run.limit, 0);
+			assert.equal(findLimit, 0);
 		} finally {
 			await new Promise((resolve) => server.close(resolve));
 		}
