@@ -3,11 +3,10 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express from 'express';
-import rateLimit from 'express-rate-limit';
 
 import mcpConfig from './config.js';
 import { ApiClient } from './lib/api-client.js';
-import { authenticateHttpRequest, checkRequestScopes, extractRequestAuth } from './lib/http-auth.js';
+import { authenticateHttpRequest, checkRequestScopes } from './lib/http-auth.js';
 import { noteTools } from './tools/notes.js';
 import { memoryTools } from './tools/memory.js';
 import { urlTools } from './tools/urls.js';
@@ -18,11 +17,13 @@ import { gitSyncTools } from './tools/git_sync.js';
 import { applyToolProfile, MCP_TOOL_PROFILES } from './tools/profile.js';
 import { MCP_SERVER_INSTRUCTIONS } from './instructions.js';
 import { buildProtectedResourceMetadata, getRequestExternalBaseUrl, getRequiredScopesForTool } from '../../modules/oauth.js';
+import McpRateLimit from '../../modules/mcp_rate_limit.js';
 import { recordException, setupExpressErrorHandler as setupOtelExpressErrorHandler } from './tracing.js';
 import { createLogger } from '../../modules/logger.js';
 
 const PORT = mcpConfig.port;
 const API_BASE_URL = mcpConfig.apiBaseUrl;
+const MCP_PRODUCT = 'kumbukum';
 const log = createLogger('mcp');
 // Default project id + feature flags change rarely, so cache them long enough
 // to stay warm across a user's session and normal gaps between calls. 60s was
@@ -51,10 +52,6 @@ function summarizeToolResult(result) {
 function logToolTelemetry(event) {
   const level = event?.success === false ? 'warn' : 'info';
   log[level]({ event: 'mcp_tool_call', ...event }, `mcp tool ${event?.tool || ''} ${event?.success === false ? 'failed' : 'ok'}`.trim());
-}
-
-function extractToken(req) {
-  return extractRequestAuth(req.headers)?.token || null;
 }
 
 function authKeyForContext(authContext) {
@@ -120,8 +117,9 @@ function buildToolMeta(name, tool) {
   };
 }
 
-async function createServer(apiAuth, { projectId, oauthClientId, cacheKey, toolProfile = MCP_TOOL_PROFILES.FULL } = {}) {
+async function createServer(apiAuth, { projectId, oauthClientId, cacheKey, toolProfile = MCP_TOOL_PROFILES.FULL, rateLimitKey = null } = {}) {
   const api = new ApiClient(API_BASE_URL, apiAuth);
+  const toolRateLimitKey = rateLimitKey || McpRateLimit.getApiClientRateLimitKey(MCP_PRODUCT, api);
   const bootstrapStart = Date.now();
   const { defaultProjectId, emailFeatureEnabled, gitSyncFeatureEnabled, cacheHit } =
     await resolveBootstrap(api, { projectId, cacheKey });
@@ -153,7 +151,12 @@ async function createServer(apiAuth, { projectId, oauthClientId, cacheKey, toolP
       const client = cv ? `${cv.name || 'unknown'}/${cv.version || '?'}` : (oauthClientId || 'unknown');
       api.setMcpClient(client);
       try {
-        const result = await originalHandler(params, extra);
+        const result = await McpRateLimit.runToolWithLimits({
+          product: MCP_PRODUCT,
+          rateLimitKey: toolRateLimitKey,
+          toolName: name,
+          run: () => originalHandler(params, extra),
+        });
         logToolTelemetry({
           tool: name,
           client,
@@ -161,8 +164,9 @@ async function createServer(apiAuth, { projectId, oauthClientId, cacheKey, toolP
           args_chars: JSON.stringify(params || {}).length,
           args_estimated_tokens: estimateTokens(JSON.stringify(params || {})),
           requested_per_page: params?.per_page || params?.limit || null,
-          success: true,
+          success: !result?.isError,
           result: summarizeToolResult(result),
+          error: result?.isError ? 'tool_error_envelope' : undefined,
         });
         return result;
       } catch (err) {
@@ -216,7 +220,6 @@ if (transportArg === '--stdio' || !transportArg) {
 } else {
   // HTTP/SSE transport
   const app = express();
-  app.use(express.json());
 
   // Health check — no auth, no rate limit
   app.get('/health', (_req, res) => {
@@ -242,16 +245,10 @@ if (transportArg === '--stdio' || !transportArg) {
 	res.json(buildProtectedResourceMetadata(`${baseUrl}/sse`));
   });
 
-  // MCP rate limiter — 120 req/min per token (in-memory store)
-  const mcpLimiter = rateLimit({
-    windowMs: 60 * 1000,
-    limit: 120,
-    keyGenerator: (req) => extractToken(req) || 'anon',
-    standardHeaders: 'draft-7',
-    legacyHeaders: false,
-    message: { error: 'MCP rate limit exceeded (120 requests/min).' },
-  });
-  app.use(mcpLimiter);
+  app.use(McpRateLimit.createIpFloodLimiter(MCP_PRODUCT));
+  app.use(McpRateLimit.createUnauthLimiter(MCP_PRODUCT));
+  app.use(McpRateLimit.createSseOpenLimiter(MCP_PRODUCT));
+  app.use(express.json());
 
   // SSE endpoint
   const sseTransports = new Map();
@@ -264,14 +261,16 @@ if (transportArg === '--stdio' || !transportArg) {
       const projectId = req.headers['x-project-id'] || null;
       const oauthClientId = authContext.tokenClaims?.client_name || authContext.tokenClaims?.client_id || null;
       const authKey = authKeyForContext(authContext);
+      const rateLimitKey = McpRateLimit.getAuthContextRateLimitKey(MCP_PRODUCT, req, authContext);
       const cacheKey = `${authKey}:${projectId || ''}`;
-      const { server } = await createServer(authContext.apiAuth, { projectId, oauthClientId, cacheKey });
+      const { server } = await createServer(authContext.apiAuth, { projectId, oauthClientId, cacheKey, rateLimitKey });
       const transport = new SSEServerTransport('/messages', res);
       sseTransports.set(transport.sessionId, {
 		server,
 		transport,
 		authKey,
 		mode: authContext.mode,
+		rateLimitKey,
 	});
 
       res.on('close', () => {
@@ -292,6 +291,7 @@ if (transportArg === '--stdio' || !transportArg) {
     try {
       const authContext = authenticateHttpRequest(req);
       if (!authContext.ok) return sendAuthResponse(res, authContext.response);
+      if (!await McpRateLimit.consumeAuthenticatedRequest(MCP_PRODUCT, req, res, authContext)) return;
       const sessionId = req.query.sessionId;
       const session = sseTransports.get(sessionId);
       if (!session) return res.status(404).json({ error: 'Session not found' });
@@ -318,13 +318,15 @@ if (transportArg === '--stdio' || !transportArg) {
     try {
       const authContext = authenticateHttpRequest(req);
       if (!authContext.ok) return sendAuthResponse(res, authContext.response);
+      const rateLimitKey = McpRateLimit.getAuthContextRateLimitKey(MCP_PRODUCT, req, authContext);
+      if (!await McpRateLimit.consumeAuthenticatedRequest(MCP_PRODUCT, req, res, authContext)) return;
 	const scopeResponse = checkRequestScopes(authContext, req.body);
 	if (scopeResponse) return sendAuthResponse(res, scopeResponse);
 
       const projectId = req.headers['x-project-id'] || null;
       const oauthClientId = authContext.tokenClaims?.client_name || authContext.tokenClaims?.client_id || null;
       const cacheKey = `${authKeyForContext(authContext)}:${projectId || ''}`;
-      const { server, bootstrapMs, bootstrapCacheHit } = await createServer(authContext.apiAuth, { projectId, oauthClientId, cacheKey, toolProfile });
+      const { server, bootstrapMs, bootstrapCacheHit } = await createServer(authContext.apiAuth, { projectId, oauthClientId, cacheKey, toolProfile, rateLimitKey });
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);

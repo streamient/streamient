@@ -16,7 +16,7 @@ import { resolveTenant, backfillStarterPlan } from './modules/tenancy.js';
 import { resolveRequestHosted } from './config.js';
 import { installIconLocals } from './modules/icons.js';
 
-import { createApiLimiter } from './middleware/rate_limit.js';
+import { createApiLimiters } from './middleware/rate_limit.js';
 import { verifyScreenshotSignature, resolveScreenshotPath } from './modules/screenshot.js';
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './swagger.js';
@@ -218,7 +218,7 @@ app.get('/api/v1/screenshots/:filename', (req, res) => {
 app.use('/', authRoutes);
 app.use('/', billingRoutes);
 app.use('/admin', adminRoutes);
-app.use('/api/v1', createApiLimiter(), apiRoutes);
+app.use('/api/v1', createApiLimiters(), apiRoutes);
 
 app.get('/', (req, res) => {
 	if (req.session?.userId) {

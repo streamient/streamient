@@ -38,7 +38,6 @@ import * as oauthService from '../services/oauth_service.js';
 import * as teamService from '../services/team_service.js';
 import * as byoAiService from '../services/byo_ai_service.js';
 import * as whiteLabelService from '../services/white_label_service.js';
-import { createChatLimiter } from '../middleware/rate_limit.js';
 import { getBillingUserForHost, hasProFeatureAccess, effectiveResourceLimits, isAtLimit } from '../services/subscription_access_service.js';
 import { decorateEmailForClient } from '../modules/email_display.js';
 import config from '../config.js';
@@ -1337,7 +1336,7 @@ router.post('/search/knowledge', async (req, res) => {
 
 // ---- AI Chat ----
 
-router.post('/chat', createChatLimiter(), async (req, res) => {
+router.post('/chat', async (req, res) => {
 	try {
 		const { query, conversation_id, project_id } = req.body;
 		if (!query) return res.status(400).json({ error: 'query required' });
@@ -1372,7 +1371,7 @@ router.post('/chat', createChatLimiter(), async (req, res) => {
 	}
 });
 
-router.post('/chat/stream', createChatLimiter(), async (req, res) => {
+router.post('/chat/stream', async (req, res) => {
 	res.setHeader('Content-Type', 'text/event-stream');
 	res.setHeader('Cache-Control', 'no-cache');
 	res.setHeader('Connection', 'keep-alive');
