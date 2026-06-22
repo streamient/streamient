@@ -119,6 +119,17 @@ describe('ECC Email AI prompt buttons', () => {
 		assert.ok(eccJs.includes('selectedIds.delete(item.dataset.id || \'\');'));
 	});
 
+	it('removes stale ECC label/status rows by realtime thread identifiers', () => {
+		const eccJs = fs.readFileSync(new URL('../public/js/ecc.js', import.meta.url), 'utf8');
+
+		assert.ok(eccJs.includes('function removeEmailItemsForSocketEmail(email)'));
+		assert.ok(eccJs.includes('var threadMatch = incomingThreadIds.length && threadIdsOverlap(incomingThreadIds, listItemThreadIds(item));'));
+		assert.ok(eccJs.includes('var removedIds = removeEmailItemsForSocketEmail(email);'));
+		assert.ok(eccJs.includes('removedIds.includes(selectedId)'));
+		assert.ok(eccJs.includes('pendingEmailActionIds.delete(removedId);'));
+		assert.ok(eccJs.includes('pendingEmailActionIds.delete(actionId);'));
+	});
+
 	it('uses optimistic ECC email actions instead of waiting for API completion UI updates', () => {
 		const eccJs = fs.readFileSync(new URL('../public/js/ecc.js', import.meta.url), 'utf8');
 		const moveSelected = functionBlock(eccJs, 'moveSelected');

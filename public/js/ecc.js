@@ -3134,6 +3134,33 @@
 			});
 		}
 
+		function removeEmailItemsForSocketEmail(email) {
+			if (!listEl || !email) return [];
+			var id = emailId(email);
+			var incomingThreadIds = emailThreadIds(email);
+			var removedIds = [];
+			listEl.querySelectorAll('.ecc-email-item').forEach(function (item) {
+				var itemId = String(item.dataset.id || '');
+				var exactMatch = Boolean(id && itemId === id);
+				var threadMatch = incomingThreadIds.length && threadIdsOverlap(incomingThreadIds, listItemThreadIds(item));
+				if (!exactMatch && !threadMatch) return;
+				if (itemId) removedIds.push(itemId);
+				item.remove();
+			});
+			if (!removedIds.length) return removedIds;
+			removedIds.forEach(function (removedId) {
+				selectedIds.delete(removedId);
+				pendingEmailActionIds.delete(removedId);
+			});
+			emailActionIdsFromSocketEmail(email).forEach(function (actionId) {
+				selectedIds.delete(actionId);
+				pendingEmailActionIds.delete(actionId);
+			});
+			updateActionBar();
+			showEmptyEmailsIfNeeded();
+			return removedIds;
+		}
+
 		function applyEmailSocketUpdate(email) {
 			if (!listEl || !email) return;
 			if (activeMailbox === 'drafts') {
@@ -3144,13 +3171,9 @@
 			var existing = listEl.querySelector('.ecc-email-item[data-id="' + CSS.escape(id) + '"]');
 			var matches = emailMatchesCurrentView(email);
 			if (!matches) {
-				if (existing) {
-					existing.remove();
-					selectedIds.delete(id);
-					updateActionBar();
-					showEmptyEmailsIfNeeded();
-				}
-				if (emailId(selectedEmail) === id) {
+				var removedIds = removeEmailItemsForSocketEmail(email);
+				var selectedId = emailId(selectedEmail);
+				if (selectedId && (selectedId === id || removedIds.includes(selectedId))) {
 					replyTargetEmail = null;
 					renderEmailAi(null);
 				}
@@ -3160,6 +3183,7 @@
 			listEl.querySelectorAll('.ecc-email-item').forEach(function (item) {
 				if (item.dataset.id !== id && threadIdsOverlap(incomingThreadIds, listItemThreadIds(item))) {
 					selectedIds.delete(item.dataset.id || '');
+					pendingEmailActionIds.delete(item.dataset.id || '');
 					item.remove();
 				}
 			});
