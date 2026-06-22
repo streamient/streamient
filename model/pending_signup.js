@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+import mongoose from './mongoose.js';
 
 const pendingSignupSchema = new mongoose.Schema(
 	{

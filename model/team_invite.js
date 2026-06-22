@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+import mongoose from './mongoose.js';
 import { TEAM_MEMBER_ROLES } from './tenant_member.js';
 
 const teamInviteSchema = new mongoose.Schema(

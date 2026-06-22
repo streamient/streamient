@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+import mongoose, { hydratedQuery } from './mongoose.js';
 import crypto from 'node:crypto';
 
 const magicLinkSchema = new mongoose.Schema(
@@ -18,11 +18,11 @@ magicLinkSchema.statics.generate = async function (userId) {
 };
 
 magicLinkSchema.statics.verify = async function (token) {
-	const link = await this.findOne({
+	const link = await hydratedQuery(this.findOne({
 		token,
 		used: false,
 		expires_at: { $gt: new Date() },
-	});
+	}));
 	if (!link) return null;
 	link.used = true;
 	await link.save();

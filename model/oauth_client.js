@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+import mongoose from './mongoose.js';
 import { OAUTH_GRANT_TYPES, OAUTH_RESPONSE_TYPES, OAUTH_TOKEN_ENDPOINT_AUTH_METHODS } from '../modules/oauth.js';
 
 const oauthClientSchema = new mongoose.Schema(

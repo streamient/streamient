@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+import mongoose from './mongoose.js';
 import bcrypt from 'bcryptjs';
 
 function safeAccessTokens(access_tokens = []) {

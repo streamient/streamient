@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+import mongoose from './mongoose.js';
 
 export const TEAM_MEMBER_ROLES = ['owner', 'admin', 'member'];
 export const TEAM_MEMBER_ROLE_RANK = {

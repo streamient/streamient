@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+import mongoose from '../model/mongoose.js';
 import { User } from '../model/user.js';
 import { TenantMember } from '../model/tenant_member.js';
 

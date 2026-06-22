@@ -1,4 +1,5 @@
 import { User } from '../model/user.js';
+import { hydratedQuery } from '../model/mongoose.js';
 import { TeamInvite } from '../model/team_invite.js';
 import { TenantMember, TEAM_MEMBER_ROLE_RANK } from '../model/tenant_member.js';
 import { Tenant } from '../modules/tenancy.js';
@@ -120,7 +121,7 @@ export async function createTeamMember(userId, host_id, data, ctx = {}) {
 }
 
 export async function updateTeamMemberRole(host_id, membershipId, actor, nextRole, ctx = {}) {
-	const membership = await TenantMember.findOne({ _id: membershipId, host_id }).populate('user', 'name email');
+	const membership = await hydratedQuery(TenantMember.findOne({ _id: membershipId, host_id }).populate('user', 'name email'));
 	if (!membership) throw new Error('Member not found');
 	if (!['admin', 'member'].includes(nextRole)) throw new Error('Invalid role');
 	if (!canManageMembership(actor.role, membership.role, nextRole)) throw new Error('You do not have permission to change this role');

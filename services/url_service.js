@@ -1,4 +1,5 @@
 import { Url } from '../model/url.js';
+import { hydratedQuery } from '../model/mongoose.js';
 import { searchCollection, indexDocument, removeDocument } from '../modules/typesense.js';
 import { extractUrlContent } from '../modules/url_content_extractor.js';
 import { emitToTenant } from '../modules/socket.js';
@@ -36,7 +37,7 @@ export async function saveUrl(userId, host_id, data, ctx = {}) {
 			{ url: normalizedUrl },
 		],
 	};
-	const existingUrl = await Url.findOne(duplicateQuery);
+	const existingUrl = await hydratedQuery(Url.findOne(duplicateQuery));
 
 	if (existingUrl) {
 		let shouldSaveExisting = false;

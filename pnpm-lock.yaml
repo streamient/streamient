@@ -217,6 +217,9 @@ importers:
       mongoose:
         specifier: ^9.7.1
         version: 9.7.1(socks@2.8.9)
+      mongoose-lean-virtuals:
+        specifier: ^2.1.0
+        version: 2.1.0(mongoose@9.7.1(socks@2.8.9))
       n-readlines:
         specifier: ^3.4.1
         version: 3.4.1
@@ -4492,9 +4495,19 @@ packages:
       socks:
         optional: true
 
+  mongoose-lean-virtuals@2.1.0:
+    resolution: {integrity: sha512-1fBeyRGzwB1yHs9L/q6QBybMgJmTcgZ8v1mjCEpRTP7FNOTOMo2yzSJmOBT9gJcpOso+mOHNQiXDfYzvMLIFTw==}
+    engines: {node: '>=16.20.1'}
+    peerDependencies:
+      mongoose: '>=8.0.0 || ^9.0.0-0'
+
   mongoose@9.7.1:
     resolution: {integrity: sha512-rOCVA9ufRSdGTG6IdSqJa30avbaSBlI98zkv76xB+5xAzwCn4qvuKi26iE2BeAZrYYqcagjJRjmTA7+qEbSbYg==}
     engines: {node: '>=20.19.0'}
+
+  mpath@0.8.4:
+    resolution: {integrity: sha512-DTxNZomBcTWlrMW76jy1wvV37X/cNNxPW1y2Jzd4DZkAaC5ZGsm8bfGfNOthcDuRJujXLqiuS6o3Tpy0JEoh7g==}
+    engines: {node: '>=4.0.0'}
 
   mpath@0.9.0:
     resolution: {integrity: sha512-ikJRQTk8hw5DEoFVxHG1Gn9T/xcjtdnOKIU1JTmGjZZlg9LST2mBLmcX3/ICIbgJydT2GOc15RnNy5mHmzfSew==}
@@ -10630,6 +10643,11 @@ snapshots:
     optionalDependencies:
       socks: 2.8.9
 
+  mongoose-lean-virtuals@2.1.0(mongoose@9.7.1(socks@2.8.9)):
+    dependencies:
+      mongoose: 9.7.1(socks@2.8.9)
+      mpath: 0.8.4
+
   mongoose@9.7.1(socks@2.8.9):
     dependencies:
       kareem: 3.3.0
@@ -10646,6 +10664,8 @@ snapshots:
       - mongodb-client-encryption
       - snappy
       - socks
+
+  mpath@0.8.4: {}
 
   mpath@0.9.0: {}
 

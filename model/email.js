@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+import mongoose from './mongoose.js';
 import { textSanitizerPlugin } from '../modules/text_sanitize.js';
 
 const emailSchema = new mongoose.Schema(

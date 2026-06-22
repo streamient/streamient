@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { ZipArchive } from 'archiver';
+import { hydratedQuery } from '../model/mongoose.js';
 import { Export } from '../model/export.js';
 import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
@@ -49,7 +50,7 @@ export async function startExport(userId, hostId, userEmail, userName) {
 }
 
 async function processExport(exportId, hostId, userEmail, userName) {
-	const doc = await Export.findById(exportId);
+	const doc = await hydratedQuery(Export.findById(exportId));
 	if (!doc) return;
 
 	doc.status = 'processing';
@@ -122,7 +123,7 @@ export async function getExportFile(token, hostId) {
 
 export async function cleanupExpiredExports() {
 	const now = new Date();
-	const expired = await Export.find({ status: 'ready', expires_at: { $lt: now } });
+	const expired = await hydratedQuery(Export.find({ status: 'ready', expires_at: { $lt: now } }));
 
 	let cleaned = 0;
 	for (const doc of expired) {

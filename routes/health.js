@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import mongoose from 'mongoose';
+import mongoose from '../model/mongoose.js';
 import { getRedisClient } from '../modules/redis.js';
 import { getTypesenseClient } from '../modules/typesense.js';
 import { getIO } from '../modules/socket.js';

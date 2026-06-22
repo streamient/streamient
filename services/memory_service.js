@@ -1,5 +1,5 @@
 import { Memory } from '../model/memory.js';
-import mongoose from 'mongoose';
+import mongoose from '../model/mongoose.js';
 import { searchCollection, indexDocument, removeDocument } from '../modules/typesense.js';
 import { emitToTenant } from '../modules/socket.js';
 import { invalidateGraphCache, removeLinksForItem } from './graph_service.js';

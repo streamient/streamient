@@ -75,7 +75,7 @@ describe('Email forwarding import route', () => {
 		});
 		Tenant.findOne = () => ({
 			select: () => ({
-				lean: async () => ({ settings: { email: { auto_triage_incoming: false }, ai_instructions: {} } }),
+				lean: async () => ({ plan: 'pro', settings: { email: { auto_triage_incoming: false }, ai_instructions: {} } }),
 			}),
 		});
 		AuditLog.create = async () => ({});
@@ -636,6 +636,7 @@ describe('Email forwarding import route', () => {
 		Tenant.findOne = () => ({
 			select: () => ({
 				lean: async () => ({
+					plan: 'pro',
 					settings: {
 						email: {
 							auto_triage_incoming: true,

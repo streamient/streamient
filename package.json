@@ -107,6 +107,7 @@
     "marked": "^18.0.5",
     "mongodb": "^7.3.0",
     "mongoose": "^9.7.1",
+    "mongoose-lean-virtuals": "^2.1.0",
     "n-readlines": "^3.4.1",
     "nodemailer": "^9.0.1",
     "otplib": "^13.4.1",

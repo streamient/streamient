@@ -1,5 +1,5 @@
 import { Router, raw } from 'express';
-import mongoose from 'mongoose';
+import mongoose from '../model/mongoose.js';
 
 import config from '../config.js';
 import { Project } from '../model/project.js';

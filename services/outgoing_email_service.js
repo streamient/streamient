@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import nodemailer from 'nodemailer';
 import striptags from 'striptags';
 import config from '../config.js';
+import { hydratedQuery } from '../model/mongoose.js';
 import { Email } from '../model/email.js';
 import { EmailDraft } from '../model/email_draft.js';
 import { EmailIdentity } from '../model/email_identity.js';
@@ -191,7 +192,7 @@ export async function queueDraftSend(hostId, draftId, ctx = {}) {
 }
 
 export async function cancelOutgoingEmail(hostId, outgoingId, ctx = {}) {
-	const outgoing = await OutgoingEmail.findOne({ _id: outgoingId, host_id: hostId });
+	const outgoing = await hydratedQuery(OutgoingEmail.findOne({ _id: outgoingId, host_id: hostId }));
 	if (!outgoing) return null;
 	if (outgoing.status !== 'queued') {
 		const err = new Error('Outgoing email can no longer be canceled');
@@ -254,11 +255,11 @@ async function markSourceEmailHandled(outgoing, options = {}) {
 }
 
 export async function processOutgoingEmail(outgoingId, options = {}) {
-	const outgoing = await OutgoingEmail.findOneAndUpdate(
+	const outgoing = await hydratedQuery(OutgoingEmail.findOneAndUpdate(
 		{ _id: outgoingId, status: 'queued', send_after: { $lte: new Date() } },
 		{ $set: { status: 'sending', error: '' }, $inc: { attempts: 1 } },
 		{ returnDocument: 'after' },
-	);
+	));
 	if (!outgoing) return null;
 	const sendStartedAt = Date.now();
 	emitOutgoing(outgoing.host_id, 'outgoing-email:sending', outgoing);

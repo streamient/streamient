@@ -1,4 +1,5 @@
 import { getStripe } from '../modules/stripe.js';
+import { hydratedQuery } from '../model/mongoose.js';
 import { User } from '../model/user.js';
 import { Tenant } from '../modules/tenancy.js';
 import config from '../config.js';
@@ -154,7 +155,7 @@ export async function handleWebhook(rawBody, sig) {
 
         case 'customer.subscription.updated': {
             const subscription = event.data.object;
-            const user = await User.findOne({ stripe_subscription_id: subscription.id });
+            const user = await hydratedQuery(User.findOne({ stripe_subscription_id: subscription.id }));
             if (user) {
                 Object.assign(user, buildSubscriptionUserUpdate(subscription));
                 await user.save();
@@ -166,7 +167,7 @@ export async function handleWebhook(rawBody, sig) {
 
         case 'customer.subscription.deleted': {
             const subscription = event.data.object;
-            const user = await User.findOne({ stripe_subscription_id: subscription.id });
+            const user = await hydratedQuery(User.findOne({ stripe_subscription_id: subscription.id }));
             if (user) {
                 user.subscription_status = 'canceled';
                 user.trial_source = null;
@@ -183,7 +184,7 @@ export async function handleWebhook(rawBody, sig) {
         case 'invoice.payment_failed': {
             const invoice = event.data.object;
             if (invoice.subscription) {
-                const user = await User.findOne({ stripe_subscription_id: invoice.subscription });
+                const user = await hydratedQuery(User.findOne({ stripe_subscription_id: invoice.subscription }));
                 if (user) {
                     user.subscription_status = 'past_due';
                     await user.save();

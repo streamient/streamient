@@ -23,6 +23,7 @@ import { crawlSite } from '../modules/crawler.js';
 import { getProjectCounts } from '../services/project_service.js';
 import { reindexHost, getReindexStatus, searchCollection, getFilteredCount, removeDocumentsByFilter } from '../modules/typesense.js';
 import { emitToTenant } from '../modules/socket.js';
+import { hydratedQuery } from '../model/mongoose.js';
 import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
 import { Url } from '../model/url.js';
@@ -1676,7 +1677,7 @@ router.delete('/team/members/:id', requireTeamManager, async (req, res) => {
 
 router.put('/profile', async (req, res) => {
 	try {
-		const user = await User.findById(req.userId);
+		const user = await hydratedQuery(User.findById(req.userId));
 		if (!user) return res.status(404).json({ error: 'User not found' });
 
 		const { name, email, timezone } = req.body;
@@ -1794,7 +1795,7 @@ router.post('/tokens', async (req, res) => {
 		const { name } = req.body;
 		if (!name?.trim()) return res.status(400).json({ error: 'Token name required' });
 
-		const user = await User.findById(req.userId);
+		const user = await hydratedQuery(User.findById(req.userId));
 		if (!user) return res.status(404).json({ error: 'User not found' });
 
 		const token = crypto.randomBytes(32).toString('hex');
@@ -1811,7 +1812,7 @@ router.post('/tokens', async (req, res) => {
 
 router.delete('/tokens/:id', async (req, res) => {
 	try {
-		const user = await User.findById(req.userId);
+		const user = await hydratedQuery(User.findById(req.userId));
 		if (!user) return res.status(404).json({ error: 'User not found' });
 
 		const idx = user.access_tokens.findIndex((t) => t._id.toString() === req.params.id);
@@ -1831,7 +1832,7 @@ router.delete('/tokens/:id', async (req, res) => {
 
 router.post('/2fa/disable', async (req, res) => {
 	try {
-		const user = await User.findById(req.userId).select('+totp_secret');
+		const user = await hydratedQuery(User.findById(req.userId).select('+totp_secret'));
 		if (!user) return res.status(404).json({ error: 'User not found' });
 
 		user.totp_enabled = false;

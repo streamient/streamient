@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import mongoose from 'mongoose';
+import mongoose from '../model/mongoose.js';
 
 import { listMemories } from '../services/memory_service.js';
 import { Memory } from '../model/memory.js';

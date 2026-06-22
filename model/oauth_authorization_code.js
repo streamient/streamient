@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+import mongoose from './mongoose.js';
 
 const oauthAuthorizationCodeSchema = new mongoose.Schema(
 	{

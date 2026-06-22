@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { hydratedQuery } from '../model/mongoose.js';
 import { User } from '../model/user.js';
 import { Tenant } from '../modules/tenancy.js';
 import { Note } from '../model/note.js';
@@ -137,7 +138,7 @@ router.put('/api/accounts/:id', async (req, res) => {
         if (email !== undefined) update.email = email.trim().toLowerCase();
         if (is_active !== undefined) update.is_active = Boolean(is_active);
 
-        const user = await User.findByIdAndUpdate(req.params.id, update, { returnDocument: 'after' });
+        const user = await hydratedQuery(User.findByIdAndUpdate(req.params.id, update, { returnDocument: 'after' }));
         if (!user) return res.status(404).json({ error: 'Not found' });
 
         // Sync is_active / plan to the tenant
@@ -157,7 +158,7 @@ router.put('/api/accounts/:id', async (req, res) => {
 
 router.delete('/api/accounts/:id', async (req, res) => {
     try {
-        const user = await User.findById(req.params.id);
+        const user = await hydratedQuery(User.findById(req.params.id));
         if (!user) return res.status(404).json({ error: 'Not found' });
 
         await deleteAccountDataForUser(user);

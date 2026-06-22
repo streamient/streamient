@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+import mongoose from '../model/mongoose.js';
 import { createLogger } from './logger.js';
 
 const log = createLogger('queue');

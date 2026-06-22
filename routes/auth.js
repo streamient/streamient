@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import crypto from 'node:crypto';
 import { generateSecret, verifySync, generateURI } from 'otplib';
+import { hydratedQuery } from '../model/mongoose.js';
 import { User } from '../model/user.js';
 import { applyTenantContextToSession, createTenant, initializeSessionTenant } from '../modules/tenancy.js';
 import { ensureCollections } from '../modules/typesense.js';
@@ -216,7 +217,7 @@ router.post('/login', async (req, res) => {
 			return res.json({ isSysadmin: true });
 		}
 
-		const user = await User.findOne({ email, is_active: true }).select('+password +totp_secret');
+		const user = await hydratedQuery(User.findOne({ email, is_active: true }).select('+password +totp_secret'));
 		if (!user || !(await user.comparePassword(password))) {
 			if (req.is('application/x-www-form-urlencoded')) return res.render('auth/login', { error: 'Invalid credentials', oauth_continue: !!req.session?.oauthLoginReturnTo, redirect_to: peekPostAuthRedirect(req) });
 			return res.status(401).json({ error: 'Invalid credentials' });
@@ -259,7 +260,7 @@ router.post('/reset-password', async (req, res) => {
 	try {
 		if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
 
-		const user = await User.findById(req.session.userId).select('+password');
+		const user = await hydratedQuery(User.findById(req.session.userId).select('+password'));
 		if (!user) return res.status(404).json({ error: 'User not found' });
 
 		const newPassword = crypto.randomBytes(16).toString('base64url');
@@ -280,7 +281,7 @@ router.post('/forgot-password', async (req, res) => {
 		const { email } = req.body;
 		if (!email) return res.status(400).json({ error: 'email is required' });
 
-		const user = await User.findOne({ email, is_active: true });
+		const user = await hydratedQuery(User.findOne({ email, is_active: true }));
 		if (user) {
 			const resetToken = crypto.randomBytes(32).toString('hex');
 			user.password_reset_token = resetToken;
@@ -339,7 +340,7 @@ router.post('/reset-password/confirm', async (req, res) => {
 			return res.render('auth/reset_password', { error: 'Invalid reset session. Please request a new link.' });
 		}
 
-		const user = await User.findById(pending.userId).select('+password +password_reset_token +password_reset_expires');
+		const user = await hydratedQuery(User.findById(pending.userId).select('+password +password_reset_token +password_reset_expires'));
 		if (!user || user.password_reset_token !== token || user.password_reset_expires < new Date()) {
 			return res.render('auth/reset_password', { error: 'Reset link has expired.' });
 		}
@@ -368,7 +369,7 @@ router.post('/2fa/verify', async (req, res) => {
 			return res.status(401).json({ error: 'Invalid 2FA session' });
 		}
 
-		const user = await User.findById(pending.userId).select('+totp_secret');
+		const user = await hydratedQuery(User.findById(pending.userId).select('+totp_secret'));
 		if (!user) return res.status(401).json({ error: 'User not found' });
 
 		const result = verifySync({ token: code, secret: user.totp_secret });
@@ -398,7 +399,7 @@ router.post('/2fa/setup', async (req, res) => {
 	try {
 		if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
 
-		const user = await User.findById(req.session.userId).select('+totp_secret');
+		const user = await hydratedQuery(User.findById(req.session.userId).select('+totp_secret'));
 		if (!user) return res.status(404).json({ error: 'User not found' });
 
 		const secret = generateSecret();
@@ -419,7 +420,7 @@ router.post('/2fa/confirm', async (req, res) => {
 		if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
 
 		const { code } = req.body;
-		const user = await User.findById(req.session.userId).select('+totp_secret');
+		const user = await hydratedQuery(User.findById(req.session.userId).select('+totp_secret'));
 		if (!user) return res.status(404).json({ error: 'User not found' });
 
 		const result = verifySync({ token: code, secret: user.totp_secret });
@@ -503,7 +504,7 @@ router.all('/magic', (req, res) => {
 router.post('/passkey/register/options', async (req, res) => {
 	try {
 		if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
-		const user = await User.findById(req.session.userId);
+		const user = await hydratedQuery(User.findById(req.session.userId));
 		if (!user) return res.status(404).json({ error: 'User not found' });
 
 		const options = await passkeyService.getRegistrationOptions(user);
@@ -518,7 +519,7 @@ router.post('/passkey/register/options', async (req, res) => {
 router.post('/passkey/register/verify', async (req, res) => {
 	try {
 		if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
-		const user = await User.findById(req.session.userId);
+		const user = await hydratedQuery(User.findById(req.session.userId));
 		if (!user) return res.status(404).json({ error: 'User not found' });
 
 		const challenge = req.session.passkeyChallenge;
@@ -562,7 +563,7 @@ router.post('/passkey/login/verify', async (req, res) => {
 			return res.status(401).json({ error: 'Passkey authentication failed' });
 		}
 
-		const user = await User.findById(passkey.user);
+		const user = await hydratedQuery(User.findById(passkey.user));
 		if (!user) return res.status(404).json({ error: 'User not found' });
 
 		const tenantContext = await hydrateSessionForUser(req, user);
@@ -646,7 +647,7 @@ router.post('/api/v1/admin/impersonate', requireSysadmin, async (req, res) => {
 		const { userId } = req.body;
 		if (!userId) return res.status(400).json({ error: 'userId required' });
 
-		const user = await User.findById(userId);
+		const user = await hydratedQuery(User.findById(userId));
 		if (!user) return res.status(404).json({ error: 'User not found' });
 
 		await hydrateSessionForUser(req, user, user.tenant?.toString(), user.host_id);
