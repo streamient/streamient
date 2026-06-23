@@ -17,9 +17,8 @@
 		var password = document.getElementById('team-member-password').value;
 		var sendWelcomeEmail = document.getElementById('team-member-send-welcome').checked;
 
-		if (!name) return showError('Name is required');
 		if (!email) return showError('Email is required');
-		if (password.length < 8) return showError('Password must be at least 8 characters');
+		if (password && password.length < 8) return showError('Password must be at least 8 characters');
 
 		try {
 			await api('POST', '/team/members', {

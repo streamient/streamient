@@ -889,7 +889,7 @@ const swaggerSpec = {
             post: {
                 tags: ['Team'],
                 summary: 'Create a team member',
-                description: 'Creates an active team member directly with email/password login access. New members are added with the member role.',
+                description: 'Adds a user to the current account with the member role. Existing Kumbukum users are linked to the current account; new users are created with email/password login access.',
                 requestBody: {
                     required: true,
                     content: {
@@ -897,12 +897,12 @@ const swaggerSpec = {
                             schema: {
                                 type: 'object',
                                 properties: {
-                                    name: { type: 'string' },
+                                    name: { type: 'string', description: 'Required only when creating a brand-new user.' },
                                     email: { type: 'string', format: 'email' },
-                                    password: { type: 'string', minLength: 8 },
+                                    password: { type: 'string', minLength: 8, description: 'Required only when creating a brand-new user.' },
                                     send_welcome_email: { type: 'boolean', default: true },
                                 },
-                                required: ['name', 'email', 'password'],
+                                required: ['email'],
                             },
                         },
                     },

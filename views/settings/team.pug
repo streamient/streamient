@@ -24,16 +24,16 @@ block settings
 							form#team-member-form
 								.mb-3
 									label.form-label(for="team-member-name") Name
-									input.form-control.form-control-sm#team-member-name(type="text" required autocomplete="name")
+									input.form-control.form-control-sm#team-member-name(type="text" autocomplete="name")
 								.mb-3
 									label.form-label(for="team-member-email") Email
 									input.form-control.form-control-sm#team-member-email(type="email" required autocomplete="email")
 								.mb-3
 									label.form-label(for="team-member-password") Password
-									input.form-control.form-control-sm#team-member-password(type="password" required minlength="8" autocomplete="new-password")
+									input.form-control.form-control-sm#team-member-password(type="password" minlength="8" autocomplete="new-password")
 								.form-check.mb-3
 									input.form-check-input#team-member-send-welcome(type="checkbox" checked)
-									label.form-check-label(for="team-member-send-welcome") Send welcome email
+									label.form-check-label(for="team-member-send-welcome") Send email notification
 								.text-end
 									button.btn.btn-primary.btn-sm(type="submit") Add user
 				.col-lg-7

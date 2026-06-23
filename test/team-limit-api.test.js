@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import express from 'express';
 
 import config from '../config.js';
+import { AuditLog } from '../model/audit_log.js';
+import { TeamInvite } from '../model/team_invite.js';
 import { User } from '../model/user.js';
 import { Tenant } from '../modules/tenancy.js';
 import { TenantMember } from '../model/tenant_member.js';
@@ -43,7 +45,10 @@ describe('Free plan team user limit', () => {
 	const originalTenantMemberFind = TenantMember.find;
 	const originalTenantMemberFindOne = TenantMember.findOne;
 	const originalTenantMemberFindOneAndUpdate = TenantMember.findOneAndUpdate;
+	const originalTenantMemberCreate = TenantMember.create;
 	const originalTenantMemberCount = TenantMember.countDocuments;
+	const originalTeamInviteDeleteMany = TeamInvite.deleteMany;
+	const originalAuditCreate = AuditLog.create;
 	let tenant;
 	let memberCount;
 
@@ -75,15 +80,24 @@ describe('Free plan team user limit', () => {
 			}),
 		});
 		User.findByIdAndUpdate = async () => null;
-		// When the quota guard passes, createTeamMember runs; make it fail fast
-		// with "email already exists" instead of hitting the real DB.
-		User.findOne = () => ({ lean: async () => ({ _id: { toString: () => 'existing-user' } }) });
+		User.findOne = () => ({ lean: async () => ({ _id: { toString: () => 'existing-user' }, email: 'new@example.com', name: 'Existing User' }) });
 		TenantMember.findOne = () => ({ lean: async () => null });
 		TenantMember.findOneAndUpdate = async () => null;
-		TenantMember.countDocuments = async () => memberCount;
-		Tenant.findOne = () => ({
-			select: (fields) => ({ lean: async () => (fields.includes('plan') ? { plan: tenant.plan } : tenant) }),
+		TenantMember.create = async (payload) => ({
+			_id: { toString: () => 'membership-2' },
+			role: payload.role,
+			joined_at: payload.joined_at,
+			user: payload.user,
 		});
+		TenantMember.countDocuments = async () => memberCount;
+		Tenant.findOne = (filter) => {
+			if (filter?.is_active === true) return tenant;
+			return {
+				select: (fields) => ({ lean: async () => (fields.includes('plan') ? { plan: tenant.plan } : tenant) }),
+			};
+		};
+		TeamInvite.deleteMany = async () => ({ deletedCount: 0 });
+		AuditLog.create = async (payload) => payload;
 	});
 
 	afterEach(() => {
@@ -96,7 +110,10 @@ describe('Free plan team user limit', () => {
 		TenantMember.find = originalTenantMemberFind;
 		TenantMember.findOne = originalTenantMemberFindOne;
 		TenantMember.findOneAndUpdate = originalTenantMemberFindOneAndUpdate;
+		TenantMember.create = originalTenantMemberCreate;
 		TenantMember.countDocuments = originalTenantMemberCount;
+		TeamInvite.deleteMany = originalTeamInviteDeleteMany;
+		AuditLog.create = originalAuditCreate;
 	});
 
 	it('blocks adding a 6th user on Free with an upgrade-worthy message', async () => {
@@ -119,15 +136,13 @@ describe('Free plan team user limit', () => {
 		memberCount = 3;
 		const server = await createServer();
 		try {
-			// Quota passes → createTeamMember runs and fails fast on the mocked
-			// existing-email check (400), proving it was NOT blocked by PLAN_LIMIT.
 			const res = await request(server, 'POST', '/team/members', {
 				name: 'New User', email: 'new@example.com', password: 'password123',
 			});
 			const json = await res.json();
-			assert.equal(res.status, 400);
-			assert.notEqual(json.code, 'PLAN_LIMIT');
-			assert.match(json.error, /already/i);
+			assert.equal(res.status, 201);
+			assert.equal(json.member._id, 'membership-2');
+			assert.equal(json.member.user.email, 'new@example.com');
 		} finally {
 			await new Promise((resolve) => server.close(resolve));
 		}

@@ -65,6 +65,18 @@ const emailTemplates = {
 			{ key: 'url', description: 'Invite acceptance URL' },
 		],
 	},
+	team_member_added: {
+		subject: 'You now have access to {{tenantName}} on Kumbukum',
+		html: `<p>Hi {{name}},</p>
+<p>You now have access to <strong>{{tenantName}}</strong> on Kumbukum.</p>
+<p><a href="{{loginUrl}}">Log in to Kumbukum</a></p>
+<p></p>`,
+		variables: [
+			{ key: 'name', description: 'User name' },
+			{ key: 'tenantName', description: 'Account / tenant name' },
+			{ key: 'loginUrl', description: 'Login page URL' },
+		],
+	},
 	trial_ending_3_days: {
 		subject: 'Your Kumbukum trial ends in 3 days',
 		html: `<p>Hi {{name}},</p>

@@ -139,6 +139,21 @@ export async function sendTeamInviteEmail(email, token, tenantName, inviterName,
 	});
 }
 
+export async function sendTeamMemberAddedEmail(email, name, tenantName) {
+	const loginUrl = `${config.appUrl}/login`;
+	const { subject, html } = await resolveTemplate('team_member_added');
+	const templateData = {
+		loginUrl,
+		name: name || 'there',
+		tenantName,
+	};
+	return sendMail({
+		to: email,
+		subject: renderTemplate(subject, templateData),
+		html: renderTemplate(html, templateData),
+	});
+}
+
 export async function sendWelcomeEmail(email, name) {
 	const loginUrl = `${config.appUrl}/login`;
 	const { subject, html } = await resolveTemplate('welcome');

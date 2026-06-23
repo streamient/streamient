@@ -205,4 +205,131 @@ describe('team membership helpers', () => {
 			AuditLog.create = originalAuditCreate;
 		}
 	});
+
+	it('adds an existing user to the current tenant without changing their primary tenant', async () => {
+		const originalTenantFindOne = Tenant.findOne;
+		const originalUserFindOne = User.findOne;
+		const originalUserCreate = User.create;
+		const originalTenantMemberFindOne = TenantMember.findOne;
+		const originalTenantMemberCreate = TenantMember.create;
+		const originalTeamInviteDeleteMany = TeamInvite.deleteMany;
+		const originalAuditCreate = AuditLog.create;
+		const tenant = { _id: { toString: () => 'tenant-current' }, host_id: 'host-current', is_active: true, name: 'Current Account' };
+		const existingUser = {
+			_id: { toString: () => 'user-existing' },
+			email: 'existing@example.com',
+			name: 'Existing User',
+			tenant: { toString: () => 'tenant-primary' },
+			host_id: 'host-primary',
+			last_login: null,
+			createdAt: new Date('2026-06-20T00:00:00Z'),
+		};
+		const originalPrimaryTenant = existingUser.tenant;
+		const originalHostId = existingUser.host_id;
+		let createdMembershipPayload;
+		let deletedInviteFilter;
+		let auditPayload;
+
+		Tenant.findOne = async (filter) => {
+			assert.deepEqual(filter, { host_id: 'host-current', is_active: true });
+			return tenant;
+		};
+		User.findOne = (filter) => ({
+			lean: async () => {
+				assert.deepEqual(filter, { email: 'existing@example.com' });
+				return existingUser;
+			},
+		});
+		User.create = async () => {
+			throw new Error('Existing users must not be recreated');
+		};
+		TenantMember.findOne = (filter) => ({
+			lean: async () => {
+				assert.deepEqual(filter, { tenant: tenant._id, user: existingUser._id });
+				return null;
+			},
+		});
+		TenantMember.create = async (payload) => {
+			createdMembershipPayload = payload;
+			return {
+				_id: { toString: () => 'membership-existing' },
+				role: payload.role,
+				joined_at: payload.joined_at,
+				user: payload.user,
+			};
+		};
+		TeamInvite.deleteMany = async (filter) => {
+			deletedInviteFilter = filter;
+			return { deletedCount: 0 };
+		};
+		AuditLog.create = async (payload) => {
+			auditPayload = payload;
+			return payload;
+		};
+
+		try {
+			const member = await createTeamMember('actor-1', 'host-current', {
+				email: ' EXISTING@example.com ',
+				send_welcome_email: false,
+			}, { channel: 'web' });
+
+			assert.equal(member._id, 'membership-existing');
+			assert.equal(member.user._id, 'user-existing');
+			assert.equal(member.user.email, 'existing@example.com');
+			assert.equal(createdMembershipPayload.tenant, tenant._id);
+			assert.equal(createdMembershipPayload.user, existingUser._id);
+			assert.equal(createdMembershipPayload.host_id, 'host-current');
+			assert.equal(existingUser.tenant, originalPrimaryTenant);
+			assert.equal(existingUser.host_id, originalHostId);
+			assert.deepEqual(deletedInviteFilter, {
+				tenant: tenant._id,
+				email: 'existing@example.com',
+				accepted_at: null,
+			});
+			assert.equal(auditPayload.details.created_directly, false);
+			assert.equal(auditPayload.details.existing_user_linked, true);
+		} finally {
+			Tenant.findOne = originalTenantFindOne;
+			User.findOne = originalUserFindOne;
+			User.create = originalUserCreate;
+			TenantMember.findOne = originalTenantMemberFindOne;
+			TenantMember.create = originalTenantMemberCreate;
+			TeamInvite.deleteMany = originalTeamInviteDeleteMany;
+			AuditLog.create = originalAuditCreate;
+		}
+	});
+
+	it('rejects an existing user who is already a current tenant member', async () => {
+		const originalTenantFindOne = Tenant.findOne;
+		const originalUserFindOne = User.findOne;
+		const originalTenantMemberFindOne = TenantMember.findOne;
+		const tenant = { _id: { toString: () => 'tenant-current' }, host_id: 'host-current', is_active: true, name: 'Current Account' };
+		const existingUser = {
+			_id: { toString: () => 'user-existing' },
+			email: 'existing@example.com',
+			name: 'Existing User',
+		};
+
+		Tenant.findOne = async () => tenant;
+		User.findOne = () => ({
+			lean: async () => existingUser,
+		});
+		TenantMember.findOne = (filter) => ({
+			lean: async () => {
+				assert.deepEqual(filter, { tenant: tenant._id, user: existingUser._id });
+				return { _id: { toString: () => 'membership-existing' } };
+			},
+		});
+
+		try {
+			await assert.rejects(
+				createTeamMember('actor-1', 'host-current', { email: 'existing@example.com' }, { channel: 'web' }),
+				/User is already a member of this account/,
+			);
+		} finally {
+			Tenant.findOne = originalTenantFindOne;
+			User.findOne = originalUserFindOne;
+			TenantMember.findOne = originalTenantMemberFindOne;
+		}
+	});
 });

@@ -3,7 +3,7 @@ import { hydratedQuery } from '../model/mongoose.js';
 import { TeamInvite } from '../model/team_invite.js';
 import { TenantMember, TEAM_MEMBER_ROLE_RANK } from '../model/tenant_member.js';
 import { Tenant } from '../modules/tenancy.js';
-import { sendWelcomeEmail } from './email_service.js';
+import { sendTeamMemberAddedEmail, sendWelcomeEmail } from './email_service.js';
 import * as audit from './audit_service.js';
 import { createLogger } from '../modules/logger.js';
 
@@ -61,29 +61,29 @@ export async function createTeamMember(userId, host_id, data, ctx = {}) {
 	const tenant = await Tenant.findOne({ host_id, is_active: true });
 	if (!tenant) throw new Error('Tenant not found');
 
-	const name = typeof data.name === 'string' ? data.name.trim() : '';
-	if (!name) throw new Error('Name is required');
-
 	const email = String(data.email || '').trim().toLowerCase();
 	if (!email) throw new Error('Email is required');
 
-	const password = typeof data.password === 'string' ? data.password : '';
-	if (password.length < 8) throw new Error('Password must be at least 8 characters');
-
 	const existingUser = await User.findOne({ email }).lean();
+	let user = existingUser;
 	if (existingUser) {
 		const existingMembership = await TenantMember.findOne({ tenant: tenant._id, user: existingUser._id }).lean();
 		if (existingMembership) throw new Error('User is already a member of this account');
-		throw new Error('Email already has a Kumbukum account');
-	}
+	} else {
+		const name = typeof data.name === 'string' ? data.name.trim() : '';
+		if (!name) throw new Error('Name is required for new users');
 
-	const user = await User.create({
-		email,
-		password,
-		name,
-		is_verified: true,
-		is_active: true,
-	});
+		const password = typeof data.password === 'string' ? data.password : '';
+		if (password.length < 8) throw new Error('Password must be at least 8 characters for new users');
+
+		user = await User.create({
+			email,
+			password,
+			name,
+			is_verified: true,
+			is_active: true,
+		});
+	}
 
 	const membership = await TenantMember.create({
 		tenant: tenant._id,
@@ -101,9 +101,15 @@ export async function createTeamMember(userId, host_id, data, ctx = {}) {
 	});
 
 	if (data.send_welcome_email === true) {
-		sendWelcomeEmail(user.email, user.name).catch((err) =>
-			log.warn({ err, email: user.email }, 'Team member welcome email failed'),
-		);
+		if (existingUser) {
+			sendTeamMemberAddedEmail(user.email, user.name, tenant.name).catch((err) =>
+				log.warn({ err, email: user.email, tenant: tenant.name }, 'Existing team member notification failed'),
+			);
+		} else {
+			sendWelcomeEmail(user.email, user.name).catch((err) =>
+				log.warn({ err, email: user.email }, 'Team member welcome email failed'),
+			);
+		}
 	}
 
 	audit.log({
@@ -112,7 +118,7 @@ export async function createTeamMember(userId, host_id, data, ctx = {}) {
 		resource_id: membership._id.toString(),
 		user_id: userId,
 		host_id,
-		details: { member_email: email, role: membership.role, created_directly: true, welcome_email_sent: data.send_welcome_email === true },
+		details: { member_email: email, role: membership.role, created_directly: !existingUser, existing_user_linked: Boolean(existingUser), welcome_email_sent: data.send_welcome_email === true },
 		...ctx,
 	});
 
