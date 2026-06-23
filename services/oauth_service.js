@@ -12,6 +12,7 @@ import {
 	getAllowedMcpResourceUrls,
 	getAuthorizationServerMetadataUrls,
 	getDefaultScopesForResource,
+	getSupportedScopesForResource,
 	getOauthIssuer,
 	getProtectedResourceMetadataUrl,
 	isAllowedMcpResource,
@@ -845,6 +846,10 @@ export function parseAuthorizationRequest(input = {}) {
 	}
 	if (!scope.length) {
 		throw new OAuthError('invalid_scope', 'At least one supported scope is required', 400);
+	}
+	const supportedScopes = new Set(getSupportedScopesForResource(resource));
+	if (!scope.every((item) => supportedScopes.has(item))) {
+		throw new OAuthError('invalid_scope', 'Requested scope is not supported for this resource', 400);
 	}
 
 	return {

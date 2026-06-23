@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { createMockApi } from './helpers/mock-api.js';
 import { startTestServer, createTestClient } from './helpers/test-server.js';
 import { FIXTURES } from './helpers/fixtures.js';
+import { PUBLIC_APP_ALLOWED_TOOLS } from '../../apps/mcp/tools/profile.js';
 
 describe('MCP Server — Streamable HTTP transport', () => {
     let server, client, appClient;
@@ -45,10 +46,16 @@ describe('MCP Server — Streamable HTTP transport', () => {
 
         it('should list the app-profile tools at /mcp/app', async () => {
             const { tools } = await appClient.listTools();
+            const names = tools.map((t) => t.name).sort();
+            assert.deepEqual(names, [...PUBLIC_APP_ALLOWED_TOOLS].sort());
+        });
+
+        it('should not expose broad or third-party integration tools at /mcp/app', async () => {
+            const { tools } = await appClient.listTools();
             const names = tools.map((t) => t.name);
-            assert.equal(tools.length, 29);
             for (const name of [
                 'chat',
+                'search_knowledge',
                 'create_project',
                 'delete_email',
                 'delete_link',
@@ -63,29 +70,17 @@ describe('MCP Server — Streamable HTTP transport', () => {
                 'update_note',
                 'update_project',
                 'update_url',
-            ]) {
-                assert.equal(names.includes(name), false, `unexpected app tool: ${name}`);
-            }
-            for (const name of [
-                'search_knowledge',
-                'search_notes',
-                'recall_memory',
-                'read_note',
-                'read_memory',
                 'read_url',
                 'read_email',
-                'store_memory',
-                'create_note',
                 'save_url',
                 'create_link',
-                'suggest_memory_tags',
                 'ingest_email',
                 'search_emails',
                 'get_email_thread',
                 'add_git_repo',
                 'git_sync_status',
             ]) {
-                assert.ok(names.includes(name), `missing app tool: ${name}`);
+                assert.equal(names.includes(name), false, `unexpected app tool: ${name}`);
             }
         });
 
@@ -139,13 +134,25 @@ describe('MCP Server — Streamable HTTP transport', () => {
             }
         });
 
+        it('app tools should not be open-world or expose third-party ingestion inputs', async () => {
+            const { tools } = await appClient.listTools();
+            const forbiddenInputs = new Set(['url', 'crawl_enabled', 'raw_email', 'parsed_email', 'repo_url', 'auth_token']);
+
+            for (const tool of tools) {
+                assert.equal(tool.annotations?.openWorldHint, false, `${tool.name} is open-world`);
+                for (const field of Object.keys(tool.inputSchema?.properties || {})) {
+                    assert.equal(forbiddenInputs.has(field), false, `${tool.name} exposes forbidden input ${field}`);
+                }
+            }
+        });
+
         it('tools should advertise per-tool OAuth scopes for ChatGPT Apps', async () => {
             const { tools } = await appClient.listTools();
             const names = new Map(tools.map((tool) => [tool.name, tool]));
             assert.deepEqual(names.get('create_note')?._meta?.securitySchemes, [
                 { type: 'oauth2', scopes: ['mcp:read', 'mcp:write'] },
             ]);
-            assert.deepEqual(names.get('search_knowledge')?._meta?.securitySchemes, [
+            assert.deepEqual(names.get('search_notes')?._meta?.securitySchemes, [
                 { type: 'oauth2', scopes: ['mcp:read'] },
             ]);
         });

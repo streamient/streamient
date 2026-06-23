@@ -6,7 +6,7 @@ import pug from 'pug';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 
 import { authenticateClientForToken, buildAuthorizationServerMetadata, buildOauthUiConfig, mapDynamicRegistrationClientResponse, parseAuthorizationRequest, validateAuthorizationRequest } from '../services/oauth_service.js';
-import { MCP_DEFAULT_SCOPES, getMcpAppEndpointUrl, getMcpEndpointUrl, getOauthIssuer, signMcpAccessToken, verifyMcpAccessToken } from '../modules/oauth.js';
+import { MCP_APP_DEFAULT_SCOPES, MCP_DEFAULT_SCOPES, getMcpAppEndpointUrl, getMcpEndpointUrl, getOauthIssuer, listScopeDetailsForResource, signMcpAccessToken, verifyMcpAccessToken } from '../modules/oauth.js';
 
 const oauthAuthorizeViewPath = fileURLToPath(new URL('../views/auth/oauth_authorize.pug', import.meta.url));
 const clientAssertionType = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer';
@@ -98,15 +98,44 @@ describe('oauth helpers', () => {
 			client_id: 'https://example.com/oauth/client.json',
 			redirect_uri: 'http://127.0.0.1:3000/callback',
 			response_type: 'code',
-			scope: 'mcp:read mcp:email',
+			scope: 'mcp:read mcp:write',
 			state: 'abc123',
 			code_challenge: 'challenge',
 			code_challenge_method: 'S256',
 			resource: getMcpAppEndpointUrl(),
 		});
 
-		assert.deepEqual(parsed.scopes, ['mcp:email', 'mcp:read']);
+		assert.deepEqual(parsed.scopes, ['mcp:read', 'mcp:write']);
 		assert.equal(parsed.resource, getMcpAppEndpointUrl());
+	});
+
+	it('rejects email and git scopes for the MCP app-profile resource', () => {
+		assert.throws(
+			() => parseAuthorizationRequest({
+				client_id: 'https://example.com/oauth/client.json',
+				redirect_uri: 'http://127.0.0.1:3000/callback',
+				response_type: 'code',
+				scope: 'mcp:read mcp:email',
+				state: 'abc123',
+				code_challenge: 'challenge',
+				code_challenge_method: 'S256',
+				resource: getMcpAppEndpointUrl(),
+			}),
+			(err) => err.oauthError === 'invalid_scope',
+		);
+		assert.throws(
+			() => parseAuthorizationRequest({
+				client_id: 'https://example.com/oauth/client.json',
+				redirect_uri: 'http://127.0.0.1:3000/callback',
+				response_type: 'code',
+				scope: 'mcp:read mcp:git',
+				state: 'abc123',
+				code_challenge: 'challenge',
+				code_challenge_method: 'S256',
+				resource: getMcpAppEndpointUrl(),
+			}),
+			(err) => err.oauthError === 'invalid_scope',
+		);
 	});
 
 	it('defaults omitted app-profile scopes to all app tool scopes', () => {
@@ -120,10 +149,18 @@ describe('oauth helpers', () => {
 			resource: getMcpAppEndpointUrl(),
 		});
 
-		assert.deepEqual(parsed.scopes, [...MCP_DEFAULT_SCOPES].sort());
+		assert.deepEqual(parsed.scopes, [...MCP_APP_DEFAULT_SCOPES].sort());
 	});
 
-	it('defaults omitted full MCP endpoint scopes to the same scopes as the app profile', () => {
+	it('uses app-profile scope descriptions for consent text', () => {
+		const details = listScopeDetailsForResource(getMcpAppEndpointUrl(), ['mcp:read', 'mcp:write']);
+		assert.deepEqual(details.map((item) => item.label), ['Read private knowledge', 'Modify private knowledge']);
+		assert.ok(details.every((item) => !item.description.includes('URLs')));
+		assert.ok(details.every((item) => !item.description.includes('emails')));
+		assert.ok(details.every((item) => !item.description.includes('graph')));
+	});
+
+	it('defaults omitted full MCP endpoint scopes to full MCP scopes', () => {
 		const parsed = parseAuthorizationRequest({
 			client_id: 'https://example.com/oauth/client.json',
 			redirect_uri: 'http://127.0.0.1:3000/callback',

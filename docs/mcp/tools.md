@@ -128,7 +128,7 @@ Returns lean hits with metadata and bounded `excerpt` fields where searchable bo
 ### `chat`
 AI chat with intent classification — search, create items, or analyze. Maintains context across messages.
 
-The `/mcp/app` app profile hides this broad chat tool and exposes the explicit search/read/write tools instead.
+The `/mcp/app` app profile hides this broad chat tool. Public app submissions expose only private notes, memories, and project metadata tools; URL, email, git sync, graph, broad search, and chat orchestration tools stay on the full `/mcp` endpoint.
 
 | Parameter         | Type   | Required |
 | ----------------- | ------ | -------- |

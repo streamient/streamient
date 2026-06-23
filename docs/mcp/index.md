@@ -23,7 +23,7 @@ With Kumbukum MCP, your AI assistant can:
 
 The server exposes **44 tools** across notes, memories, URLs, emails, projects, graph, git sync, and search. See the [Tools reference](./tools) for the full list.
 
-Public app submissions can use the curated `/mcp/app` endpoint on the same server. It exposes the explicit tools and hides broad chat orchestration.
+Public app submissions can use the curated `/mcp/app` endpoint on the same server. It exposes only private notes, memories, and project metadata tools; URL, email, git sync, graph, broad search, and chat orchestration tools remain available only on the full `/mcp` endpoint.
 
 ## How it works
 

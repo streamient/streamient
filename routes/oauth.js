@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { Tenant } from '../modules/tenancy.js';
-import { listScopeDetails } from '../modules/oauth.js';
+import { listScopeDetailsForResource } from '../modules/oauth.js';
 import * as oauthService from '../services/oauth_service.js';
 import { createLogger } from '../modules/logger.js';
 
@@ -116,7 +116,7 @@ router.get('/oauth/authorize', async (req, res) => {
 			error: null,
 			client: oauthRequest.client,
 			oauth_request: oauthRequest,
-			scope_details: listScopeDetails(oauthRequest.scopes),
+			scope_details: listScopeDetailsForResource(oauthRequest.resource, oauthRequest.scopes),
 			active_tenant: activeTenant,
 		});
 	} catch (err) {

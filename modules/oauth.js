@@ -26,10 +26,21 @@ export const MCP_SCOPE_DETAILS = {
 	},
 };
 
+export const MCP_APP_SCOPE_DETAILS = {
+	'mcp:read': {
+		label: 'Read private knowledge',
+		description: 'List, search, and read notes, memories, and project metadata exposed by the public ChatGPT app profile.',
+	},
+	'mcp:write': {
+		label: 'Modify private knowledge',
+		description: 'Create notes and memories exposed by the public ChatGPT app profile.',
+	},
+};
+
 export const MCP_BASELINE_SCOPES = ['mcp:read'];
 export const MCP_ALL_SCOPES = Object.keys(MCP_SCOPE_DETAILS);
 export const MCP_DEFAULT_SCOPES = ['mcp:read', 'mcp:write', 'mcp:email', 'mcp:git'];
-export const MCP_APP_DEFAULT_SCOPES = MCP_DEFAULT_SCOPES;
+export const MCP_APP_DEFAULT_SCOPES = ['mcp:read', 'mcp:write'];
 
 export const MCP_TOOL_SCOPES = {
 	chat: ['mcp:read', 'mcp:write'],
@@ -170,12 +181,24 @@ export function getRequiredScopesForTool(toolName) {
 	return MCP_TOOL_SCOPES[toolName] || MCP_BASELINE_SCOPES;
 }
 
+export function isMcpAppResource(resource) {
+	try {
+		return new URL(String(resource || '')).pathname.replace(/\/+$/, '') === '/mcp/app';
+	} catch {
+		return false;
+	}
+}
+
+export function getSupportedScopesForResource(resource) {
+	return isMcpAppResource(resource) ? MCP_APP_DEFAULT_SCOPES : MCP_ALL_SCOPES;
+}
+
 export function getDefaultScopesForResource(resource) {
-	return MCP_DEFAULT_SCOPES;
+	return isMcpAppResource(resource) ? MCP_APP_DEFAULT_SCOPES : MCP_DEFAULT_SCOPES;
 }
 
 export function getDefaultScopesForRequestPath(path) {
-	return MCP_DEFAULT_SCOPES;
+	return path === '/mcp/app' ? MCP_APP_DEFAULT_SCOPES : MCP_DEFAULT_SCOPES;
 }
 
 export function hasRequiredScopes(grantedScopes, requiredScopes) {
@@ -187,6 +210,14 @@ export function listScopeDetails(scopes) {
 	return normalizeScopeInput(scopes).map((scope) => ({
 		scope,
 		...(MCP_SCOPE_DETAILS[scope] || { label: scope, description: scope }),
+	}));
+}
+
+export function listScopeDetailsForResource(resource, scopes) {
+	const details = isMcpAppResource(resource) ? MCP_APP_SCOPE_DETAILS : MCP_SCOPE_DETAILS;
+	return normalizeScopeInput(scopes).map((scope) => ({
+		scope,
+		...(details[scope] || MCP_SCOPE_DETAILS[scope] || { label: scope, description: scope }),
 	}));
 }
 
@@ -266,7 +297,7 @@ export function buildProtectedResourceMetadata(resource) {
 	return {
 		resource,
 		authorization_servers: [getOauthIssuer()],
-		scopes_supported: MCP_ALL_SCOPES,
+		scopes_supported: getSupportedScopesForResource(resource),
 		bearer_methods_supported: ['header'],
 	};
 }

@@ -9,7 +9,7 @@ import { noteTools } from '../../apps/mcp/tools/notes.js';
 import { applyToolProfile, MCP_TOOL_PROFILES } from '../../apps/mcp/tools/profile.js';
 import { projectTools } from '../../apps/mcp/tools/projects.js';
 import { urlTools } from '../../apps/mcp/tools/urls.js';
-import { getDefaultScopesForRequestPath, getMcpEndpointUrl, getRequiredScopesForTool, hasRequiredScopes, signMcpAccessToken } from '../../modules/oauth.js';
+import { buildProtectedResourceMetadata, getDefaultScopesForRequestPath, getMcpAppEndpointUrl, getMcpEndpointUrl, getRequiredScopesForTool, hasRequiredScopes, signMcpAccessToken } from '../../modules/oauth.js';
 import {
 	authenticateHttpRequest,
 	buildUnauthorizedResponse,
@@ -80,7 +80,14 @@ describe('MCP HTTP auth helper', () => {
 
 		assert.equal(result.ok, false);
 		assert.match(result.response.headers['WWW-Authenticate'], /resource_metadata="https:\/\/mcp\.kumbukum\.com\/\.well-known\/oauth-protected-resource\/mcp\/app"/);
-		assert.match(result.response.headers['WWW-Authenticate'], /scope="mcp:email mcp:git mcp:read mcp:write"/);
+		assert.match(result.response.headers['WWW-Authenticate'], /scope="mcp:read mcp:write"/);
+		assert.doesNotMatch(result.response.headers['WWW-Authenticate'], /mcp:email/);
+		assert.doesNotMatch(result.response.headers['WWW-Authenticate'], /mcp:git/);
+	});
+
+	it('advertises only read and write scopes for the app-profile protected resource', () => {
+		const metadata = buildProtectedResourceMetadata(getMcpAppEndpointUrl());
+		assert.deepEqual(metadata.scopes_supported, ['mcp:read', 'mcp:write']);
 	});
 
 	it('authenticates valid OAuth bearer tokens and mints bridge auth', () => {
@@ -186,8 +193,9 @@ describe('MCP HTTP auth helper', () => {
 		}
 	});
 
-	it('uses the same OAuth default scopes for /mcp and /mcp/app', () => {
-		assert.deepEqual(getDefaultScopesForRequestPath('/mcp'), getDefaultScopesForRequestPath('/mcp/app'));
+	it('uses narrower OAuth default scopes for /mcp/app than full /mcp', () => {
+		assert.deepEqual(getDefaultScopesForRequestPath('/mcp'), ['mcp:read', 'mcp:write', 'mcp:email', 'mcp:git']);
+		assert.deepEqual(getDefaultScopesForRequestPath('/mcp/app'), ['mcp:read', 'mcp:write']);
 	});
 
 	it('returns insufficient_scope for write calls using read-only tokens', () => {

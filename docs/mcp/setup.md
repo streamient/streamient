@@ -80,7 +80,7 @@ node apps/mcp/server.js --transport http --port 3002
 
 The server will listen at `http://localhost:3002/mcp` for Streamable HTTP connections and `http://localhost:3002/sse` for SSE connections.
 
-For public app-store submissions, the same server also exposes `http://localhost:3002/mcp/app`. This endpoint uses the curated app profile and hides broad tools such as `chat` while keeping the explicit email search/read tools.
+For public app-store submissions, the same server also exposes `http://localhost:3002/mcp/app`. This endpoint uses the strict public app profile and exposes only private notes, memories, and project metadata tools. URL, email, git sync, graph, broad search, and chat orchestration tools stay on the full `/mcp` endpoint.
 
 Set `MCP_BASE_URL` to the public base URL that serves the MCP server so OAuth resource metadata and audience checks use the correct value.
 
@@ -99,7 +99,7 @@ Personal access tokens are still accepted for backward compatibility via `Author
 
 If ChatGPT or another OpenAI connector discovers OAuth automatically, you usually only need to enter the MCP server URL.
 
-For public OpenAI app submission, use the curated app-profile endpoint:
+For public OpenAI app submission, use the strict app-profile endpoint:
 
 :::tabs
 == Cloud
@@ -108,7 +108,7 @@ For public OpenAI app submission, use the curated app-profile endpoint:
 `https://mcp.your-instance.com/mcp/app`
 :::
 
-For regular ChatGPT developer-mode testing or general MCP clients, use the full endpoint: `https://mcp.kumbukum.com/mcp`.
+For regular ChatGPT developer-mode testing or general MCP clients that need URL, email, git sync, graph, broad search, or chat orchestration tools, use the full endpoint: `https://mcp.kumbukum.com/mcp`.
 
 The extra OAuth values are only needed when the client asks for them explicitly.
 
@@ -204,7 +204,7 @@ When using the HTTP or SSE transport, pass your credentials as headers instead o
 
 ## Default Project
 
-On startup, the MCP server calls `GET /projects` and picks the project with `is_default: true`. All create tools (`create_note`, `store_memory`, `save_url`) fall back to this project when `project_id` is omitted.
+On startup, the MCP server calls `GET /projects` and picks the project with `is_default: true`. Create tools fall back to this project when `project_id` is omitted.
 
 Set `PROJECT-ID` (passed via `env` for stdio) or the `X-Project-Id` header (HTTP/SSE) to override this behavior.
 

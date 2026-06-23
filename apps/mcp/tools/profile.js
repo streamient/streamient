@@ -3,26 +3,23 @@ export const MCP_TOOL_PROFILES = {
 	APP: 'app',
 };
 
-export const PUBLIC_APP_EXCLUDED_TOOLS = new Set([
-	'chat',
-	'create_project',
-	'delete_email',
-	'delete_link',
-	'delete_memory',
-	'delete_note',
-	'delete_project',
-	'delete_url',
-	'remove_git_repo',
-	'trigger_git_sync',
-	'update_git_repo',
-	'update_memory',
-	'update_note',
-	'update_project',
-	'update_url',
+export const PUBLIC_APP_ALLOWED_TOOLS = new Set([
+	'create_note',
+	'read_note',
+	'list_notes',
+	'search_notes',
+	'store_memory',
+	'recall_memory',
+	'search_memory',
+	'read_memory',
+	'suggest_memory_tags',
+	'list_projects',
+	'get_project',
+	'get_project_counts',
 ]);
 
 export function applyPublicAppToolProfile(tools) {
-	return Object.fromEntries(Object.entries(tools).filter(([name]) => !PUBLIC_APP_EXCLUDED_TOOLS.has(name)));
+	return Object.fromEntries(Object.entries(tools).filter(([name]) => PUBLIC_APP_ALLOWED_TOOLS.has(name)));
 }
 
 export function applyToolProfile(tools, profile = MCP_TOOL_PROFILES.FULL) {
