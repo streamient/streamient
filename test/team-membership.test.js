@@ -133,7 +133,6 @@ describe('team membership helpers', () => {
 		let createdUserPayload;
 		let createdMembershipPayload;
 		let deletedInviteFilter;
-		let populatedPath;
 
 		Tenant.findOne = (filter) => {
 			assert.deepEqual(filter, { host_id: 'host-1', is_active: true });
@@ -159,10 +158,8 @@ describe('team membership helpers', () => {
 				role: 'member',
 				joined_at: payload.joined_at,
 				user: payload.user,
-				populate: async (path, select) => {
-					populatedPath = { path, select };
-					membership.user = user;
-					return membership;
+				populate: async () => {
+					throw new Error('createTeamMember should not populate after create');
 				},
 			};
 			return membership;
@@ -198,7 +195,6 @@ describe('team membership helpers', () => {
 				email: 'new@example.com',
 				accepted_at: null,
 			});
-			assert.deepEqual(populatedPath, { path: 'user', select: 'name email last_login createdAt' });
 		} finally {
 			Tenant.findOne = originalTenantFindOne;
 			User.findOne = originalUserFindOne;

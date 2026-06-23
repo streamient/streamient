@@ -116,8 +116,12 @@ export async function createTeamMember(userId, host_id, data, ctx = {}) {
 		...ctx,
 	});
 
-	await membership.populate('user', 'name email last_login createdAt');
-	return formatTeamMember(membership);
+	return formatTeamMember({
+		_id: membership._id,
+		role: membership.role,
+		joined_at: membership.joined_at,
+		user,
+	});
 }
 
 export async function updateTeamMemberRole(host_id, membershipId, actor, nextRole, ctx = {}) {
