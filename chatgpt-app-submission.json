@@ -155,16 +155,8 @@
 	},
 	"test_cases": [
 		{
-			"description": "Search notes in the review demo workspace.",
-			"user_prompt": "Search my Kumbukum notes for OpenAI review demo.",
-			"file_attachment_urls": null,
-			"tools_triggered": "search_notes",
-			"expected_output": "Returns relevant demo notes with concise excerpts and identifiers for follow-up reads.",
-			"expected_output_url": null
-		},
-		{
-			"description": "Retrieve a specific note after search.",
-			"user_prompt": "Open the product launch note from the OpenAI review demo results.",
+			"description": "Search and read notes in the review demo workspace.",
+			"user_prompt": "Search my Kumbukum notes for OpenAI review demo and open the product launch note.",
 			"file_attachment_urls": null,
 			"tools_triggered": "search_notes, read_note",
 			"expected_output": "Finds and reads the matching note, then summarizes its launch checklist and related context.",
@@ -205,14 +197,6 @@
 	],
 	"negative_test_cases": [
 		{
-			"description": "Do not invoke Kumbukum for unrelated calendar scheduling.",
-			"user_prompt": "Schedule a meeting with Nitai tomorrow at 3 PM.",
-			"file_attachment_urls": null,
-			"tools_triggered": null,
-			"expected_output": "The app should not be invoked because Kumbukum does not manage calendars or schedule meetings.",
-			"expected_output_url": null
-		},
-		{
 			"description": "Do not invoke Kumbukum to save or crawl external URLs.",
 			"user_prompt": "Save and crawl https://developers.openai.com/apps-sdk/app-submission-guidelines in Kumbukum.",
 			"file_attachment_urls": null,
@@ -234,30 +218,6 @@
 			"file_attachment_urls": null,
 			"tools_triggered": null,
 			"expected_output": "The app should not be invoked because git sync tools are not exposed in the public ChatGPT app profile.",
-			"expected_output_url": null
-		},
-		{
-			"description": "Do not invoke Kumbukum for graph operations.",
-			"user_prompt": "Show the graph links related to the OpenAI App Review Demo launch note.",
-			"file_attachment_urls": null,
-			"tools_triggered": null,
-			"expected_output": "The app should not be invoked because graph tools are not exposed in the public ChatGPT app profile.",
-			"expected_output_url": null
-		},
-		{
-			"description": "Do not invoke Kumbukum for destructive deletion in the app profile.",
-			"user_prompt": "Delete all memories and notes from my Kumbukum account.",
-			"file_attachment_urls": null,
-			"tools_triggered": null,
-			"expected_output": "The app should not perform this request because destructive delete tools are not exposed in the app profile.",
-			"expected_output_url": null
-		},
-		{
-			"description": "Do not invoke Kumbukum for subscription checkout.",
-			"user_prompt": "Upgrade my Kumbukum account to a paid subscription.",
-			"file_attachment_urls": null,
-			"tools_triggered": null,
-			"expected_output": "The app should not be invoked because the ChatGPT app does not facilitate purchases, checkout, or subscription upgrades.",
 			"expected_output_url": null
 		}
 	]

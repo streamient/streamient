@@ -59,6 +59,11 @@ function toSafeUrl(value) {
 	return String(value || '').trim();
 }
 
+function normalizeScopesForResource(scopes, resource) {
+	const supportedScopes = new Set(getSupportedScopesForResource(resource));
+	return normalizeScopeInput(scopes).filter((scope) => supportedScopes.has(scope));
+}
+
 function isLoopbackHost(hostname) {
 	if (!hostname) return false;
 	if (LOOPBACK_HOSTS.has(hostname)) return true;
@@ -585,7 +590,7 @@ export function consentCoversScopes(consent, requestedScopes) {
 
 export async function approveConsent({ userId, tenantId, host_id, client, requestedScopes, resource, redirectUri, ctx = {} }) {
 	const existing = await findConsent({ userId, host_id, clientId: client.client_id, resource });
-	const scopes = normalizeScopeInput([...(existing?.scopes || []), ...normalizeScopeInput(requestedScopes)]);
+	const scopes = normalizeScopesForResource([...(existing?.scopes || []), ...normalizeScopeInput(requestedScopes)], resource);
 	const redirectUris = [...new Set([...(client.redirect_uris || []), redirectUri].filter(Boolean))];
 	const snapshot = {
 		client_name: client.client_name,
@@ -708,7 +713,7 @@ async function storeRefreshToken({ userId, tenantId, host_id, client, scopes, re
 }
 
 export async function issueTokenPair({ userId, tenantId, host_id, client, scopes, resource }) {
-	const normalizedScopes = normalizeScopeInput(scopes);
+	const normalizedScopes = normalizeScopesForResource(scopes, resource);
 	const accessToken = signMcpAccessToken({
 		userId,
 		tenantId,
@@ -833,7 +838,10 @@ export function parseAuthorizationRequest(input = {}) {
 	const requestedScope = Array.isArray(input.scope)
 		? input.scope.filter(Boolean)
 		: String(input.scope || '').trim();
-	const scope = normalizeScopeInput(requestedScope || getDefaultScopesForResource(resource));
+	const requestedScopeProvided = Array.isArray(input.scope)
+		? input.scope.filter(Boolean).length > 0
+		: String(input.scope || '').trim().length > 0;
+	let scope = normalizeScopeInput(requestedScopeProvided ? requestedScope : getDefaultScopesForResource(resource));
 
 	if (!clientId) throw new OAuthError('invalid_request', 'client_id is required', 400);
 	if (!redirectUri) throw new OAuthError('invalid_request', 'redirect_uri is required', 400);
@@ -844,12 +852,9 @@ export function parseAuthorizationRequest(input = {}) {
 	if (!isAllowedMcpResource(resource)) {
 		throw new OAuthError('invalid_target', 'resource must target this MCP server', 400);
 	}
+	scope = normalizeScopesForResource(scope, resource);
 	if (!scope.length) {
 		throw new OAuthError('invalid_scope', 'At least one supported scope is required', 400);
-	}
-	const supportedScopes = new Set(getSupportedScopesForResource(resource));
-	if (!scope.every((item) => supportedScopes.has(item))) {
-		throw new OAuthError('invalid_scope', 'Requested scope is not supported for this resource', 400);
 	}
 
 	return {

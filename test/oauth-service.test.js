@@ -109,26 +109,28 @@ describe('oauth helpers', () => {
 		assert.equal(parsed.resource, getMcpAppEndpointUrl());
 	});
 
-	it('rejects email and git scopes for the MCP app-profile resource', () => {
+	it('filters stale elevated scopes from the MCP app-profile resource', () => {
+		const parsed = parseAuthorizationRequest({
+			client_id: 'https://example.com/oauth/client.json',
+			redirect_uri: 'http://127.0.0.1:3000/callback',
+			response_type: 'code',
+			scope: 'mcp:read mcp:write mcp:email mcp:git',
+			state: 'abc123',
+			code_challenge: 'challenge',
+			code_challenge_method: 'S256',
+			resource: getMcpAppEndpointUrl(),
+		});
+
+		assert.deepEqual(parsed.scopes, ['mcp:read', 'mcp:write']);
+	});
+
+	it('rejects app-profile authorization when no requested scope is supported', () => {
 		assert.throws(
 			() => parseAuthorizationRequest({
 				client_id: 'https://example.com/oauth/client.json',
 				redirect_uri: 'http://127.0.0.1:3000/callback',
 				response_type: 'code',
-				scope: 'mcp:read mcp:email',
-				state: 'abc123',
-				code_challenge: 'challenge',
-				code_challenge_method: 'S256',
-				resource: getMcpAppEndpointUrl(),
-			}),
-			(err) => err.oauthError === 'invalid_scope',
-		);
-		assert.throws(
-			() => parseAuthorizationRequest({
-				client_id: 'https://example.com/oauth/client.json',
-				redirect_uri: 'http://127.0.0.1:3000/callback',
-				response_type: 'code',
-				scope: 'mcp:read mcp:git',
+				scope: 'mcp:email mcp:git',
 				state: 'abc123',
 				code_challenge: 'challenge',
 				code_challenge_method: 'S256',
