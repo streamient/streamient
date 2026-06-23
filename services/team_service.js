@@ -123,6 +123,7 @@ export async function createTeamMember(userId, host_id, data, ctx = {}) {
 export async function updateTeamMemberRole(host_id, membershipId, actor, nextRole, ctx = {}) {
 	const membership = await hydratedQuery(TenantMember.findOne({ _id: membershipId, host_id }).populate('user', 'name email'));
 	if (!membership) throw new Error('Member not found');
+	if (!membership.user) throw new Error('Member user no longer exists');
 	if (!['admin', 'member'].includes(nextRole)) throw new Error('Invalid role');
 	if (!canManageMembership(actor.role, membership.role, nextRole)) throw new Error('You do not have permission to change this role');
 	if (String(membership.user._id) === String(actor.userId)) throw new Error('You cannot change your own role here');
@@ -148,8 +149,8 @@ export async function removeTeamMember(host_id, membershipId, actor, ctx = {}) {
 	const membership = await TenantMember.findOne({ _id: membershipId, host_id }).populate('user', 'name email');
 	if (!membership) throw new Error('Member not found');
 	if (!canManageMembership(actor.role, membership.role)) throw new Error('You do not have permission to remove this member');
-	if (String(membership.user._id) === String(actor.userId)) throw new Error('You cannot remove yourself here');
 	if (membership.role === 'owner') throw new Error('The account owner cannot be removed');
+	if (membership.user && String(membership.user._id) === String(actor.userId)) throw new Error('You cannot remove yourself here');
 
 	await TenantMember.deleteOne({ _id: membership._id });
 
@@ -159,7 +160,7 @@ export async function removeTeamMember(host_id, membershipId, actor, ctx = {}) {
 		resource_id: membership._id.toString(),
 		user_id: actor.userId,
 		host_id,
-		details: { member_email: membership.user.email, role: membership.role },
+		details: { member_email: membership.user?.email || null, role: membership.role, missing_user: !membership.user },
 		...ctx,
 	});
 

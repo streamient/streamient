@@ -2,7 +2,12 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { pickActiveTenantContext } from '../modules/tenancy.js';
-import { canManageMembership, canManageTeam, sortTeamMembers } from '../services/team_service.js';
+import { AuditLog } from '../model/audit_log.js';
+import { TeamInvite } from '../model/team_invite.js';
+import { TenantMember } from '../model/tenant_member.js';
+import { User } from '../model/user.js';
+import { Tenant } from '../modules/tenancy.js';
+import { canManageMembership, canManageTeam, createTeamMember, removeTeamMember, sortTeamMembers } from '../services/team_service.js';
 
 describe('team membership helpers', () => {
 	it('prefers explicit tenant id when picking the active tenant', () => {
@@ -65,5 +70,143 @@ describe('team membership helpers', () => {
 			members.map((member) => member.role),
 			['owner', 'admin', 'member'],
 		);
+	});
+
+	it('removes stale membership rows whose user document is gone', async () => {
+		const originalFindOne = TenantMember.findOne;
+		const originalDeleteOne = TenantMember.deleteOne;
+		const originalAuditCreate = AuditLog.create;
+		const membership = {
+			_id: { toString: () => 'membership-1' },
+			role: 'member',
+			user: null,
+		};
+		let deleteFilter;
+		let auditPayload;
+
+		TenantMember.findOne = (filter) => ({
+			populate: async (path, select) => {
+				assert.deepEqual(filter, { _id: 'membership-1', host_id: 'host-1' });
+				assert.equal(path, 'user');
+				assert.equal(select, 'name email');
+				return membership;
+			},
+		});
+		TenantMember.deleteOne = async (filter) => {
+			deleteFilter = filter;
+			return { deletedCount: 1 };
+		};
+		AuditLog.create = async (payload) => {
+			auditPayload = payload;
+			return payload;
+		};
+
+		try {
+			await removeTeamMember('host-1', 'membership-1', { userId: 'actor-1', role: 'owner' }, { channel: 'web' });
+
+			assert.deepEqual(deleteFilter, { _id: membership._id });
+			assert.equal(auditPayload.details.missing_user, true);
+			assert.equal(auditPayload.details.member_email, null);
+		} finally {
+			TenantMember.findOne = originalFindOne;
+			TenantMember.deleteOne = originalDeleteOne;
+			AuditLog.create = originalAuditCreate;
+		}
+	});
+
+	it('creates a member when welcome email is unchecked', async () => {
+		const originalTenantFindOne = Tenant.findOne;
+		const originalUserFindOne = User.findOne;
+		const originalUserCreate = User.create;
+		const originalTenantMemberFindOne = TenantMember.findOne;
+		const originalTenantMemberCreate = TenantMember.create;
+		const originalTeamInviteDeleteMany = TeamInvite.deleteMany;
+		const originalAuditCreate = AuditLog.create;
+		const tenant = { _id: { toString: () => 'tenant-1' }, host_id: 'host-1', is_active: true };
+		const user = {
+			_id: { toString: () => 'user-2' },
+			email: 'new@example.com',
+			name: 'New User',
+			last_login: null,
+			createdAt: new Date('2026-06-23T00:00:00Z'),
+		};
+		let createdUserPayload;
+		let createdMembershipPayload;
+		let deletedInviteFilter;
+		let populatedPath;
+
+		Tenant.findOne = (filter) => {
+			assert.deepEqual(filter, { host_id: 'host-1', is_active: true });
+			return tenant;
+		};
+		User.findOne = (filter) => ({
+			lean: async () => {
+				assert.deepEqual(filter, { email: 'new@example.com' });
+				return null;
+			},
+		});
+		User.create = async (payload) => {
+			createdUserPayload = payload;
+			return user;
+		};
+		TenantMember.findOne = () => ({
+			lean: async () => null,
+		});
+		TenantMember.create = async (payload) => {
+			createdMembershipPayload = payload;
+			const membership = {
+				_id: { toString: () => 'membership-2' },
+				role: 'member',
+				joined_at: payload.joined_at,
+				user: payload.user,
+				populate: async (path, select) => {
+					populatedPath = { path, select };
+					membership.user = user;
+					return membership;
+				},
+			};
+			return membership;
+		};
+		TeamInvite.deleteMany = async (filter) => {
+			deletedInviteFilter = filter;
+			return { deletedCount: 0 };
+		};
+		AuditLog.create = async (payload) => payload;
+
+		try {
+			const member = await createTeamMember('actor-1', 'host-1', {
+				name: ' New User ',
+				email: ' NEW@example.com ',
+				password: 'password123',
+				send_welcome_email: false,
+			}, { channel: 'web' });
+
+			assert.equal(member._id, 'membership-2');
+			assert.equal(member.user.email, 'new@example.com');
+			assert.deepEqual(createdUserPayload, {
+				email: 'new@example.com',
+				password: 'password123',
+				name: 'New User',
+				is_verified: true,
+				is_active: true,
+			});
+			assert.equal(createdMembershipPayload.role, 'member');
+			assert.equal(createdMembershipPayload.host_id, 'host-1');
+			assert.equal(createdMembershipPayload.user, user._id);
+			assert.deepEqual(deletedInviteFilter, {
+				tenant: tenant._id,
+				email: 'new@example.com',
+				accepted_at: null,
+			});
+			assert.deepEqual(populatedPath, { path: 'user', select: 'name email last_login createdAt' });
+		} finally {
+			Tenant.findOne = originalTenantFindOne;
+			User.findOne = originalUserFindOne;
+			User.create = originalUserCreate;
+			TenantMember.findOne = originalTenantMemberFindOne;
+			TenantMember.create = originalTenantMemberCreate;
+			TeamInvite.deleteMany = originalTeamInviteDeleteMany;
+			AuditLog.create = originalAuditCreate;
+		}
 	});
 });
