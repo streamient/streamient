@@ -7,7 +7,7 @@ import { EmailIdentity } from '../model/email_identity.js';
 import { EmailExternalSyncState } from '../model/email_external_sync_state.js';
 import { MongoQueue } from '../modules/mongo_queue.js';
 import { enqueueDraftSync, enqueueEmailMailboxSync } from '../services/email_action_sync_service.js';
-import { syncHelpmonksAction } from '../services/helpmonks_email_sync_service.js';
+import { sendHelpmonksReply, syncHelpmonksAction } from '../services/helpmonks_email_sync_service.js';
 import { syncFastmailAction } from '../services/fastmail_email_sync_service.js';
 
 function jsonResponse(payload, status = 200) {
@@ -139,6 +139,85 @@ describe('Email action sync service', () => {
 		assert.equal(calls[1].path, '/api/v1/conversation/update');
 		assert.deepEqual(calls[1].body, { id: '507f1f77bcf86cd799439011', mark_read: true });
 		assert.equal(calls[2].path, '/api/v1/conversation/status/507f1f77bcf86cd799439011/closed');
+	});
+
+	it('sends Helpmonks replies with the tracked remote draft id', async () => {
+		const calls = [];
+		const identity = {
+			helpmonks: {
+				enabled: true,
+				base_url: 'https://helpmonks.example.com',
+				api_key: encrypt('hm-key'),
+			},
+		};
+		const fetchFn = async (url, options = {}) => {
+			const parsed = new URL(url);
+			const body = options.body ? JSON.parse(options.body) : null;
+			calls.push({ path: parsed.pathname, method: options.method || 'GET', body, authorization: options.headers.Authorization });
+			return jsonResponse({ success: true, results: { id: '507f1f77bcf86cd799439011', status: 'closed' } });
+		};
+
+		const result = await sendHelpmonksReply({
+			identity,
+			state: {
+				remote_conversation_id: '507f1f77bcf86cd799439011',
+				remote_draft_id: 'remote-draft-1',
+			},
+			outgoing: {
+				body_html: '<p>Reply body</p>',
+				body_text: 'Reply body',
+				subject: 'Re: Help',
+				to: ['customer@example.com'],
+				cc: ['copy@example.com'],
+				bcc: [],
+			},
+			fetchFn,
+		});
+
+		assert.equal(result.remote_conversation_id, '507f1f77bcf86cd799439011');
+		assert.equal(result.remote_draft_id, '');
+		assert.equal(calls.length, 1);
+		assert.equal(calls[0].path, '/api/v1/conversation/reply');
+		assert.equal(calls[0].method, 'POST');
+		assert.equal(calls[0].authorization, `Basic ${Buffer.from('hm-key:').toString('base64')}`);
+		assert.deepEqual(calls[0].body, {
+			id: '507f1f77bcf86cd799439011',
+			body: '<p>Reply body</p>',
+			subject: 'Re: Help',
+			to: ['customer@example.com'],
+			cc: ['copy@example.com'],
+			bcc: [],
+			status_after: 'closed',
+			draft_id: 'remote-draft-1',
+		});
+	});
+
+	it('skips Helpmonks draft upserts once the local draft is no longer active', async () => {
+		const calls = [];
+		const result = await syncHelpmonksAction({
+			identity: {
+				helpmonks: {
+					enabled: true,
+					base_url: 'https://helpmonks.example.com',
+					api_key: encrypt('hm-key'),
+				},
+			},
+			state: {
+				remote_conversation_id: '507f1f77bcf86cd799439011',
+			},
+			action: 'draft.upsert',
+			draft: {
+				status: 'ready',
+			},
+			fetchFn: async () => {
+				calls.push(true);
+				return jsonResponse({ success: true });
+			},
+		});
+
+		assert.equal(result.skipped, true);
+		assert.equal(result.reason, 'helpmonks_draft_not_active:ready');
+		assert.equal(calls.length, 0);
 	});
 
 	it('retries Helpmonks requests with access-token auth when Basic auth is rejected', async () => {

@@ -13,7 +13,8 @@ import { emitToTenant } from '../modules/socket.js';
 import { invalidateGraphCache } from './graph_service.js';
 import { indexEmailsNow } from './email_index_service.js';
 import { createSystemTransport } from './email_service.js';
-import { enqueueReplySentSync } from './email_action_sync_service.js';
+import { clearDraftExternalSyncStateRemoteDraft, enqueueReplySentSync, loadDraftExternalSyncState } from './email_action_sync_service.js';
+import { sendHelpmonksReply } from './helpmonks_email_sync_service.js';
 import { buildEmailRealtimePayload, emitEmailCreatedOrUpdated } from './email_ingest_service.js';
 import * as audit from './audit_service.js';
 import { createLogger } from '../modules/logger.js';
@@ -127,6 +128,16 @@ async function createTransport(identity) {
 			: undefined,
 	});
 	return { transport, shared: false };
+}
+
+function usesHelpmonksSendProvider(identity) {
+	return Boolean(identity?.helpmonks?.enabled && identity.helpmonks?.base_url && identity.helpmonks?.api_key);
+}
+
+function skipProvider(options, provider) {
+	const skipProviders = new Set(options.skipProviders || []);
+	skipProviders.add(provider);
+	return { ...options, skipProviders: [...skipProviders] };
 }
 
 export async function queueDraftSend(hostId, draftId, ctx = {}) {
@@ -267,24 +278,42 @@ export async function processOutgoingEmail(outgoingId, options = {}) {
 	try {
 		const identity = await EmailIdentity.findOne({ _id: outgoing.email_identity, host_id: outgoing.host_id }).lean();
 		if (!identity) throw new Error('Email identity not found');
-		const { transport, shared } = await createTransport(identity);
 		const html = outgoing.body_html || '';
 		const text = outgoing.body_text || (html ? striptags(html, [], ' ').replace(/\s+/g, ' ').trim() : '');
-		const mailOptions = {
-			from: identity.name ? `${identity.name} <${outgoing.from}>` : outgoing.from,
-			to: outgoing.to,
-			cc: outgoing.cc?.length ? outgoing.cc : undefined,
-			bcc: outgoing.bcc?.length ? outgoing.bcc : undefined,
-			replyTo: outgoing.from,
-			subject: outgoing.subject,
-			text,
-			html: html || undefined,
-			messageId: messageIdForHeader(outgoing.message_id),
-			inReplyTo: messageIdForHeader(outgoing.in_reply_to) || undefined,
-			references: outgoing.references.map(messageIdForHeader).filter(Boolean),
-		};
-		await transport.sendMail(mailOptions);
-		if (!shared) transport.close?.();
+		let replySyncOptions = options;
+
+		if (usesHelpmonksSendProvider(identity)) {
+			const [sourceEmailForSend, draftSyncState] = await Promise.all([
+				Email.findOne({ _id: outgoing.source_email, host_id: outgoing.host_id }).lean(),
+				loadDraftExternalSyncState(outgoing.host_id, outgoing.draft, identity._id, 'helpmonks'),
+			]);
+			await sendHelpmonksReply({ identity, state: draftSyncState || {}, outgoing, sourceEmail: sourceEmailForSend, fetchFn: options.fetchFn });
+			if (draftSyncState) {
+				try {
+					await clearDraftExternalSyncStateRemoteDraft(draftSyncState);
+				} catch (err) {
+					log.warn({ err, host_id: outgoing.host_id, draft_id: outgoing.draft?.toString ? outgoing.draft.toString() : outgoing.draft }, 'Helpmonks draft sync state clear failed');
+				}
+			}
+			replySyncOptions = skipProvider(options, 'helpmonks');
+		} else {
+			const { transport, shared } = await createTransport(identity);
+			const mailOptions = {
+				from: identity.name ? `${identity.name} <${outgoing.from}>` : outgoing.from,
+				to: outgoing.to,
+				cc: outgoing.cc?.length ? outgoing.cc : undefined,
+				bcc: outgoing.bcc?.length ? outgoing.bcc : undefined,
+				replyTo: outgoing.from,
+				subject: outgoing.subject,
+				text,
+				html: html || undefined,
+				messageId: messageIdForHeader(outgoing.message_id),
+				inReplyTo: messageIdForHeader(outgoing.in_reply_to) || undefined,
+				references: outgoing.references.map(messageIdForHeader).filter(Boolean),
+			};
+			await transport.sendMail(mailOptions);
+			if (!shared) transport.close?.();
+		}
 
 		outgoing.status = 'sent';
 		outgoing.sent_at = new Date();
@@ -328,7 +357,7 @@ export async function processOutgoingEmail(outgoingId, options = {}) {
 		emitDraft(outgoing.host_id, 'email-draft:updated', draft);
 		emitOutgoing(outgoing.host_id, 'outgoing-email:sent', outgoing, { email: sentEmailPayload, draft, source_email: sourceEmailPayload });
 		emitToTenant(outgoing.host_id, 'counts:refresh');
-		await enqueueReplySentSync(outgoing.host_id, outgoing, options);
+		await enqueueReplySentSync(outgoing.host_id, outgoing, replySyncOptions);
 		log.info({ host_id: outgoing.host_id, outgoing_id: outgoing._id.toString(), message_id: outgoing.message_id, duration_ms: Date.now() - sendStartedAt }, 'Outgoing email sent');
 		return { outgoing_email: publicOutgoing(outgoing), email: sentEmail };
 	} catch (err) {

@@ -106,9 +106,11 @@ async function addSyncJob({ hostId, identity, provider, action, localType, local
 	);
 }
 
-async function enqueueForIdentities(hostId, identities, action, localType, localId) {
+async function enqueueForIdentities(hostId, identities, action, localType, localId, options = {}) {
+	const skipProviders = new Set(options.skipProviders || []);
 	for (const identity of identities) {
 		for (const provider of enabledProviders(identity)) {
+			if (skipProviders.has(provider)) continue;
 			await addSyncJob({ hostId, identity, provider, action, localType, localId });
 		}
 	}
@@ -151,8 +153,37 @@ export async function enqueueReplySentSync(hostId, outgoing, ctx = {}) {
 	await safeEnqueue('reply.sent', async () => {
 		const identity = await EmailIdentity.findOne({ _id: outgoing.email_identity, host_id: hostId }).lean();
 		if (!identity || !enabledProviders(identity).length) return;
-		await enqueueForIdentities(hostId, [identity], 'reply.sent', 'outgoing', outgoing._id);
+		await enqueueForIdentities(hostId, [identity], 'reply.sent', 'outgoing', outgoing._id, { skipProviders: ctx.skipProviders });
 	});
+}
+
+export async function loadDraftExternalSyncState(hostId, draftId, identityId, provider) {
+	if (!hostId || !draftId || !identityId || !provider) return null;
+	return EmailExternalSyncState.findOne({
+		host_id: hostId,
+		provider,
+		local_type: 'draft',
+		local_id: stringifyId(draftId),
+		identity: stringifyId(identityId),
+	}).lean();
+}
+
+export async function clearDraftExternalSyncStateRemoteDraft(state) {
+	if (!state?._id) return;
+	await EmailExternalSyncState.updateOne(
+		{ _id: state._id },
+		{
+			$set: {
+				remote_draft_id: '',
+				last_action: 'reply.sent',
+				last_status: 'synced',
+				last_synced_at: new Date(),
+				last_error: '',
+				last_error_at: null,
+				last_skipped_reason: '',
+			},
+		},
+	);
 }
 
 async function getState(job) {

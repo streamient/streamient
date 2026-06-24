@@ -131,7 +131,44 @@ function draftBody(draft) {
 	return String(draft?.body_html || draft?.body_text || '');
 }
 
+function outgoingBody(outgoing) {
+	return String(outgoing?.body_html || outgoing?.body_text || '');
+}
+
+export async function sendHelpmonksReply({ identity, state, outgoing, sourceEmail, fetchFn } = {}) {
+	const conversationId = await resolveConversation(identity, state || {}, { sourceEmail, outgoing }, { fetchFn });
+	const result = await requestHelpmonks(identity, '/api/v1/conversation/reply', {
+		method: 'POST',
+		body: {
+			id: conversationId,
+			body: outgoingBody(outgoing),
+			subject: outgoing?.subject || '',
+			to: outgoing?.to || [],
+			cc: outgoing?.cc || [],
+			bcc: outgoing?.bcc || [],
+			status_after: 'closed',
+			draft_id: state?.remote_draft_id || undefined,
+		},
+		fetchFn,
+	});
+	return {
+		remote_conversation_id: conversationId,
+		remote_draft_id: '',
+		result: result.results || null,
+	};
+}
+
 export async function syncHelpmonksAction({ identity, state, action, email, draft, outgoing, sourceEmail, fetchFn } = {}) {
+	if (action === 'draft.upsert') {
+		if (!draft) throw new HelpmonksSyncSkip('draft_not_found');
+		if ((draft.status || 'draft') !== 'draft') {
+			return {
+				skipped: true,
+				reason: `helpmonks_draft_not_active:${draft.status || ''}`,
+			};
+		}
+	}
+
 	const conversationId = await resolveConversation(identity, state, { email, sourceEmail, outgoing }, { fetchFn });
 
 	if (action === 'email.spam' || action === 'email.trash') {
@@ -144,7 +181,6 @@ export async function syncHelpmonksAction({ identity, state, action, email, draf
 	}
 
 	if (action === 'draft.upsert') {
-		if (!draft) throw new HelpmonksSyncSkip('draft_not_found');
 		const result = await requestHelpmonks(identity, '/api/v1/conversation/draft/save', {
 			method: 'POST',
 			body: {
