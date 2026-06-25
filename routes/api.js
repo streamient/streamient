@@ -66,6 +66,7 @@ router.use(async (req, res, next) => {
 });
 
 function auditCtx(req) {
+	const skipExternalSyncHeader = req.headers['x-kumbukum-skip-external-sync'];
 	return {
 		user_id: req.userId,
 		channel: req.headers['x-mcp-client'] ? 'mcp' : (req.authMethod === 'session' ? 'web' : 'api'),
@@ -73,6 +74,7 @@ function auditCtx(req) {
 		mcp_client: req.headers['x-mcp-client'],
 		ip: req.ip,
 		user_agent: req.headers['user-agent'],
+		skipExternalSync: skipExternalSyncHeader === true || skipExternalSyncHeader === 'true' || skipExternalSyncHeader === '1' || skipExternalSyncHeader === 'helpmonks',
 	};
 }
 

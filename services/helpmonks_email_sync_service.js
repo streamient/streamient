@@ -63,7 +63,10 @@ async function requestHelpmonks(identity, path, { method = 'GET', body = null, f
 }
 
 async function requestHelpmonksWithAuth({ baseUrl, apiKey, path, method, body, fetchFn, authMode }) {
-	const headers = { 'Content-Type': 'application/json' };
+	const headers = {
+		'Content-Type': 'application/json',
+		'x-helpmonks-skip-kumbukum-sync': 'true',
+	};
 	if (authMode === 'access_token') {
 		headers['x-access-token'] = apiKey;
 	} else {

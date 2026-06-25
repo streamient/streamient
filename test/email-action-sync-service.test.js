@@ -119,7 +119,7 @@ describe('Email action sync service', () => {
 		const fetchFn = async (url, options = {}) => {
 			const parsed = new URL(url);
 			const body = options.body ? JSON.parse(options.body) : null;
-			calls.push({ path: parsed.pathname, method: options.method || 'GET', body, authorization: options.headers.Authorization });
+			calls.push({ path: parsed.pathname, method: options.method || 'GET', body, authorization: options.headers.Authorization, skipHeader: options.headers['x-helpmonks-skip-kumbukum-sync'] });
 			if (parsed.pathname.endsWith('/conversation/findone')) {
 				return jsonResponse({ success: true, results: { _id: '507f1f77bcf86cd799439011' } });
 			}
@@ -136,6 +136,7 @@ describe('Email action sync service', () => {
 
 		assert.equal(result.remote_conversation_id, '507f1f77bcf86cd799439011');
 		assert.equal(calls[0].authorization, `Basic ${Buffer.from('hm-key:').toString('base64')}`);
+		assert.equal(calls[0].skipHeader, 'true');
 		assert.equal(calls[1].path, '/api/v1/conversation/update');
 		assert.deepEqual(calls[1].body, { id: '507f1f77bcf86cd799439011', mark_read: true });
 		assert.equal(calls[2].path, '/api/v1/conversation/status/507f1f77bcf86cd799439011/closed');
@@ -153,7 +154,7 @@ describe('Email action sync service', () => {
 		const fetchFn = async (url, options = {}) => {
 			const parsed = new URL(url);
 			const body = options.body ? JSON.parse(options.body) : null;
-			calls.push({ path: parsed.pathname, method: options.method || 'GET', body, authorization: options.headers.Authorization });
+			calls.push({ path: parsed.pathname, method: options.method || 'GET', body, authorization: options.headers.Authorization, skipHeader: options.headers['x-helpmonks-skip-kumbukum-sync'] });
 			return jsonResponse({ success: true, results: { id: '507f1f77bcf86cd799439011', status: 'closed' } });
 		};
 
@@ -180,6 +181,7 @@ describe('Email action sync service', () => {
 		assert.equal(calls[0].path, '/api/v1/conversation/reply');
 		assert.equal(calls[0].method, 'POST');
 		assert.equal(calls[0].authorization, `Basic ${Buffer.from('hm-key:').toString('base64')}`);
+		assert.equal(calls[0].skipHeader, 'true');
 		assert.deepEqual(calls[0].body, {
 			id: '507f1f77bcf86cd799439011',
 			body: '<p>Reply body</p>',
@@ -235,6 +237,7 @@ describe('Email action sync service', () => {
 				path: parsed.pathname,
 				authorization: options.headers.Authorization || '',
 				accessToken: options.headers['x-access-token'] || '',
+				skipHeader: options.headers['x-helpmonks-skip-kumbukum-sync'],
 			});
 			if (options.headers.Authorization) return jsonResponse({ message: 'API key not valid' }, 401);
 			return jsonResponse({ success: true, results: { _id: '507f1f77bcf86cd799439011' } });
@@ -253,6 +256,8 @@ describe('Email action sync service', () => {
 		assert.equal(calls[0].authorization, `Basic ${Buffer.from('hm-access-token:').toString('base64')}`);
 		assert.equal(calls[1].authorization, '');
 		assert.equal(calls[1].accessToken, 'hm-access-token');
+		assert.equal(calls[0].skipHeader, 'true');
+		assert.equal(calls[1].skipHeader, 'true');
 		assert.equal(calls[1].path, '/api/v1/conversation/status/507f1f77bcf86cd799439011/spam');
 	});
 
