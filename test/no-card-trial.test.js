@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import config from '../config.js';
 import { buildHostedTrialFields } from '../routes/auth.js';
-import { BILLING_SUBSCRIPTION_URL, buildCheckoutSessionParams, buildPortalSessionParams, buildSubscriptionUserUpdate, resolveCheckoutPlan, resolveCheckoutPriceId } from '../services/billing_service.js';
+import { BILLING_SUBSCRIPTION_URL, buildCheckoutSessionParams, buildPortalSessionParams, buildStripeCustomerParams, buildSubscriptionUserUpdate, createCheckoutSession, ensureStripeCustomerForAccountHolder, resolveCheckoutPlan, resolveCheckoutPriceId } from '../services/billing_service.js';
 import { formatSignupNotificationDate } from '../services/email_service.js';
 import { runEmailRetentionCleanup, runTrialLifecycle } from '../modules/scheduler.js';
 import { deleteTenantData, getTenantTypesenseCollectionNames } from '../services/account_cleanup_service.js';
@@ -70,6 +70,177 @@ describe('no-card trial signup and billing helpers', () => {
 		assert.equal(update.trial_reminder_3d_sent_at, null);
 		assert.equal(update.trial_reminder_24h_sent_at, null);
 		assert.equal(update.trial_locked_at, null);
+	});
+
+	it('builds Stripe customer params with host_id as the customer id', () => {
+		const params = buildStripeCustomerParams(
+			{
+				_id: 'user-1',
+				email: 'owner@example.com',
+				name: 'Owner User',
+				host_id: 'old-host',
+				tenant: 'old-tenant',
+			},
+			{
+				_id: 'tenant-1',
+				host_id: 'host-1',
+			},
+		);
+
+		assert.equal(params.id, 'host-1');
+		assert.equal(params.email, 'owner@example.com');
+		assert.equal(params.name, 'Owner User');
+		assert.equal(params.metadata.host_id, 'host-1');
+		assert.equal(params.metadata.tenant_id, 'tenant-1');
+		assert.equal(params.metadata.kumbukum_user_id, 'user-1');
+		assert.equal(params.metadata['Customer Type'], 'kumbukum');
+	});
+
+	it('creates a Stripe customer with host_id and stores it on the account holder', async () => {
+		const user = {
+			_id: 'user-1',
+			email: 'owner@example.com',
+			name: 'Owner User',
+			host_id: 'host-1',
+			tenant: 'tenant-1',
+		};
+		const tenant = { _id: 'tenant-1', host_id: 'host-1' };
+		let createdPayload;
+		let updateCall;
+		const stripe = {
+			customers: {
+				create: async (payload) => {
+					createdPayload = payload;
+					return { id: payload.id };
+				},
+			},
+		};
+		const userModel = {
+			findByIdAndUpdate: async (...args) => {
+				updateCall = args;
+				return null;
+			},
+		};
+
+		const customerId = await ensureStripeCustomerForAccountHolder(user, tenant, { stripe, userModel });
+
+		assert.equal(customerId, 'host-1');
+		assert.equal(createdPayload.id, 'host-1');
+		assert.deepEqual(updateCall, ['user-1', { stripe_customer_id: 'host-1' }]);
+		assert.equal(user.stripe_customer_id, 'host-1');
+	});
+
+	it('reuses a Stripe customer when the custom host_id customer already exists', async () => {
+		const user = {
+			_id: 'user-1',
+			email: 'owner@example.com',
+			name: 'Owner User',
+			host_id: 'host-1',
+			tenant: 'tenant-1',
+		};
+		let retrieveId;
+		let updateCall;
+		const stripe = {
+			customers: {
+				create: async () => {
+					const err = new Error('Customer already exists');
+					err.raw = { code: 'resource_already_exists' };
+					throw err;
+				},
+				retrieve: async (id) => {
+					retrieveId = id;
+					return { id };
+				},
+			},
+		};
+		const userModel = {
+			findByIdAndUpdate: async (...args) => {
+				updateCall = args;
+				return null;
+			},
+		};
+
+		const customerId = await ensureStripeCustomerForAccountHolder(user, null, { stripe, userModel });
+
+		assert.equal(customerId, 'host-1');
+		assert.equal(retrieveId, 'host-1');
+		assert.deepEqual(updateCall, ['user-1', { stripe_customer_id: 'host-1' }]);
+	});
+
+	it('does not recreate existing Stripe customers, including legacy cus ids', async () => {
+		const user = {
+			_id: 'user-1',
+			email: 'owner@example.com',
+			name: 'Owner User',
+			host_id: 'host-1',
+			tenant: 'tenant-1',
+			stripe_customer_id: 'cus_legacy',
+		};
+		let createCalled = false;
+		let updateCalled = false;
+		const stripe = {
+			customers: {
+				create: async () => {
+					createCalled = true;
+					return { id: 'host-1' };
+				},
+			},
+		};
+		const userModel = {
+			findByIdAndUpdate: async () => {
+				updateCalled = true;
+			},
+		};
+
+		const customerId = await ensureStripeCustomerForAccountHolder(user, null, { stripe, userModel });
+
+		assert.equal(customerId, 'cus_legacy');
+		assert.equal(createCalled, false);
+		assert.equal(updateCalled, false);
+	});
+
+	it('creates the host_id Stripe customer before checkout when missing', async () => {
+		const original = config.stripe.proPriceId;
+		config.stripe.proPriceId = 'price_pro';
+		const user = {
+			_id: 'user-1',
+			email: 'owner@example.com',
+			name: 'Owner User',
+			host_id: 'host-1',
+			tenant: 'tenant-1',
+		};
+		let checkoutParams;
+		let updateCall;
+		const stripe = {
+			customers: {
+				create: async (payload) => ({ id: payload.id }),
+			},
+			checkout: {
+				sessions: {
+					create: async (params) => {
+						checkoutParams = params;
+						return { url: 'https://checkout.example/session' };
+					},
+				},
+			},
+		};
+		const userModel = {
+			findByIdAndUpdate: async (...args) => {
+				updateCall = args;
+				return null;
+			},
+		};
+
+		try {
+			const url = await createCheckoutSession(user, { stripe, userModel });
+
+			assert.equal(url, 'https://checkout.example/session');
+			assert.equal(checkoutParams.customer, 'host-1');
+			assert.equal(checkoutParams.line_items[0].price, 'price_pro');
+			assert.deepEqual(updateCall, ['user-1', { stripe_customer_id: 'host-1' }]);
+		} finally {
+			config.stripe.proPriceId = original;
+		}
 	});
 });
 

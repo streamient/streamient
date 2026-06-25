@@ -37,6 +37,70 @@ export function resolveCheckoutPlan() {
 	return 'pro';
 }
 
+function stringifyId(value) {
+	if (!value) return '';
+	return value.toString ? value.toString() : String(value);
+}
+
+function isStripeCustomerExistsError(err) {
+	const code = err?.code || err?.raw?.code;
+	if (code === 'resource_already_exists') return true;
+	return typeof err?.message === 'string' && err.message.toLowerCase().includes('already exists');
+}
+
+export function buildStripeCustomerParams(user, tenant = null) {
+	const hostId = stringifyId(tenant?.host_id || user?.host_id);
+	if (!hostId) {
+		throw new Error('host_id is required to create a Stripe customer');
+	}
+	if (!user?.email) {
+		throw new Error('email is required to create a Stripe customer');
+	}
+	if (!user?.name) {
+		throw new Error('name is required to create a Stripe customer');
+	}
+
+	return {
+		id: hostId,
+		email: user.email,
+		name: user.name,
+		metadata: {
+			'Customer Type': 'kumbukum',
+			host_id: hostId,
+			tenant_id: stringifyId(tenant?._id || user.tenant),
+			kumbukum_user_id: stringifyId(user._id),
+		},
+	};
+}
+
+export async function ensureStripeCustomerForAccountHolder(user, tenant = null, options = {}) {
+	if (!user) {
+		throw new Error('user is required to create a Stripe customer');
+	}
+	if (user.stripe_customer_id) {
+		return user.stripe_customer_id;
+	}
+
+	const stripe = options.stripe || getStripe();
+	const userModel = options.userModel || User;
+	const customerParams = buildStripeCustomerParams(user, tenant);
+	let stripeCustomer;
+
+	try {
+		stripeCustomer = await stripe.customers.create(customerParams);
+	} catch (err) {
+		if (!isStripeCustomerExistsError(err)) {
+			throw err;
+		}
+		stripeCustomer = await stripe.customers.retrieve(customerParams.id);
+	}
+
+	const customerId = stripeCustomer?.id || customerParams.id;
+	await userModel.findByIdAndUpdate(user._id, { stripe_customer_id: customerId });
+	user.stripe_customer_id = customerId;
+	return customerId;
+}
+
 export async function applySubscriptionToUser(userId, subscription, stripeCustomerId = undefined) {
 	const plan = resolvePlanFromSubscription(subscription);
 	const user = await User.findByIdAndUpdate(
@@ -62,9 +126,9 @@ export function buildCheckoutSessionParams(user, customerId, priceId) {
 	};
 }
 
-export function buildPortalSessionParams(user) {
+export function buildPortalSessionParams(user, customerId = user.stripe_customer_id) {
 	return {
-		customer: user.stripe_customer_id,
+		customer: customerId,
 		return_url: BILLING_SUBSCRIPTION_URL,
 		...(config.stripe.portalConfigId && { configuration: config.stripe.portalConfigId }),
 	};
@@ -90,27 +154,20 @@ export function buildSubscriptionUserUpdate(subscription, stripeCustomerId = und
  * Create a Stripe Checkout session for the Pro subscription.
  * Returns the Checkout URL to redirect the user to.
  */
-export async function createCheckoutSession(user) {
+export async function createCheckoutSession(user, options = {}) {
     const priceId = resolveCheckoutPriceId();
     if (!priceId) {
         throw new Error('Stripe price ID is not configured for the Pro plan (STRIPE_PRO_PRICE_ID).');
     }
-    const stripe = getStripe();
+    const stripe = options.stripe || getStripe();
 
     // Create or reuse Stripe customer
     let customerId = user.stripe_customer_id;
     if (!customerId) {
-        const customer = await stripe.customers.create({
-            email: user.email,
-            name: user.name,
-            metadata: {
-                kumbukum_user_id: user._id.toString(),
-                host_id: user.host_id || '',
-                tenant_id: user.tenant?.toString?.() || '',
-            },
+        customerId = await ensureStripeCustomerForAccountHolder(user, null, {
+            stripe,
+            userModel: options.userModel || User,
         });
-        customerId = customer.id;
-        await User.findByIdAndUpdate(user._id, { stripe_customer_id: customerId });
     }
 
     const session = await stripe.checkout.sessions.create(buildCheckoutSessionParams(user, customerId, priceId));
@@ -122,14 +179,15 @@ export async function createCheckoutSession(user) {
  * Create a Stripe Customer Portal session for subscription management.
  * Returns the portal URL.
  */
-export async function createPortalSession(user) {
-    const stripe = getStripe();
+export async function createPortalSession(user, options = {}) {
+    const stripe = options.stripe || getStripe();
 
-    if (!user.stripe_customer_id) {
-        throw new Error('No Stripe customer linked to this account');
-    }
+    const customerId = user.stripe_customer_id || await ensureStripeCustomerForAccountHolder(user, null, {
+        stripe,
+        userModel: options.userModel || User,
+    });
 
-    const portalSession = await stripe.billingPortal.sessions.create(buildPortalSessionParams(user));
+    const portalSession = await stripe.billingPortal.sessions.create(buildPortalSessionParams(user, customerId));
 
     return portalSession.url;
 }

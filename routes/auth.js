@@ -7,7 +7,7 @@ import { applyTenantContextToSession, createTenant, initializeSessionTenant } fr
 import { ensureCollections } from '../modules/typesense.js';
 import { generateToken } from '../middleware/auth.js';
 import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail } from '../services/email_service.js';
-import { buildHostedTrialFields } from '../services/billing_service.js';
+import { buildHostedTrialFields, ensureStripeCustomerForAccountHolder } from '../services/billing_service.js';
 import { sendMagicLink, isMagicLinkValid, verifyMagicLink } from '../services/magic_link_service.js';
 import * as passkeyService from '../services/passkey_service.js';
 import { createLogger } from '../modules/logger.js';
@@ -175,6 +175,12 @@ router.post('/verify', async (req, res) => {
 		// New accounts start on the permanent Free plan. The 7-day Pro trial is now
 		// an in-app opt-in (POST /billing/trial), not an automatic signup trial.
 		await user.save();
+
+		try {
+			await ensureStripeCustomerForAccountHolder(user, tenant);
+		} catch (e) {
+			log.error({ err: e, host_id: tenant.host_id, user_id: user._id.toString() }, 'Stripe customer creation failed during signup');
+		}
 
 		ensureCollections(tenant.host_id).catch((e) =>
 			log.warn({ err: e, host_id: tenant.host_id }, 'Typesense collection setup deferred'),
