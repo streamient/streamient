@@ -248,6 +248,7 @@ if (transportArg === '--stdio' || !transportArg) {
   app.use(McpRateLimit.createIpFloodLimiter(MCP_PRODUCT));
   app.use(McpRateLimit.createUnauthLimiter(MCP_PRODUCT));
   app.use(McpRateLimit.createSseOpenLimiter(MCP_PRODUCT));
+  const authenticatedRequestLimiter = McpRateLimit.createAuthenticatedRequestLimiter(MCP_PRODUCT);
   app.use(express.json());
 
   // SSE endpoint
@@ -291,7 +292,7 @@ if (transportArg === '--stdio' || !transportArg) {
     try {
       const authContext = authenticateHttpRequest(req);
       if (!authContext.ok) return sendAuthResponse(res, authContext.response);
-      if (!await McpRateLimit.consumeAuthenticatedRequest(MCP_PRODUCT, req, res, authContext)) return;
+      if (!await McpRateLimit.consumeAuthenticatedRequest(MCP_PRODUCT, authenticatedRequestLimiter, req, res, authContext)) return;
       const sessionId = req.query.sessionId;
       const session = sseTransports.get(sessionId);
       if (!session) return res.status(404).json({ error: 'Session not found' });
@@ -319,7 +320,7 @@ if (transportArg === '--stdio' || !transportArg) {
       const authContext = authenticateHttpRequest(req);
       if (!authContext.ok) return sendAuthResponse(res, authContext.response);
       const rateLimitKey = McpRateLimit.getAuthContextRateLimitKey(MCP_PRODUCT, req, authContext);
-      if (!await McpRateLimit.consumeAuthenticatedRequest(MCP_PRODUCT, req, res, authContext)) return;
+      if (!await McpRateLimit.consumeAuthenticatedRequest(MCP_PRODUCT, authenticatedRequestLimiter, req, res, authContext)) return;
 	const scopeResponse = checkRequestScopes(authContext, req.body);
 	if (scopeResponse) return sendAuthResponse(res, scopeResponse);
 

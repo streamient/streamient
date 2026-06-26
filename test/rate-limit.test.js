@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it } from 'node:test';
+import express from 'express';
 
 import * as ApiRateLimit from '../middleware/rate_limit.js';
+import config from '../config.js';
 import * as McpRateLimit from '../modules/mcp_rate_limit.js';
 
 const ENV_KEYS = [
@@ -44,6 +46,7 @@ const MCP_RATE_LIMIT_ENV = {
 };
 
 let savedEnv = {};
+let savedSocketRedis = null;
 
 function setEnv(values) {
 	for (const [key, value] of Object.entries(values)) {
@@ -63,12 +66,32 @@ function request(options = {}) {
 	};
 }
 
+function listen(app) {
+	return new Promise(function startServer(resolve, reject) {
+		const server = app.listen(0, '127.0.0.1', function listening() {
+			resolve(server);
+		});
+		server.on('error', reject);
+	});
+}
+
+function closeServer(server) {
+	return new Promise(function stopServer(resolve, reject) {
+		server.close(function closed(error) {
+			if (error) return reject(error);
+			return resolve();
+		});
+	});
+}
+
 beforeEach(() => {
 	savedEnv = {};
 	for (const key of ENV_KEYS) {
 		savedEnv[key] = process.env[key];
 		delete process.env[key];
 	}
+	savedSocketRedis = config.socketRedis;
+	config.socketRedis = false;
 });
 
 afterEach(() => {
@@ -79,6 +102,7 @@ afterEach(() => {
 			process.env[key] = savedEnv[key];
 		}
 	}
+	config.socketRedis = savedSocketRedis;
 });
 
 describe('API rate-limit helpers', () => {
@@ -234,5 +258,50 @@ describe('MCP rate-limit helpers', () => {
 		assert.equal(McpRateLimit.isHeavyToolName('delete_note'), true);
 		assert.equal(McpRateLimit.isHeavyToolName('trigger_git_sync'), true);
 		assert.equal(McpRateLimit.isHeavyToolName('list_projects'), false);
+	});
+
+	it('runs startup-created authenticated limiter inside request handlers', async () => {
+		setEnv({
+			...MCP_RATE_LIMIT_ENV,
+			MCP_AUTH_PER_MINUTE: '1',
+		});
+
+		const product = 'kumbukum-auth-regression';
+		const app = express();
+		const authenticatedRequestLimiter = McpRateLimit.createAuthenticatedRequestLimiter(product);
+
+		app.post('/mcp', async function testMcpRoute(req, res, next) {
+			try {
+				const authContext = {
+					mode: 'oauth',
+					tokenClaims: { sub: 'user-123' },
+				};
+				if (!await McpRateLimit.consumeAuthenticatedRequest(product, authenticatedRequestLimiter, req, res, authContext)) return;
+				return res.json({ success: true });
+			} catch (error) {
+				return next(error);
+			}
+		});
+
+		app.use(function errorHandler(error, _req, res, _next) {
+			return res.status(500).json({ error: error?.code || error?.message || 'unknown' });
+		});
+
+		const server = await listen(app);
+		try {
+			const { port } = server.address();
+			const url = `http://127.0.0.1:${port}/mcp`;
+			const first = await fetch(url, { method: 'POST' });
+			assert.equal(first.status, 200);
+			assert.deepEqual(await first.json(), { success: true });
+
+			const second = await fetch(url, { method: 'POST' });
+			assert.equal(second.status, 429);
+			const body = await second.json();
+			assert.equal(body.success, false);
+			assert.match(body.error, /Rate limit exceeded/);
+		} finally {
+			await closeServer(server);
+		}
 	});
 });

@@ -295,7 +295,7 @@ export function createSseOpenLimiter(product) {
 	});
 }
 
-function getAuthenticatedRequestLimiter(product) {
+export function createAuthenticatedRequestLimiter(product) {
 	return createRequestLimiter(product, 'auth', getConfig().authPerMinute, function keyByAuthContext(request) {
 		return request.mcpRateLimitKey || getCredentialOrIpKey(product, request);
 	}, function skipAuth(request) {
@@ -312,11 +312,11 @@ function runExpressLimiter(limiter, request, response) {
 	});
 }
 
-export async function consumeAuthenticatedRequest(product, request, response, authContext) {
+export async function consumeAuthenticatedRequest(product, limiter, request, response, authContext) {
 	if (!getConfig().enabled) return true;
 
 	request.mcpRateLimitKey = getAuthContextRateLimitKey(product, request, authContext);
-	return await runExpressLimiter(getAuthenticatedRequestLimiter(product), request, response);
+	return await runExpressLimiter(limiter, request, response);
 }
 
 function getMemoryCounter(key, windowMs) {
@@ -456,6 +456,7 @@ export async function runToolWithLimits(options) {
 
 export default {
 	createIpFloodLimiter,
+	createAuthenticatedRequestLimiter,
 	createSseOpenLimiter,
 	createUnauthLimiter,
 	consumeAuthenticatedRequest,
