@@ -84,6 +84,16 @@ function closeServer(server) {
 	});
 }
 
+function deferred() {
+	let resolve;
+	let reject;
+	const promise = new Promise(function createDeferred(res, rej) {
+		resolve = res;
+		reject = rej;
+	});
+	return { promise, resolve, reject };
+}
+
 beforeEach(() => {
 	savedEnv = {};
 	for (const key of ENV_KEYS) {
@@ -253,11 +263,110 @@ describe('MCP rate-limit helpers', () => {
 		assert.equal(McpRateLimit.shouldSkipCommon(request({ method: 'POST', path: '/messages' })), false);
 		assert.equal(McpRateLimit.isSseOpen(request({ method: 'GET', path: '/sse' })), true);
 		assert.equal(McpRateLimit.isSseOpen(request({ method: 'POST', path: '/sse' })), false);
-		assert.equal(McpRateLimit.isHeavyToolName('search_knowledge'), true);
+		assert.equal(McpRateLimit.isHeavyToolName('search_knowledge'), false);
+		assert.equal(McpRateLimit.isHeavyToolName('search_notes'), false);
+		assert.equal(McpRateLimit.isHeavyToolName('recall_memory'), false);
+		assert.equal(McpRateLimit.isHeavyToolName('search_memory'), false);
+		assert.equal(McpRateLimit.isHeavyToolName('search_urls'), false);
+		assert.equal(McpRateLimit.isHeavyToolName('search_emails'), false);
 		assert.equal(McpRateLimit.isHeavyToolName('chat'), true);
+		assert.equal(McpRateLimit.isHeavyToolName('ingest_email'), true);
 		assert.equal(McpRateLimit.isHeavyToolName('delete_note'), true);
+		assert.equal(McpRateLimit.isHeavyToolName('bulk_delete_notes'), true);
+		assert.equal(McpRateLimit.isHeavyToolName('remove_git_repo'), true);
+		assert.equal(McpRateLimit.isHeavyToolName('empty_trash'), true);
 		assert.equal(McpRateLimit.isHeavyToolName('trigger_git_sync'), true);
 		assert.equal(McpRateLimit.isHeavyToolName('list_projects'), false);
+	});
+
+	it('allows overlapping read-only searches under normal tool concurrency', async () => {
+		setEnv({
+			...MCP_RATE_LIMIT_ENV,
+			MCP_TOOL_CONCURRENCY: '3',
+			MCP_HEAVY_TOOL_CONCURRENCY: '1',
+		});
+
+		const product = 'kumbukum-search-concurrency-regression';
+		const rateLimitKey = 'user:search-concurrency-regression';
+		const firstStarted = deferred();
+		const releaseFirst = deferred();
+		const first = McpRateLimit.runToolWithLimits({
+			product,
+			rateLimitKey,
+			toolName: 'search_knowledge',
+			run: async function runFirstSearch() {
+				firstStarted.resolve();
+				await releaseFirst.promise;
+				return { content: [{ type: 'text', text: 'first search' }] };
+			},
+		});
+
+		await firstStarted.promise;
+		try {
+			const second = await McpRateLimit.runToolWithLimits({
+				product,
+				rateLimitKey,
+				toolName: 'search_notes',
+				run: async function runSecondSearch() {
+					return { content: [{ type: 'text', text: 'second search' }] };
+				},
+			});
+
+			assert.equal(second?.isError, undefined);
+			assert.equal(second.content[0].text, 'second search');
+		} finally {
+			releaseFirst.resolve();
+		}
+
+		const firstResult = await first;
+		assert.equal(firstResult?.isError, undefined);
+		assert.equal(firstResult.content[0].text, 'first search');
+	});
+
+	it('still rejects overlapping heavy tools at the heavy concurrency cap', async () => {
+		setEnv({
+			...MCP_RATE_LIMIT_ENV,
+			MCP_TOOL_CONCURRENCY: '3',
+			MCP_HEAVY_TOOL_CONCURRENCY: '1',
+		});
+
+		const product = 'kumbukum-heavy-concurrency-regression';
+		const rateLimitKey = 'user:heavy-concurrency-regression';
+		const firstStarted = deferred();
+		const releaseFirst = deferred();
+		const first = McpRateLimit.runToolWithLimits({
+			product,
+			rateLimitKey,
+			toolName: 'chat',
+			run: async function runFirstHeavyTool() {
+				firstStarted.resolve();
+				await releaseFirst.promise;
+				return { content: [{ type: 'text', text: 'first heavy' }] };
+			},
+		});
+
+		await firstStarted.promise;
+		try {
+			const second = await McpRateLimit.runToolWithLimits({
+				product,
+				rateLimitKey,
+				toolName: 'chat',
+				run: async function runSecondHeavyTool() {
+					return { content: [{ type: 'text', text: 'second heavy' }] };
+				},
+			});
+
+			assert.equal(second.isError, true);
+			const payload = JSON.parse(second.content[0].text);
+			assert.match(payload.error, /Too many concurrent MCP tool calls/);
+			assert.equal(payload.tool, 'chat');
+		} finally {
+			releaseFirst.resolve();
+		}
+
+		const firstResult = await first;
+		assert.equal(firstResult?.isError, undefined);
+		assert.equal(firstResult.content[0].text, 'first heavy');
 	});
 
 	it('runs startup-created authenticated limiter inside request handlers', async () => {

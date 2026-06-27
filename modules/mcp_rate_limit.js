@@ -9,14 +9,17 @@ const log = createLogger('mcp-rate-limit');
 
 const CONCURRENCY_TTL_MS = 5 * 60 * 1000;
 
-const HEAVY_TOOL_NAMES = new Set([
-	'chat',
+const READ_ONLY_RETRIEVAL_TOOL_NAMES = new Set([
 	'search_knowledge',
 	'search_notes',
 	'recall_memory',
 	'search_memory',
 	'search_urls',
 	'search_emails',
+]);
+
+const HEAVY_TOOL_NAMES = new Set([
+	'chat',
 	'ingest_email',
 	'trigger_git_sync',
 ]);
@@ -409,6 +412,7 @@ async function releaseConcurrency(lock) {
 }
 
 export function isHeavyToolName(toolName) {
+	if (READ_ONLY_RETRIEVAL_TOOL_NAMES.has(toolName)) return false;
 	return HEAVY_TOOL_NAMES.has(toolName) || HEAVY_TOOL_PATTERNS.some((pattern) => pattern.test(toolName));
 }
 
