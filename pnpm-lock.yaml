@@ -122,8 +122,8 @@ importers:
         specifier: ^3.27.1
         version: 3.27.1
       '@yaireo/tagify':
-        specifier: ^4.37.1
-        version: 4.37.1(prop-types@15.8.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: ^4.38.0
+        version: 4.38.0(prop-types@15.8.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       archiver:
         specifier: ^8.0.0
         version: 8.0.0
@@ -144,7 +144,7 @@ importers:
         version: 6.5.0
       connect-mongo:
         specifier: ^6.0.0
-        version: 6.0.0(express-session@1.19.0)(mongodb@7.3.0(socks@2.8.9))
+        version: 6.0.0(express-session@1.19.0)(mongodb@7.4.0(socks@2.8.9))
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7
@@ -212,14 +212,14 @@ importers:
         specifier: ^18.0.5
         version: 18.0.5
       mongodb:
-        specifier: ^7.3.0
-        version: 7.3.0(socks@2.8.9)
+        specifier: ^7.4.0
+        version: 7.4.0(socks@2.8.9)
       mongoose:
-        specifier: ^9.7.2
-        version: 9.7.2(socks@2.8.9)
+        specifier: ^9.7.3
+        version: 9.7.3(socks@2.8.9)
       mongoose-lean-virtuals:
         specifier: ^2.1.0
-        version: 2.1.0(mongoose@9.7.2(socks@2.8.9))
+        version: 2.1.0(mongoose@9.7.3(socks@2.8.9))
       n-readlines:
         specifier: ^3.4.1
         version: 3.4.1
@@ -285,7 +285,7 @@ importers:
         version: 3.0.6(@babel/runtime@7.29.2)
       vitepress-openapi:
         specifier: ^0.2.0
-        version: 0.2.0(vitepress@1.6.4(@algolia/client-search@5.55.1)(@types/node@26.0.1)(axios@1.18.1)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3))(vue@3.5.39)
+        version: 0.2.0(vitepress@1.6.4(@algolia/client-search@5.55.1)(@types/node@26.0.1)(axios@1.18.1)(postcss@8.5.16)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3))(vue@3.5.39)
     devDependencies:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
@@ -316,10 +316,10 @@ importers:
         version: 8.5.2(express@5.2.1)
       vitepress-openapi:
         specifier: ^0.2.0
-        version: 0.2.0(vitepress@1.6.4(@algolia/client-search@5.55.1)(@types/node@26.0.1)(axios@1.18.1)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3))(vue@3.5.39)
+        version: 0.2.0(vitepress@1.6.4(@algolia/client-search@5.55.1)(@types/node@26.0.1)(axios@1.18.1)(postcss@8.5.16)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3))(vue@3.5.39)
       vitepress-plugin-tabs:
         specifier: ^0.9.0
-        version: 0.9.0(vitepress@1.6.4(@algolia/client-search@5.55.1)(@types/node@26.0.1)(axios@1.18.1)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3))(vue@3.5.39)
+        version: 0.9.0(vitepress@1.6.4(@algolia/client-search@5.55.1)(@types/node@26.0.1)(axios@1.18.1)(postcss@8.5.16)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3))(vue@3.5.39)
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -332,13 +332,13 @@ importers:
     devDependencies:
       vitepress:
         specifier: ^1.6.4
-        version: 1.6.4(@algolia/client-search@5.55.1)(@types/node@26.0.1)(axios@1.18.1)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3)
+        version: 1.6.4(@algolia/client-search@5.55.1)(@types/node@26.0.1)(axios@1.18.1)(postcss@8.5.16)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3)
       vitepress-openapi:
         specifier: ^0.2.0
-        version: 0.2.0(vitepress@1.6.4(@algolia/client-search@5.55.1)(@types/node@26.0.1)(axios@1.18.1)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3))(vue@3.5.39)
+        version: 0.2.0(vitepress@1.6.4(@algolia/client-search@5.55.1)(@types/node@26.0.1)(axios@1.18.1)(postcss@8.5.16)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3))(vue@3.5.39)
       vitepress-plugin-tabs:
         specifier: ^0.9.0
-        version: 0.9.0(vitepress@1.6.4(@algolia/client-search@5.55.1)(@types/node@26.0.1)(axios@1.18.1)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3))(vue@3.5.39)
+        version: 0.9.0(vitepress@1.6.4(@algolia/client-search@5.55.1)(@types/node@26.0.1)(axios@1.18.1)(postcss@8.5.16)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3))(vue@3.5.39)
       vue:
         specifier: ^3.5.39
         version: 3.5.39
@@ -2457,14 +2457,17 @@ packages:
     peerDependencies:
       socket.io-adapter: ^2.5.4
 
+  '@standard-schema/spec@1.1.0':
+    resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
+
   '@swc/helpers@0.5.23':
     resolution: {integrity: sha512-5lSsMOTXURePglDfvuAQUqkGek9Hg2kksOYay2m0+XR++b2NWYL/4sWyuvVBIs8oKnJaxkdi9whaL/sqN13afw==}
 
-  '@tanstack/virtual-core@3.17.1':
-    resolution: {integrity: sha512-VZyW2Uiml5tmBZwPGrSD3Sz73OxzljQMCmzYHsUTPEuTsERf5xwa+uWb01xEzkz3ZSYTjj8NEb/mKHvgKxyZdA==}
+  '@tanstack/virtual-core@3.17.2':
+    resolution: {integrity: sha512-w43MvWvmShpb6kIC9MOoLyUkLmRTLPjt61bHWs+X29hACSpX+n8DvgZ3qM7cUfflKlRRcHR9KVJE6TmcqnQvcA==}
 
-  '@tanstack/vue-virtual@3.13.29':
-    resolution: {integrity: sha512-MWb9tNHjpar3sP34b8+3A4I5j9akveoPXIYqqp7/ipyWd49a/kso+1S1LqEmAVR/+g/k1WWTJC4ktvdCGWgXYQ==}
+  '@tanstack/vue-virtual@3.13.30':
+    resolution: {integrity: sha512-5IpTZf5US81z9CHaRm2imVC44WDU1V/pd8mN1OIvIerRmo6C179UN+vnzlO/dx9Fpt9X7Rjl7fyvolPhPgtfqg==}
     peerDependencies:
       vue: ^2.7.0 || ^3.0.0
 
@@ -2830,8 +2833,8 @@ packages:
     resolution: {integrity: sha512-KRYzxepc14G/CEpEGc3Yn+JKaAeT63smlDr+vjB8jRfgTBBI9wRj/nkQEO+ucV8p8I9bfKLWp37uHgFrbntPvw==}
     engines: {node: '>=10.0.0'}
 
-  '@yaireo/tagify@4.37.1':
-    resolution: {integrity: sha512-/+0ZZ55rd4sG5Nlop2QF9D2oo3kbRgn/KlsW6oN1MwKVS7DDB2mIrGnizk740M0qzXvQfE7JhbCeWDuC8+6kmA==}
+  '@yaireo/tagify@4.38.0':
+    resolution: {integrity: sha512-/ZyG2NWQGNcTK4ay2aPE3ka/ZQmhTo+bUKb81SqjtQlt3VrGoxCNhmvKTV/mBJbY69BOXXeBEi+a5JLrvp6wLA==}
     engines: {node: '>=22', pnpm: '>=10'}
     peerDependencies:
       prop-types: '>15.5.7'
@@ -3011,8 +3014,8 @@ packages:
       bare-buffer:
         optional: true
 
-  bare-os@3.9.1:
-    resolution: {integrity: sha512-6M5XjcnsygQNPMCMPXSK379xrJFiZ/AEMNBmFEmQW8d/789VQATvriyi5r0HYTL9TkQ26rn3kgdTG3aisbrXkQ==}
+  bare-os@3.9.2:
+    resolution: {integrity: sha512-h530JsrkYi8518ZfR57GHaLoI5YzXkGGEV0Y+mf4KYPBn4OnNajiznwkDq7FgE+Vnmyss9Utnzi44y7sowiAXA==}
     engines: {bare: '>=1.14.0'}
 
   bare-path@3.0.1:
@@ -3042,8 +3045,8 @@ packages:
     resolution: {integrity: sha512-lGe34o6EHj9y3Kts9R4ZYs/Gr+6N7MCaMlIFA3F1R2O5/m7K06AxfSeO5530PEERE6/WyEg3lsuyw4GHlPZHog==}
     engines: {node: ^4.5.0 || >= 5.9}
 
-  baseline-browser-mapping@2.10.38:
-    resolution: {integrity: sha512-31/02mVB4yuQU6adKk5SlY6m+mxDwUq5KZkyYgnLrrKl7TEm1+3PyDtDBz2kOv/wxZz41GHsvV1A/u6RmiyBvw==}
+  baseline-browser-mapping@2.10.40:
+    resolution: {integrity: sha512-BSSLZ9/Cjjv7Gtj5B68ZzXcXUg8iOf3fme+FCuh8rC/Go+Kmh8cox7M3A8dolou16s64QjLPOSdngh7GxXvkSw==}
     engines: {node: '>=6.0.0'}
     hasBin: true
 
@@ -3067,8 +3070,8 @@ packages:
   bluebird@3.4.7:
     resolution: {integrity: sha512-iD3898SR7sWVRHbiQv+sHUtHnMvC1o3nW5rAcqnq3uOn07DSAppZYUkIGslDz6gXC7HfunPe7YVBgoEJASPcHA==}
 
-  bn.js@4.12.3:
-    resolution: {integrity: sha512-fGTi3gxV/23FTYdAoUtLYp6qySe2KE3teyZitipKNRuVYcBkoP/bB3guXN/XVKUe9mxCHXnc9C4ocyz8OmgN0g==}
+  bn.js@4.12.4:
+    resolution: {integrity: sha512-njR1b+ixG2ufvL9Zn9JGneW+b5GV6jqpYyPPpg4QVt723b5kJPGUczkUyWEH9BwEA74UakJZ43I4FDLBF7ci0g==}
 
   body-parser@2.3.0:
     resolution: {integrity: sha512-2cGmJupaNgg+QUwVLAucDuWuoMZ6EX9iHDRswZ5lsNYEmwPaRknMPCLZz07yTzVq/83p4o/wzbDZbBrTvGGTIw==}
@@ -3085,8 +3088,8 @@ packages:
   brace-expansion@2.1.1:
     resolution: {integrity: sha512-WR1cURNjuvBLMZBMbqM0UoE+WAfdUcEV1ccD8PVBVOI+Z3ND4+SZbN8RsfT2bMuG1qwz5RFvPukSZm5fF2D5eA==}
 
-  brace-expansion@5.0.6:
-    resolution: {integrity: sha512-kLpxurY4Z4r9sgMsyG0Z9uzsBlgiU/EFKhj/h91/8yHu0edo7XuixOIH3VcJ8kkxs6/jPzoI6U9Vj3WqbMQ94g==}
+  brace-expansion@5.0.7:
+    resolution: {integrity: sha512-7oFy703dxfY3/NLxC1fh2SUCQ0H9rmAY+5EpDVfXjUTTs+HEwR2nYaqLv+GWcTsumwxPfiz6CzCNkwXwBUwqCA==}
     engines: {node: 18 || 20 || >=22}
 
   braces@3.0.3:
@@ -3470,8 +3473,8 @@ packages:
   devlop@1.1.0:
     resolution: {integrity: sha512-RWmIqhcFf1lRYBvNmr7qTNuyCt/7/ns2jbpp1+PalgE/rDQcBT0fioSMUpJ93irlUhC5hrg4cYqe6U+0ImW0rA==}
 
-  devtools-protocol@0.0.1651496:
-    resolution: {integrity: sha512-aJNGsTbQSN63p6E6DVW0+X4yVUK7BoRlkHFCYPN/dGIQTBwC/6bxucK9GjdK0yrq0HXK1mXddH7+xbOQyg85qw==}
+  devtools-protocol@0.0.1653615:
+    resolution: {integrity: sha512-pGVkY3T/qXxAp2nFPodwYqOevk6ncNMSmvL8QfRCx5ZWGd6Vor7AFNmyaA8Zs6uJyP1QAfjuLandCgvSix1BNA==}
 
   dezalgo@1.0.4:
     resolution: {integrity: sha512-rXSP0bf+5n0Qonsb+SVVfNfIsimO4HEtmnIpPHY8Q1UCzKlQrDMfdobr8nJOOsRgWCyMRqeSBQzmWUMq7zvVig==}
@@ -3522,8 +3525,8 @@ packages:
   ee-first@1.1.1:
     resolution: {integrity: sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow==}
 
-  electron-to-chromium@1.5.378:
-    resolution: {integrity: sha512-VinvOAuuPmdD1guEgGv5f2Qp7/vlfqOrUOMYNnOD4wj3pit8kRsQHzfIf6teyUGWo15Tg5+bOJaRunvyltpVWQ==}
+  electron-to-chromium@1.5.380:
+    resolution: {integrity: sha512-W6d5AbuEoRayO447cqrg6lKJIlscgRnnxOZl/08kfV71BQDoEBC7Wwis68z87LjyK6f4kWyTaubuDbhHKrZkbA==}
 
   emoji-regex-xs@1.0.0:
     resolution: {integrity: sha512-LRlerrMYoIDrT6jgpeZ2YYl/L8EulRTt5hQcYjy5AInh7HWXKimpqx68aknBFpGL2+/IcogTcaydJEgaTmOpDg==}
@@ -4124,8 +4127,8 @@ packages:
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
 
-  js-yaml@3.14.2:
-    resolution: {integrity: sha512-PMSmkqxr106Xa156c2M265Z+FTrPl+oxd/rgOQy2tijQeK5TxQ43psO1ZCwhVOSdnn+RzkzlRz/eY4BgJBYVpg==}
+  js-yaml@3.15.0:
+    resolution: {integrity: sha512-ttBQIIQPDeLjpPOohtUdXuXUVoA2uIB6fEH9HyJ7234s5mBJ5wTx20njxplLZQgLaOfpmPQA7X2t5AX6tIPbog==}
     hasBin: true
 
   jsdom@26.1.0:
@@ -4468,8 +4471,8 @@ packages:
       socks:
         optional: true
 
-  mongodb@7.3.0:
-    resolution: {integrity: sha512-WpCqSx7JAU9vcyjm/SU7ydnHls2YrfU3Y3sx4Ml9D7sPe4mXPlaapndiurDXrQ7/VvJkB4/i7b7WovHb8bd8sg==}
+  mongodb@7.4.0:
+    resolution: {integrity: sha512-giySkkdYiwoBFo/oCc8nzov3xOYZ/sB8OpAYk5GINRLEjVw0LDsm8xgQL0XMTyU4extQlDZjhdUr1ZEwKFaazw==}
     engines: {node: '>=20.19.0'}
     peerDependencies:
       '@aws-sdk/credential-providers': ^3.806.0
@@ -4501,8 +4504,8 @@ packages:
     peerDependencies:
       mongoose: '>=8.0.0 || ^9.0.0-0'
 
-  mongoose@9.7.2:
-    resolution: {integrity: sha512-VxxS3tjOGRIvhBMd84RR7L1WbDdm08Qq6V88VMq6jP6aE1Q+NlbTZDBtye2NAyO48i5kBFxM2oxfX0CPKNwCMg==}
+  mongoose@9.7.3:
+    resolution: {integrity: sha512-9DsD4sq0tL9IKyfttZ6qn74KXBcD4lxDTzGXoAeOLMnDFFp1gqc5oc4s2BiMPbetJrLwvVylfyR4cqLst2pasQ==}
     engines: {node: '>=20.19.0'}
 
   mpath@0.8.4:
@@ -4793,8 +4796,8 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
-  postcss@8.5.15:
-    resolution: {integrity: sha512-FfR8sjd4em2T6fb3I2MwAJU7HWVMr9zba+enmQeeWFfCbm+UOC/0X4DS8XtpUTMwWMGbjKYP7xjfNekzyGmB3A==}
+  postcss@8.5.16:
+    resolution: {integrity: sha512-vuwillviilfKZsg0VGj5R/YwwcHx4SLsIOI/7K6mQkWx+l5cUHTjj5g0AasTBcyXsbfTgrwsUNmVUb5xVwyPwg==}
     engines: {node: ^10 || ^12 || >=14}
 
   postgres-array@2.0.0:
@@ -4813,8 +4816,8 @@ packages:
     resolution: {integrity: sha512-9ZhXKM/rw350N1ovuWHbGxnGh/SNJ4cnxHiM0rxE4VN41wsg8P8zWn9hv/buK00RP4WvlOyr/RBDiptyxVbkZQ==}
     engines: {node: '>=0.10.0'}
 
-  preact@10.29.2:
-    resolution: {integrity: sha512-7tNmwg/7mzzAoB/8kSg6Hl37JraAZw3Z3A0JSY7VXlZwo82Xn0G7wKbNNs2qoF4ZEEsQGTwDAroNdqKs1ofJxQ==}
+  preact@10.29.3:
+    resolution: {integrity: sha512-D9NL1GAnJZhc3RndVs4gDdxEeU9TcHgywMrhhOsnpdlvFjdbx0gAsLUnH6JEhlJH5giL7Tx5biWPUSEXE/HPzw==}
 
   process-nextick-args@2.0.1:
     resolution: {integrity: sha512-3ouUOpQhtgrbOa17J7+uxOTpITYWaGP7/AhoR3+A+/1e9skrzelGi/dXzEYyvbxubEF6Wn2ypscTKiKJFFn1ag==}
@@ -4969,8 +4972,8 @@ packages:
     resolution: {integrity: sha512-iv7LhNVO047HzYR3InF6pUcUsPQiHTM1Qal51DcGSuZFBil1aBBWG5eHPNek7bvILMaYJ/8RU1e8w1AMdHmLQQ==}
     engines: {node: '>= 0.8'}
 
-  range-parser@1.2.1:
-    resolution: {integrity: sha512-Hrgsx+orqoygnmhFbKaHE6c296J+HTAQXoxEF6gNupROmmGJRoyzfG3ccAveqCBrwr/2yxQ5BVd/GTl5agOwSg==}
+  range-parser@1.3.0:
+    resolution: {integrity: sha512-hek2mFQpPuI4E1BBKrSto+BU3e3x4xuarsbiwr3+lf7p44juvFMV0XFWQAP3xUyqXA4RrXLIoaSUGbSt056ZMw==}
     engines: {node: '>= 0.6'}
 
   rate-limit-redis@5.0.0:
@@ -5041,8 +5044,8 @@ packages:
   regex@6.1.0:
     resolution: {integrity: sha512-6VwtthbV4o/7+OaAF9I5L5V3llLEsoPyq9P1JVXkedTP33c7MfCG0/5NOPcSJn0TzXcG9YUrR0gQSWioew3LDg==}
 
-  reka-ui@2.10.0:
-    resolution: {integrity: sha512-HIUVfSBM/AyGkcUI7aiOxxMc4N+0UD2ZEun8dcrT0H4fveotEoeDdvzyZu97eeEvEa1H9oGHoOpApkfxlgnC7g==}
+  reka-ui@2.10.1:
+    resolution: {integrity: sha512-drcOQ4rQtDYAcGCsyQBqQg8QQ+H3B+zDaMJU0h8KPEPMa7g9BHu3zcOi4OB39XJSWizceFoNO0Z9tctSGLOXqg==}
     peerDependencies:
       vue: '>= 3.4.0'
 
@@ -5429,15 +5432,15 @@ packages:
   tldts-core@6.1.86:
     resolution: {integrity: sha512-Je6p7pkk+KMzMv2XXKmAE3McmolOQFdxkKw0R8EYNr7sELW46JqnNeTX8ybPiQgvg1ymCoF8LXs5fzFaZvJPTA==}
 
-  tldts-core@7.4.4:
-    resolution: {integrity: sha512-vwVLJVvvpslm7vqAH7+XNj/neA/Ynq7DT2EEcMuwc5YzN5XaMyRAqxwU+uX3azZ1FQtB2gvrvnLnAEkvYlVdfg==}
+  tldts-core@7.4.5:
+    resolution: {integrity: sha512-pGrwzZDvPwKe+7NNUqAunb6rqTfynr0VOUhCMdqbu5xlvNiszsAJygRzwvpVycdzejlbpY+SWJOn+s75Og7FEA==}
 
   tldts@6.1.86:
     resolution: {integrity: sha512-WMi/OQ2axVTf/ykqCQgXiIct+mSQDFdH2fkwhPwgEwvJ1kSzZRiinb0zF2Xb8u4+OqPChmyI6MEu4EezNJz+FQ==}
     hasBin: true
 
-  tldts@7.4.4:
-    resolution: {integrity: sha512-kFXFK7O4WPextIUAOk8qtnw9dxR9UIXP9CjuH1cTBVBZMDeQcUPgr/IazGiw1B0Yiw5L75gHLWeW4iD793r90g==}
+  tldts@7.4.5:
+    resolution: {integrity: sha512-RfEzKWcq5fHUOFq7J3rl3Oz6ylKGtcHqUznzj4EcXsxLSIjJcvpbXAQtWGeJQ0xKnimR5e0Cn+cn9TssfMzm+g==}
     hasBin: true
 
   to-regex-range@5.0.1:
@@ -5994,7 +5997,7 @@ snapshots:
       fs-extra: 11.3.5
       got-scraping: 4.2.1
       ow: 0.28.2
-      tldts: 7.4.4
+      tldts: 7.4.5
       tslib: 2.8.1
       type-fest: 4.41.0
     transitivePeerDependencies:
@@ -6079,7 +6082,7 @@ snapshots:
       minimatch: 9.0.9
       ow: 0.28.2
       stream-json: 1.9.1
-      tldts: 7.4.4
+      tldts: 7.4.5
       tough-cookie: 6.0.1
       tslib: 2.8.1
       type-fest: 4.41.0
@@ -6183,7 +6186,7 @@ snapshots:
       '@crawlee/types': 3.17.0
       '@crawlee/utils': 3.17.0
       cheerio: 1.0.0-rc.12
-      devtools-protocol: 0.0.1651496
+      devtools-protocol: 0.0.1653615
       jquery: 3.7.1
       ow: 0.28.2
       tslib: 2.8.1
@@ -6247,7 +6250,7 @@ snapshots:
   '@docsearch/js@3.8.2(@algolia/client-search@5.55.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3)':
     dependencies:
       '@docsearch/react': 3.8.2(@algolia/client-search@5.55.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3)
-      preact: 10.29.2
+      preact: 10.29.3
     transitivePeerDependencies:
       - '@algolia/client-search'
       - '@types/react'
@@ -8432,15 +8435,17 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@standard-schema/spec@1.1.0': {}
+
   '@swc/helpers@0.5.23':
     dependencies:
       tslib: 2.8.1
 
-  '@tanstack/virtual-core@3.17.1': {}
+  '@tanstack/virtual-core@3.17.2': {}
 
-  '@tanstack/vue-virtual@3.13.29(vue@3.5.39)':
+  '@tanstack/vue-virtual@3.13.30(vue@3.5.39)':
     dependencies:
-      '@tanstack/virtual-core': 3.17.1
+      '@tanstack/virtual-core': 3.17.2
       vue: 3.5.39
 
   '@tiptap/core@3.27.1(@tiptap/pm@3.27.1)':
@@ -8744,7 +8749,7 @@ snapshots:
       '@vue/shared': 3.5.39
       estree-walker: 2.0.2
       magic-string: 0.30.21
-      postcss: 8.5.15
+      postcss: 8.5.16
       source-map-js: 1.2.1
 
   '@vue/compiler-ssr@3.5.39':
@@ -8837,7 +8842,7 @@ snapshots:
 
   '@xmldom/xmldom@0.8.13': {}
 
-  '@yaireo/tagify@4.37.1(prop-types@15.8.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@yaireo/tagify@4.38.0(prop-types@15.8.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       prop-types: 15.8.1
       react: 18.3.1
@@ -8966,7 +8971,7 @@ snapshots:
 
   asn1.js@5.4.1:
     dependencies:
-      bn.js: 4.12.3
+      bn.js: 4.12.4
       inherits: 2.0.4
       minimalistic-assert: 1.0.1
       safer-buffer: 2.1.2
@@ -9020,11 +9025,11 @@ snapshots:
       - bare-abort-controller
       - react-native-b4a
 
-  bare-os@3.9.1: {}
+  bare-os@3.9.2: {}
 
   bare-path@3.0.1:
     dependencies:
-      bare-os: 3.9.1
+      bare-os: 3.9.2
 
   bare-stream@2.13.3(bare-events@2.9.1):
     dependencies:
@@ -9044,7 +9049,7 @@ snapshots:
 
   base64id@2.0.0: {}
 
-  baseline-browser-mapping@2.10.38: {}
+  baseline-browser-mapping@2.10.40: {}
 
   bcryptjs@3.0.3: {}
 
@@ -9062,7 +9067,7 @@ snapshots:
 
   bluebird@3.4.7: {}
 
-  bn.js@4.12.3: {}
+  bn.js@4.12.4: {}
 
   body-parser@2.3.0:
     dependencies:
@@ -9088,7 +9093,7 @@ snapshots:
     dependencies:
       balanced-match: 1.0.2
 
-  brace-expansion@5.0.6:
+  brace-expansion@5.0.7:
     dependencies:
       balanced-match: 4.0.4
 
@@ -9098,9 +9103,9 @@ snapshots:
 
   browserslist@4.28.4:
     dependencies:
-      baseline-browser-mapping: 2.10.38
+      baseline-browser-mapping: 2.10.40
       caniuse-lite: 1.0.30001799
-      electron-to-chromium: 1.5.378
+      electron-to-chromium: 1.5.380
       node-releases: 2.0.50
       update-browserslist-db: 1.2.3(browserslist@4.28.4)
 
@@ -9288,12 +9293,12 @@ snapshots:
       normalize-path: 3.0.0
       readable-stream: 4.7.0
 
-  connect-mongo@6.0.0(express-session@1.19.0)(mongodb@7.3.0(socks@2.8.9)):
+  connect-mongo@6.0.0(express-session@1.19.0)(mongodb@7.4.0(socks@2.8.9)):
     dependencies:
       debug: 4.4.3(supports-color@5.5.0)
       express-session: 1.19.0
       kruptein: 3.0.8
-      mongodb: 7.3.0(socks@2.8.9)
+      mongodb: 7.4.0(socks@2.8.9)
     transitivePeerDependencies:
       - supports-color
 
@@ -9465,7 +9470,7 @@ snapshots:
     dependencies:
       dequal: 2.0.3
 
-  devtools-protocol@0.0.1651496: {}
+  devtools-protocol@0.0.1653615: {}
 
   dezalgo@1.0.4:
     dependencies:
@@ -9522,7 +9527,7 @@ snapshots:
 
   ee-first@1.1.1: {}
 
-  electron-to-chromium@1.5.378: {}
+  electron-to-chromium@1.5.380: {}
 
   emoji-regex-xs@1.0.0: {}
 
@@ -9721,7 +9726,7 @@ snapshots:
       parseurl: 1.3.3
       proxy-addr: 2.0.7
       qs: 6.15.3
-      range-parser: 1.2.1
+      range-parser: 1.3.0
       router: 2.2.0
       send: 1.2.1
       serve-static: 2.2.1
@@ -9968,7 +9973,7 @@ snapshots:
 
   gray-matter@4.0.3:
     dependencies:
-      js-yaml: 3.14.2
+      js-yaml: 3.15.0
       kind-of: 6.0.3
       section-matter: 1.0.0
       strip-bom-string: 1.0.0
@@ -10279,7 +10284,7 @@ snapshots:
 
   js-tokens@4.0.0: {}
 
-  js-yaml@3.14.2:
+  js-yaml@3.15.0:
     dependencies:
       argparse: 1.0.10
       esprima: 4.0.1
@@ -10583,7 +10588,7 @@ snapshots:
 
   minimatch@10.2.5:
     dependencies:
-      brace-expansion: 5.0.6
+      brace-expansion: 5.0.7
 
   minimatch@9.0.9:
     dependencies:
@@ -10635,7 +10640,7 @@ snapshots:
     optionalDependencies:
       socks: 2.8.9
 
-  mongodb@7.3.0(socks@2.8.9):
+  mongodb@7.4.0(socks@2.8.9):
     dependencies:
       '@mongodb-js/saslprep': 1.4.11
       bson: 7.3.1
@@ -10643,13 +10648,14 @@ snapshots:
     optionalDependencies:
       socks: 2.8.9
 
-  mongoose-lean-virtuals@2.1.0(mongoose@9.7.2(socks@2.8.9)):
+  mongoose-lean-virtuals@2.1.0(mongoose@9.7.3(socks@2.8.9)):
     dependencies:
-      mongoose: 9.7.2(socks@2.8.9)
+      mongoose: 9.7.3(socks@2.8.9)
       mpath: 0.8.4
 
-  mongoose@9.7.2(socks@2.8.9):
+  mongoose@9.7.3(socks@2.8.9):
     dependencies:
+      '@standard-schema/spec': 1.1.0
       kareem: 3.3.0
       mongodb: 7.2.0(socks@2.8.9)
       mpath: 0.9.0
@@ -10955,7 +10961,7 @@ snapshots:
     optionalDependencies:
       fsevents: 2.3.2
 
-  postcss@8.5.15:
+  postcss@8.5.16:
     dependencies:
       nanoid: 3.3.15
       picocolors: 1.1.1
@@ -10971,7 +10977,7 @@ snapshots:
     dependencies:
       xtend: 4.0.2
 
-  preact@10.29.2: {}
+  preact@10.29.3: {}
 
   process-nextick-args@2.0.1: {}
 
@@ -11197,7 +11203,7 @@ snapshots:
 
   random-bytes@1.0.0: {}
 
-  range-parser@1.2.1: {}
+  range-parser@1.3.0: {}
 
   rate-limit-redis@5.0.0(express-rate-limit@8.5.2(express@5.2.1)):
     dependencies:
@@ -11276,13 +11282,13 @@ snapshots:
     dependencies:
       regex-utilities: 2.3.0
 
-  reka-ui@2.10.0(vue@3.5.39):
+  reka-ui@2.10.1(vue@3.5.39):
     dependencies:
       '@floating-ui/dom': 1.7.6
       '@floating-ui/vue': 1.1.11(vue@3.5.39)
       '@internationalized/date': 3.12.2
       '@internationalized/number': 3.6.7
-      '@tanstack/vue-virtual': 3.13.29(vue@3.5.39)
+      '@tanstack/vue-virtual': 3.13.30(vue@3.5.39)
       '@vueuse/core': 14.3.0(vue@3.5.39)
       '@vueuse/shared': 14.3.0(vue@3.5.39)
       aria-hidden: 1.2.6
@@ -11406,7 +11412,7 @@ snapshots:
       is-plain-object: 5.0.0
       launder: 1.7.1
       parse-srcset: 1.0.2
-      postcss: 8.5.15
+      postcss: 8.5.16
 
   sax@1.6.0: {}
 
@@ -11444,7 +11450,7 @@ snapshots:
       mime-types: 3.0.2
       ms: 2.1.3
       on-finished: 2.4.1
-      range-parser: 1.2.1
+      range-parser: 1.3.0
       statuses: 2.0.2
     transitivePeerDependencies:
       - supports-color
@@ -11773,15 +11779,15 @@ snapshots:
 
   tldts-core@6.1.86: {}
 
-  tldts-core@7.4.4: {}
+  tldts-core@7.4.5: {}
 
   tldts@6.1.86:
     dependencies:
       tldts-core: 6.1.86
 
-  tldts@7.4.4:
+  tldts@7.4.5:
     dependencies:
-      tldts-core: 7.4.4
+      tldts-core: 7.4.5
 
   to-regex-range@5.0.1:
     dependencies:
@@ -11810,7 +11816,7 @@ snapshots:
 
   tough-cookie@6.0.1:
     dependencies:
-      tldts: 7.4.4
+      tldts: 7.4.5
 
   tr46@0.0.3: {}
 
@@ -11932,31 +11938,31 @@ snapshots:
   vite@5.4.21(@types/node@26.0.1):
     dependencies:
       esbuild: 0.21.5
-      postcss: 8.5.15
+      postcss: 8.5.16
       rollup: 4.62.2
     optionalDependencies:
       '@types/node': 26.0.1
       fsevents: 2.3.3
 
-  vitepress-openapi@0.2.0(vitepress@1.6.4(@algolia/client-search@5.55.1)(@types/node@26.0.1)(axios@1.18.1)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3))(vue@3.5.39):
+  vitepress-openapi@0.2.0(vitepress@1.6.4(@algolia/client-search@5.55.1)(@types/node@26.0.1)(axios@1.18.1)(postcss@8.5.16)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3))(vue@3.5.39):
     dependencies:
       '@vueuse/core': 14.3.0(vue@3.5.39)
       class-variance-authority: 0.7.1
       clsx: 2.1.1
       lucide-vue-next: 1.0.0(vue@3.5.39)
       markdown-it-link-attributes: 4.0.1
-      reka-ui: 2.10.0(vue@3.5.39)
-      vitepress: 1.6.4(@algolia/client-search@5.55.1)(@types/node@26.0.1)(axios@1.18.1)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3)
+      reka-ui: 2.10.1(vue@3.5.39)
+      vitepress: 1.6.4(@algolia/client-search@5.55.1)(@types/node@26.0.1)(axios@1.18.1)(postcss@8.5.16)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3)
       vue: 3.5.39
     transitivePeerDependencies:
       - '@vue/composition-api'
 
-  vitepress-plugin-tabs@0.9.0(vitepress@1.6.4(@algolia/client-search@5.55.1)(@types/node@26.0.1)(axios@1.18.1)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3))(vue@3.5.39):
+  vitepress-plugin-tabs@0.9.0(vitepress@1.6.4(@algolia/client-search@5.55.1)(@types/node@26.0.1)(axios@1.18.1)(postcss@8.5.16)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3))(vue@3.5.39):
     dependencies:
-      vitepress: 1.6.4(@algolia/client-search@5.55.1)(@types/node@26.0.1)(axios@1.18.1)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3)
+      vitepress: 1.6.4(@algolia/client-search@5.55.1)(@types/node@26.0.1)(axios@1.18.1)(postcss@8.5.16)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3)
       vue: 3.5.39
 
-  vitepress@1.6.4(@algolia/client-search@5.55.1)(@types/node@26.0.1)(axios@1.18.1)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3):
+  vitepress@1.6.4(@algolia/client-search@5.55.1)(@types/node@26.0.1)(axios@1.18.1)(postcss@8.5.16)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3):
     dependencies:
       '@docsearch/css': 3.8.2
       '@docsearch/js': 3.8.2(@algolia/client-search@5.55.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3)
@@ -11977,7 +11983,7 @@ snapshots:
       vite: 5.4.21(@types/node@26.0.1)
       vue: 3.5.39
     optionalDependencies:
-      postcss: 8.5.15
+      postcss: 8.5.16
     transitivePeerDependencies:
       - '@algolia/client-search'
       - '@types/node'
