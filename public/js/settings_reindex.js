@@ -28,6 +28,7 @@
 	var alertEl = findElement('reindex-alert');
 	var statusSpinner = findElement('reindex-status-spinner');
 	var statusMessage = findElement('reindex-status-message');
+	var countsEl = findElement('reindex-counts');
 	var pollTimer = null;
 	var destroyed = false;
 	var renderedCachedComplete = false;
@@ -93,9 +94,34 @@
 		return 'Search index is idle.';
 	}
 
+	function countText(value) {
+		var count = Number(value || 0);
+		if (!Number.isFinite(count)) count = 0;
+		return count.toLocaleString();
+	}
+
+	function updateCountRow(row, counts) {
+		if (!row || !counts) return;
+		var db = row.querySelector('[data-index-count-db]');
+		var indexed = row.querySelector('[data-index-count-indexed]');
+		var notIndexed = row.querySelector('[data-index-count-not-indexed]');
+		if (db) db.textContent = countText(counts.db_records);
+		if (indexed) indexed.textContent = countText(counts.indexed_records);
+		if (notIndexed) notIndexed.textContent = countText(counts.not_indexed_records);
+	}
+
+	function renderCounts(counts) {
+		if (!countsEl || !counts) return;
+		updateCountRow(countsEl.querySelector('[data-index-count-total]'), counts);
+		countsEl.querySelectorAll('[data-index-count-type]').forEach(function(row) {
+			updateCountRow(row, counts.by_type?.[row.dataset.indexCountType]);
+		});
+	}
+
 	function renderReindexStatus(data, options) {
 		if (shouldStop() || !data) return;
 		options = options || {};
+		renderCounts(data.counts);
 
 		var status = data.status || 'queued';
 		if (status === 'idle' && !options.force) {
@@ -160,9 +186,10 @@
 		try {
 			var data = await api('POST', '/reindex');
 			renderReindexStatus({
-				status: data.total_queued > 0 ? 'queued' : 'complete',
+				status: data.status || (data.total_queued > 0 ? 'queued' : 'complete'),
 				total_queued: data.total_queued || 0,
-				remaining: data.total_queued || 0,
+				remaining: data.remaining || data.total_queued || 0,
+				counts: data.counts,
 				message: data.message,
 			}, { force: true });
 		} catch (err) {

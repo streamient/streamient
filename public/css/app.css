@@ -469,7 +469,7 @@ body.kk-template1 #settingsModal .input-group-text,
 body.kk-template1 #projectSettingsModal .form-control,
 body.kk-template1 #projectSettingsModal .form-select,
 body.kk-template1 #projectSettingsModal .input-group-text {
-	background: var(--panel2) !important;
+	background-color: var(--panel2) !important;
 	border-color: var(--line-strong) !important;
 	color: var(--text) !important;
 }

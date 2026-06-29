@@ -1206,14 +1206,50 @@ async function clearStoredReindexStatus(host_id) {
 	}
 }
 
-async function countPendingForHost(host_id, typeModelMap) {
-	const counts = await Promise.all(
-		typeModelMap.map(({ model }) => model.countDocuments({ host_id, is_indexed: { $ne: true } })),
-	);
-	return counts.reduce((sum, count) => sum + count, 0);
+async function countTypeIndexStatus(host_id, model) {
+	const query = { host_id };
+	const [dbRecords, indexedRecords, notIndexedRecords] = await Promise.all([
+		model.countDocuments(query),
+		model.countDocuments({ ...query, is_indexed: true }),
+		model.countDocuments({ ...query, is_indexed: { $ne: true } }),
+	]);
+
+	return {
+		db_records: dbRecords,
+		indexed_records: indexedRecords,
+		not_indexed_records: notIndexedRecords,
+	};
 }
 
-export function buildReindexStatus(reindexState, remaining = 0) {
+function emptySearchIndexCounts(typeModelMap = []) {
+	return {
+		db_records: 0,
+		indexed_records: 0,
+		not_indexed_records: 0,
+		by_type: Object.fromEntries(typeModelMap.map(({ type }) => [type, {
+			db_records: 0,
+			indexed_records: 0,
+			not_indexed_records: 0,
+		}])),
+	};
+}
+
+export async function getSearchIndexCounts(host_id, modelsOrMap) {
+	const typeModelMap = Array.isArray(modelsOrMap) ? modelsOrMap : getIndexedTypeModelMap(modelsOrMap || {});
+	const counts = emptySearchIndexCounts(typeModelMap);
+
+	await Promise.all(typeModelMap.map(async ({ type, model }) => {
+		const typeCounts = await countTypeIndexStatus(host_id, model);
+		counts.by_type[type] = typeCounts;
+		counts.db_records += typeCounts.db_records;
+		counts.indexed_records += typeCounts.indexed_records;
+		counts.not_indexed_records += typeCounts.not_indexed_records;
+	}));
+
+	return counts;
+}
+
+export function buildReindexStatus(reindexState, remaining = 0, counts = emptySearchIndexCounts()) {
 	if (!reindexState?.total_queued) {
 		return {
 			status: 'idle',
@@ -1221,6 +1257,7 @@ export function buildReindexStatus(reindexState, remaining = 0) {
 			indexed: 0,
 			remaining: 0,
 			message: 'Search index is idle.',
+			counts,
 		};
 	}
 
@@ -1243,15 +1280,17 @@ export function buildReindexStatus(reindexState, remaining = 0) {
 		total_queued: totalQueued,
 		started_at: reindexState.started_at,
 		message,
+		counts,
 	};
 }
 
 export async function getReindexStatus(host_id, models) {
+	const typeModelMap = getIndexedTypeModelMap(models);
+	const counts = await getSearchIndexCounts(host_id, typeModelMap);
 	const reindexState = await getStoredReindexStatus(host_id);
-	if (!reindexState?.total_queued) return buildReindexStatus(null, 0);
+	if (!reindexState?.total_queued) return buildReindexStatus(null, 0, counts);
 
-	const remaining = await countPendingForHost(host_id, getIndexedTypeModelMap(models));
-	return buildReindexStatus(reindexState, remaining);
+	return buildReindexStatus(reindexState, counts.not_indexed_records, counts);
 }
 
 export async function runKumbukumIndexer(models) {
@@ -1351,8 +1390,8 @@ export async function runKumbukumIndexer(models) {
 		const reindexState = await getStoredReindexStatus(host_id);
 		if (!reindexState?.total_queued) continue;
 
-		const remaining = await countPendingForHost(host_id, typeModelMap);
-		const statusData = buildReindexStatus(reindexState, remaining);
+		const counts = await getSearchIndexCounts(host_id, typeModelMap);
+		const statusData = buildReindexStatus(reindexState, counts.not_indexed_records, counts);
 
 		emitToTenant(host_id, 'reindex:status', {
 			...statusData,

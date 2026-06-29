@@ -1147,16 +1147,20 @@ router.post('/reindex', requireRestrictedSettingsAccess, async (req, res) => {
 		const message = totalQueued > 0
 			? `Reindexing is queued for ${totalQueued} item${totalQueued === 1 ? '' : 's'}.`
 			: 'Search index is already up to date.';
-
-		emitToTenant(req.host_id, 'reindex:status', {
-			status: totalQueued > 0 ? 'queued' : 'complete',
+		const status = await getReindexStatus(req.host_id, { Note, Memory, Url, Email });
+		const payload = {
+			...status,
+			status: totalQueued > 0 ? status.status : 'complete',
 			total_queued: totalQueued,
-			remaining: totalQueued,
+			indexed: totalQueued > 0 ? status.indexed : 0,
+			remaining: totalQueued > 0 ? status.remaining : 0,
 			results,
 			message,
-		});
+		};
 
-		res.json({ message, total_queued: totalQueued, results });
+		emitToTenant(req.host_id, 'reindex:status', payload);
+
+		res.json(payload);
 	} catch (err) {
 		log.error({ err, host_id: req.host_id }, 'Reindex error');
 		res.status(500).json({ error: 'Reindex failed: ' + err.message });

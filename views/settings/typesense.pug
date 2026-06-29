@@ -17,6 +17,49 @@ block settings
 				.alert.alert-info.mb-0#reindex-alert
 					span.spinner-border.spinner-border-sm.me-2.d-none#reindex-status-spinner(role="status" aria-hidden="true")
 					span#reindex-status-message
+			.table-responsive.mt-4
+				table.table.table-sm.align-middle.mb-0#reindex-counts
+					thead
+						tr
+							th(scope="col")
+								span Collection
+							th.text-end(scope="col")
+								span DB records
+							th.text-end(scope="col")
+								span Indexed
+							th.text-end(scope="col")
+								span Not indexed
+					tbody
+						tr.fw-semibold(data-index-count-total)
+							td
+								span Total
+							td.text-end(data-index-count-db) 0
+							td.text-end(data-index-count-indexed) 0
+							td.text-end(data-index-count-not-indexed) 0
+						tr(data-index-count-type="notes")
+							td
+								span Notes
+							td.text-end(data-index-count-db) 0
+							td.text-end(data-index-count-indexed) 0
+							td.text-end(data-index-count-not-indexed) 0
+						tr(data-index-count-type="memory")
+							td
+								span Memory
+							td.text-end(data-index-count-db) 0
+							td.text-end(data-index-count-indexed) 0
+							td.text-end(data-index-count-not-indexed) 0
+						tr(data-index-count-type="urls")
+							td
+								span URLs
+							td.text-end(data-index-count-db) 0
+							td.text-end(data-index-count-indexed) 0
+							td.text-end(data-index-count-not-indexed) 0
+						tr(data-index-count-type="emails")
+							td
+								span Emails
+							td.text-end(data-index-count-db) 0
+							td.text-end(data-index-count-indexed) 0
+							td.text-end(data-index-count-not-indexed) 0
 
 block scripts
 	script(src=`/static/v-${v}/js/settings_reindex.js`)

@@ -2150,8 +2150,31 @@ const swaggerSpec = {
                                 schema: {
                                     type: 'object',
                                     properties: {
+                                        status: { type: 'string', enum: ['idle', 'queued', 'progress', 'complete'] },
                                         message: { type: 'string' },
                                         total_queued: { type: 'integer' },
+                                        indexed: { type: 'integer' },
+                                        remaining: { type: 'integer' },
+                                        started_at: { type: 'string', format: 'date-time' },
+                                        counts: {
+                                            type: 'object',
+                                            properties: {
+                                                db_records: { type: 'integer' },
+                                                indexed_records: { type: 'integer' },
+                                                not_indexed_records: { type: 'integer' },
+                                                by_type: {
+                                                    type: 'object',
+                                                    additionalProperties: {
+                                                        type: 'object',
+                                                        properties: {
+                                                            db_records: { type: 'integer' },
+                                                            indexed_records: { type: 'integer' },
+                                                            not_indexed_records: { type: 'integer' },
+                                                        },
+                                                    },
+                                                },
+                                            },
+                                        },
                                         results: {
                                             type: 'object',
                                             properties: {
@@ -2189,6 +2212,25 @@ const swaggerSpec = {
                                         remaining: { type: 'integer' },
                                         started_at: { type: 'string', format: 'date-time' },
                                         message: { type: 'string' },
+                                        counts: {
+                                            type: 'object',
+                                            properties: {
+                                                db_records: { type: 'integer' },
+                                                indexed_records: { type: 'integer' },
+                                                not_indexed_records: { type: 'integer' },
+                                                by_type: {
+                                                    type: 'object',
+                                                    additionalProperties: {
+                                                        type: 'object',
+                                                        properties: {
+                                                            db_records: { type: 'integer' },
+                                                            indexed_records: { type: 'integer' },
+                                                            not_indexed_records: { type: 'integer' },
+                                                        },
+                                                    },
+                                                },
+                                            },
+                                        },
                                     },
                                 },
                             },
