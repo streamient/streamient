@@ -125,10 +125,14 @@ describe('MCP Tools — Memory', () => {
         assert.equal(result.structuredContent.data.message, 'Memory deleted');
     });
 
-    it('suggest_memory_tags — calls GET /memories/tags/suggest', async () => {
-        const result = await tools.suggest_memory_tags.handler({});
+    it('suggest_memory_tags — calls GET /memories/tags/suggest with bounded params', async () => {
+        const result = await tools.suggest_memory_tags.handler({ query: 'dev', limit: 10 });
         assert.equal(api.lastCall.method, 'GET');
         assert.ok(api.lastCall.path.includes('tags/suggest'));
+        const params = new URLSearchParams(api.lastCall.path.split('?')[1]);
+        assert.equal(params.get('project'), FIXTURES.project._id);
+        assert.equal(params.get('q'), 'dev');
+        assert.equal(params.get('limit'), '10');
         const parsed = JSON.parse(result.content[0].text);
         assert.ok(Array.isArray(parsed));
     });

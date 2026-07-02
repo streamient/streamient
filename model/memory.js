@@ -42,6 +42,7 @@ const memorySchema = new mongoose.Schema(
 );
 
 memorySchema.index({ host_id: 1, in_trash: 1, project: 1 });
+memorySchema.index({ host_id: 1, in_trash: 1, project: 1, tags: 1 });
 memorySchema.index({ is_indexed: 1, in_trash: 1 });
 memorySchema.index({ 'git_source.repo_id': 1, 'git_source.file_path': 1 }, { sparse: true });
 memorySchema.index({ 'git_commit.repo_id': 1, 'git_commit.sha': 1 }, { sparse: true });

@@ -2194,6 +2194,85 @@
         }
       }
     },
+    "/projects/{id}/email-filter/apply": {
+      "post": {
+        "tags": [
+          "Projects"
+        ],
+        "summary": "Apply project email filter",
+        "description": "Applies saved project email filter rules to project inbox and labeled emails. Candidate selection uses Typesense; MongoDB updates are limited to matched email IDs.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "project": {
+                          "type": "string"
+                        },
+                        "filter_configured": {
+                          "type": "boolean"
+                        },
+                        "processed": {
+                          "type": "integer"
+                        },
+                        "matched": {
+                          "type": "integer"
+                        },
+                        "moved": {
+                          "type": "integer"
+                        },
+                        "email_ids": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Owner/admin or email feature access required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/account/tenants": {
       "get": {
         "tags": [
@@ -3293,6 +3372,50 @@
           "Memories"
         ],
         "summary": "Suggest memory tags",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Case-insensitive tag prefix filter"
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Alias for q"
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Project ID filter"
+          },
+          {
+            "name": "project_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Alias for project"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "maximum": 100
+            },
+            "description": "Maximum tags returned"
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -3321,7 +3444,7 @@
           "Emails"
         ],
         "summary": "List emails",
-        "description": "Typesense-backed mailbox results grouped by thread_key. Mongo is used for detail, thread, and write paths only.",
+        "description": "Typesense-backed mailbox results grouped by thread_key and ordered by email created date descending. Mongo is used for detail, thread, and write paths only.",
         "parameters": [
           {
             "$ref": "#/components/parameters/page"
@@ -3453,7 +3576,7 @@
           "Emails"
         ],
         "summary": "List email IDs for current view",
-        "description": "Typesense-backed ID list grouped by thread_key using the same mailbox, label, triage, and project filters as /emails.",
+        "description": "Typesense-backed ID list grouped by thread_key using the same mailbox, label, triage, project filters, and created-date ordering as /emails.",
         "parameters": [
           {
             "$ref": "#/components/parameters/project"
@@ -3515,7 +3638,7 @@
           "Emails"
         ],
         "summary": "List email triage statuses",
-        "description": "Returns compact triage status records. Use include=email,draft to retrieve the full source email and generated triage draft in the same response.",
+        "description": "Returns compact triage status records ordered by email created date descending. Use include=email,draft to retrieve the full source email and generated triage draft in the same response.",
         "parameters": [
           {
             "$ref": "#/components/parameters/page"

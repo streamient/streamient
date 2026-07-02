@@ -69,7 +69,7 @@ Uses semantic/BM25 search. Returns results sorted by text match then recency.
 ## Tag Suggestions
 
 ```
-GET /api/v1/memories/tags/suggest?q=prefix
+GET /api/v1/memories/tags/suggest?q=prefix&project=project-id&limit=50
 ```
 
-Returns tag autocomplete suggestions based on existing memory tags.
+Returns bounded tag autocomplete suggestions based on existing memory tags. Default limit is 50, max is 100.

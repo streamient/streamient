@@ -451,7 +451,11 @@ router.post('/memories/search', async (req, res) => {
 });
 
 router.get('/memories/tags/suggest', async (req, res) => {
-	const tags = await memoryService.suggestMemoryTags(req.host_id);
+	const tags = await memoryService.suggestMemoryTags(req.host_id, {
+		query: req.query.q || req.query.query,
+		projectId: req.query.project || req.query.project_id,
+		limit: req.query.limit,
+	});
 	res.json({ tags });
 });
 

@@ -136,12 +136,24 @@ export function memoryTools(api, defaultProjectId) {
     },
 
     suggest_memory_tags: {
-      description: 'Get suggested tags based on existing memory tags',
+      description: 'Get a bounded list of existing memory tags for reuse. Use query for prefix matching and limit responses to avoid large payloads.',
       annotations: READ_ONLY,
       outputSchema: MCP_JSON_OUTPUT_SCHEMA,
-      inputSchema: {},
-      handler: async () => {
-        const { tags } = await api.get('/memories/tags/suggest');
+      inputSchema: {
+        query: z.string().optional().describe('Tag prefix to match'),
+        project_id: z.string().optional().describe('Project ID (defaults to the default project)'),
+        limit: z.number().optional().describe('Maximum tags to return (default 50, max 100)'),
+      },
+      handler: async (args = {}) => {
+        const params = new URLSearchParams();
+        const projectId = args.project_id || defaultProjectId;
+
+        if (projectId) params.set('project', projectId);
+        if (args.query) params.set('q', args.query);
+        if (args.limit) params.set('limit', String(args.limit));
+
+        const qs = params.toString();
+        const { tags } = await api.get(`/memories/tags/suggest${qs ? `?${qs}` : ''}`);
         return mcpJson(tags, { ephemeral: true });
       },
     },

@@ -1220,6 +1220,13 @@ const swaggerSpec = {
             get: {
                 tags: ['Memories'],
                 summary: 'Suggest memory tags',
+                parameters: [
+                    { name: 'q', in: 'query', schema: { type: 'string' }, description: 'Case-insensitive tag prefix filter' },
+                    { name: 'query', in: 'query', schema: { type: 'string' }, description: 'Alias for q' },
+                    { name: 'project', in: 'query', schema: { type: 'string' }, description: 'Project ID filter' },
+                    { name: 'project_id', in: 'query', schema: { type: 'string' }, description: 'Alias for project' },
+                    { name: 'limit', in: 'query', schema: { type: 'integer', default: 50, maximum: 100 }, description: 'Maximum tags returned' },
+                ],
                 responses: {
                     200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { tags: { type: 'array', items: { type: 'string' } } } } } } },
                 },

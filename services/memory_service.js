@@ -7,6 +7,19 @@ import * as audit from './audit_service.js';
 import { createLogger } from '../modules/logger.js';
 
 const log = createLogger('memory');
+const DEFAULT_TAG_SUGGESTION_LIMIT = 50;
+const MAX_TAG_SUGGESTION_LIMIT = 100;
+const GENERATED_TAG_REGEX = /^(?:[a-z0-9-]+-id-[a-f0-9]{24}|[a-f0-9]{24})$/i;
+
+function escapeRegExp(value) {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function normalizeTagLimit(value) {
+	const parsed = Number.parseInt(value, 10);
+	if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_TAG_SUGGESTION_LIMIT;
+	return Math.min(parsed, MAX_TAG_SUGGESTION_LIMIT);
+}
 
 function maybeObjectId(value) {
 	if (!value || typeof value !== 'string' || !mongoose.Types.ObjectId.isValid(value)) return value;
@@ -101,9 +114,35 @@ export async function recallMemory(host_id, query, options = {}) {
 	});
 }
 
-export async function suggestMemoryTags(host_id) {
-	const tags = await Memory.distinct('tags', { host_id });
-	return tags.filter(Boolean).sort();
+export async function suggestMemoryTags(host_id, options = {}) {
+	const limit = normalizeTagLimit(options.limit);
+	const query = String(options.query || options.q || '').trim();
+	const projectId = options.projectId || options.project_id || options.project;
+	const tagPrefix = query ? `^${escapeRegExp(query)}` : null;
+	const match = { host_id, in_trash: { $ne: true } };
+
+	if (projectId) match.project = maybeObjectId(projectId);
+	if (tagPrefix) match.tags = { $regex: tagPrefix, $options: 'i' };
+
+	const tagMatches = [
+		{ tag: { $ne: '' } },
+		{ tag: { $not: GENERATED_TAG_REGEX } },
+	];
+
+	if (tagPrefix) tagMatches.push({ tag: { $regex: tagPrefix, $options: 'i' } });
+
+	const rows = await Memory.aggregate([
+		{ $match: match },
+		{ $unwind: '$tags' },
+		{ $project: { tag: { $trim: { input: { $ifNull: ['$tags', ''] } } }, updatedAt: 1 } },
+		{ $match: { $and: tagMatches } },
+		{ $group: { _id: '$tag', count: { $sum: 1 }, last_used_at: { $max: '$updatedAt' } } },
+		{ $sort: { count: -1, last_used_at: -1, _id: 1 } },
+		{ $limit: limit },
+		{ $project: { _id: 0, tag: '$_id' } },
+	]);
+
+	return rows.map(row => row.tag).filter(Boolean);
 }
 
 export async function countMemories(host_id) {
