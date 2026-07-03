@@ -10,7 +10,7 @@ const auditLogSchema = new mongoose.Schema(
         resource: {
             type: String,
             required: true,
-	            enum: ['note', 'memory', 'url', 'email', 'email_draft', 'email_internal_note', 'email_identity', 'outgoing_email', 'project', 'link', 'user', 'passkey', 'conversation', 'trash', 'git_repo', 'team_member', 'team_invite', 'oauth_client', 'oauth_consent'],
+	            enum: ['note', 'memory', 'url', 'email', 'project', 'link', 'user', 'passkey', 'conversation', 'trash', 'git_repo', 'team_member', 'team_invite', 'oauth_client', 'oauth_consent'],
         },
         resource_id: { type: String },
         user_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },

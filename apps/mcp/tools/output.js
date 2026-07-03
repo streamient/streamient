@@ -28,13 +28,7 @@ const INTERNAL_OUTPUT_FIELDS = new Set([
 	'created_at',
 	'updated_at',
 	'trashed_at',
-	'triaged_at',
 	'crawled_at',
-	'triage_run_id',
-	'triage_draft_id',
-	'triage_error',
-	'triage_confidence',
-	'triage_related_context',
 ]);
 
 function isPlainObject(value) {

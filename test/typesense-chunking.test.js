@@ -73,7 +73,6 @@ describe('Typesense chunking', () => {
 		assert.equal(docs[0].text_content, 'body text');
 		assert.equal(docs[0].html_content, undefined);
 		assert.equal(docs[0].attachment_text_content, '');
-		assert.equal(docs[0].triaged, false);
 		assert.equal(docs[0].in_trash, false);
 		assert.equal(docs[0].thread_key, 'root@example.com');
 		assert.deepEqual(docs[0].thread_identifiers, ['child@example.com', 'root@example.com', 'parent@example.com']);

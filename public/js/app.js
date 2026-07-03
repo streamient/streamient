@@ -299,7 +299,6 @@ var ROUTES = {
 	'/memories': { section: 'memories', title: 'Memories', partial: '/ajax/section/memories', batch: true },
 	'/urls': { section: 'urls', title: 'URLs', partial: '/ajax/section/urls', batch: true },
 	'/emails': { section: 'emails', title: 'Emails', partial: '/ajax/section/emails', batch: true },
-	'/ecc': { section: 'ecc', title: 'Email Command Center', partial: '/ajax/section/ecc' },
 	'/trash': { section: 'trash', title: 'Trash', partial: '/ajax/section/trash' },
 	'/settings': { title: 'Profile', partial: '/ajax/section/settings/profile' },
 	'/settings/profile': { title: 'Profile', partial: '/ajax/section/settings/profile' },
@@ -307,7 +306,6 @@ var ROUTES = {
 	'/settings/team': { title: 'My Team', partial: '/ajax/section/settings/team' },
 	'/settings/tokens': { title: 'API Tokens', partial: '/ajax/section/settings/tokens' },
 	'/settings/byo-ai': { title: 'AI', partial: '/ajax/section/settings/byo-ai' },
-	'/settings/email': { title: 'Email settings', partial: '/ajax/section/settings/email' },
 	'/settings/white-label': { title: 'White-label', partial: '/ajax/section/settings/white-label' },
 	'/settings/typesense': { title: 'Search', partial: '/ajax/section/settings/typesense' },
 	'/settings/usage': { title: 'Usage', partial: '/ajax/section/settings/usage' },
@@ -322,7 +320,6 @@ function shouldHideChatSidebar(path) {
 
 function syncLayoutForPath(path) {
 	document.body.classList.toggle('kk-no-chat-sidebar', shouldHideChatSidebar(path));
-	document.body.classList.toggle('kk-ecc-page', path === '/ecc');
 }
 
 // Dashboard section — managed here since it depends on app.js functions
@@ -648,201 +645,8 @@ function bindProjectSettingsModal(projectId, activeTab) {
 		}
 		showSuccess('Forwarding email copied');
 	});
-
-	bindProjectEmailIdentityForm(bodyEl, projectId);
 }
 
-function bindProjectEmailIdentityForm(bodyEl, projectId) {
-	var addBtn = bodyEl.querySelector('#project-email-identity-add');
-	var formWrap = bodyEl.querySelector('#project-email-identity-form-wrap');
-	var form = bodyEl.querySelector('#project-email-identity-form');
-	var cancelBtn = bodyEl.querySelector('#project-email-identity-cancel');
-	if (!formWrap || !form) return;
-	var formHomeParent = formWrap.parentNode;
-	var formHomeNextSibling = formWrap.nextSibling;
-
-	function field(id) {
-		return bodyEl.querySelector(id);
-	}
-
-	function dataBool(value) {
-		return value === true || value === 'true' || value === '1' || value === 'on';
-	}
-
-	var SMTP_FIELD_IDS = [
-		'#project-email-identity-smtp-host',
-		'#project-email-identity-smtp-port',
-		'#project-email-identity-smtp-user',
-		'#project-email-identity-smtp-password',
-		'#project-email-identity-smtp-tls',
-		'#project-email-identity-smtp-ssl',
-	];
-
-	function toggleSystemSmtp() {
-		var useSystem = field('#project-email-identity-use-system-smtp').checked;
-		SMTP_FIELD_IDS.forEach(function (id) {
-			var el = field(id);
-			if (!el) return;
-			el.disabled = useSystem;
-			var group = el.closest('.col-md-8, .col-md-6, .col-md-4');
-			if (group) group.classList.toggle('opacity-50', useSystem);
-		});
-	}
-
-	function placeIdentityForm(row) {
-		var divider = field('#project-email-identity-form-wrap .project-email-identity-form-divider');
-		if (row) {
-			row.insertAdjacentElement('afterend', formWrap);
-			formWrap.classList.add('list-group-item');
-			divider?.classList.add('d-none');
-			return;
-		}
-		formWrap.classList.remove('list-group-item');
-		divider?.classList.remove('d-none');
-		if (formHomeParent && formWrap.parentNode !== formHomeParent) {
-			formHomeParent.insertBefore(formWrap, formHomeNextSibling);
-		}
-	}
-
-	function showIdentityForm(identity, row) {
-		placeIdentityForm(row);
-		var isEdit = Boolean(identity?.id);
-		field('#project-email-identity-id').value = identity?.id || '';
-		field('#project-email-identity-name').value = identity?.name || '';
-		field('#project-email-identity-email').value = identity?.email || '';
-		field('#project-email-identity-signature').value = identity?.signature || '';
-		field('#project-email-identity-smtp-host').value = identity?.smtpHost || '';
-		field('#project-email-identity-smtp-port').value = identity?.smtpPort || '587';
-		field('#project-email-identity-smtp-user').value = identity?.smtpAuthUser || '';
-		field('#project-email-identity-smtp-password').value = '';
-		field('#project-email-identity-smtp-tls').checked = dataBool(identity?.smtpTls);
-		field('#project-email-identity-smtp-ssl').checked = dataBool(identity?.smtpSsl);
-		field('#project-email-identity-use-system-smtp').checked = dataBool(identity?.useSystemSmtp);
-		toggleSystemSmtp();
-		field('#project-email-identity-clear-password').checked = false;
-		field('#project-email-identity-helpmonks-enabled').checked = dataBool(identity?.helpmonksEnabled);
-		field('#project-email-identity-helpmonks-base-url').value = identity?.helpmonksBaseUrl || '';
-		field('#project-email-identity-helpmonks-api-key').value = '';
-		field('#project-email-identity-clear-helpmonks-api-key').checked = false;
-		field('#project-email-identity-fastmail-enabled').checked = dataBool(identity?.fastmailEnabled);
-		field('#project-email-identity-fastmail-account-id').value = identity?.fastmailAccountId || '';
-		field('#project-email-identity-fastmail-api-token').value = '';
-		field('#project-email-identity-clear-fastmail-api-token').checked = false;
-		field('#project-email-identity-form-title').textContent = isEdit ? 'Edit outbound email address' : 'Add outbound email address';
-		var passwordConfigured = dataBool(identity?.smtpPasswordConfigured);
-		var helpmonksApiKeyConfigured = dataBool(identity?.helpmonksApiKeyConfigured);
-		var fastmailApiTokenConfigured = dataBool(identity?.fastmailApiTokenConfigured);
-		field('#project-email-identity-password-help').textContent = isEdit && passwordConfigured ? 'Leave empty to keep the stored password.' : '';
-		field('#project-email-identity-helpmonks-api-key-help').textContent = isEdit && helpmonksApiKeyConfigured ? 'Leave empty to keep the stored credential.' : '';
-		field('#project-email-identity-fastmail-api-token-help').textContent = isEdit && fastmailApiTokenConfigured ? 'Leave empty to keep the stored API token.' : '';
-		field('#project-email-identity-clear-password-wrap').classList.toggle('d-none', !isEdit || !passwordConfigured);
-		field('#project-email-identity-clear-helpmonks-api-key-wrap').classList.toggle('d-none', !isEdit || !helpmonksApiKeyConfigured);
-		field('#project-email-identity-clear-fastmail-api-token-wrap').classList.toggle('d-none', !isEdit || !fastmailApiTokenConfigured);
-		formWrap.classList.remove('d-none');
-		field('#project-email-identity-name')?.focus();
-	}
-
-	function toggleIdentityForm(identity, row) {
-		if (!formWrap.classList.contains('d-none') && field('#project-email-identity-id').value === identity?.id) {
-			hideIdentityForm();
-			return;
-		}
-		showIdentityForm(identity, row);
-	}
-
-	function hideIdentityForm() {
-		form.reset();
-		field('#project-email-identity-id').value = '';
-		formWrap.classList.add('d-none');
-		placeIdentityForm(null);
-	}
-
-	addBtn?.addEventListener('click', function () {
-		showIdentityForm(null);
-	});
-
-	cancelBtn?.addEventListener('click', hideIdentityForm);
-
-	field('#project-email-identity-use-system-smtp')?.addEventListener('change', toggleSystemSmtp);
-
-	bodyEl.querySelectorAll('.project-email-identity-row').forEach(function (row) {
-		row.addEventListener('click', function () {
-			toggleIdentityForm(row.dataset, row);
-		});
-		row.addEventListener('keydown', function (e) {
-			if (e.key !== 'Enter' && e.key !== ' ') return;
-			e.preventDefault();
-			toggleIdentityForm(row.dataset, row);
-		});
-	});
-
-	bodyEl.querySelectorAll('.project-email-identity-edit').forEach(function (button) {
-		button.addEventListener('click', function (e) {
-			e.stopPropagation();
-			var row = button.closest('.project-email-identity-row');
-			toggleIdentityForm(row?.dataset || button.dataset, row);
-		});
-	});
-
-	bodyEl.querySelectorAll('.project-email-identity-delete').forEach(function (button) {
-		button.addEventListener('click', async function (e) {
-			e.stopPropagation();
-			var confirmed = await confirmAction('Delete email address', 'This removes the outbound SMTP configuration.');
-			if (!confirmed) return;
-			try {
-				await api('DELETE', `/email-identities/${button.dataset.id}`);
-				await loadProjectSettingsBody(projectId, 'email');
-				showSuccess('Email address deleted');
-			} catch (err) {
-				showError(err.message);
-			}
-		});
-	});
-
-	form.addEventListener('submit', async function (e) {
-		e.preventDefault();
-		var identityId = field('#project-email-identity-id').value;
-		var payload = {
-			name: field('#project-email-identity-name').value.trim(),
-			email: field('#project-email-identity-email').value.trim(),
-			signature: field('#project-email-identity-signature').value.trim(),
-			use_system_smtp: field('#project-email-identity-use-system-smtp').checked,
-			smtp: {
-				host: field('#project-email-identity-smtp-host').value.trim(),
-				port: parseInt(field('#project-email-identity-smtp-port').value, 10) || 587,
-				auth_user: field('#project-email-identity-smtp-user').value.trim(),
-				auth_password: field('#project-email-identity-smtp-password').value.trim(),
-				tls: field('#project-email-identity-smtp-tls').checked,
-				ssl: field('#project-email-identity-smtp-ssl').checked,
-			},
-			helpmonks: {
-				enabled: field('#project-email-identity-helpmonks-enabled').checked,
-				base_url: field('#project-email-identity-helpmonks-base-url').value.trim(),
-				api_key: field('#project-email-identity-helpmonks-api-key').value.trim(),
-			},
-			fastmail: {
-				enabled: field('#project-email-identity-fastmail-enabled').checked,
-				account_id: field('#project-email-identity-fastmail-account-id').value.trim(),
-				api_token: field('#project-email-identity-fastmail-api-token').value.trim(),
-			},
-			clear_auth_password: field('#project-email-identity-clear-password').checked,
-			clear_helpmonks_api_key: field('#project-email-identity-clear-helpmonks-api-key').checked,
-			clear_fastmail_api_token: field('#project-email-identity-clear-fastmail-api-token').checked,
-		};
-		try {
-			if (identityId) {
-				await api('PUT', `/email-identities/${identityId}`, payload);
-				showSuccess('Email address updated');
-			} else {
-				await api('POST', `/projects/${projectId}/email-identities`, payload);
-				showSuccess('Email address added');
-			}
-			await loadProjectSettingsBody(projectId, 'email');
-		} catch (err) {
-			showError(err.message);
-		}
-	});
-}
 
 async function openSettingsModal(path) {
 	var route = ROUTES[path] || ROUTES['/settings/profile'];
@@ -1072,9 +876,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 			'memory:created', 'memory:updated', 'memory:deleted',
 			'url:created', 'url:updated', 'url:deleted',
 			'email:created', 'email:updated', 'email:deleted',
-			'email-draft:created', 'email-draft:updated', 'email-draft:deleted',
-			'email-internal-note:created', 'email-internal-note:updated', 'email-internal-note:deleted',
-			'outgoing-email:queued', 'outgoing-email:sending', 'outgoing-email:canceled', 'outgoing-email:sent', 'outgoing-email:error',
 			'counts:refresh',
 		];
 		for (const evt of crudEvents) {
@@ -1084,9 +885,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 				loadTrashCount();
 			});
 		}
-		socket.on('email-triage:run-updated', (data) => {
-			window.dispatchEvent(new CustomEvent('email-triage:run-updated', { detail: data || {} }));
-		});
 		socket.on('email-counts:updated', (data) => {
 			window.dispatchEvent(new CustomEvent('email-counts:updated', { detail: data || {} }));
 		});

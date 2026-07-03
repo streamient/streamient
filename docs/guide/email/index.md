@@ -1,30 +1,20 @@
-# Email
+# Email Storage
 
-Kumbukum's email feature turns your inbox into searchable, AI‑triaged context that lives alongside your notes, memories, and URLs. Forward email into a project, and Kumbukum parses it, stores it, threads it, and (optionally) classifies it so you can focus on what actually needs a reply.
+Kumbukum stores emails as searchable project context alongside notes, memories, and URLs. It does not triage, draft, send replies, or manage outbound identities. Those workflows live in Mailtwine.
 
-## What's in this section
+## What Kumbukum Keeps
 
-- [Settings](/guide/email/settings) — turn on auto‑triage, customize AI instructions, add your own API keys, and configure outbound SMTP identities per project.
-- [Parsing](/guide/email/parsing) — what Kumbukum does to an inbound email: extract headers and body, sanitize HTML, pull text out of attachments, dedupe, and thread.
-- [Forwarding](/guide/email/forwarding) — the how‑to. Find your per‑project forwarding address and point your mail provider at it.
-- [Viewing](/guide/email/viewing) — the Email Command Center (ECC), mailboxes, labels, thread view, drafts, and internal notes.
-- [Triage](/guide/email/triage) — how the AI classifies emails, what context it uses, and what it does automatically.
+- Project-scoped email ingest by forwarding address, browser extension, API, or MCP.
+- Sanitized email body, attachments text, headers, mailbox, labels, and threading metadata.
+- Typesense search and AI Chat search context.
+- `GET /api/v1/emails`, `/emails/search`, `/emails/:id/thread`, and storage CRUD.
 
-::: tip Stay in your inbox
-If you live in Gmail, Outlook, or Fastmail, the [Browser Extension](/guide/browser-extension/email-capture) is often the fastest way to use Kumbukum's email features — it auto‑detects the email you're reading and brings Summarize, Suggest reply, Internal notes, and one‑click ingest into a side panel without you ever leaving your mail client.
-:::
+## Mailtwine
 
-## Project emails vs the Email Command Center
+Use Mailtwine for mail triage, summaries, reply suggestions, drafts, outbound send, labels, internal notes, sync providers, and mail-specific MCP tools. Mailtwine can store selected mail back in Kumbukum when a Kumbukum token is configured.
 
-Every email in Kumbukum belongs to a [project](/guide/projects) — that's where it's stored, indexed, and searchable. The **Email Command Center** at `/ecc` is a global, cross‑project view of those same emails: one inbox, one triage workflow, one place to work through everything no matter which project it landed in.
+## Related
 
-In short:
-
-- A **project email** is the underlying record (project‑scoped, searchable from AI Chat and MCP).
-- The **ECC** is a viewing surface on top of those records. Filter by "All projects" to see everything, or pick a project from the dropdown to narrow down.
-
-There aren't two kinds of email — just two ways of looking at the same data.
-
-## How it fits with the rest of Kumbukum
-
-Ingested emails are indexed in Typesense and become first‑class context: they show up in [AI Chat](/guide/ai-chat) answers, in the [Knowledge Graph](/guide/graph) alongside notes and memories, and through the [Emails API](/api/emails) and [MCP tools](/mcp/tools) for external clients.
+- [Parsing](/guide/email/parsing)
+- [Forwarding](/guide/email/forwarding)
+- [Emails API](/api/emails)

@@ -27,7 +27,7 @@ describe('Quick search service', () => {
 				},
 			],
 			text_match_info: { score: '42' },
-		}, { emailOpenMode: 'ecc' });
+		}, { emailOpenMode: 'modal' });
 
 		assert.equal(result.id, 'email-1');
 		assert.equal(result.type, 'emails');
@@ -38,10 +38,10 @@ describe('Quick search service', () => {
 			{ text: ' from Acme', highlighted: false },
 		]);
 		assert.deepEqual(result.open_target, {
-			kind: 'ecc',
+			kind: 'modal',
+			type: 'emails',
 			id: 'email-1',
 			project_id: 'project-1',
-			mailbox: 'archived',
 		});
 	});
 
@@ -97,4 +97,3 @@ describe('Quick search service', () => {
 		assert.equal(result.results[0].id, 'note-1');
 	});
 });
-

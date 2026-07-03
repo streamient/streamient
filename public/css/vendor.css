@@ -12742,7 +12742,7 @@ fieldset:disabled .btn {
   margin-top: 14px;
 }
 
-/* node_modules/.pnpm/@yaireo+tagify@4.37.1_prop-types@15.8.1_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/@yaireo/tagify/dist/tagify.css */
+/* node_modules/.pnpm/@yaireo+tagify@4.38.0_prop-types@15.8.1_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/@yaireo/tagify/dist/tagify.css */
 :root {
   --tagify-dd-color-primary:rgb(53,149,246);
   --tagify-dd-text-color:black;
@@ -12929,6 +12929,7 @@ fieldset:disabled .btn {
   display: block;
   outline: 0;
   -webkit-user-select: text;
+  -moz-user-select: text;
   user-select: text;
   cursor: text;
   margin: -2px;
@@ -13082,6 +13083,7 @@ fieldset:disabled .btn {
   margin: 5px;
   padding: var(--tag-pad);
   line-height: normal;
+  min-width: -moz-fit-content;
   min-width: fit-content;
   min-height: 1.5lh;
   position: relative;

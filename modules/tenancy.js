@@ -36,13 +36,6 @@ const tenantSchema = new mongoose.Schema(
 			},
 			ai_instructions: {
 				global: { type: String, default: '' },
-				email: { type: String, default: '' },
-				email_triage: { type: String, default: '' },
-			},
-			email: {
-				auto_triage_incoming: { type: Boolean, default: false },
-				send_draft_emails_automatically: { type: Boolean, default: false },
-				spam_guard: { type: String, default: '' },
 			},
 			white_label: {
 				logo: { type: whiteLabelAssetSchema, default: null },

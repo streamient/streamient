@@ -60,11 +60,8 @@ export default defineConfig({
                     text: 'Email',
                     items: [
                         { text: 'Overview', link: '/guide/email/' },
-                        { text: 'Settings', link: '/guide/email/settings' },
                         { text: 'Parsing', link: '/guide/email/parsing' },
                         { text: 'Forwarding', link: '/guide/email/forwarding' },
-                        { text: 'Viewing', link: '/guide/email/viewing' },
-                        { text: 'Triage', link: '/guide/email/triage' },
                     ],
                 },
                 {
@@ -74,7 +71,6 @@ export default defineConfig({
                         { text: 'Setup', link: '/guide/browser-extension/setup' },
                         { text: 'URL Capture', link: '/guide/browser-extension/url-capture' },
                         { text: 'Email Capture', link: '/guide/browser-extension/email-capture' },
-                        { text: 'Email Accounts', link: '/guide/browser-extension/email-accounts' },
                         { text: 'Multiple Accounts', link: '/guide/browser-extension/multiple-accounts' },
                     ],
                 },

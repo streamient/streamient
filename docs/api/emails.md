@@ -1,190 +1,51 @@
 # Emails API
 
-Email endpoints require the email feature and normal API authentication.
+Kumbukum email APIs store and search project email records. Triage, drafts, replies, internal notes, outbound identities, and sync providers are Mailtwine features.
+
+## Endpoints
+
+```
+GET    /api/v1/emails
+GET    /api/v1/emails/ids
+POST   /api/v1/emails
+GET    /api/v1/emails/:id
+GET    /api/v1/emails/:id/thread
+PUT    /api/v1/emails/:id
+DELETE /api/v1/emails/:id
+POST   /api/v1/emails/search
+POST   /import/email
+```
 
 ## Ingest
 
-```http
-POST /api/v1/emails
-```
-
-Send either `raw_email` or a mailparser-like `parsed_email`. HTML bodies are accepted from `html`, `html_content`, or `body_html`, sanitized before storage, and returned as `html_content`.
-
-Remote image URLs in stored HTML are rewritten to `data-kk-remote-src` and flagged with `html_content_has_remote_images`. Existing emails cannot be backfilled unless they are re-ingested because raw HTML was not stored before this feature.
-
-Incoming inbox mail is checked against the account spam guard before auto-triage. Matches are stored in the Spam mailbox with complete spam triage metadata and do not enter the triage queue.
+`POST /api/v1/emails` accepts:
 
 ```json
 {
-	"project": "optional-project-id",
+	"project": "PROJECT_ID",
+	"raw_email": "From: sender@example.com\nSubject: Hello\n\nBody"
+}
+```
+
+or:
+
+```json
+{
+	"project": "PROJECT_ID",
 	"parsed_email": {
+		"message_id": "<message@example.com>",
 		"from": "sender@example.com",
-		"to": "team@example.com",
-		"subject": "Project update",
-		"text": "Plain text fallback",
-		"html": "<table><tr><td>HTML body</td></tr></table>"
+		"to": "project@example.com",
+		"subject": "Hello",
+		"text": "Body"
 	}
 }
 ```
 
-## Read
+## Search
 
-```http
-GET /api/v1/emails
-GET /api/v1/emails/:id
-GET /api/v1/emails/:id/thread
-GET /api/v1/emails/:id/internal-notes
-POST /api/v1/emails/:id/internal-notes
-PUT /api/v1/emails/:id/internal-notes/:noteId
-DELETE /api/v1/emails/:id/internal-notes/:noteId
-```
+Use `POST /api/v1/emails/search` for Typesense search over subject, participants, body text, and attachment text.
 
-Email read responses include sanitized `html_content`, `html_content_has_remote_images`, `excerpt`, and `display_date`. The excerpt is derived from visible HTML when available and strips parser control lines such as reply-above markers. ECC mailbox lists, selection IDs, and mailbox/label counts are Typesense-backed and grouped by `thread_key`, using `message_id` / `references` / `in_reply_to` data indexed on each email. MongoDB is still used for email detail, thread, and write paths. Updating an email `mailbox` applies to related non-sent, non-trash inbound thread emails so archived threads do not reappear as older replies after refresh. Moving email to `archived`, `spam`, or trash clears all labels. Realtime and update responses can include `thread_identifiers` and `thread_source_ids` for client-side thread reconciliation.
+## Forwarding
 
-Public forwarding through `POST /import/email` accepts project mail at `PROJECT_ID@EMAIL_FORWARD_DOMAIN`. The route resolves project delivery from SMTP envelope/provider recipient fields such as `recipient`, `recipients`, `session.recipient`, `envelope.to`, `Delivered-To`, `X-Original-To`, `Envelope-To`, `OriginalRecipient`, SES `receipt.recipients[]`, or `Received: ... for <addr>`. When that project address is the hidden delivery recipient, or appears in parsed `bcc`, and the sender matches a configured project outbound email identity, Kumbukum archives the answered thread, clears labels, and resets triage state. Later visible `To`/`Cc` project-address mail on the same thread stays normal untriaged Inbox mail, so customer replies reopen the conversation.
-
-Internal notes are private team notes for the email thread. They are stored separately from email drafts and are never included in outbound email content. Notes can be threaded with `parent_note`, edited by tenant team members, and deleted only when they have no replies.
-
-## Email AI
-
-```http
-POST /api/v1/emails/ai
-POST /api/v1/emails/:id/ai
-POST /api/v1/emails/:id/summarize
-POST /api/v1/emails/:id/suggest-replies
-POST /api/v1/emails/:id/draft-reply
-```
-
-Use `/emails/ai` for list-level ECC questions such as counts, sender lookups, mailbox summaries, and semantic searches. It uses Typesense first and accepts the current ECC view as `scope`. Summary requests search the scoped project first; if no scoped emails are found, they retry across all projects.
-
-```json
-{
-	"query": "show emails from sender@example.com",
-	"scope": {
-		"project": "optional-project-id",
-		"mailbox": "inbox",
-		"label": "",
-		"triaged": false
-	}
-}
-```
-
-Response:
-
-```json
-{
-	"answer": "Showing 3 emails matching \"show emails from sender@example.com\".",
-	"count": 3,
-	"mode": "list",
-	"context_scope": "project",
-	"scope": {},
-	"emails": []
-}
-```
-
-Use `/emails/:id/ai` for questions about one selected email. It includes retrieved Kumbukum context by searching the selected email's project first, then all projects only when no project records are found. Use `/emails/:id/summarize` to generate and save `triage_summary`, `/emails/:id/suggest-replies` to return two structured reply choices with the same project-first context lookup, and `/emails/:id/draft-reply` to turn one choice into a draft.
-
-Draft updates accept `from`, recipient arrays in `to`, `cc`, and `bcc`, plus `subject`, `body_text`, and sanitized `body_html`. `from` must match a configured outbound email identity for the email project when identities exist. `to`, `cc`, and `bcc` are limited to 10 addresses each. When the selected email is a sent reply, `/emails/:id/draft-reply` creates or updates the draft against the latest non-sent message in that thread.
-
-Draft deletion uses `DELETE /api/v1/email-drafts/:id` and marks the draft as `discarded`, which removes it from active draft lists.
-
-Compose clients can load safe outbound identity data with `GET /api/v1/projects/:id/email-identities/compose`. Recipient autocomplete should call `GET /api/v1/emails/recipient-addresses?q=partial&project=PROJECT_ID&limit=10`; it searches email participants in the project first, then falls back tenant-wide when no project results are found. `GET /api/v1/emails/from-addresses` remains a compatible alias.
-
-Outbound identity settings can include masked external sync config. Helpmonks accepts `helpmonks.enabled`, `helpmonks.base_url`, and `helpmonks.api_key`; the secret may be a Helpmonks API key or access token. Fastmail accepts `fastmail.enabled`, `fastmail.account_id`, `fastmail.session_url`, and `fastmail.api_token`. Secret values are encrypted and returned only as `api_key_configured` / `api_token_configured`; use clear flags to remove stored values.
-
-## Triage status
-
-Use triage status endpoints when an external system only needs classification state, routing action, and optional embedded message/draft data.
-
-```http
-GET /api/v1/emails/triage-status
-GET /api/v1/emails/:id/triage-status
-```
-
-Common query parameters:
-
-| Parameter | Description |
-| --- | --- |
-| `ids` | Comma-separated Kumbukum email IDs. |
-| `message_id` | Message-ID lookup. Angle brackets accepted. Comma-separated values accepted. |
-| `project` | Project ID filter. |
-| `mailbox` | `inbox`, `archived`, `sent`, `spam`, or `trash`. |
-| `triaged` | `true` or `false`. |
-| `status` | `pending`, `complete`, or `failed`. Comma-separated values accepted. |
-| `primary_action` | `reply-required`, `human-do`, `waiting`, `marketing`, `no-action`, or `spam`. Comma-separated values accepted. |
-| `run_id` | Triage run correlation ID. |
-| `include` | Optional embedded payloads: `email`, `draft`, or `email,draft`. |
-
-Example:
-
-```bash
-curl -H "Authorization: Token $KUMBUKUM_TOKEN" \
-	"https://your-instance.com/api/v1/emails/triage-status?message_id=%3Cabc@example.com%3E&include=email,draft"
-```
-
-Response:
-
-```json
-{
-	"statuses": [
-		{
-			"email_id": "664...",
-			"message_id": "abc@example.com",
-			"triaged": true,
-			"triage_status": "complete",
-			"triage_primary_action": "reply-required",
-			"triage_summary": "Needs a setup reply",
-			"triage_draft_id": "665...",
-			"email": {},
-			"draft": {}
-		}
-	]
-}
-```
-
-## Run triage
-
-```http
-POST /api/v1/emails/triage-inbox
-```
-
-Body:
-
-```json
-{
-	"project": "optional-project-id",
-	"limit": 0,
-	"run_id": "client-run-id"
-}
-```
-
-Omit `limit` or set it to `0` to triage all matching inbox emails. Use a positive `limit` only when intentionally capping a run.
-
-Use the returned `run_id`, `email_id`, or original `message_id` with the triage status endpoints to poll completion from external systems.
-
-Response is `202 Accepted` and returns immediately:
-
-```json
-{
-	"run_id": "client-run-id",
-	"status": "queued",
-	"total": 24,
-	"run": {
-		"run_id": "client-run-id",
-		"status": "queued",
-		"processed": 0,
-		"triaged": 0,
-		"errors": []
-	}
-}
-```
-
-Poll run progress:
-
-```http
-GET /api/v1/emails/triage-runs/client-run-id
-```
-
-The run status is one of `queued`, `running`, `completed`, or `failed`. The UI also receives `email-triage:run-updated` socket events for live progress.
-
-Triage-generated classifications and reply drafts use the same project-first context rule: search records in the email's project first, then retry across all projects only when no usable project context is found.
+`POST /import/email` is the public forwarding endpoint. The recipient must be `PROJECT_ID@EMAIL_FORWARD_DOMAIN`. It stores matching email in the project and applies the project email filter as a trash rule.

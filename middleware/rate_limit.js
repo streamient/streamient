@@ -21,8 +21,6 @@ const SEARCH_READ_API_PATHS = new Set([
 const EXPENSIVE_API_METHOD_PATHS = new Set([
 	'POST /chat',
 	'POST /chat/stream',
-	'POST /emails/ai',
-	'POST /emails/triage-inbox',
 	'POST /reindex',
 	'POST /export',
 	'POST /batch/delete',
@@ -30,14 +28,12 @@ const EXPENSIVE_API_METHOD_PATHS = new Set([
 	'POST /trash/batch/restore',
 	'POST /trash/batch/delete',
 	'DELETE /trash',
-	'DELETE /emails/spam',
 	'POST /settings/byo-ai/verify',
 	'POST /settings/white-label/domain/verify',
 	'POST /settings/white-label/domain/refresh',
 ]);
 
 const EXPENSIVE_API_PATTERNS = [
-	{ method: 'POST', pattern: /^\/emails\/[^/]+\/(ai|summarize|suggest-replies|draft-reply|reset-triage)$/ },
 	{ method: 'POST', pattern: /^\/urls\/[^/]+\/resync$/ },
 	{ method: 'POST', pattern: /^\/git-repos\/[^/]+\/sync$/ },
 	{ method: 'DELETE', pattern: /^\/trash\/[^/]+\/[^/]+$/ },

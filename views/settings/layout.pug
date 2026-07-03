@@ -21,9 +21,6 @@ block content
 						a.list-group-item.list-group-item-action(href="/settings/byo-ai" class=(title === 'AI' ? 'active' : ''))
 							!= icon('sparkle', 'me-2')
 							span AI
-						a.list-group-item.list-group-item-action(href="/settings/email" class=(title === 'Email settings' ? 'active' : ''))
-							!= icon('email', 'me-2')
-							span Email settings
 				if can_manage_restricted_settings
 					a.list-group-item.list-group-item-action(href="/settings/white-label" class=(title === 'White-label' ? 'active' : ''))
 						!= icon('palette', 'me-2')

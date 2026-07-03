@@ -791,33 +791,33 @@ var require_huebee = __commonJS({
         return rgb2hex(rgb);
       }
       function hsl2rgb(h3, s2, l4) {
-        var C3 = (1 - Math.abs(2 * l4 - 1)) * s2;
+        var C2 = (1 - Math.abs(2 * l4 - 1)) * s2;
         var hp = h3 / 60;
-        var X3 = C3 * (1 - Math.abs(hp % 2 - 1));
+        var X2 = C2 * (1 - Math.abs(hp % 2 - 1));
         var rgb, m4;
         switch (Math.floor(hp)) {
           case 0:
-            rgb = [C3, X3, 0];
+            rgb = [C2, X2, 0];
             break;
           case 1:
-            rgb = [X3, C3, 0];
+            rgb = [X2, C2, 0];
             break;
           case 2:
-            rgb = [0, C3, X3];
+            rgb = [0, C2, X2];
             break;
           case 3:
-            rgb = [0, X3, C3];
+            rgb = [0, X2, C2];
             break;
           case 4:
-            rgb = [X3, 0, C3];
+            rgb = [X2, 0, C2];
             break;
           case 5:
-            rgb = [C3, 0, X3];
+            rgb = [C2, 0, X2];
             break;
           default:
             rgb = [0, 0, 0];
         }
-        m4 = l4 - C3 / 2;
+        m4 = l4 - C2 / 2;
         rgb = rgb.map(function(v3) {
           return v3 + m4;
         });
@@ -829,21 +829,21 @@ var require_huebee = __commonJS({
         b4 /= 255;
         var M3 = Math.max(r2, g4, b4);
         var m4 = Math.min(r2, g4, b4);
-        var C3 = M3 - m4;
-        var L3 = 0.5 * (M3 + m4);
-        var S3 = C3 === 0 ? 0 : C3 / (1 - Math.abs(2 * L3 - 1));
+        var C2 = M3 - m4;
+        var L2 = 0.5 * (M3 + m4);
+        var S2 = C2 === 0 ? 0 : C2 / (1 - Math.abs(2 * L2 - 1));
         var h3;
-        if (C3 === 0) {
+        if (C2 === 0) {
           h3 = 0;
         } else if (M3 === r2) {
-          h3 = (g4 - b4) / C3 % 6;
+          h3 = (g4 - b4) / C2 % 6;
         } else if (M3 === g4) {
-          h3 = (b4 - r2) / C3 + 2;
+          h3 = (b4 - r2) / C2 + 2;
         } else if (M3 === b4) {
-          h3 = (r2 - g4) / C3 + 4;
+          h3 = (r2 - g4) / C2 + 4;
         }
-        var H3 = 60 * h3;
-        return [H3, parseFloat(S3), parseFloat(L3)];
+        var H2 = 60 * h3;
+        return [H2, parseFloat(S2), parseFloat(L2)];
       }
       function rgb2hex(rgb) {
         var hex = rgb.map(function(value) {
@@ -2979,13 +2979,13 @@ var require_filepond = __commonJS({
               }, this);
             }, this);
           },
-          initializeClassElements: function(F3, elements) {
-            var proto = F3.prototype;
+          initializeClassElements: function(F2, elements) {
+            var proto = F2.prototype;
             ["method", "field"].forEach(function(kind) {
               elements.forEach(function(element) {
                 var placement = element.placement;
                 if (element.kind === kind && (placement === "static" || placement === "prototype")) {
-                  var receiver = placement === "static" ? F3 : proto;
+                  var receiver = placement === "static" ? F2 : proto;
                   this.defineClassElement(receiver, element);
                 }
               }, this);
@@ -3057,8 +3057,8 @@ var require_filepond = __commonJS({
               }
               var newExtras = elementFinisherExtras.extras;
               if (newExtras) {
-                for (var j3 = 0; j3 < newExtras.length; j3++) {
-                  this.addElementPlacement(newExtras[j3], placements2);
+                for (var j2 = 0; j2 < newExtras.length; j2++) {
+                  this.addElementPlacement(newExtras[j2], placements2);
                 }
                 extras.push.apply(extras, newExtras);
               }
@@ -3081,11 +3081,11 @@ var require_filepond = __commonJS({
               }
               if (elementsAndFinisher.elements !== void 0) {
                 elements = elementsAndFinisher.elements;
-                for (var j3 = 0; j3 < elements.length - 1; j3++) {
-                  for (var k2 = j3 + 1; k2 < elements.length; k2++) {
-                    if (elements[j3].key === elements[k2].key && elements[j3].placement === elements[k2].placement) {
+                for (var j2 = 0; j2 < elements.length - 1; j2++) {
+                  for (var k = j2 + 1; k < elements.length; k++) {
+                    if (elements[j2].key === elements[k].key && elements[j2].placement === elements[k].placement) {
                       throw new TypeError(
-                        "Duplicated element (" + elements[j3].key + ")"
+                        "Duplicated element (" + elements[j2].key + ")"
                       );
                     }
                   }
@@ -3351,7 +3351,7 @@ var require_filepond = __commonJS({
             return _super[Symbol.replace].call(
               this,
               str,
-              substitution.replace(/\$<([^>]+)>/g, function(_4, name2) {
+              substitution.replace(/\$<([^>]+)>/g, function(_3, name2) {
                 return "$" + groups2[name2];
               })
             );
@@ -9363,8 +9363,8 @@ var require_filepond = __commonJS({
           }).filter(function(query) {
             return query;
           });
-          return mappedQueries.map(function(q3) {
-            return removeFile(q3, options);
+          return mappedQueries.map(function(q2) {
+            return removeFile(q2, options);
           });
         };
         var exports3 = Object.assign(
@@ -14878,14 +14878,14 @@ var onDOMContentLoaded = (callback) => {
 var isRTL = () => document.documentElement.dir === "rtl";
 var defineJQueryPlugin = (plugin15) => {
   onDOMContentLoaded(() => {
-    const $4 = getjQuery();
-    if ($4) {
+    const $3 = getjQuery();
+    if ($3) {
       const name = plugin15.NAME;
-      const JQUERY_NO_CONFLICT = $4.fn[name];
-      $4.fn[name] = plugin15.jQueryInterface;
-      $4.fn[name].Constructor = plugin15;
-      $4.fn[name].noConflict = () => {
-        $4.fn[name] = JQUERY_NO_CONFLICT;
+      const JQUERY_NO_CONFLICT = $3.fn[name];
+      $3.fn[name] = plugin15.jQueryInterface;
+      $3.fn[name].Constructor = plugin15;
+      $3.fn[name].noConflict = () => {
+        $3.fn[name] = JQUERY_NO_CONFLICT;
         return plugin15.jQueryInterface;
       };
     }
@@ -15084,16 +15084,16 @@ var EventHandler = {
     if (typeof event !== "string" || !element) {
       return null;
     }
-    const $4 = getjQuery();
+    const $3 = getjQuery();
     const typeEvent = getTypeEvent(event);
     const inNamespace = event !== typeEvent;
     let jQueryEvent = null;
     let bubbles = true;
     let nativeDispatch = true;
     let defaultPrevented = false;
-    if (inNamespace && $4) {
-      jQueryEvent = $4.Event(event, args);
-      $4(element).trigger(jQueryEvent);
+    if (inNamespace && $3) {
+      jQueryEvent = $3.Event(event, args);
+      $3(element).trigger(jQueryEvent);
       bubbles = !jQueryEvent.isPropagationStopped();
       nativeDispatch = !jQueryEvent.isImmediatePropagationStopped();
       defaultPrevented = jQueryEvent.isDefaultPrevented();
@@ -18490,930 +18490,633 @@ var E = (e2, t2, s2) => {
 // src/vendor.js
 var FilePond = __toESM(require_filepond(), 1);
 
-// node_modules/.pnpm/@yaireo+tagify@4.37.1_prop-types@15.8.1_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/@yaireo/tagify/dist/tagify.esm.js
+// node_modules/.pnpm/@yaireo+tagify@4.38.0_prop-types@15.8.1_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/@yaireo/tagify/dist/tagify.esm.js
 var t = "&#8203;";
-function e(t2, e2) {
-  (null == e2 || e2 > t2.length) && (e2 = t2.length);
-  for (var i2 = 0, n2 = new Array(e2); i2 < e2; i2++) n2[i2] = t2[i2];
-  return n2;
-}
-function i(t2) {
-  return (function(t3) {
-    if (Array.isArray(t3)) return e(t3);
-  })(t2) || (function(t3) {
-    if ("undefined" != typeof Symbol && null != t3[Symbol.iterator] || null != t3["@@iterator"]) return Array.from(t3);
-  })(t2) || (function(t3, i2) {
-    if (!t3) return;
-    if ("string" == typeof t3) return e(t3, i2);
-    var n2 = Object.prototype.toString.call(t3).slice(8, -1);
-    "Object" === n2 && t3.constructor && (n2 = t3.constructor.name);
-    if ("Map" === n2 || "Set" === n2) return Array.from(n2);
-    if ("Arguments" === n2 || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n2)) return e(t3, i2);
-  })(t2) || (function() {
-    throw new TypeError("Invalid attempt to spread non-iterable instance.\\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
-  })();
-}
-var n = { isEnabled: function() {
-  var t2;
-  return null === (t2 = window.TAGIFY_DEBUG) || void 0 === t2 || t2;
-}, log: function() {
-  for (var t2 = arguments.length, e2 = new Array(t2), n2 = 0; n2 < t2; n2++) e2[n2] = arguments[n2];
-  var a3;
-  this.isEnabled() && (a3 = console).log.apply(a3, ["[Tagify]:"].concat(i(e2)));
-}, warn: function() {
-  for (var t2 = arguments.length, e2 = new Array(t2), n2 = 0; n2 < t2; n2++) e2[n2] = arguments[n2];
-  var a3;
-  this.isEnabled() && (a3 = console).warn.apply(a3, ["[Tagify]:"].concat(i(e2)));
+var e = { isEnabled: () => window.TAGIFY_DEBUG ?? true, log(...t2) {
+  this.isEnabled() && console.log("[Tagify]:", ...t2);
+}, warn(...t2) {
+  this.isEnabled() && console.warn("[Tagify]:", ...t2);
 } };
-var a2 = function(t2, e2, i2, n2) {
-  return t2 = "" + t2, e2 = "" + e2, n2 && (t2 = t2.trim(), e2 = e2.trim()), i2 ? t2 == e2 : t2.toLowerCase() == e2.toLowerCase();
-};
-var s = function(t2, e2) {
-  return t2 && Array.isArray(t2) && t2.map((function(t3) {
-    return o(t3, e2);
-  }));
-};
-function o(t2, e2) {
-  var i2, n2 = {};
-  for (i2 in t2) e2.indexOf(i2) < 0 && (n2[i2] = t2[i2]);
-  return n2;
+var s = (t2, e2, s2, i2) => (t2 = "" + t2, e2 = "" + e2, i2 && (t2 = t2.trim(), e2 = e2.trim()), s2 ? t2 == e2 : t2.toLowerCase() == e2.toLowerCase());
+var i = (t2, e2) => t2 && Array.isArray(t2) && t2.map(((t3) => a2(t3, e2)));
+function a2(t2, e2) {
+  var s2, i2 = {};
+  for (s2 in t2) e2.indexOf(s2) < 0 && (i2[s2] = t2[s2]);
+  return i2;
 }
-function r(t2) {
+function n(t2) {
   return new DOMParser().parseFromString(t2.trim(), "text/html").body.firstElementChild;
 }
-function l(t2, e2) {
+function o(t2, e2) {
   for (e2 = e2 || "previous"; t2 = t2[e2 + "Sibling"]; ) if (3 == t2.nodeType) return t2;
 }
-function d2(t2) {
+function r(t2) {
   return "string" == typeof t2 ? t2.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/`|'/g, "&#039;") : t2;
 }
-function c2(t2) {
+function l(t2) {
   var e2 = Object.prototype.toString.call(t2).split(" ")[1].slice(0, -1);
   return t2 === Object(t2) && "Array" != e2 && "Function" != e2 && "RegExp" != e2 && "HTMLUnknownElement" != e2;
 }
-function u(t2, e2, i2) {
-  var n2, a3;
-  function s2(t3, e3) {
-    for (var i3 in e3) if (e3.hasOwnProperty(i3)) {
-      if (c2(e3[i3])) {
-        c2(t3[i3]) ? s2(t3[i3], e3[i3]) : t3[i3] = Object.assign({}, e3[i3]);
+function d2(t2, e2, s2) {
+  function i2(t3, e3) {
+    for (var s3 in e3) if (e3.hasOwnProperty(s3)) {
+      if (l(e3[s3])) {
+        l(t3[s3]) ? i2(t3[s3], e3[s3]) : t3[s3] = Object.assign({}, e3[s3]);
         continue;
       }
-      if (Array.isArray(e3[i3])) {
-        t3[i3] = Object.assign([], e3[i3]);
+      if (Array.isArray(e3[s3])) {
+        t3[s3] = Object.assign([], e3[s3]);
         continue;
       }
-      t3[i3] = e3[i3];
+      t3[s3] = e3[s3];
     }
   }
-  return n2 = t2, (null != (a3 = Object) && "undefined" != typeof Symbol && a3[Symbol.hasInstance] ? a3[Symbol.hasInstance](n2) : n2 instanceof a3) || (t2 = {}), s2(t2, e2), i2 && s2(t2, i2), t2;
+  return t2 instanceof Object || (t2 = {}), i2(t2, e2), s2 && i2(t2, s2), t2;
 }
-function g2() {
-  var t2 = [], e2 = {}, i2 = true, n2 = false, a3 = void 0;
-  try {
-    for (var s2, o2 = arguments[Symbol.iterator](); !(i2 = (s2 = o2.next()).done); i2 = true) {
-      var r2 = s2.value, l4 = true, d4 = false, u2 = void 0;
-      try {
-        for (var g4, h3 = r2[Symbol.iterator](); !(l4 = (g4 = h3.next()).done); l4 = true) {
-          var p3 = g4.value;
-          c2(p3) ? e2[p3.value] || (t2.push(p3), e2[p3.value] = 1) : t2.includes(p3) || t2.push(p3);
-        }
-      } catch (t3) {
-        d4 = true, u2 = t3;
-      } finally {
-        try {
-          l4 || null == h3.return || h3.return();
-        } finally {
-          if (d4) throw u2;
-        }
-      }
-    }
-  } catch (t3) {
-    n2 = true, a3 = t3;
-  } finally {
-    try {
-      i2 || null == o2.return || o2.return();
-    } finally {
-      if (n2) throw a3;
-    }
-  }
+function h2() {
+  const t2 = [], e2 = {};
+  for (let s2 of arguments) for (let i2 of s2) l(i2) ? e2[i2.value] || (t2.push(i2), e2[i2.value] = 1) : t2.includes(i2) || t2.push(i2);
   return t2;
 }
-function h2(t2) {
+function g2(t2) {
   return String.prototype.normalize ? "string" == typeof t2 ? t2.normalize("NFD").replace(/[\u0300-\u036f]/g, "") : void 0 : t2;
 }
-var p2 = function() {
-  return /(?=.*chrome)(?=.*android)/i.test(navigator.userAgent);
-};
-function f2() {
-  return ("10000000-1000-4000-8000" + -1e11).replace(/[018]/g, (function(t2) {
-    return (t2 ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> t2 / 4).toString(16);
-  }));
+var c2 = () => /(?=.*chrome)(?=.*android)/i.test(navigator.userAgent);
+function p2() {
+  return ("10000000-1000-4000-8000" + -1e11).replace(/[018]/g, ((t2) => (t2 ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> t2 / 4).toString(16)));
 }
-function v(t2) {
-  var e2, i2 = b2.call(this, t2), n2 = null == t2 || null === (e2 = t2.classList) || void 0 === e2 ? void 0 : e2.contains(this.settings.classNames.tag);
-  return i2 && n2;
+function u(t2) {
+  const e2 = v.call(this, t2), s2 = t2?.classList?.contains(this.settings.classNames.tag);
+  return e2 && s2;
 }
 function m2(t2) {
-  return b2.call(this, t2) && (null == t2 ? void 0 : t2.closest(this.settings.classNames.tagSelector));
+  return v.call(this, t2) && t2?.closest(this.settings.classNames.tagSelector);
 }
-function b2(t2) {
-  var e2;
-  return (null == t2 || null === (e2 = t2.closest) || void 0 === e2 ? void 0 : e2.call(t2, this.settings.classNames.namespaceSelector)) === this.DOM.scope;
+function v(t2) {
+  let e2 = t2?.closest?.(this.settings.classNames.namespaceSelector);
+  return e2 === this.DOM.scope;
 }
-function w2(t2, e2) {
-  var i2 = window.getSelection();
-  return e2 = e2 || i2.getRangeAt(0), "string" == typeof t2 && (t2 = document.createTextNode(t2)), e2 && (e2.deleteContents(), e2.insertNode(t2)), t2;
+function f2(t2, e2) {
+  var s2 = window.getSelection();
+  return e2 = e2 || (s2.rangeCount ? s2.getRangeAt(0) : null), "string" == typeof t2 && (t2 = document.createTextNode(t2)), e2 && (e2.deleteContents(), e2.insertNode(t2)), t2;
 }
-function y2(t2, e2, i2) {
-  return t2 ? (e2 && (t2.__tagifyTagData = i2 ? e2 : u({}, t2.__tagifyTagData || {}, e2)), t2.__tagifyTagData) : (n.warn("tag element doesn't exist", { tagElm: t2, data: e2 }), e2);
+function T(t2, s2, i2) {
+  return t2 ? (s2 && (t2.__tagifyTagData = i2 ? s2 : d2({}, t2.__tagifyTagData || {}, s2)), t2.__tagifyTagData) : (e.warn("tag element doesn't exist", { tagElm: t2, data: s2 }), s2);
 }
-function T(t2) {
+function w2(t2) {
   if (t2 && t2.parentNode) {
-    var e2 = t2, i2 = window.getSelection(), n2 = i2.getRangeAt(0);
-    i2.rangeCount && (n2.setStartAfter(e2), n2.collapse(true), i2.removeAllRanges(), i2.addRange(n2));
+    var e2 = window.getSelection();
+    if (e2) {
+      var s2 = document.createRange();
+      s2.setStartAfter(t2), s2.collapse(true), e2.removeAllRanges(), e2.addRange(s2);
+    }
   }
 }
-function O2(t2, e2) {
-  t2.forEach((function(t3) {
-    if (y2(t3.previousSibling) || !t3.previousSibling) {
-      var i2 = document.createTextNode("\u200B");
-      t3.before(i2), e2 && T(i2);
+function b2(t2, e2) {
+  t2.forEach(((t3) => {
+    if (T(t3.previousSibling) || !t3.previousSibling) {
+      var s2 = document.createTextNode("\u200B");
+      t3.before(s2), e2 && w2(s2);
     }
   }));
 }
-var x = { delimiters: ",", pattern: null, tagTextProp: "value", maxTags: 1 / 0, callbacks: {}, addTagOnBlur: true, addTagOn: ["blur", "tab", "enter"], onChangeAfterBlur: true, duplicates: false, whitelist: [], blacklist: [], enforceWhitelist: false, userInput: true, focusable: true, focusInputOnRemove: true, keepInvalidTags: false, createInvalidTags: true, mixTagsAllowedAfter: /,|\.|\:|\s/, mixTagsInterpolator: ["[[", "]]"], backspace: true, allowCaretBetweenTags: true, skipInvalid: false, pasteAsTags: true, editTags: { clicks: 2, keepInvalid: true }, transformTag: function() {
-}, trim: true, a11y: { focusableTags: false, inputAriaLabel: "Tags input field" }, mixMode: { insertAfterTag: "\xA0" }, autoComplete: { enabled: true, rightKey: false, tabKey: false }, classNames: { namespace: "tagify", mixMode: "tagify--mix", selectMode: "tagify--select", input: "tagify__input", focus: "tagify--focus", tagNoAnimation: "tagify--noAnim", tagInvalid: "tagify--invalid", tagNotAllowed: "tagify--notAllowed", scopeLoading: "tagify--loading", hasMaxTags: "tagify--hasMaxTags", hasNoTags: "tagify--noTags", empty: "tagify--empty", inputInvalid: "tagify__input--invalid", dropdown: "tagify__dropdown", dropdownWrapper: "tagify__dropdown__wrapper", dropdownHeader: "tagify__dropdown__header", dropdownFooter: "tagify__dropdown__footer", dropdownItem: "tagify__dropdown__item", dropdownItemActive: "tagify__dropdown__item--active", dropdownItemHidden: "tagify__dropdown__item--hidden", dropdownItemSelected: "tagify__dropdown__item--selected", dropdownInital: "tagify__dropdown--initial", tag: "tagify__tag", tagText: "tagify__tag-text", tagX: "tagify__tag__removeBtn", tagLoading: "tagify__tag--loading", tagEditing: "tagify__tag--editable", tagFlash: "tagify__tag--flash", tagHide: "tagify__tag--hide" }, dropdown: { classname: "", enabled: 2, maxItems: 10, searchKeys: ["value", "searchBy"], fuzzySearch: true, caseSensitive: false, accentedSearch: true, includeSelectedTags: false, escapeHTML: true, highlightFirst: true, closeOnSelect: true, clearOnSelect: true, position: "all", appendTarget: null }, hooks: { beforeRemoveTag: function() {
-  return Promise.resolve();
-}, beforePaste: function() {
-  return Promise.resolve();
-}, suggestionClick: function() {
-  return Promise.resolve();
-}, beforeKeyDown: function() {
-  return Promise.resolve();
-} } };
-function D2(t2, e2, i2) {
-  return e2 in t2 ? Object.defineProperty(t2, e2, { value: i2, enumerable: true, configurable: true, writable: true }) : t2[e2] = i2, t2;
-}
-function S2(t2) {
-  for (var e2 = 1; e2 < arguments.length; e2++) {
-    var i2 = null != arguments[e2] ? arguments[e2] : {}, n2 = Object.keys(i2);
-    "function" == typeof Object.getOwnPropertySymbols && (n2 = n2.concat(Object.getOwnPropertySymbols(i2).filter((function(t3) {
-      return Object.getOwnPropertyDescriptor(i2, t3).enumerable;
-    })))), n2.forEach((function(e3) {
-      D2(t2, e3, i2[e3]);
-    }));
-  }
-  return t2;
-}
-function I2(t2, e2) {
-  return e2 = null != e2 ? e2 : {}, Object.getOwnPropertyDescriptors ? Object.defineProperties(t2, Object.getOwnPropertyDescriptors(e2)) : (function(t3, e3) {
-    var i2 = Object.keys(t3);
-    if (Object.getOwnPropertySymbols) {
-      var n2 = Object.getOwnPropertySymbols(t3);
-      e3 && (n2 = n2.filter((function(e4) {
-        return Object.getOwnPropertyDescriptor(t3, e4).enumerable;
-      }))), i2.push.apply(i2, n2);
-    }
-    return i2;
-  })(Object(e2)).forEach((function(i2) {
-    Object.defineProperty(t2, i2, Object.getOwnPropertyDescriptor(e2, i2));
-  })), t2;
-}
-function E2(t2, e2) {
-  (null == e2 || e2 > t2.length) && (e2 = t2.length);
-  for (var i2 = 0, n2 = new Array(e2); i2 < e2; i2++) n2[i2] = t2[i2];
-  return n2;
-}
-function M(t2, e2, i2) {
-  return e2 in t2 ? Object.defineProperty(t2, e2, { value: i2, enumerable: true, configurable: true, writable: true }) : t2[e2] = i2, t2;
-}
-function N(t2) {
-  return (function(t3) {
-    if (Array.isArray(t3)) return E2(t3);
-  })(t2) || (function(t3) {
-    if ("undefined" != typeof Symbol && null != t3[Symbol.iterator] || null != t3["@@iterator"]) return Array.from(t3);
-  })(t2) || (function(t3, e2) {
-    if (!t3) return;
-    if ("string" == typeof t3) return E2(t3, e2);
-    var i2 = Object.prototype.toString.call(t3).slice(8, -1);
-    "Object" === i2 && t3.constructor && (i2 = t3.constructor.name);
-    if ("Map" === i2 || "Set" === i2) return Array.from(i2);
-    if ("Arguments" === i2 || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(i2)) return E2(t3, e2);
-  })(t2) || (function() {
-    throw new TypeError("Invalid attempt to spread non-iterable instance.\\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
-  })();
-}
-function A2() {
-  for (var t2 in this.dropdown = {}, this._dropdown) this.dropdown[t2] = "function" == typeof this._dropdown[t2] ? this._dropdown[t2].bind(this) : this._dropdown[t2];
+var y2 = { delimiters: ",", pattern: null, tagTextProp: "value", maxTags: 1 / 0, callbacks: {}, addTagOnBlur: true, addTagOn: ["blur", "tab", "enter"], onChangeAfterBlur: true, duplicates: false, whitelist: [], blacklist: [], enforceWhitelist: false, userInput: true, focusable: true, focusInputOnRemove: true, keepInvalidTags: false, createInvalidTags: true, mixTagsAllowedAfter: /,|\.|\:|\s/, mixTagsInterpolator: ["[[", "]]"], backspace: true, allowCaretBetweenTags: true, skipInvalid: false, pasteAsTags: true, editTags: { clicks: 2, keepInvalid: true }, transformTag: () => {
+}, trim: true, a11y: { focusableTags: false, inputAriaLabel: "Tags input field" }, mixMode: { insertAfterTag: "\xA0" }, autoComplete: { enabled: true, rightKey: false, tabKey: false }, classNames: { namespace: "tagify", mixMode: "tagify--mix", selectMode: "tagify--select", input: "tagify__input", focus: "tagify--focus", tagNoAnimation: "tagify--noAnim", tagInvalid: "tagify--invalid", tagNotAllowed: "tagify--notAllowed", scopeLoading: "tagify--loading", hasMaxTags: "tagify--hasMaxTags", hasNoTags: "tagify--noTags", empty: "tagify--empty", inputInvalid: "tagify__input--invalid", dropdown: "tagify__dropdown", dropdownWrapper: "tagify__dropdown__wrapper", dropdownHeader: "tagify__dropdown__header", dropdownFooter: "tagify__dropdown__footer", dropdownItem: "tagify__dropdown__item", dropdownItemActive: "tagify__dropdown__item--active", dropdownItemHidden: "tagify__dropdown__item--hidden", dropdownItemSelected: "tagify__dropdown__item--selected", dropdownInital: "tagify__dropdown--initial", tag: "tagify__tag", tagText: "tagify__tag-text", tagX: "tagify__tag__removeBtn", tagLoading: "tagify__tag--loading", tagEditing: "tagify__tag--editable", tagFlash: "tagify__tag--flash", tagHide: "tagify__tag--hide" }, dropdown: { classname: "", enabled: 2, maxItems: 10, searchKeys: ["value", "searchBy"], fuzzySearch: true, caseSensitive: false, accentedSearch: true, includeSelectedTags: false, escapeHTML: true, highlightFirst: true, closeOnSelect: true, clearOnSelect: true, position: "all", appendTarget: null }, hooks: { beforeRemoveTag: () => Promise.resolve(), beforePaste: () => Promise.resolve(), suggestionClick: () => Promise.resolve(), beforeKeyDown: () => Promise.resolve() } };
+function x() {
+  this.dropdown = {};
+  for (let t2 in this._dropdown) this.dropdown[t2] = "function" == typeof this._dropdown[t2] ? this._dropdown[t2].bind(this) : this._dropdown[t2];
   this.dropdown.refs(), this.DOM.dropdown.__tagify = this;
 }
-var C2;
-var _2;
-var k = (C2 = (function(t2) {
-  for (var e2 = 1; e2 < arguments.length; e2++) {
-    var i2 = null != arguments[e2] ? arguments[e2] : {}, n2 = Object.keys(i2);
-    "function" == typeof Object.getOwnPropertySymbols && (n2 = n2.concat(Object.getOwnPropertySymbols(i2).filter((function(t3) {
-      return Object.getOwnPropertyDescriptor(i2, t3).enumerable;
-    })))), n2.forEach((function(e3) {
-      M(t2, e3, i2[e3]);
-    }));
-  }
-  return t2;
-})({}, { events: { binding: function() {
-  var t2 = !(arguments.length > 0 && void 0 !== arguments[0]) || arguments[0], e2 = this.dropdown.events.callbacks, i2 = this.listeners.dropdown = this.listeners.dropdown || { position: this.dropdown.position.bind(this, null), onKeyDown: e2.onKeyDown.bind(this), onMouseOver: e2.onMouseOver.bind(this), onMouseLeave: e2.onMouseLeave.bind(this), onClick: e2.onClick.bind(this), onScroll: e2.onScroll.bind(this) }, n2 = t2 ? "addEventListener" : "removeEventListener";
-  "manual" != this.settings.dropdown.position && (document[n2]("scroll", i2.position, true), window[n2]("resize", i2.position), window[n2]("keydown", i2.onKeyDown)), this.DOM.dropdown[n2]("mouseover", i2.onMouseOver), this.DOM.dropdown[n2]("mouseleave", i2.onMouseLeave), this.DOM.dropdown[n2]("mousedown", i2.onClick), this.DOM.dropdown.content[n2]("scroll", i2.onScroll);
-}, callbacks: { onKeyDown: function(t2) {
-  var e2 = this;
+var D2 = { ...{ events: { binding(t2 = true) {
+  var e2 = this.dropdown.events.callbacks, s2 = this.listeners.dropdown = this.listeners.dropdown || { position: this.dropdown.position.bind(this, null), onKeyDown: e2.onKeyDown.bind(this), onMouseOver: e2.onMouseOver.bind(this), onMouseLeave: e2.onMouseLeave.bind(this), onClick: e2.onClick.bind(this), onScroll: e2.onScroll.bind(this) }, i2 = t2 ? "addEventListener" : "removeEventListener";
+  "manual" != this.settings.dropdown.position && (document[i2]("scroll", s2.position, true), window[i2]("resize", s2.position), window[i2]("keydown", s2.onKeyDown)), this.DOM.dropdown[i2]("mouseover", s2.onMouseOver), this.DOM.dropdown[i2]("mouseleave", s2.onMouseLeave), this.DOM.dropdown[i2]("mousedown", s2.onClick), this.DOM.dropdown.content[i2]("scroll", s2.onScroll);
+}, callbacks: { onKeyDown(t2) {
   if (this.state.hasFocus && !this.state.composing) {
-    var i2 = this.settings, a3 = i2.dropdown.includeSelectedTags, s2 = this.DOM.dropdown.querySelector(i2.classNames.dropdownItemActiveSelector), o2 = this.dropdown.getSuggestionDataByNode(s2), r2 = "mix" == i2.mode, l4 = "select" == i2.mode;
-    i2.hooks.beforeKeyDown(t2, { tagify: this }).then((function(d4) {
+    var s2 = this.settings, i2 = s2.dropdown.includeSelectedTags, a3 = this.DOM.dropdown.querySelector(s2.classNames.dropdownItemActiveSelector), n2 = this.dropdown.getSuggestionDataByNode(a3), o2 = "mix" == s2.mode, r2 = "select" == s2.mode;
+    s2.hooks.beforeKeyDown(t2, { tagify: this }).then(((l4) => {
       switch (t2.key) {
         case "ArrowDown":
         case "ArrowUp":
         case "Down":
         case "Up":
           t2.preventDefault();
-          var c3 = e2.dropdown.getAllSuggestionsRefs(), u2 = "ArrowUp" == t2.key || "Up" == t2.key;
-          s2 && (s2 = e2.dropdown.getNextOrPrevOption(s2, !u2)), s2 && s2.matches(i2.classNames.dropdownItemSelector) || (s2 = c3[u2 ? c3.length - 1 : 0]), e2.dropdown.highlightOption(s2, true);
+          var d4 = this.dropdown.getAllSuggestionsRefs(), h3 = "ArrowUp" == t2.key || "Up" == t2.key;
+          a3 && (a3 = this.dropdown.getNextOrPrevOption(a3, !h3)), a3 && a3.matches(s2.classNames.dropdownItemSelector) || (a3 = d4[h3 ? d4.length - 1 : 0]), this.dropdown.highlightOption(a3, true);
           break;
         case "PageUp":
-        case "PageDown":
-          var g4;
+        case "PageDown": {
           t2.preventDefault();
-          var h3 = e2.dropdown.getAllSuggestionsRefs(), p3 = Math.floor(e2.DOM.dropdown.content.clientHeight / (null === (g4 = h3[0]) || void 0 === g4 ? void 0 : g4.offsetHeight)) || 1, f3 = "PageUp" === t2.key;
-          if (s2) {
-            var v3 = h3.indexOf(s2), m4 = f3 ? Math.max(0, v3 - p3) : Math.min(h3.length - 1, v3 + p3);
-            s2 = h3[m4];
-          } else s2 = h3[0];
-          e2.dropdown.highlightOption(s2, true);
+          const e2 = this.dropdown.getAllSuggestionsRefs(), s3 = Math.floor(this.DOM.dropdown.content.clientHeight / e2[0]?.offsetHeight) || 1, i3 = "PageUp" === t2.key;
+          if (a3) {
+            const t3 = e2.indexOf(a3), n3 = i3 ? Math.max(0, t3 - s3) : Math.min(e2.length - 1, t3 + s3);
+            a3 = e2[n3];
+          } else a3 = e2[0];
+          this.dropdown.highlightOption(a3, true);
           break;
+        }
         case "Home":
-        case "End":
+        case "End": {
           t2.preventDefault();
-          var b4 = e2.dropdown.getAllSuggestionsRefs();
-          s2 = b4["Home" === t2.key ? 0 : b4.length - 1], e2.dropdown.highlightOption(s2, true);
+          const e2 = this.dropdown.getAllSuggestionsRefs();
+          a3 = e2["Home" === t2.key ? 0 : e2.length - 1], this.dropdown.highlightOption(a3, true);
           break;
+        }
         case "Escape":
         case "Esc":
-          e2.dropdown.hide();
+          this.dropdown.hide();
           break;
         case "ArrowRight":
-          if (e2.state.actions.ArrowLeft || i2.autoComplete.rightKey || i2.allowCaretBetweenTags) return;
-        case "Tab":
-          var w4 = !i2.autoComplete.rightKey || !i2.autoComplete.tabKey;
-          if (!r2 && !l4 && s2 && w4 && !e2.state.editing && o2) {
+          if (this.state.actions.ArrowLeft || s2.autoComplete.rightKey || s2.allowCaretBetweenTags) return;
+        case "Tab": {
+          let e2 = !s2.autoComplete.rightKey || !s2.autoComplete.tabKey;
+          if (!o2 && !r2 && a3 && e2 && !this.state.editing && n2) {
             t2.preventDefault();
-            var y4 = e2.dropdown.getMappedValue(o2);
-            return e2.state.autoCompleteData = o2, e2.input.autocomplete.set.call(e2, y4), false;
+            var g4 = this.dropdown.getMappedValue(n2);
+            return this.state.autoCompleteData = n2, this.input.autocomplete.set.call(this, g4), false;
           }
           return true;
+        }
         case "Enter":
-          t2.preventDefault(), e2.state.actions.selectOption = true, setTimeout((function() {
-            return e2.state.actions.selectOption = false;
-          }), 100), i2.hooks.suggestionClick(t2, { tagify: e2, tagData: o2, suggestionElm: s2 }).then((function() {
-            if (s2) {
-              var i3 = a3 ? s2 : e2.dropdown.getNextOrPrevOption(s2, !u2);
-              e2.dropdown.selectOption(s2, t2, (function() {
-                if (i3) {
-                  var t3 = i3.getAttribute("value");
-                  i3 = e2.dropdown.getSuggestionNodeByValue(t3), e2.dropdown.highlightOption(i3);
+          t2.preventDefault(), this.state.actions.selectOption = true, setTimeout((() => this.state.actions.selectOption = false), 100), s2.hooks.suggestionClick(t2, { tagify: this, tagData: n2, suggestionElm: a3 }).then((() => {
+            if (a3) {
+              var e2 = i2 ? a3 : this.dropdown.getNextOrPrevOption(a3, !h3);
+              this.dropdown.selectOption(a3, t2, (() => {
+                if (e2) {
+                  var t3 = e2.getAttribute("value");
+                  e2 = this.dropdown.getSuggestionNodeByValue(t3), this.dropdown.highlightOption(e2);
                 }
               }));
-            } else e2.dropdown.hide(), r2 || e2.addTags(e2.state.inputText.trim(), true);
-          })).catch((function(t3) {
-            return n.warn(t3);
-          }));
+            } else this.dropdown.hide(), o2 || this.addTags(this.state.inputText.trim(), true);
+          })).catch(((t3) => e.warn(t3)));
           break;
-        case "Backspace":
-          if (r2 || e2.state.editing.scope) return;
-          var T3 = e2.input.raw.call(e2);
-          "" != T3 && 8203 != T3.charCodeAt(0) || (true === i2.backspace ? e2.removeTags() : "edit" == i2.backspace && setTimeout(e2.editTag.bind(e2), 0));
+        case "Backspace": {
+          if (o2 || this.state.editing.scope) return;
+          const t3 = this.input.raw.call(this);
+          "" != t3 && 8203 != t3.charCodeAt(0) || (true === s2.backspace ? this.removeTags() : "edit" == s2.backspace && setTimeout(this.editTag.bind(this), 0));
+        }
       }
     }));
   }
-}, onMouseOver: function(t2) {
+}, onMouseOver(t2) {
   var e2 = t2.target.closest(this.settings.classNames.dropdownItemSelector);
   this.dropdown.highlightOption(e2);
-}, onMouseLeave: function(t2) {
+}, onMouseLeave(t2) {
   this.dropdown.highlightOption();
-}, onClick: function(t2) {
-  var e2 = this;
+}, onClick(t2) {
   if (0 == t2.button && t2.target != this.DOM.dropdown && t2.target != this.DOM.dropdown.content) {
-    var i2 = t2.target.closest(this.settings.classNames.dropdownItemSelector), a3 = this.dropdown.getSuggestionDataByNode(i2);
-    this.state.actions.selectOption = true, setTimeout((function() {
-      return e2.state.actions.selectOption = false;
-    }), 100), this.settings.hooks.suggestionClick(t2, { tagify: this, tagData: a3, suggestionElm: i2 }).then((function() {
-      i2 ? e2.dropdown.selectOption(i2, t2) : e2.dropdown.hide();
-    })).catch((function(t3) {
-      return n.warn(t3);
-    }));
+    var s2 = t2.target.closest(this.settings.classNames.dropdownItemSelector), i2 = this.dropdown.getSuggestionDataByNode(s2);
+    this.state.actions.selectOption = true, setTimeout((() => this.state.actions.selectOption = false), 100), this.settings.hooks.suggestionClick(t2, { tagify: this, tagData: i2, suggestionElm: s2 }).then((() => {
+      s2 ? this.dropdown.selectOption(s2, t2) : this.dropdown.hide();
+    })).catch(((t3) => e.warn(t3)));
   }
-}, onScroll: function(t2) {
-  var e2 = t2.target, i2 = e2.scrollTop / (e2.scrollHeight - e2.parentNode.clientHeight) * 100;
-  this.trigger("dropdown:scroll", { percentage: Math.round(i2) });
-} } }, refilter: function(t2) {
+}, onScroll(t2) {
+  var e2 = t2.target, s2 = e2.scrollTop / (e2.scrollHeight - e2.parentNode.clientHeight) * 100;
+  this.trigger("dropdown:scroll", { percentage: Math.round(s2) });
+} } }, refilter(t2) {
   t2 = t2 || this.state.dropdown.query || "", this.suggestedListItems = this.dropdown.filterListItems(t2), this.dropdown.fill(), this.suggestedListItems.length || this.dropdown.hide(), this.trigger("dropdown:updated", this.DOM.dropdown);
-}, getSuggestionDataByNode: function(t2) {
-  for (var e2, i2 = t2 && t2.getAttribute("value"), n2 = this.suggestedListItems.length; n2--; ) {
-    if (c2(e2 = this.suggestedListItems[n2]) && e2.value == i2) return e2;
-    if (e2 == i2) return { value: e2 };
+}, getSuggestionDataByNode(t2) {
+  for (var e2, s2 = t2 && t2.getAttribute("value"), i2 = this.suggestedListItems.length; i2--; ) {
+    if (l(e2 = this.suggestedListItems[i2]) && e2.value == s2) return e2;
+    if (e2 == s2) return { value: e2 };
   }
-}, getSuggestionNodeByValue: function(t2) {
-  return this.dropdown.getAllSuggestionsRefs().find((function(e2) {
-    return e2.getAttribute("value") === t2;
-  }));
-}, getNextOrPrevOption: function(t2) {
-  var e2 = !(arguments.length > 1 && void 0 !== arguments[1]) || arguments[1], i2 = this.dropdown.getAllSuggestionsRefs(), n2 = i2.findIndex((function(e3) {
-    return e3 === t2;
-  }));
-  return e2 ? i2[n2 + 1] : i2[n2 - 1];
-}, highlightOption: function(t2, e2) {
-  var i2, n2 = this.settings.classNames.dropdownItemActive;
-  if (this.state.ddItemElm && (this.state.ddItemElm.classList.remove(n2), this.state.ddItemElm.removeAttribute("aria-selected")), !t2) return this.state.ddItemData = null, this.state.ddItemElm = null, void this.input.autocomplete.suggest.call(this);
-  i2 = this.dropdown.getSuggestionDataByNode(t2), this.state.ddItemData = i2, this.state.ddItemElm = t2, t2.classList.add(n2), t2.setAttribute("aria-selected", true), e2 && (t2.parentNode.scrollTop = t2.clientHeight + t2.offsetTop - t2.parentNode.clientHeight), this.settings.autoComplete && (this.input.autocomplete.suggest.call(this, i2), this.dropdown.position());
-}, selectOption: function(t2, e2, i2) {
-  var n2 = this, a3 = this.settings, s2 = a3.dropdown.includeSelectedTags, o2 = a3.dropdown, r2 = o2.clearOnSelect, l4 = o2.closeOnSelect;
-  if (!t2) return this.addTags(this.state.inputText, true), void (l4 && this.dropdown.hide());
+}, getSuggestionNodeByValue(t2) {
+  return this.dropdown.getAllSuggestionsRefs().find(((e2) => e2.getAttribute("value") === t2));
+}, getNextOrPrevOption(t2, e2 = true) {
+  var s2 = this.dropdown.getAllSuggestionsRefs(), i2 = s2.findIndex(((e3) => e3 === t2));
+  return e2 ? s2[i2 + 1] : s2[i2 - 1];
+}, highlightOption(t2, e2) {
+  var s2, i2 = this.settings.classNames.dropdownItemActive;
+  if (this.state.ddItemElm && (this.state.ddItemElm.classList.remove(i2), this.state.ddItemElm.removeAttribute("aria-selected")), !t2) return this.state.ddItemData = null, this.state.ddItemElm = null, void this.input.autocomplete.suggest.call(this);
+  s2 = this.dropdown.getSuggestionDataByNode(t2), this.state.ddItemData = s2, this.state.ddItemElm = t2, t2.classList.add(i2), t2.setAttribute("aria-selected", true), e2 && (t2.parentNode.scrollTop = t2.clientHeight + t2.offsetTop - t2.parentNode.clientHeight), this.settings.autoComplete && (this.input.autocomplete.suggest.call(this, s2), this.dropdown.position());
+}, selectOption(t2, e2, s2) {
+  var i2 = this.settings, a3 = i2.dropdown.includeSelectedTags, { clearOnSelect: n2, closeOnSelect: o2 } = i2.dropdown;
+  if (!t2) return this.addTags(this.state.inputText, true), void (o2 && this.dropdown.hide());
   e2 = e2 || {};
-  var d4 = t2.getAttribute("value"), c3 = "noMatch" == d4, g4 = "mix" == a3.mode, h3 = this.suggestedListItems.find((function(t3) {
-    var e3;
-    return (null !== (e3 = t3.value) && void 0 !== e3 ? e3 : t3) == d4;
-  }));
-  if (this.trigger("dropdown:select", { data: h3, elm: t2, event: e2 }), h3 || c3) {
+  var r2 = t2.getAttribute("value"), l4 = "noMatch" == r2, h3 = "mix" == i2.mode, g4 = this.suggestedListItems.find(((t3) => (t3.value ?? t3) == r2));
+  if (this.trigger("dropdown:select", { data: g4, elm: t2, event: e2 }), g4 || l4) {
     if (this.state.editing) {
-      var p3 = this.normalizeTags([h3])[0];
-      h3 = a3.transformTag.call(this, p3) || p3, this.onEditTagDone(null, u({ __isValid: true }, h3));
-    } else this[g4 ? "addMixTags" : "addTags"]([h3 || this.input.raw.call(this)], r2);
-    (g4 || this.DOM.input.parentNode) && (setTimeout((function() {
-      n2.DOM.input.focus(), n2.toggleFocusClass(true);
-    })), l4 && setTimeout(this.dropdown.hide.bind(this)), s2 ? i2 && i2() : (t2.addEventListener("transitionend", (function() {
-      n2.dropdown.fillHeaderFooter(), setTimeout((function() {
-        t2.remove(), n2.dropdown.refilter(), i2 && i2();
+      let t3 = this.normalizeTags([g4])[0];
+      g4 = i2.transformTag.call(this, t3) || t3, this.onEditTagDone(null, d2({ __isValid: true }, g4));
+    } else this[h3 ? "addMixTags" : "addTags"]([g4 || this.input.raw.call(this)], n2);
+    (h3 || this.DOM.input.parentNode) && (setTimeout((() => {
+      this.DOM.input.focus(), this.toggleFocusClass(true);
+    })), o2 && setTimeout(this.dropdown.hide.bind(this)), a3 ? s2 && s2() : (t2.addEventListener("transitionend", (() => {
+      this.dropdown.fillHeaderFooter(), setTimeout((() => {
+        t2.remove(), this.dropdown.refilter(), s2 && s2();
       }), 100);
     }), { once: true }), t2.classList.add(this.settings.classNames.dropdownItemHidden)));
-  } else l4 && setTimeout(this.dropdown.hide.bind(this));
-}, selectAll: function(t2) {
+  } else o2 && setTimeout(this.dropdown.hide.bind(this));
+}, selectAll(t2) {
   this.suggestedListItems.length = 0, this.dropdown.hide(), this.dropdown.filterListItems("");
   var e2 = this.dropdown.filterListItems("");
   return t2 || (e2 = this.state.dropdown.suggestions), this.addTags(e2, true), this;
-}, filterListItems: function(t2, e2) {
-  var i2, n2, a3, s2, o2, r2, l4 = function() {
-    var t3, l5, d5 = void 0, u3 = void 0;
-    t3 = v3[T3], n2 = (null != (l5 = Object) && "undefined" != typeof Symbol && l5[Symbol.hasInstance] ? l5[Symbol.hasInstance](t3) : t3 instanceof l5) ? v3[T3] : { value: v3[T3] };
-    var m5, b5 = !Object.keys(n2).some((function(t4) {
-      return y4.includes(t4);
-    })) ? ["value"] : y4;
-    g4.fuzzySearch && !e2.exact ? (s2 = b5.reduce((function(t4, e3) {
-      return t4 + " " + (n2[e3] || "");
-    }), "").toLowerCase().trim(), g4.accentedSearch && (s2 = h2(s2), r2 = h2(r2)), d5 = 0 == s2.indexOf(r2), u3 = s2 === r2, m5 = s2, a3 = r2.toLowerCase().split(" ").every((function(t4) {
-      return m5.includes(t4.toLowerCase());
-    }))) : (d5 = true, a3 = b5.some((function(t4) {
-      var i3 = "" + (n2[t4] || "");
-      return g4.accentedSearch && (i3 = h2(i3), r2 = h2(r2)), g4.caseSensitive || (i3 = i3.toLowerCase()), u3 = i3 === r2, e2.exact ? i3 === r2 : 0 == i3.indexOf(r2);
-    }))), o2 = !g4.includeSelectedTags && i2.isTagDuplicate(c2(n2) ? n2.value : n2), a3 && !o2 && (u3 && d5 ? f3.push(n2) : "startsWith" == g4.sortby && d5 ? p3.unshift(n2) : p3.push(n2));
-  }, d4 = this, u2 = this.settings, g4 = u2.dropdown, p3 = (e2 = e2 || {}, []), f3 = [], v3 = u2.whitelist, m4 = g4.maxItems >= 0 ? g4.maxItems : 1 / 0, b4 = g4.includeSelectedTags, w4 = "function" == typeof g4.sortby, y4 = g4.searchKeys, T3 = 0;
-  if (!(t2 = "select" == u2.mode && this.value.length && this.value[0][u2.tagTextProp] == t2 ? "" : t2) || !y4.length) {
-    p3 = b4 ? v3 : v3.filter((function(t3) {
-      return !d4.isTagDuplicate(c2(t3) ? t3.value : t3);
-    }));
-    var O4 = w4 ? g4.sortby(p3, r2) : p3.slice(0, m4);
-    return this.state.dropdown.suggestions = O4, O4;
+}, filterListItems(t2, e2) {
+  var s2, i2, a3, n2, o2, r2 = this.settings, d4 = r2.dropdown, h3 = (e2 = e2 || {}, []), c3 = [], p3 = r2.whitelist, u2 = d4.maxItems >= 0 ? d4.maxItems : 1 / 0, m4 = d4.includeSelectedTags, v3 = "function" == typeof d4.sortby, f3 = d4.searchKeys, T3 = 0;
+  if (!(t2 = "select" == r2.mode && this.value.length && this.value[0][r2.tagTextProp] == t2 ? "" : t2) || !f3.length) {
+    h3 = m4 ? p3 : p3.filter(((t3) => !this.isTagDuplicate(l(t3) ? t3.value : t3)));
+    var w4 = v3 ? d4.sortby(h3, o2) : h3.slice(0, u2);
+    return this.state.dropdown.suggestions = w4, w4;
   }
-  for (r2 = g4.caseSensitive ? "" + t2 : ("" + t2).toLowerCase(); T3 < v3.length; T3++) i2 = this, l4();
-  this.state.dropdown.suggestions = f3.concat(p3);
-  O4 = w4 ? g4.sortby(f3.concat(p3), r2) : f3.concat(p3).slice(0, m4);
-  return this.state.dropdown.suggestions = O4, O4;
-}, getMappedValue: function(t2) {
+  function b4(t3, e3) {
+    return e3.toLowerCase().split(" ").every(((e4) => t3.includes(e4.toLowerCase())));
+  }
+  for (o2 = d4.caseSensitive ? "" + t2 : ("" + t2).toLowerCase(); T3 < p3.length; T3++) {
+    let t3, r3;
+    s2 = p3[T3] instanceof Object ? p3[T3] : { value: p3[T3] };
+    let u3 = !Object.keys(s2).some(((t4) => f3.includes(t4))) ? ["value"] : f3;
+    d4.fuzzySearch && !e2.exact ? (a3 = u3.reduce(((t4, e3) => t4 + " " + (s2[e3] || "")), "").toLowerCase().trim(), d4.accentedSearch && (a3 = g2(a3), o2 = g2(o2)), t3 = 0 == a3.indexOf(o2), r3 = a3 === o2, i2 = b4(a3, o2)) : (t3 = true, i2 = u3.some(((t4) => {
+      var i3 = "" + (s2[t4] || "");
+      return d4.accentedSearch && (i3 = g2(i3), o2 = g2(o2)), d4.caseSensitive || (i3 = i3.toLowerCase()), r3 = i3 === o2, e2.exact ? i3 === o2 : 0 == i3.indexOf(o2);
+    }))), n2 = !d4.includeSelectedTags && this.isTagDuplicate(l(s2) ? s2.value : s2), i2 && !n2 && (r3 && t3 ? c3.push(s2) : "startsWith" == d4.sortby && t3 ? h3.unshift(s2) : h3.push(s2));
+  }
+  this.state.dropdown.suggestions = c3.concat(h3);
+  w4 = v3 ? d4.sortby(c3.concat(h3), o2) : c3.concat(h3).slice(0, u2);
+  return this.state.dropdown.suggestions = w4, w4;
+}, getMappedValue(t2) {
   var e2 = this.settings.dropdown.mapValueTo;
   return e2 ? "function" == typeof e2 ? e2(t2) : t2[e2] || t2.value : t2.value;
-}, createListHTML: function(t2) {
-  var e2 = this;
-  return u([], t2).map((function(t3, i2) {
+}, createListHTML(t2) {
+  return d2([], t2).map(((t3, e2) => {
     "string" != typeof t3 && "number" != typeof t3 || (t3 = { value: t3 });
-    var n2 = e2.dropdown.getMappedValue(t3);
-    return n2 = "string" == typeof n2 && e2.settings.dropdown.escapeHTML ? d2(n2) : n2, e2.settings.templates.dropdownItem.apply(e2, [I2(S2({}, t3), { mappedValue: n2 }), e2]);
+    var s2 = this.dropdown.getMappedValue(t3);
+    return s2 = "string" == typeof s2 && this.settings.dropdown.escapeHTML ? r(s2) : s2, this.settings.templates.dropdownItem.apply(this, [{ ...t3, mappedValue: s2 }, this]);
   })).join("");
-} }), _2 = null != (_2 = { refs: function() {
+} }, refs() {
   this.DOM.dropdown = this.parseTemplate("dropdown", [this.settings]), this.DOM.dropdown.content = this.DOM.dropdown.querySelector("[data-selector='tagify-suggestions-wrapper']");
-}, getHeaderRef: function() {
+}, getHeaderRef() {
   return this.DOM.dropdown.querySelector("[data-selector='tagify-suggestions-header']");
-}, getFooterRef: function() {
+}, getFooterRef() {
   return this.DOM.dropdown.querySelector("[data-selector='tagify-suggestions-footer']");
-}, getAllSuggestionsRefs: function() {
-  return N(this.DOM.dropdown.content.querySelectorAll(this.settings.classNames.dropdownItemSelector));
-}, show: function(t2) {
-  var e2, i2, n2, s2 = this, o2 = this.settings, r2 = "mix" == o2.mode && !o2.enforceWhitelist, l4 = !o2.whitelist || !o2.whitelist.length, d4 = "manual" == o2.dropdown.position;
-  if (t2 = void 0 === t2 ? this.state.inputText : t2, !(l4 && !r2 && !o2.templates.dropdownItemNoMatch || false === o2.dropdown.enabled || this.state.isLoading || this.settings.readonly)) {
-    if (clearTimeout(this.dropdownHide__bindEventsTimeout), this.suggestedListItems = this.dropdown.filterListItems(t2), t2 && !this.suggestedListItems.length && (this.trigger("dropdown:noMatch", t2), o2.templates.dropdownItemNoMatch && (n2 = o2.templates.dropdownItemNoMatch.call(this, { value: t2 }))), !n2) {
-      if (this.suggestedListItems.length) t2 && r2 && !this.state.editing.scope && !a2(this.suggestedListItems[0].value, t2) && this.suggestedListItems.unshift({ value: t2 });
+}, getAllSuggestionsRefs() {
+  return [...this.DOM.dropdown.content.querySelectorAll(this.settings.classNames.dropdownItemSelector)];
+}, show(t2) {
+  var e2, i2, a3, n2 = this.settings, o2 = "mix" == n2.mode && !n2.enforceWhitelist, r2 = !n2.whitelist || !n2.whitelist.length, d4 = "manual" == n2.dropdown.position;
+  if (t2 = void 0 === t2 ? this.state.inputText : t2, !(r2 && !o2 && !n2.templates.dropdownItemNoMatch || false === n2.dropdown.enabled || this.state.isLoading || this.settings.readonly)) {
+    if (clearTimeout(this.dropdownHide__bindEventsTimeout), this.suggestedListItems = this.dropdown.filterListItems(t2), t2 && !this.suggestedListItems.length && (this.trigger("dropdown:noMatch", t2), n2.templates.dropdownItemNoMatch && (a3 = n2.templates.dropdownItemNoMatch.call(this, { value: t2 }))), !a3) {
+      if (this.suggestedListItems.length) t2 && o2 && !this.state.editing.scope && !s(this.suggestedListItems[0].value, t2) && this.suggestedListItems.unshift({ value: t2 });
       else {
-        if (!t2 || !r2 || this.state.editing.scope) return this.input.autocomplete.suggest.call(this), void this.dropdown.hide();
+        if (!t2 || !o2 || this.state.editing.scope) return this.input.autocomplete.suggest.call(this), void this.dropdown.hide();
         this.suggestedListItems = [{ value: t2 }];
       }
-      i2 = "" + (c2(e2 = this.suggestedListItems[0]) ? e2.value : e2), o2.autoComplete && i2 && 0 == i2.indexOf(t2) && this.input.autocomplete.suggest.call(this, e2);
+      i2 = "" + (l(e2 = this.suggestedListItems[0]) ? e2.value : e2), n2.autoComplete && i2 && 0 == i2.indexOf(t2) && this.input.autocomplete.suggest.call(this, e2);
     }
-    this.dropdown.fill(n2), o2.dropdown.highlightFirst && this.dropdown.highlightOption(this.DOM.dropdown.content.querySelector(o2.classNames.dropdownItemSelector)), this.state.dropdown.visible || setTimeout(this.dropdown.events.binding.bind(this)), this.state.dropdown.visible = t2 || true, this.state.dropdown.query = t2, this.setStateSelection(), d4 || setTimeout((function() {
-      s2.dropdown.position(), s2.dropdown.render();
-    })), setTimeout((function() {
-      s2.trigger("dropdown:show", s2.DOM.dropdown);
+    this.dropdown.fill(a3), n2.dropdown.highlightFirst && this.dropdown.highlightOption(this.DOM.dropdown.content.querySelector(n2.classNames.dropdownItemSelector)), this.state.dropdown.visible || setTimeout(this.dropdown.events.binding.bind(this)), this.state.dropdown.visible = t2 || true, this.state.dropdown.query = t2, this.setStateSelection(), d4 || setTimeout((() => {
+      this.dropdown.position(), this.dropdown.render();
+    })), setTimeout((() => {
+      this.trigger("dropdown:show", this.DOM.dropdown);
     }));
   }
-}, hide: function(t2) {
-  var e2 = this, i2 = this.DOM, n2 = i2.scope, a3 = i2.dropdown, s2 = "manual" == this.settings.dropdown.position && !t2;
-  if (a3 && document.body.contains(a3) && !s2) return window.removeEventListener("resize", this.dropdown.position), this.dropdown.events.binding.call(this, false), n2.setAttribute("aria-expanded", false), a3.parentNode.removeChild(a3), setTimeout((function() {
-    e2.state.dropdown.visible = false;
-  }), 100), this.state.dropdown.query = this.state.ddItemData = this.state.ddItemElm = this.state.selection = null, this.state.tag && this.state.tag.value.length && (this.state.flaggedTags[this.state.tag.baseOffset] = this.state.tag), this.trigger("dropdown:hide", a3), this;
-}, toggle: function(t2) {
+}, hide(t2) {
+  var { scope: e2, dropdown: s2 } = this.DOM, i2 = "manual" == this.settings.dropdown.position && !t2;
+  if (s2 && document.body.contains(s2) && !i2) return window.removeEventListener("resize", this.dropdown.position), this.dropdown.events.binding.call(this, false), e2.setAttribute("aria-expanded", false), s2.parentNode.removeChild(s2), setTimeout((() => {
+    this.state.dropdown.visible = false;
+  }), 100), this.state.dropdown.query = this.state.ddItemData = this.state.ddItemElm = this.state.selection = null, this.state.tag && this.state.tag.value.length && (this.state.flaggedTags[this.state.tag.baseOffset] = this.state.tag), this.trigger("dropdown:hide", s2), this;
+}, toggle(t2) {
   this.dropdown[this.state.dropdown.visible && !t2 ? "hide" : "show"]();
-}, getAppendTarget: function() {
+}, getAppendTarget() {
   var t2 = this.settings.dropdown;
   return "function" == typeof t2.appendTarget ? t2.appendTarget() : t2.appendTarget;
-}, render: function() {
-  var t2, e2, i2, n2 = this, a3 = (t2 = this.DOM.dropdown, (i2 = t2.cloneNode(true)).style.cssText = "position:fixed; top:-9999px; opacity:0", document.body.appendChild(i2), e2 = i2.clientHeight, i2.parentNode.removeChild(i2), e2), s2 = this.settings, o2 = this.dropdown.getAppendTarget();
-  return false === s2.dropdown.enabled || (this.DOM.scope.setAttribute("aria-expanded", true), document.body.contains(this.DOM.dropdown) || (this.DOM.dropdown.classList.add(s2.classNames.dropdownInital), this.dropdown.position(a3), o2.appendChild(this.DOM.dropdown), setTimeout((function() {
-    return n2.DOM.dropdown.classList.remove(s2.classNames.dropdownInital);
-  })))), this;
-}, fill: function(t2) {
+}, render() {
+  var t2, e2, s2, i2 = (t2 = this.DOM.dropdown, (s2 = t2.cloneNode(true)).style.cssText = "position:fixed; top:-9999px; opacity:0", document.body.appendChild(s2), e2 = s2.clientHeight, s2.parentNode.removeChild(s2), e2), a3 = this.settings, n2 = this.dropdown.getAppendTarget();
+  return false === a3.dropdown.enabled || (this.DOM.scope.setAttribute("aria-expanded", true), document.body.contains(this.DOM.dropdown) || (this.DOM.dropdown.classList.add(a3.classNames.dropdownInital), this.dropdown.position(i2), n2.appendChild(this.DOM.dropdown), setTimeout((() => this.DOM.dropdown.classList.remove(a3.classNames.dropdownInital))))), this;
+}, fill(t2) {
   t2 = "string" == typeof t2 ? t2 : this.dropdown.createListHTML(t2 || this.suggestedListItems);
-  var e2, i2 = this.settings.templates.dropdownContent.call(this, t2);
-  this.DOM.dropdown.content.innerHTML = (e2 = i2) ? e2.replace(/\>[\r\n ]+\</g, "><").split(/>\s+</).join("><").trim() : "";
-}, fillHeaderFooter: function() {
-  var t2 = this.dropdown.filterListItems(this.state.dropdown.query), e2 = this.parseTemplate("dropdownHeader", [t2]), i2 = this.parseTemplate("dropdownFooter", [t2]), n2 = this.dropdown.getHeaderRef(), a3 = this.dropdown.getFooterRef();
-  e2 && (null == n2 || n2.parentNode.replaceChild(e2, n2)), i2 && (null == a3 || a3.parentNode.replaceChild(i2, a3));
-}, position: function(t2) {
-  var e2, i2 = this.settings.dropdown, n2 = this.dropdown.getAppendTarget();
-  if ("manual" != i2.position && n2) {
-    var a3, s2, o2, r2, l4, d4, c3, u2, g4, h3, p3 = this.DOM.dropdown, f3 = i2.RTL, v3 = n2 === document.body, m4 = n2 === this.DOM.scope, b4 = v3 ? window.pageYOffset : n2.scrollTop, w4 = document.fullscreenElement || document.webkitFullscreenElement || document.documentElement, y4 = w4.clientHeight, T3 = Math.max(w4.clientWidth || 0, window.innerWidth || 0), O4 = T3 > 480 ? i2.position : "all", x3 = this.DOM["input" == O4 ? "input" : "scope"];
+  var e2, s2 = this.settings.templates.dropdownContent.call(this, t2);
+  this.DOM.dropdown.content.innerHTML = (e2 = s2) ? e2.replace(/\>[\r\n ]+\</g, "><").split(/>\s+</).join("><").trim() : "";
+}, fillHeaderFooter() {
+  var t2 = this.dropdown.filterListItems(this.state.dropdown.query), e2 = this.parseTemplate("dropdownHeader", [t2]), s2 = this.parseTemplate("dropdownFooter", [t2]), i2 = this.dropdown.getHeaderRef(), a3 = this.dropdown.getFooterRef();
+  e2 && i2?.parentNode.replaceChild(e2, i2), s2 && a3?.parentNode.replaceChild(s2, a3);
+}, position(t2) {
+  var e2 = this.settings.dropdown, s2 = this.dropdown.getAppendTarget();
+  if ("manual" != e2.position && s2) {
+    var i2, a3, n2, o2, r2, l4, d4, h3, g4, c3, p3 = this.DOM.dropdown, u2 = e2.RTL, m4 = s2 === document.body, v3 = s2 === this.DOM.scope, f3 = m4 ? window.pageYOffset : s2.scrollTop, T3 = document.fullscreenElement || document.webkitFullscreenElement || document.documentElement, w4 = T3.clientHeight, b4 = Math.max(T3.clientWidth || 0, window.innerWidth || 0), y4 = b4 > 480 ? e2.position : "all", x3 = this.DOM["input" == y4 ? "input" : "scope"];
     if (t2 = t2 || p3.clientHeight, this.state.dropdown.visible) {
-      if ("text" == O4 ? (o2 = (a3 = (function() {
-        var t3 = document.getSelection();
+      if ("text" == y4 ? (n2 = (i2 = (function() {
+        const t3 = document.getSelection();
         if (t3.rangeCount) {
-          var e3, i3, n3 = t3.getRangeAt(0), a4 = n3.startContainer, s3 = n3.startOffset;
-          if (s3 > 0) return (i3 = document.createRange()).setStart(a4, s3 - 1), i3.setEnd(a4, s3), { left: (e3 = i3.getBoundingClientRect()).right, top: e3.top, bottom: e3.bottom };
-          if (a4.getBoundingClientRect) return a4.getBoundingClientRect();
+          const e3 = t3.getRangeAt(0), s3 = e3.startContainer, i3 = e3.startOffset;
+          let a4, n3;
+          if (i3 > 0) return n3 = document.createRange(), n3.setStart(s3, i3 - 1), n3.setEnd(s3, i3), a4 = n3.getBoundingClientRect(), { left: a4.right, top: a4.top, bottom: a4.bottom };
+          if (s3.getBoundingClientRect) return s3.getBoundingClientRect();
         }
         return { left: -9999, top: -9999 };
-      })()).bottom, s2 = a3.top, r2 = a3.left, l4 = "auto") : (d4 = (function(t3) {
-        var e3 = 0, i3 = 0;
-        for (t3 = t3.parentNode; t3 && t3 != w4; ) e3 += t3.offsetTop || 0, i3 += t3.offsetLeft || 0, t3 = t3.parentNode;
-        return { top: e3, left: i3 };
-      })(n2), a3 = x3.getBoundingClientRect(), s2 = m4 ? -1 : a3.top - d4.top, o2 = (m4 ? a3.height : a3.bottom - d4.top) - 1, r2 = m4 ? -1 : a3.left - d4.left, l4 = a3.width + "px"), !v3) {
-        var D4 = (function() {
-          for (var t3 = 0, e3 = i2.appendTarget.parentNode; e3; ) t3 += e3.scrollTop || 0, e3 = e3.parentNode;
-          return t3;
+      })()).bottom, a3 = i2.top, o2 = i2.left, r2 = "auto") : (l4 = (function(t3) {
+        var e3 = 0, s3 = 0;
+        for (t3 = t3.parentNode; t3 && t3 != T3; ) e3 += t3.offsetTop || 0, s3 += t3.offsetLeft || 0, t3 = t3.parentNode;
+        return { top: e3, left: s3 };
+      })(s2), i2 = x3.getBoundingClientRect(), a3 = v3 ? -1 : i2.top - l4.top, n2 = (v3 ? i2.height : i2.bottom - l4.top) - 1, o2 = v3 ? -1 : i2.left - l4.left, r2 = i2.width + "px"), !m4) {
+        let t3 = (function() {
+          for (var t4 = 0, s3 = e2.appendTarget.parentNode; s3; ) t4 += s3.scrollTop || 0, s3 = s3.parentNode;
+          return t4;
         })();
-        s2 += D4, o2 += D4;
+        a3 += t3, n2 += t3;
       }
-      s2 = Math.floor(s2), o2 = Math.ceil(o2), u2 = T3 - r2 < 120, g4 = ((c3 = null !== (e2 = i2.placeAbove) && void 0 !== e2 ? e2 : y4 - a3.bottom < t2) ? s2 : o2) + b4, h3 = r2 + (f3 && a3.width || 0) + window.pageXOffset, h3 = "text" == O4 && u2 ? "right: 0;" : "left: ".concat(h3, "px;"), p3.style.cssText = "".concat(h3, " top: ").concat(g4, "px; min-width: ").concat(l4, "; max-width: ").concat(l4), p3.setAttribute("placement", c3 ? "top" : "bottom"), p3.setAttribute("position", O4);
+      a3 = Math.floor(a3), n2 = Math.ceil(n2), h3 = b4 - o2 < 120, g4 = ((d4 = e2.placeAbove ?? w4 - i2.bottom < t2) ? a3 : n2) + f3, c3 = o2 + (u2 && i2.width || 0) + window.pageXOffset, c3 = "text" == y4 && h3 ? "right: 0;" : `left: ${c3}px;`, p3.style.cssText = `${c3} top: ${g4}px; min-width: ${r2}; max-width: ${r2}`, p3.setAttribute("placement", d4 ? "top" : "bottom"), p3.setAttribute("position", y4);
     }
   }
-} }) ? _2 : {}, Object.getOwnPropertyDescriptors ? Object.defineProperties(C2, Object.getOwnPropertyDescriptors(_2)) : (function(t2, e2) {
-  var i2 = Object.keys(t2);
-  if (Object.getOwnPropertySymbols) {
-    var n2 = Object.getOwnPropertySymbols(t2);
-    e2 && (n2 = n2.filter((function(e3) {
-      return Object.getOwnPropertyDescriptor(t2, e3).enumerable;
-    }))), i2.push.apply(i2, n2);
-  }
-  return i2;
-})(Object(_2)).forEach((function(t2) {
-  Object.defineProperty(C2, t2, Object.getOwnPropertyDescriptor(_2, t2));
-})), C2);
-var L = "@yaireo/tagify/";
-var P = { empty: "empty", exceed: "number of tags exceeded", pattern: "pattern mismatch", duplicate: "already exists", notAllowed: "not allowed" };
-var j = { wrapper: function(e2, i2) {
-  return '<tags class="'.concat(i2.classNames.namespace, " ").concat(i2.mode ? "".concat(i2.classNames[i2.mode + "Mode"]) : "", " ").concat(e2.className, '"\n                    ').concat(i2.readonly ? "readonly" : "", "\n                    ").concat(i2.disabled ? "disabled" : "", "\n                    ").concat(i2.required ? "required" : "", "\n                    ").concat("select" === i2.mode ? "spellcheck='false'" : "", '\n                    tabIndex="-1">\n                    ').concat(this.settings.templates.input.call(this), "\n                ").concat(t, "\n        </tags>");
-}, input: function() {
-  var e2 = this.settings, i2 = e2.placeholder || t;
-  return "<span ".concat(!e2.readonly && e2.userInput ? "contenteditable" : "", ' data-can-editable tabIndex="0" data-placeholder="').concat(i2, '" aria-placeholder="').concat(e2.placeholder || "", '"\n                    class="').concat(e2.classNames.input, '"\n                    role="textbox"\n                    autocapitalize="false"\n                    autocorrect="off"\n                    aria-label="').concat(e2.a11y.inputAriaLabel, '"\n                    aria-autocomplete="both"\n                    aria-multiline="').concat("mix" == e2.mode, '"></span>');
-}, tag: function(t2, e2) {
-  var i2 = e2.settings;
-  return '<tag title="'.concat(t2.title || t2.value, `"
+} };
+var O2 = "@yaireo/tagify/";
+var I2 = { empty: "empty", exceed: "number of tags exceeded", pattern: "pattern mismatch", duplicate: "already exists", notAllowed: "not allowed" };
+var M = { wrapper(e2, s2) {
+  return `<tags class="${s2.classNames.namespace} ${s2.mode ? `${s2.classNames[s2.mode + "Mode"]}` : ""} ${e2.className}"
+                    ${s2.readonly ? "readonly" : ""}
+                    ${s2.disabled ? "disabled" : ""}
+                    ${s2.required ? "required" : ""}
+                    ${"select" === s2.mode ? "spellcheck='false'" : ""}
+                    tabIndex="-1">
+                    ${this.settings.templates.input.call(this)}
+                ${t}
+        </tags>`;
+}, input() {
+  var e2 = this.settings, s2 = e2.placeholder || t;
+  return `<span ${!e2.readonly && e2.userInput ? "contenteditable" : ""} data-can-editable tabIndex="0" data-placeholder="${s2}" aria-placeholder="${e2.placeholder || ""}"
+                    class="${e2.classNames.input}"
+                    role="textbox"
+                    autocapitalize="false"
+                    autocorrect="off"
+                    aria-label="${e2.a11y.inputAriaLabel}"
+                    aria-autocomplete="both"
+                    aria-multiline="${"mix" == e2.mode}"></span>`;
+}, tag(t2, { settings: e2 }) {
+  return `<tag title="${t2.title || t2.value}"
                     contenteditable='false'
-                    tabIndex="`).concat(i2.a11y.focusableTags ? 0 : -1, '"\n                    class="').concat(i2.classNames.tag, " ").concat(t2.class || "", '"\n                    ').concat(this.getAttributes(t2), `>
-            <x title='' tabIndex="`).concat(i2.a11y.focusableTags ? 0 : -1, '" class="').concat(i2.classNames.tagX, `" role='button' aria-label='remove tag'></x>
+                    tabIndex="${e2.a11y.focusableTags ? 0 : -1}"
+                    class="${e2.classNames.tag} ${t2.class || ""}"
+                    ${this.getAttributes(t2)}>
+            <x title='' tabIndex="${e2.a11y.focusableTags ? 0 : -1}" class="${e2.classNames.tagX}" role='button' aria-label='remove tag'></x>
             <div>
-                <span `).concat("select" === i2.mode && i2.userInput ? "contenteditable='true'" : "", ` autocapitalize="false" autocorrect="off" spellcheck='false' class="`).concat(i2.classNames.tagText, '">').concat(t2[i2.tagTextProp] || t2.value, "</span>\n            </div>\n        </tag>");
-}, dropdown: function(t2) {
-  var e2 = t2.dropdown, i2 = "manual" == e2.position;
-  return '<div class="'.concat(i2 ? "" : t2.classNames.dropdown, " ").concat(e2.classname, '" role="listbox" aria-labelledby="dropdown" dir="').concat(e2.RTL ? "rtl" : "", `">
-                    <div data-selector='tagify-suggestions-wrapper' class="`).concat(t2.classNames.dropdownWrapper, '"></div>\n                </div>');
-}, dropdownContent: function(t2) {
-  var e2 = this.settings.templates, i2 = this.state.dropdown.suggestions;
-  return "\n            ".concat(e2.dropdownHeader.call(this, i2), "\n            ").concat(t2, "\n            ").concat(e2.dropdownFooter.call(this, i2), "\n        ");
-}, dropdownItem: function(t2) {
-  return "<div ".concat(this.getAttributes(t2), "\n                    class='").concat(this.settings.classNames.dropdownItem, " ").concat(this.isTagDuplicate(t2.value) ? this.settings.classNames.dropdownItemSelected : "", " ").concat(t2.class || "", `'
+                <span ${"select" === e2.mode && e2.userInput ? "contenteditable='true'" : ""} autocapitalize="false" autocorrect="off" spellcheck='false' class="${e2.classNames.tagText}">${t2[e2.tagTextProp] || t2.value}</span>
+            </div>
+        </tag>`;
+}, dropdown(t2) {
+  var e2 = t2.dropdown;
+  return `<div class="${"manual" == e2.position ? "" : t2.classNames.dropdown} ${e2.classname}" role="listbox" aria-labelledby="dropdown" dir="${e2.RTL ? "rtl" : ""}">
+                    <div data-selector='tagify-suggestions-wrapper' class="${t2.classNames.dropdownWrapper}"></div>
+                </div>`;
+}, dropdownContent(t2) {
+  var e2 = this.settings.templates, s2 = this.state.dropdown.suggestions;
+  return `
+            ${e2.dropdownHeader.call(this, s2)}
+            ${t2}
+            ${e2.dropdownFooter.call(this, s2)}
+        `;
+}, dropdownItem(t2) {
+  return `<div ${this.getAttributes(t2)}
+                    class='${this.settings.classNames.dropdownItem} ${this.isTagDuplicate(t2.value) ? this.settings.classNames.dropdownItemSelected : ""} ${t2.class || ""}'
                     tabindex="0"
-                    role="option">`).concat(t2.mappedValue || t2.value, "</div>");
-}, dropdownHeader: function(t2) {
-  return `<header data-selector='tagify-suggestions-header' class="`.concat(this.settings.classNames.dropdownHeader, '"></header>');
-}, dropdownFooter: function(t2) {
+                    role="option">${t2.mappedValue || t2.value}</div>`;
+}, dropdownHeader(t2) {
+  return `<header data-selector='tagify-suggestions-header' class="${this.settings.classNames.dropdownHeader}"></header>`;
+}, dropdownFooter(t2) {
   var e2 = t2.length - this.settings.dropdown.maxItems;
-  return e2 > 0 ? `<footer data-selector='tagify-suggestions-footer' class="`.concat(this.settings.classNames.dropdownFooter, '">\n                ').concat(e2, " more items. Refine your search.\n            </footer>") : "";
+  return e2 > 0 ? `<footer data-selector='tagify-suggestions-footer' class="${this.settings.classNames.dropdownFooter}">
+                ${e2} more items. Refine your search.
+            </footer>` : "";
 }, dropdownItemNoMatch: null };
-function V(t2, e2) {
-  (null == e2 || e2 > t2.length) && (e2 = t2.length);
-  for (var i2 = 0, n2 = new Array(e2); i2 < e2; i2++) n2[i2] = t2[i2];
-  return n2;
-}
-function R2(t2, e2) {
-  return null != e2 && "undefined" != typeof Symbol && e2[Symbol.hasInstance] ? !!e2[Symbol.hasInstance](t2) : t2 instanceof e2;
-}
-function F(t2, e2) {
-  return (function(t3) {
-    if (Array.isArray(t3)) return t3;
-  })(t2) || (function(t3, e3) {
-    var i2 = null == t3 ? null : "undefined" != typeof Symbol && t3[Symbol.iterator] || t3["@@iterator"];
-    if (null != i2) {
-      var n2, a3, s2 = [], o2 = true, r2 = false;
-      try {
-        for (i2 = i2.call(t3); !(o2 = (n2 = i2.next()).done) && (s2.push(n2.value), !e3 || s2.length !== e3); o2 = true) ;
-      } catch (t4) {
-        r2 = true, a3 = t4;
-      } finally {
-        try {
-          o2 || null == i2.return || i2.return();
-        } finally {
-          if (r2) throw a3;
-        }
-      }
-      return s2;
-    }
-  })(t2, e2) || (function(t3, e3) {
-    if (!t3) return;
-    if ("string" == typeof t3) return V(t3, e3);
-    var i2 = Object.prototype.toString.call(t3).slice(8, -1);
-    "Object" === i2 && t3.constructor && (i2 = t3.constructor.name);
-    if ("Map" === i2 || "Set" === i2) return Array.from(i2);
-    if ("Arguments" === i2 || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(i2)) return V(t3, e3);
-  })(t2, e2) || (function() {
-    throw new TypeError("Invalid attempt to destructure non-iterable instance.\\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
-  })();
-}
-function B(t2) {
-  var e2 = document.createTextNode(""), i2 = {};
-  function a3(t3, i3, n2) {
-    n2 && i3.split(/\s+/g).forEach((function(i4) {
-      return e2[t3 + "EventListener"].call(e2, i4, n2);
-    }));
-  }
-  return { removeAllCustomListeners: function() {
-    Object.entries(i2).forEach((function(t3) {
-      var e3 = F(t3, 2), i3 = e3[0];
-      e3[1].forEach((function(t4) {
-        return a3("remove", i3, t4);
-      }));
-    })), i2 = {};
-  }, off: function(t3, e3) {
-    return t3 && (e3 ? a3("remove", t3, e3) : t3.split(/\s+/g).forEach((function(t4) {
-      var e4;
-      null === (e4 = i2[t4]) || void 0 === e4 || e4.forEach((function(e5) {
-        return a3("remove", t4, e5);
-      })), delete i2[t4];
-    }))), this;
-  }, on: function(t3, e3) {
-    return e3 && "function" == typeof e3 && (t3.split(/\s+/g).forEach((function(t4) {
-      Array.isArray(i2[t4]) ? i2[t4].push(e3) : i2[t4] = [e3];
-    })), a3("add", t3, e3)), this;
-  }, trigger: function(i3, a4, s2) {
-    var o2, r2;
-    if (s2 = s2 || { cloneData: true }, i3) if (t2.settings.isJQueryPlugin) "remove" == i3 && (i3 = "removeTag"), jQuery(t2.DOM.originalInput).triggerHandler(i3, [a4]);
-    else {
-      try {
-        var l4 = "object" == (void 0 === a4 ? "undefined" : (r2 = a4) && "undefined" != typeof Symbol && r2.constructor === Symbol ? "symbol" : typeof r2) ? a4 : { value: a4 };
-        if ((l4 = s2.cloneData ? u({}, l4) : l4).tagify = this, a4.event && (l4.event = this.cloneEvent(a4.event)), R2(a4, Object)) for (var d4 in a4) R2(a4[d4], HTMLElement) && (l4[d4] = a4[d4]);
-        o2 = new CustomEvent(i3, { detail: l4 });
-      } catch (t3) {
-        n.warn(t3);
-      }
-      e2.dispatchEvent(o2);
-    }
-  } };
-}
-function H(t2, e2) {
-  (null == e2 || e2 > t2.length) && (e2 = t2.length);
-  for (var i2 = 0, n2 = new Array(e2); i2 < e2; i2++) n2[i2] = t2[i2];
-  return n2;
-}
-function W(t2, e2, i2) {
-  return e2 in t2 ? Object.defineProperty(t2, e2, { value: i2, enumerable: true, configurable: true, writable: true }) : t2[e2] = i2, t2;
-}
-function q(t2, e2) {
-  return null != e2 && "undefined" != typeof Symbol && e2[Symbol.hasInstance] ? !!e2[Symbol.hasInstance](t2) : t2 instanceof e2;
-}
-function U2(t2, e2) {
-  return e2 = null != e2 ? e2 : {}, Object.getOwnPropertyDescriptors ? Object.defineProperties(t2, Object.getOwnPropertyDescriptors(e2)) : (function(t3, e3) {
-    var i2 = Object.keys(t3);
-    if (Object.getOwnPropertySymbols) {
-      var n2 = Object.getOwnPropertySymbols(t3);
-      e3 && (n2 = n2.filter((function(e4) {
-        return Object.getOwnPropertyDescriptor(t3, e4).enumerable;
-      }))), i2.push.apply(i2, n2);
-    }
-    return i2;
-  })(Object(e2)).forEach((function(i2) {
-    Object.defineProperty(t2, i2, Object.getOwnPropertyDescriptor(e2, i2));
-  })), t2;
-}
-function K(t2) {
-  return (function(t3) {
-    if (Array.isArray(t3)) return H(t3);
-  })(t2) || (function(t3) {
-    if ("undefined" != typeof Symbol && null != t3[Symbol.iterator] || null != t3["@@iterator"]) return Array.from(t3);
-  })(t2) || (function(t3, e2) {
-    if (!t3) return;
-    if ("string" == typeof t3) return H(t3, e2);
-    var i2 = Object.prototype.toString.call(t3).slice(8, -1);
-    "Object" === i2 && t3.constructor && (i2 = t3.constructor.name);
-    if ("Map" === i2 || "Set" === i2) return Array.from(i2);
-    if ("Arguments" === i2 || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(i2)) return H(t3, e2);
-  })(t2) || (function() {
-    throw new TypeError("Invalid attempt to spread non-iterable instance.\\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
-  })();
-}
-var z = { customBinding: function() {
-  var t2 = this;
-  this.customEventsList.forEach((function(e2) {
-    t2.on(e2, t2.settings.callbacks[e2]);
+var E2 = { customBinding() {
+  this.customEventsList.forEach(((t2) => {
+    this.on(t2, this.settings.callbacks[t2]);
   }));
-}, binding: function() {
-  var t2, e2 = !(arguments.length > 0 && void 0 !== arguments[0]) || arguments[0], i2 = this.settings, n2 = this.events.callbacks, a3 = e2 ? "addEventListener" : "removeEventListener";
-  if (!(this.state.mainEvents && e2 || i2.disabled || i2.readonly)) {
-    for (var s2 in this.state.mainEvents = e2, e2 && !this.listeners.main && (this.events.bindGlobal.call(this), this.settings.isJQueryPlugin && jQuery(this.DOM.originalInput).on("tagify.removeAllTags", this.removeAllTags.bind(this))), t2 = this.listeners.main = this.listeners.main || { keydown: ["input", n2.onKeydown.bind(this)], click: ["scope", n2.onClickScope.bind(this)], dblclick: "select" != i2.mode && ["scope", n2.onDoubleClickScope.bind(this)], paste: ["input", n2.onPaste.bind(this)], drop: ["input", n2.onDrop.bind(this)], compositionstart: ["input", n2.onCompositionStart.bind(this)], compositionend: ["input", n2.onCompositionEnd.bind(this)] }) t2[s2] && this.DOM[t2[s2][0]][a3](s2, t2[s2][1]);
-    var o2 = this.listeners.main.inputMutationObserver || new MutationObserver(n2.onInputDOMChange.bind(this));
-    o2.disconnect(), "mix" == i2.mode && o2.observe(this.DOM.input, { childList: true }), this.events.bindOriginaInputListener.call(this), e2 && (this.listeners.main = void 0);
+}, binding(t2 = true) {
+  var e2, s2 = this.settings, i2 = this.events.callbacks, a3 = t2 ? "addEventListener" : "removeEventListener";
+  if (!(this.state.mainEvents && t2 || s2.disabled || s2.readonly)) {
+    for (var n2 in this.state.mainEvents = t2, t2 && !this.listeners.main && (this.events.bindGlobal.call(this), this.settings.isJQueryPlugin && jQuery(this.DOM.originalInput).on("tagify.removeAllTags", this.removeAllTags.bind(this))), e2 = this.listeners.main = this.listeners.main || { keydown: ["input", i2.onKeydown.bind(this)], click: ["scope", i2.onClickScope.bind(this)], dblclick: "select" != s2.mode && ["scope", i2.onDoubleClickScope.bind(this)], paste: ["input", i2.onPaste.bind(this)], drop: ["input", i2.onDrop.bind(this)], compositionstart: ["input", i2.onCompositionStart.bind(this)], compositionend: ["input", i2.onCompositionEnd.bind(this)] }) e2[n2] && this.DOM[e2[n2][0]][a3](n2, e2[n2][1]);
+    var o2 = this.listeners.main.inputMutationObserver || new MutationObserver(i2.onInputDOMChange.bind(this));
+    o2.disconnect(), "mix" == s2.mode && o2.observe(this.DOM.input, { childList: true }), this.events.bindOriginaInputListener.call(this), t2 && (this.listeners.main = void 0);
   }
-}, bindOriginaInputListener: function(t2) {
-  var e2 = (t2 || 0) + 500;
+}, bindOriginaInputListener(t2) {
+  const e2 = (t2 || 0) + 500;
   this.listeners.main && (clearInterval(this.listeners.main.originalInputValueObserverInterval), this.listeners.main.originalInputValueObserverInterval = setInterval(this.events.callbacks.observeOriginalInputValue.bind(this), e2));
-}, bindGlobal: function(t2) {
-  var e2, i2 = this.events.callbacks, n2 = t2 ? "removeEventListener" : "addEventListener";
+}, bindGlobal(t2) {
+  var e2, s2 = this.events.callbacks, i2 = t2 ? "removeEventListener" : "addEventListener";
   if (this.listeners && (t2 || !this.listeners.global)) {
-    this.listeners.global = this.listeners.global || [{ type: this.isIE ? "keydown" : "input", target: this.DOM.input, cb: i2[this.isIE ? "onInputIE" : "onInput"].bind(this) }, { type: "keydown", target: window, cb: i2.onWindowKeyDown.bind(this) }, { type: "focusin", target: this.DOM.scope, cb: i2.onFocusBlur.bind(this) }, { type: "focusout", target: this.DOM.scope, cb: i2.onFocusBlur.bind(this) }, { type: "click", target: document, cb: i2.onClickAnywhere.bind(this), useCapture: true }];
-    var a3 = true, s2 = false, o2 = void 0;
-    try {
-      for (var r2, l4 = this.listeners.global[Symbol.iterator](); !(a3 = (r2 = l4.next()).done); a3 = true) (e2 = r2.value).target[n2](e2.type, e2.cb, !!e2.useCapture);
-    } catch (t3) {
-      s2 = true, o2 = t3;
-    } finally {
-      try {
-        a3 || null == l4.return || l4.return();
-      } finally {
-        if (s2) throw o2;
-      }
-    }
+    for (e2 of (this.listeners.global = this.listeners.global || [{ type: this.isIE ? "keydown" : "input", target: this.DOM.input, cb: s2[this.isIE ? "onInputIE" : "onInput"].bind(this) }, { type: "keydown", target: window, cb: s2.onWindowKeyDown.bind(this) }, { type: "focusin", target: this.DOM.scope, cb: s2.onFocusBlur.bind(this) }, { type: "focusout", target: this.DOM.scope, cb: s2.onFocusBlur.bind(this) }, { type: "click", target: document, cb: s2.onClickAnywhere.bind(this), useCapture: true }], this.listeners.global)) e2.target[i2](e2.type, e2.cb, !!e2.useCapture);
     t2 && (this.listeners.global = void 0);
   }
-}, unbindGlobal: function() {
+}, unbindGlobal() {
   this.events.bindGlobal.call(this, true);
-}, callbacks: { onFocusBlur: function(t2) {
-  var e2, i2, n2 = this.settings, a3 = m2.call(this, t2.relatedTarget), s2 = v.call(this, t2.target), o2 = t2.target.classList.contains(n2.classNames.tagX), r2 = "focusin" == t2.type, l4 = "focusout" == t2.type;
-  o2 && "mix" != n2.mode && n2.focusInputOnRemove && this.DOM.input.focus(), a3 && r2 && !s2 && !o2 && this.toggleFocusClass(this.state.hasFocus = +/* @__PURE__ */ new Date());
-  var d4 = t2.target ? this.trim(this.DOM.input.textContent) : "", c3 = null === (i2 = this.value) || void 0 === i2 || null === (e2 = i2[0]) || void 0 === e2 ? void 0 : e2[n2.tagTextProp], u2 = n2.dropdown.enabled >= 0, g4 = { relatedTarget: t2.relatedTarget }, h3 = this.state.actions.selectOption && (u2 || !n2.dropdown.closeOnSelect), p3 = this.state.actions.addNew && u2;
-  if (l4) {
-    var f3;
-    if ("mix" != n2.mode) t2.relatedTarget && (null === (f3 = this.DOM.dropdown) || void 0 === f3 ? void 0 : f3.contains(t2.relatedTarget)) || this.repositionScopeInput("reset", { focus: false });
+}, callbacks: { onFocusBlur(t2) {
+  var e2 = this.settings, s2 = m2.call(this, t2.relatedTarget), i2 = u.call(this, t2.target), a3 = t2.target.matches(e2.classNames.tagXSelector), n2 = "focusin" == t2.type, o2 = "focusout" == t2.type;
+  a3 && "mix" != e2.mode && e2.focusInputOnRemove && this.DOM.input.focus(), s2 && n2 && !i2 && !a3 && this.toggleFocusClass(this.state.hasFocus = +/* @__PURE__ */ new Date());
+  var r2 = t2.target ? this.trim(this.DOM.input.textContent) : "", l4 = this.value?.[0]?.[e2.tagTextProp], d4 = e2.dropdown.enabled >= 0, h3 = { relatedTarget: t2.relatedTarget }, g4 = this.state.actions.selectOption && (d4 || !e2.dropdown.closeOnSelect), c3 = this.state.actions.addNew && d4;
+  if (o2) {
+    if ("mix" != e2.mode) t2.relatedTarget && this.DOM.dropdown?.contains(t2.relatedTarget) || this.repositionScopeInput("reset", { focus: false });
     if (t2.relatedTarget === this.DOM.scope) return this.dropdown.hide(), void this.DOM.input.focus();
-    this.postUpdate(), n2.onChangeAfterBlur && this.triggerChangeEvent();
+    this.postUpdate(), e2.onChangeAfterBlur && this.triggerChangeEvent();
   }
-  if (!(h3 || p3 || o2)) if (this.state.hasFocus = !(!r2 && !a3) && +/* @__PURE__ */ new Date(), this.toggleFocusClass(this.state.hasFocus), "mix" != n2.mode) {
-    if (r2) {
-      if (!n2.focusable) return;
-      var b4 = 0 === n2.dropdown.enabled && !this.state.dropdown.visible, w4 = this.DOM.scope.querySelector(this.settings.classNames.tagTextSelector);
-      return this.trigger("focus", g4), void (b4 && !s2 && (this.dropdown.show(this.value.length ? "" : void 0), "select" === n2.mode && this.setRangeAtStartEnd(false, w4)));
+  if (!(g4 || c3 || a3)) if (this.state.hasFocus = !(!n2 && !s2) && +/* @__PURE__ */ new Date(), this.toggleFocusClass(this.state.hasFocus), "mix" != e2.mode) {
+    if (n2) {
+      if (!e2.focusable) return;
+      var p3 = 0 === e2.dropdown.enabled && !this.state.dropdown.visible, v3 = this.DOM.scope.querySelector(this.settings.classNames.tagTextSelector);
+      return this.trigger("focus", h3), void (p3 && !i2 && (this.dropdown.show(this.value.length ? "" : void 0), "select" === e2.mode && this.setRangeAtStartEnd(false, v3)));
     }
-    if (l4) {
-      if (this.trigger("blur", g4), this.loading(false), "select" == n2.mode) {
+    if (o2) {
+      if (this.trigger("blur", h3), this.loading(false), "select" == e2.mode) {
         if (this.value.length) {
-          var y4 = this.getTagElms()[0];
-          d4 = this.trim(y4.textContent);
+          let t3 = this.getTagElms()[0];
+          r2 = this.trim(t3.textContent);
         }
-        c3 === d4 && (d4 = "");
+        l4 === r2 && (r2 = "");
       }
-      d4 && !this.state.actions.selectOption && n2.addTagOnBlur && n2.addTagOn.includes("blur") && this.addTags(d4, true);
+      r2 && !this.state.actions.selectOption && e2.addTagOnBlur && e2.addTagOn.includes("blur") && this.addTags(r2, true);
     }
-    a3 || (this.DOM.input.removeAttribute("style"), this.dropdown.hide());
-  } else r2 ? this.trigger("focus", g4) : l4 && (this.trigger("blur", g4), this.loading(false), this.dropdown.hide(), this.state.dropdown.visible = void 0, this.setStateSelection());
-}, onCompositionStart: function(t2) {
+    s2 || (this.DOM.input.removeAttribute("style"), this.dropdown.hide());
+  } else n2 ? this.trigger("focus", h3) : o2 && (this.trigger("blur", h3), this.loading(false), this.dropdown.hide(), this.state.dropdown.visible = void 0, this.setStateSelection());
+}, onCompositionStart(t2) {
   this.state.composing = true;
-}, onCompositionEnd: function(t2) {
+}, onCompositionEnd(t2) {
   this.state.composing = false;
-}, onWindowKeyDown: function(t2) {
-  var e2, i2 = this.settings, n2 = document.activeElement, a3 = m2.call(this, n2) && this.DOM.scope.contains(n2), s2 = n2 === this.DOM.input, o2 = a3 && n2.hasAttribute("readonly"), r2 = this.DOM.scope.querySelector(this.settings.classNames.tagTextSelector), l4 = this.state.dropdown.visible;
-  if (("Tab" === t2.key && l4 || this.state.hasFocus || a3 && !o2) && !s2) {
-    e2 = n2.nextElementSibling;
-    var d4 = t2.target.classList.contains(i2.classNames.tagX);
+}, onWindowKeyDown(t2) {
+  var e2, s2 = this.settings, i2 = document.activeElement, a3 = m2.call(this, i2) && this.DOM.scope.contains(i2), n2 = i2 === this.DOM.input, o2 = a3 && i2.hasAttribute("readonly"), r2 = this.DOM.scope.querySelector(this.settings.classNames.tagTextSelector), l4 = this.state.dropdown.visible;
+  if (("Tab" === t2.key && l4 || this.state.hasFocus || a3 && !o2) && !n2) {
+    e2 = i2.nextElementSibling;
+    var d4 = t2.target.matches(s2.classNames.tagXSelector);
     switch (t2.key) {
       case "Backspace":
-        i2.readonly || this.state.editing || (this.removeTags(n2), (e2 || this.DOM.input).focus());
+        s2.readonly || this.state.editing || (this.removeTags(i2), (e2 || this.DOM.input).focus());
         break;
       case "Enter":
         if (d4) return void this.removeTags(t2.target.parentNode);
-        i2.a11y.focusableTags && v.call(this, n2) && setTimeout(this.editTag.bind(this), 0, n2);
+        s2.a11y.focusableTags && u.call(this, i2) && setTimeout(this.editTag.bind(this), 0, i2);
         break;
       case "ArrowDown":
-        this.state.dropdown.visible || "mix" == i2.mode || this.dropdown.show();
+        this.state.dropdown.visible || "mix" == s2.mode || this.dropdown.show();
         break;
       case "Tab":
-        null == r2 || r2.focus();
+        r2?.focus();
     }
   }
-}, onKeydown: function(t2) {
-  var e2 = this, i2 = this.settings;
-  if (!this.state.composing && i2.userInput) {
-    "select" == i2.mode && i2.enforceWhitelist && this.value.length && "Tab" != t2.key && t2.preventDefault();
-    var n2 = this.trim(t2.target.textContent);
-    this.trigger("keydown", { event: t2 }), i2.hooks.beforeKeyDown(t2, { tagify: this }).then((function(a3) {
-      if ("mix" == i2.mode) {
+}, onKeydown(t2) {
+  var e2 = this.settings;
+  if (!this.state.composing && e2.userInput) {
+    "select" == e2.mode && e2.enforceWhitelist && this.value.length && "Tab" != t2.key && t2.preventDefault();
+    var s2 = this.trim(t2.target.textContent);
+    this.trigger("keydown", { event: t2 }), e2.hooks.beforeKeyDown(t2, { tagify: this }).then(((i2) => {
+      if ("mix" == e2.mode) {
         switch (t2.key) {
           case "Left":
           case "ArrowLeft":
-            e2.state.actions.ArrowLeft = true;
+            this.state.actions.ArrowLeft = true;
             break;
           case "Delete":
           case "Backspace":
-            if (e2.state.editing) return;
-            var s2 = document.getSelection(), o2 = "Delete" == t2.key && s2.anchorOffset == (s2.anchorNode.length || 0), r2 = s2.anchorNode.previousSibling, d4 = 1 == s2.anchorNode.nodeType || !s2.anchorOffset && r2 && 1 == r2.nodeType && s2.anchorNode.previousSibling;
+            if (this.state.editing) return;
+            var a3 = document.getSelection(), n2 = "Delete" == t2.key && a3.anchorOffset == (a3.anchorNode.length || 0), r2 = a3.anchorNode.previousSibling, l4 = 1 == a3.anchorNode.nodeType || !a3.anchorOffset && r2 && 1 == r2.nodeType && a3.anchorNode.previousSibling;
             !(function(t3) {
               var e3 = document.createElement("div");
               t3.replace(/\&#?[0-9a-z]+;/gi, (function(t4) {
                 return e3.innerHTML = t4, e3.innerText;
               }));
-            })(e2.DOM.input.innerHTML);
-            var c3, u2, g4, h3 = e2.getTagElms(), f3 = 1 === s2.anchorNode.length && s2.anchorNode.nodeValue == String.fromCharCode(8203);
-            if ("edit" == i2.backspace && d4) return c3 = 1 == s2.anchorNode.nodeType ? null : s2.anchorNode.previousElementSibling, setTimeout(e2.editTag.bind(e2), 0, c3), void t2.preventDefault();
-            if (p2() && q(d4, Element)) return g4 = l(d4), d4.hasAttribute("readonly") || d4.remove(), e2.DOM.input.focus(), void setTimeout((function() {
-              T(g4), e2.DOM.input.click();
+            })(this.DOM.input.innerHTML);
+            var d4, h3, g4, p3 = this.getTagElms(), u2 = 1 === a3.anchorNode.length && a3.anchorNode.nodeValue == String.fromCharCode(8203);
+            if ("edit" == e2.backspace && l4) return d4 = 1 == a3.anchorNode.nodeType ? null : a3.anchorNode.previousElementSibling, setTimeout(this.editTag.bind(this), 0, d4), void t2.preventDefault();
+            if (c2() && l4 instanceof Element) return g4 = o(l4), l4.hasAttribute("readonly") || l4.remove(), this.DOM.input.focus(), void setTimeout((() => {
+              w2(g4), this.DOM.input.click();
             }));
-            if ("BR" == s2.anchorNode.nodeName) return;
-            if ((o2 || d4) && 1 == s2.anchorNode.nodeType ? u2 = 0 == s2.anchorOffset ? o2 ? h3[0] : null : h3[Math.min(h3.length, s2.anchorOffset) - 1] : o2 ? u2 = s2.anchorNode.nextElementSibling : q(d4, Element) && (u2 = d4), 3 == s2.anchorNode.nodeType && !s2.anchorNode.nodeValue && s2.anchorNode.previousElementSibling && t2.preventDefault(), (d4 || o2) && !i2.backspace) return void t2.preventDefault();
-            if ("Range" != s2.type && !s2.anchorOffset && s2.anchorNode == e2.DOM.input && "Delete" != t2.key) return void t2.preventDefault();
-            if ("Range" != s2.type && u2 && u2.hasAttribute("readonly")) return void T(l(u2));
-            "Delete" == t2.key && f3 && y2(s2.anchorNode.nextSibling) && e2.removeTags(s2.anchorNode.nextSibling);
+            if ("BR" == a3.anchorNode.nodeName) return;
+            if ((n2 || l4) && 1 == a3.anchorNode.nodeType ? h3 = 0 == a3.anchorOffset ? n2 ? p3[0] : null : p3[Math.min(p3.length, a3.anchorOffset) - 1] : n2 ? h3 = a3.anchorNode.nextElementSibling : l4 instanceof Element && (h3 = l4), 3 == a3.anchorNode.nodeType && !a3.anchorNode.nodeValue && a3.anchorNode.previousElementSibling && t2.preventDefault(), (l4 || n2) && !e2.backspace) return void t2.preventDefault();
+            if ("Range" != a3.type && !a3.anchorOffset && a3.anchorNode == this.DOM.input && "Delete" != t2.key) return void t2.preventDefault();
+            if ("Range" != a3.type && h3 && h3.hasAttribute("readonly")) return void w2(o(h3));
+            "Delete" == t2.key && u2 && T(a3.anchorNode.nextSibling) && this.removeTags(a3.anchorNode.nextSibling);
             break;
-          case "Enter":
-            if (t2.preventDefault(), e2.state.tag) return;
-            var v3 = window.getSelection();
-            v3.getRangeAt(0).insertNode(document.createElement("br")), v3.collapseToEnd();
+          case "Enter": {
+            if (t2.preventDefault(), this.state.tag) return;
+            let e3 = window.getSelection();
+            e3.getRangeAt(0).insertNode(document.createElement("br")), e3.collapseToEnd();
+          }
         }
         return true;
       }
-      var m4 = "manual" == i2.dropdown.position;
+      var m4 = "manual" == e2.dropdown.position;
       switch (t2.key) {
         case "Backspace":
-          var b4 = e2.getTagElmBeforeInput();
-          "select" == i2.mode && i2.enforceWhitelist && e2.value.length ? b4 && e2.removeTags(b4) : e2.state.dropdown.visible && "manual" != i2.dropdown.position || "" != t2.target.textContent && 8203 != n2.charCodeAt(0) || (true === i2.backspace ? b4 && e2.removeTags(b4) : "edit" == i2.backspace && b4 && setTimeout((function() {
-            return e2.editTag(b4);
-          }), 0));
+          var v3 = this.getTagElmBeforeInput();
+          "select" == e2.mode && e2.enforceWhitelist && this.value.length ? v3 && this.removeTags(v3) : this.state.dropdown.visible && "manual" != e2.dropdown.position || "" != t2.target.textContent && 8203 != s2.charCodeAt(0) || (true === e2.backspace ? v3 && this.removeTags(v3) : "edit" == e2.backspace && v3 && setTimeout((() => this.editTag(v3)), 0));
           break;
         case "Esc":
         case "Escape":
-          if (e2.state.dropdown.visible) return;
+          if (this.state.dropdown.visible) return;
           t2.target.blur();
           break;
         case "Down":
         case "ArrowDown":
-          e2.state.dropdown.visible || e2.dropdown.show();
+          this.state.dropdown.visible || this.dropdown.show();
           break;
         case "ArrowLeft":
-          e2.repositionScopeInput("left") && t2.preventDefault();
+          this.repositionScopeInput("left") && t2.preventDefault();
           break;
-        case "ArrowRight":
-          if (e2.repositionScopeInput("right")) {
+        case "ArrowRight": {
+          if (this.repositionScopeInput("right")) {
             t2.preventDefault();
             break;
           }
-          var w4 = e2.state.inputSuggestion || e2.state.ddItemData;
-          if (w4 && i2.autoComplete.rightKey) return void e2.addTags([w4], true);
+          let s3 = this.state.inputSuggestion || this.state.ddItemData;
+          if (s3 && e2.autoComplete.rightKey) return void this.addTags([s3], true);
           break;
+        }
         case "Tab":
-          if (!i2.addTagOn.includes(t2.key.toLowerCase())) break;
+          if (!e2.addTagOn.includes(t2.key.toLowerCase())) break;
         case "Enter":
-          if (e2.state.dropdown.visible && !m4) return;
-          var O4 = e2.state.autoCompleteData || n2;
-          if (!O4 && "Tab" === t2.key) return true;
-          t2.preventDefault(), setTimeout((function() {
-            e2.state.dropdown.visible && !m4 || e2.state.actions.selectOption || !i2.addTagOn.includes(t2.key.toLowerCase()) || (e2.addTags([O4], true), e2.state.autoCompleteData = null);
+          if (this.state.dropdown.visible && !m4) return;
+          var f3 = this.state.autoCompleteData || s2;
+          if (!f3 && "Tab" === t2.key) return true;
+          t2.preventDefault(), setTimeout((() => {
+            this.state.dropdown.visible && !m4 || this.state.actions.selectOption || !e2.addTagOn.includes(t2.key.toLowerCase()) || (this.addTags([f3], true), this.state.autoCompleteData = null);
           }));
       }
-    })).catch((function(t3) {
-      return t3;
-    }));
+    })).catch(((t3) => t3));
   }
-}, onInput: function(t2) {
+}, onInput(t2) {
   this.postUpdate();
   var e2 = this.settings;
   if ("mix" == e2.mode) return this.events.callbacks.onMixTagsInput.call(this, t2);
-  var i2 = this.input.normalize.call(this, void 0, { trim: false }), n2 = i2.length >= e2.dropdown.enabled, a3 = { value: i2, inputElm: this.DOM.input }, s2 = this.validateTag({ value: i2 });
-  "select" == e2.mode && this.toggleScopeValidation(s2), a3.isValid = s2, this.state.inputText != i2 && (this.input.set.call(this, i2, false), -1 != i2.search(e2.delimiters) ? this.addTags(i2) && this.input.set.call(this) : e2.dropdown.enabled >= 0 && this.dropdown[n2 ? "show" : "hide"](i2), this.trigger("input", a3));
-}, onMixTagsInput: function(t2) {
-  var e2, i2, n2, a3, s2, o2, r2, l4, d4 = this, c3 = this.settings, g4 = this.value.length, h3 = this.getTagElms(), f3 = document.createDocumentFragment(), v3 = window.getSelection().getRangeAt(0), m4 = [].map.call(h3, (function(t3) {
-    return y2(t3).value;
-  }));
-  if ("deleteContentBackward" == t2.inputType && p2() && this.events.callbacks.onKeydown.call(this, { target: t2.target, key: "Backspace" }), O2(this.getTagElms()), this.value.slice().forEach((function(t3) {
-    t3.readonly && !m4.includes(t3.value) && f3.appendChild(d4.createTagElem(t3));
-  })), f3.childNodes.length && (v3.insertNode(f3), this.setRangeAtStartEnd(false, f3.lastChild)), h3.length != g4) return this.value = [].map.call(this.getTagElms(), (function(t3) {
-    return y2(t3);
-  })), void this.update({ withoutChangeEvent: true });
+  var s2 = this.input.normalize.call(this, void 0, { trim: false }), i2 = s2.length >= e2.dropdown.enabled, a3 = { value: s2, inputElm: this.DOM.input }, n2 = this.validateTag({ value: s2 });
+  "select" == e2.mode && this.toggleScopeValidation(n2), a3.isValid = n2, this.state.inputText != s2 && (this.input.set.call(this, s2, false), -1 != s2.search(e2.delimiters) ? this.addTags(s2) && this.input.set.call(this) : e2.dropdown.enabled >= 0 && this.dropdown[i2 ? "show" : "hide"](s2), this.trigger("input", a3));
+}, onMixTagsInput(t2) {
+  var e2, s2, i2, a3, n2, o2, r2, l4, h3 = this.settings, g4 = this.value.length, p3 = this.getTagElms(), u2 = document.createDocumentFragment(), m4 = (l4 = window.getSelection()).rangeCount ? l4.getRangeAt(0) : null, v3 = [].map.call(p3, ((t3) => T(t3).value));
+  if ("deleteContentBackward" == t2.inputType && c2() && this.events.callbacks.onKeydown.call(this, { target: t2.target, key: "Backspace" }), b2(this.getTagElms()), this.value.slice().forEach(((t3) => {
+    t3.readonly && !v3.includes(t3.value) && u2.appendChild(this.createTagElem(t3));
+  })), u2.childNodes.length && m4 && (m4.insertNode(u2), this.setRangeAtStartEnd(false, u2.lastChild)), p3.length != g4) return this.value = [].map.call(this.getTagElms(), ((t3) => T(t3))), void this.update({ withoutChangeEvent: true });
   if (this.hasMaxTags()) return true;
-  if (window.getSelection && (o2 = window.getSelection()).rangeCount > 0 && 3 == o2.anchorNode.nodeType) {
-    if ((v3 = o2.getRangeAt(0).cloneRange()).collapse(true), v3.setStart(o2.focusNode, 0), n2 = (e2 = v3.toString().slice(0, v3.endOffset)).split(c3.pattern).length - 1, (i2 = e2.match(c3.pattern)) && (a3 = e2.slice(e2.lastIndexOf(i2[i2.length - 1]))), a3) {
-      if (this.state.actions.ArrowLeft = false, this.state.tag = { prefix: a3.match(c3.pattern)[0], value: a3.replace(c3.pattern, "") }, this.state.tag.baseOffset = o2.baseOffset - this.state.tag.value.length, l4 = this.state.tag.value.match(c3.delimiters)) return this.state.tag.value = this.state.tag.value.replace(c3.delimiters, ""), this.state.tag.delimiters = l4[0], this.addTags(this.state.tag.value, c3.dropdown.clearOnSelect), void this.dropdown.hide();
-      s2 = this.state.tag.value.length >= c3.dropdown.enabled;
+  if (window.getSelection && (l4 = window.getSelection()).rangeCount > 0 && 3 == l4.anchorNode.nodeType) {
+    if ((m4 = l4.getRangeAt(0).cloneRange()).collapse(true), m4.setStart(l4.focusNode, 0), i2 = (e2 = m4.toString().slice(0, m4.endOffset)).split(h3.pattern).length - 1, (s2 = e2.match(h3.pattern)) && (a3 = e2.slice(e2.lastIndexOf(s2[s2.length - 1]))), a3) {
+      if (this.state.actions.ArrowLeft = false, this.state.tag = { prefix: a3.match(h3.pattern)[0], value: a3.replace(h3.pattern, "") }, this.state.tag.baseOffset = l4.baseOffset - this.state.tag.value.length, r2 = this.state.tag.value.match(h3.delimiters)) return this.state.tag.value = this.state.tag.value.replace(h3.delimiters, ""), this.state.tag.delimiters = r2[0], this.addTags(this.state.tag.value, h3.dropdown.clearOnSelect), void this.dropdown.hide();
+      n2 = this.state.tag.value.length >= h3.dropdown.enabled;
       try {
-        r2 = (r2 = this.state.flaggedTags[this.state.tag.baseOffset]).prefix == this.state.tag.prefix && r2.value[0] == this.state.tag.value[0], this.state.flaggedTags[this.state.tag.baseOffset] && !this.state.tag.value && delete this.state.flaggedTags[this.state.tag.baseOffset];
+        o2 = (o2 = this.state.flaggedTags[this.state.tag.baseOffset]).prefix == this.state.tag.prefix && o2.value[0] == this.state.tag.value[0], this.state.flaggedTags[this.state.tag.baseOffset] && !this.state.tag.value && delete this.state.flaggedTags[this.state.tag.baseOffset];
       } catch (t3) {
       }
-      (r2 || n2 < this.state.mixMode.matchedPatternCount) && (s2 = false);
+      (o2 || i2 < this.state.mixMode.matchedPatternCount) && (n2 = false);
     } else this.state.flaggedTags = {};
-    this.state.mixMode.matchedPatternCount = n2;
+    this.state.mixMode.matchedPatternCount = i2;
   }
-  setTimeout((function() {
-    d4.update({ withoutChangeEvent: true }), d4.trigger("input", u({}, d4.state.tag, { textContent: d4.DOM.input.textContent })), d4.state.tag && d4.dropdown[s2 ? "show" : "hide"](d4.state.tag.value);
+  setTimeout((() => {
+    this.update({ withoutChangeEvent: true }), this.trigger("input", d2({}, this.state.tag, { textContent: this.DOM.input.textContent })), this.state.tag && this.dropdown[n2 ? "show" : "hide"](this.state.tag.value);
   }), 10);
-}, onInputIE: function(t2) {
+}, onInputIE(t2) {
   var e2 = this;
   setTimeout((function() {
     e2.events.callbacks.onInput.call(e2, t2);
   }));
-}, observeOriginalInputValue: function() {
+}, observeOriginalInputValue() {
   this.DOM.originalInput.parentNode || this.destroy(), this.DOM.originalInput.value != this.DOM.originalInput.tagifyValue && this.loadOriginalValues();
-}, onClickAnywhere: function(t2) {
+}, onClickAnywhere(t2) {
   if (t2.target != this.DOM.scope && !this.DOM.scope.contains(t2.target)) {
     this.toggleFocusClass(false), this.state.hasFocus = false;
-    var e2 = t2.target.closest(this.settings.classNames.dropdownSelector);
-    (null == e2 ? void 0 : e2.__tagify) != this && this.dropdown.hide();
+    let e2 = t2.target.closest(this.settings.classNames.dropdownSelector);
+    e2?.__tagify != this && this.dropdown.hide();
   }
-}, onClickScope: function(t2) {
-  var e2 = this.settings, i2 = t2.target.closest("." + e2.classNames.tag);
+}, onClickScope(t2) {
+  var e2 = this.settings, s2 = t2.target.closest("." + e2.classNames.tag);
   t2.target, this.DOM.scope;
-  var n2 = +/* @__PURE__ */ new Date() - this.state.hasFocus;
-  if (!t2.target.classList.contains(e2.classNames.tagX)) return i2 && !this.state.editing ? (this.trigger("click", { tag: i2, index: this.getNodeIndex(i2), data: y2(i2), event: t2 }), void (1 !== e2.editTags && 1 !== e2.editTags.clicks && "select" != e2.mode || this.events.callbacks.onDoubleClickScope.call(this, t2))) : void (t2.target == this.DOM.input && ("mix" == e2.mode && this.fixFirefoxLastTagNoCaret(), n2 > 500 || !e2.focusable) ? this.state.dropdown.visible ? this.dropdown.hide() : 0 === e2.dropdown.enabled && "mix" != e2.mode && this.dropdown.show(this.value.length ? "" : void 0) : "select" != e2.mode || 0 !== e2.dropdown.enabled || this.state.dropdown.visible || (this.events.callbacks.onDoubleClickScope.call(this, U2((function(t3) {
-    for (var e3 = 1; e3 < arguments.length; e3++) {
-      var i3 = null != arguments[e3] ? arguments[e3] : {}, n3 = Object.keys(i3);
-      "function" == typeof Object.getOwnPropertySymbols && (n3 = n3.concat(Object.getOwnPropertySymbols(i3).filter((function(t4) {
-        return Object.getOwnPropertyDescriptor(i3, t4).enumerable;
-      })))), n3.forEach((function(e4) {
-        W(t3, e4, i3[e4]);
-      }));
-    }
-    return t3;
-  })({}, t2), { target: this.getTagElms()[0] })), !e2.userInput && this.dropdown.show()));
+  var i2 = +/* @__PURE__ */ new Date() - this.state.hasFocus;
+  if (!t2.target.matches(e2.classNames.tagXSelector)) return s2 && !this.state.editing ? (this.trigger("click", { tag: s2, index: this.getNodeIndex(s2), data: T(s2), event: t2 }), void (1 !== e2.editTags && 1 !== e2.editTags.clicks && "select" != e2.mode || this.events.callbacks.onDoubleClickScope.call(this, t2))) : void (t2.target == this.DOM.input && ("mix" == e2.mode && this.fixFirefoxLastTagNoCaret(), i2 > 500 || !e2.focusable) ? this.state.dropdown.visible ? this.dropdown.hide() : 0 === e2.dropdown.enabled && "mix" != e2.mode && this.dropdown.show(this.value.length ? "" : void 0) : "select" != e2.mode || 0 !== e2.dropdown.enabled || this.state.dropdown.visible || (this.events.callbacks.onDoubleClickScope.call(this, { ...t2, target: this.getTagElms()[0] }), !e2.userInput && this.dropdown.show()));
   this.removeTags(t2.target.parentNode);
-}, onPaste: function(t2) {
-  var e2 = this;
+}, onPaste(t2) {
   t2.preventDefault();
-  var i2, n2, a3, s2 = this.settings;
-  if (!s2.userInput) return false;
-  s2.readonly || (n2 = t2.clipboardData || window.clipboardData, a3 = n2.getData("Text"), s2.hooks.beforePaste(t2, { tagify: this, pastedText: a3, clipboardData: n2 }).then((function(s3) {
-    if (void 0 === s3 && (s3 = a3), s3) if ("mix" == e2.settings.mode) {
-      if (e2.settings.pasteAsTags) {
-        var o2 = e2.convertPastedTextToMixTags(s3), r2 = e2.parseMixTags(o2, { skipDOM: true }), l4 = r2.__tagifyTagsData || [];
-        e2.injectAtCaret(r2, window.getSelection().getRangeAt(0)), l4.forEach((function(t3) {
-          return e2.value.push(t3);
-        }));
-        var d4 = e2.getTagElms().slice(-l4.length);
-        d4.forEach((function(t3, e3) {
-          return y2(t3, l4[e3]);
-        })), e2.update(), O2(d4);
-      } else e2.injectAtCaret(s3, window.getSelection().getRangeAt(0));
-      e2.events.callbacks.onMixTagsInput.call(e2, t2);
-    } else e2.injectAtCaret(s3, window.getSelection().getRangeAt(0)), e2.settings.pasteAsTags ? i2 = e2.addTags(e2.state.inputText + s3, true) : (e2.state.inputText = s3, e2.dropdown.show(s3));
-    e2.trigger("paste", { event: t2, pastedText: a3, clipboardData: n2, tagsElems: i2 });
-  })).catch((function(t3) {
-    return t3;
-  })));
-}, onDrop: function(t2) {
+  var e2, s2, i2, a3 = this.settings;
+  if (!a3.userInput) return false;
+  a3.readonly || (s2 = t2.clipboardData || window.clipboardData, i2 = s2.getData("Text"), a3.hooks.beforePaste(t2, { tagify: this, pastedText: i2, clipboardData: s2 }).then(((a4) => {
+    if (void 0 === a4 && (a4 = i2), a4) if ("mix" == this.settings.mode) {
+      if (this.settings.pasteAsTags) {
+        const t3 = this.convertPastedTextToMixTags(a4), e3 = this.parseMixTags(t3, { skipDOM: true }), s3 = e3.__tagifyTagsData || [];
+        this.injectAtCaret(e3, window.getSelection().getRangeAt(0)), s3.forEach(((t4) => this.value.push(t4)));
+        const i3 = this.getTagElms().slice(-s3.length);
+        i3.forEach(((t4, e4) => T(t4, s3[e4]))), this.update(), b2(i3);
+      } else this.injectAtCaret(a4, window.getSelection().getRangeAt(0));
+      this.events.callbacks.onMixTagsInput.call(this, t2);
+    } else this.injectAtCaret(a4, window.getSelection().getRangeAt(0)), this.settings.pasteAsTags ? e2 = this.addTags(this.state.inputText + a4, true) : (this.state.inputText = a4, this.dropdown.show(a4));
+    this.trigger("paste", { event: t2, pastedText: i2, clipboardData: s2, tagsElems: e2 });
+  })).catch(((t3) => t3)));
+}, onDrop(t2) {
   t2.preventDefault();
-}, onEditTagInput: function(t2, e2) {
-  var i2, n2 = t2.closest("." + this.settings.classNames.tag), a3 = this.getNodeIndex(n2), s2 = y2(n2), o2 = this.input.normalize.call(this, t2), r2 = (W(i2 = {}, this.settings.tagTextProp, o2), W(i2, "__tagId", s2.__tagId), i2), l4 = this.validateTag(r2);
-  this.editTagChangeDetected(u(s2, r2)) || true !== t2.originalIsValid || (l4 = true), n2.classList.toggle(this.settings.classNames.tagInvalid, true !== l4), s2.__isValid = l4, n2.title = true === l4 ? s2.title || s2.value : l4, o2.length >= this.settings.dropdown.enabled && (this.state.editing && (this.state.editing.value = o2), this.dropdown.show(o2)), this.trigger("edit:input", { tag: n2, index: a3, data: u({}, this.value[a3], { newValue: o2 }), event: e2 });
-}, onEditTagPaste: function(t2, e2) {
-  var i2 = (e2.clipboardData || window.clipboardData).getData("Text");
+}, onEditTagInput(t2, e2) {
+  var s2 = t2.closest("." + this.settings.classNames.tag), i2 = this.getNodeIndex(s2), a3 = T(s2), n2 = this.input.normalize.call(this, t2), o2 = { [this.settings.tagTextProp]: n2, __tagId: a3.__tagId }, r2 = this.validateTag(o2);
+  this.editTagChangeDetected(d2(a3, o2)) || true !== t2.originalIsValid || (r2 = true), s2.classList.toggle(this.settings.classNames.tagInvalid, true !== r2), a3.__isValid = r2, s2.title = true === r2 ? a3.title || a3.value : r2, n2.length >= this.settings.dropdown.enabled && (this.state.editing && (this.state.editing.value = n2), this.dropdown.show(n2)), this.trigger("edit:input", { tag: s2, index: i2, data: d2({}, this.value[i2], { newValue: n2 }), event: e2 });
+}, onEditTagPaste(t2, e2) {
+  var s2 = (e2.clipboardData || window.clipboardData).getData("Text");
   e2.preventDefault();
-  var n2 = w2(i2);
-  this.setRangeAtStartEnd(false, n2);
-}, onEditTagClick: function(t2, e2) {
+  var i2 = f2(s2);
+  this.setRangeAtStartEnd(false, i2);
+}, onEditTagClick(t2, e2) {
   this.events.callbacks.onClickScope.call(this, e2);
-}, onEditTagFocus: function(t2) {
+}, onEditTagFocus(t2) {
   this.state.editing = { scope: t2, input: t2.querySelector("[contenteditable]") };
-}, onEditTagBlur: function(t2, e2) {
-  var i2 = v.call(this, e2.relatedTarget);
-  if ("select" == this.settings.mode && i2 && e2.relatedTarget.contains(e2.target)) this.dropdown.hide();
+}, onEditTagBlur(t2, e2) {
+  var s2 = u.call(this, e2.relatedTarget);
+  if ("select" == this.settings.mode && s2 && e2.relatedTarget.contains(e2.target)) this.dropdown.hide();
   else if (this.state.editing && (this.state.hasFocus || this.toggleFocusClass(), this.DOM.scope.contains(document.activeElement) || this.trigger("blur", {}), this.DOM.scope.contains(t2))) {
-    var n2, a3, s2, o2 = this.settings, r2 = t2.closest("." + o2.classNames.tag), l4 = y2(r2), d4 = this.input.normalize.call(this, t2), c3 = (W(n2 = {}, o2.tagTextProp, d4), W(n2, "__tagId", l4.__tagId), n2), g4 = l4.__originalData, h3 = this.editTagChangeDetected(u(l4, c3)), p3 = this.validateTag(c3);
-    if (d4) if (h3) {
-      var f3;
-      if (a3 = this.hasMaxTags(), s2 = u({}, g4, (W(f3 = {}, o2.tagTextProp, this.trim(d4)), W(f3, "__isValid", p3), f3)), o2.transformTag.call(this, s2, g4), true !== (p3 = (!a3 || true === g4.__isValid) && this.validateTag(s2))) {
-        if (this.trigger("invalid", { data: s2, tag: r2, message: p3 }), o2.editTags.keepInvalid) return;
-        o2.keepInvalidTags ? s2.__isValid = p3 : s2 = g4;
-      } else o2.keepInvalidTags && (delete s2.title, delete s2["aria-invalid"], delete s2.class);
-      this.onEditTagDone(r2, s2);
-    } else this.onEditTagDone(r2, g4);
-    else this.onEditTagDone(r2);
+    var i2, a3, n2 = this.settings, o2 = t2.closest("." + n2.classNames.tag), r2 = T(o2), l4 = this.input.normalize.call(this, t2), h3 = { [n2.tagTextProp]: l4, __tagId: r2.__tagId }, g4 = r2.__originalData, c3 = this.editTagChangeDetected(d2(r2, h3)), p3 = this.validateTag(h3);
+    if (l4) if (c3) {
+      if (i2 = this.hasMaxTags(), a3 = d2({}, g4, { [n2.tagTextProp]: this.trim(l4), __isValid: p3 }), n2.transformTag.call(this, a3, g4), true !== (p3 = (!i2 || true === g4.__isValid) && this.validateTag(a3))) {
+        if (this.trigger("invalid", { data: a3, tag: o2, message: p3 }), n2.editTags.keepInvalid) return;
+        n2.keepInvalidTags ? a3.__isValid = p3 : a3 = g4;
+      } else n2.keepInvalidTags && (delete a3.title, delete a3["aria-invalid"], delete a3.class);
+      this.onEditTagDone(o2, a3);
+    } else this.onEditTagDone(o2, g4);
+    else this.onEditTagDone(o2);
   }
-}, onEditTagkeydown: function(t2, e2) {
+}, onEditTagkeydown(t2, e2) {
   if (!this.state.composing) switch (this.trigger("edit:keydown", { event: t2 }), t2.key) {
     case "Esc":
     case "Escape":
@@ -19422,135 +19125,96 @@ var z = { customBinding: function() {
     case "Enter":
     case "Tab":
       t2.preventDefault();
-      setTimeout((function() {
-        return t2.target.blur();
-      }), 0);
+      setTimeout((() => t2.target.blur()), 0);
   }
-}, onDoubleClickScope: function(t2) {
+}, onDoubleClickScope(t2) {
   var e2 = t2.target.closest("." + this.settings.classNames.tag);
   if (e2) {
-    var i2, n2, a3 = y2(e2), s2 = this.settings;
-    false !== (null == a3 ? void 0 : a3.editable) && (i2 = e2.classList.contains(this.settings.classNames.tagEditing), n2 = e2.hasAttribute("readonly"), s2.readonly || i2 || n2 || !this.settings.editTags || !s2.userInput || (this.events.callbacks.onEditTagFocus.call(this, e2), this.editTag(e2)), this.toggleFocusClass(true), "select" != s2.mode && this.trigger("dblclick", { tag: e2, index: this.getNodeIndex(e2), data: y2(e2) }));
+    var s2, i2, a3 = T(e2), n2 = this.settings;
+    false !== a3?.editable && (s2 = e2.classList.contains(this.settings.classNames.tagEditing), i2 = e2.hasAttribute("readonly"), n2.readonly || s2 || i2 || !this.settings.editTags || !n2.userInput || (this.events.callbacks.onEditTagFocus.call(this, e2), this.editTag(e2)), this.toggleFocusClass(true), "select" != n2.mode && this.trigger("dblclick", { tag: e2, index: this.getNodeIndex(e2), data: T(e2) }));
   }
-}, onInputDOMChange: function(t2) {
-  var e2 = this, i2 = this.DOM.input.lastChild;
-  t2.forEach((function(t3) {
-    t3.addedNodes.forEach((function(t4) {
+}, onInputDOMChange(t2) {
+  var e2 = this.DOM.input.lastChild;
+  t2.forEach(((t3) => {
+    t3.addedNodes.forEach(((t4) => {
       if ("<div><br></div>" == t4.outerHTML) t4.replaceWith(document.createElement("br"));
-      else if (1 == t4.nodeType && t4.querySelector(e2.settings.classNames.tagSelector)) {
-        var i3, n2 = document.createTextNode("");
-        3 == t4.childNodes[0].nodeType && "BR" != t4.previousSibling.nodeName && (n2 = document.createTextNode("\n")), (i3 = t4).replaceWith.apply(i3, K([n2].concat(K(K(t4.childNodes).slice(0, -1))))), T(n2);
-      } else if (v.call(e2, t4)) {
-        var a3;
-        if (3 != (null === (a3 = t4.previousSibling) || void 0 === a3 ? void 0 : a3.nodeType) || t4.previousSibling.textContent || t4.previousSibling.remove(), t4.previousSibling && "BR" == t4.previousSibling.nodeName) {
-          t4.previousSibling.replaceWith("\n\u200B");
-          for (var s2 = t4.nextSibling, o2 = ""; s2; ) o2 += s2.textContent, s2 = s2.nextSibling;
-          o2.trim() && T(t4.previousSibling);
-        } else t4.previousSibling && !y2(t4.previousSibling) || t4.before("\u200B");
-      }
-    })), t3.removedNodes.forEach((function(t4) {
-      t4 && "BR" == t4.nodeName && v.call(e2, i2) && (e2.removeTags(i2), e2.fixFirefoxLastTagNoCaret());
+      else if (1 == t4.nodeType && t4.querySelector(this.settings.classNames.tagSelector)) {
+        let e3 = document.createTextNode("");
+        3 == t4.childNodes[0].nodeType && "BR" != t4.previousSibling.nodeName && (e3 = document.createTextNode("\n")), t4.replaceWith(e3, ...[...t4.childNodes].slice(0, -1)), w2(e3);
+      } else if (u.call(this, t4)) if (3 != t4.previousSibling?.nodeType || t4.previousSibling.textContent || t4.previousSibling.remove(), t4.previousSibling && "BR" == t4.previousSibling.nodeName) {
+        t4.previousSibling.replaceWith("\n\u200B");
+        let e3 = t4.nextSibling, s2 = "";
+        for (; e3; ) s2 += e3.textContent, e3 = e3.nextSibling;
+        s2.trim() && w2(t4.previousSibling);
+      } else t4.previousSibling && !T(t4.previousSibling) || t4.before("\u200B");
+    })), t3.removedNodes.forEach(((t4) => {
+      t4 && "BR" == t4.nodeName && u.call(this, e2) && (this.removeTags(e2), this.fixFirefoxLastTagNoCaret());
     }));
-  })), i2 && "" == i2.nodeValue && i2.remove(), i2 && "BR" == i2.nodeName || this.DOM.input.appendChild(document.createElement("br"));
+  })), e2 && "" == e2.nodeValue && e2.remove(), e2 && "BR" == e2.nodeName || this.DOM.input.appendChild(document.createElement("br"));
 } } };
-function X(t2, e2) {
-  (null == e2 || e2 > t2.length) && (e2 = t2.length);
-  for (var i2 = 0, n2 = new Array(e2); i2 < e2; i2++) n2[i2] = t2[i2];
-  return n2;
-}
-function J2(t2, e2, i2) {
-  return e2 in t2 ? Object.defineProperty(t2, e2, { value: i2, enumerable: true, configurable: true, writable: true }) : t2[e2] = i2, t2;
-}
-function G(t2, e2) {
-  return null != e2 && "undefined" != typeof Symbol && e2[Symbol.hasInstance] ? !!e2[Symbol.hasInstance](t2) : t2 instanceof e2;
-}
-function $2(t2) {
-  for (var e2 = 1; e2 < arguments.length; e2++) {
-    var i2 = null != arguments[e2] ? arguments[e2] : {}, n2 = Object.keys(i2);
-    "function" == typeof Object.getOwnPropertySymbols && (n2 = n2.concat(Object.getOwnPropertySymbols(i2).filter((function(t3) {
-      return Object.getOwnPropertyDescriptor(i2, t3).enumerable;
-    })))), n2.forEach((function(e3) {
-      J2(t2, e3, i2[e3]);
-    }));
-  }
-  return t2;
-}
-function Q(t2, e2) {
-  return e2 = null != e2 ? e2 : {}, Object.getOwnPropertyDescriptors ? Object.defineProperties(t2, Object.getOwnPropertyDescriptors(e2)) : (function(t3, e3) {
-    var i2 = Object.keys(t3);
-    if (Object.getOwnPropertySymbols) {
-      var n2 = Object.getOwnPropertySymbols(t3);
-      e3 && (n2 = n2.filter((function(e4) {
-        return Object.getOwnPropertyDescriptor(t3, e4).enumerable;
-      }))), i2.push.apply(i2, n2);
-    }
-    return i2;
-  })(Object(e2)).forEach((function(i2) {
-    Object.defineProperty(t2, i2, Object.getOwnPropertyDescriptor(e2, i2));
-  })), t2;
-}
-function Y(t2) {
-  return (function(t3) {
-    if (Array.isArray(t3)) return X(t3);
-  })(t2) || (function(t3) {
-    if ("undefined" != typeof Symbol && null != t3[Symbol.iterator] || null != t3["@@iterator"]) return Array.from(t3);
-  })(t2) || (function(t3, e2) {
-    if (!t3) return;
-    if ("string" == typeof t3) return X(t3, e2);
-    var i2 = Object.prototype.toString.call(t3).slice(8, -1);
-    "Object" === i2 && t3.constructor && (i2 = t3.constructor.name);
-    if ("Map" === i2 || "Set" === i2) return Array.from(i2);
-    if ("Arguments" === i2 || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(i2)) return X(t3, e2);
-  })(t2) || (function() {
-    throw new TypeError("Invalid attempt to spread non-iterable instance.\\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
-  })();
-}
-function Z2(t2) {
-  return t2 && "undefined" != typeof Symbol && t2.constructor === Symbol ? "symbol" : typeof t2;
-}
-function tt(t2, e2) {
+function N(t2, s2) {
   if (!t2) {
-    n.warn("input element not found", t2);
-    var i2 = new Proxy(this, { get: function() {
-      return function() {
-        return i2;
-      };
-    } });
-    return i2;
+    e.warn("input element not found", t2);
+    const s3 = new Proxy(this, { get: () => () => s3 });
+    return s3;
   }
-  if (t2.__tagify) return n.warn("input element is already Tagified - Same instance is returned.", t2), t2.__tagify;
-  var a3;
-  u(this, B(this)), this.isFirefox = /firefox|fxios/i.test(navigator.userAgent) && !/seamonkey/i.test(navigator.userAgent), this.isIE = window.document.documentMode, e2 = e2 || {}, this.getPersistedData = (a3 = e2.id, function(t3) {
-    var e3;
-    if (a3) {
-      var i3, n2 = "/" + t3;
-      if (1 === (null === (e3 = localStorage) || void 0 === e3 ? void 0 : e3.getItem(L + a3 + "/v"))) try {
-        i3 = JSON.parse(localStorage[L + a3 + n2]);
-      } catch (t4) {
-      }
-      return i3;
+  if (t2.__tagify) return e.warn("input element is already Tagified - Same instance is returned.", t2), t2.__tagify;
+  var i2;
+  d2(this, (function(t3) {
+    var s3 = document.createTextNode(""), i3 = {};
+    function a3(t4, e2, i4) {
+      i4 && e2.split(/\s+/g).forEach(((e3) => s3[t4 + "EventListener"].call(s3, e3, i4)));
     }
-  }), this.setPersistedData = (function(t3) {
-    var e3;
-    return t3 ? (null === (e3 = localStorage) || void 0 === e3 || e3.setItem(L + t3 + "/v", 1), function(e4, i3) {
-      var n2, a4 = "/" + i3, s2 = JSON.stringify(e4);
-      e4 && i3 && (null === (n2 = localStorage) || void 0 === n2 || n2.setItem(L + t3 + a4, s2), dispatchEvent(new Event("storage")));
-    }) : function() {
-    };
-  })(e2.id), this.clearPersistedData = /* @__PURE__ */ (function(t3) {
-    return function(e3) {
-      var i3 = L + "/" + t3 + "/";
-      if (e3) localStorage.removeItem(i3 + e3);
-      else for (var n2 in localStorage) n2.includes(i3) && localStorage.removeItem(n2);
-    };
-  })(e2.id), this.applySettings(t2, e2), this.state = { inputText: "", editing: false, composing: false, actions: {}, mixMode: {}, dropdown: {}, flaggedTags: {} }, this.value = [], this.listeners = {}, this.DOM = {}, this.build(t2), A2.call(this), this.getCSSVars(), this.loadOriginalValues(), this.events.customBinding.call(this), this.events.binding.call(this), t2.autofocus && this.DOM.input.focus(), t2.__tagify = this;
+    return { removeAllCustomListeners() {
+      Object.entries(i3).forEach((([t4, e2]) => {
+        e2.forEach(((e3) => a3("remove", t4, e3)));
+      })), i3 = {};
+    }, off(t4, e2) {
+      return t4 && (e2 ? a3("remove", t4, e2) : t4.split(/\s+/g).forEach(((t5) => {
+        i3[t5]?.forEach(((e3) => a3("remove", t5, e3))), delete i3[t5];
+      }))), this;
+    }, on(t4, e2) {
+      return e2 && "function" == typeof e2 && (t4.split(/\s+/g).forEach(((t5) => {
+        Array.isArray(i3[t5]) ? i3[t5].push(e2) : i3[t5] = [e2];
+      })), a3("add", t4, e2)), this;
+    }, trigger(i4, a4, n2) {
+      var o2;
+      if (n2 = n2 || { cloneData: true }, i4) if (t3.settings.isJQueryPlugin) "remove" == i4 && (i4 = "removeTag"), jQuery(t3.DOM.originalInput).triggerHandler(i4, [a4]);
+      else {
+        try {
+          var r2 = "object" == typeof a4 ? a4 : { value: a4 };
+          if ((r2 = n2.cloneData ? d2({}, r2) : r2).tagify = this, a4.event && (r2.event = this.cloneEvent(a4.event)), a4 instanceof Object) for (var l4 in a4) a4[l4] instanceof HTMLElement && (r2[l4] = a4[l4]);
+          o2 = new CustomEvent(i4, { detail: r2 });
+        } catch (t4) {
+          e.warn(t4);
+        }
+        s3.dispatchEvent(o2);
+      }
+    } };
+  })(this)), this.isFirefox = /firefox|fxios/i.test(navigator.userAgent) && !/seamonkey/i.test(navigator.userAgent), this.isIE = window.document.documentMode, s2 = s2 || {}, this.getPersistedData = (i2 = s2.id, (t3) => {
+    if (!i2) return;
+    let e2, s3 = "/" + t3, a3 = localStorage?.getItem(O2 + i2 + "/v");
+    if (1 === a3) try {
+      e2 = JSON.parse(localStorage[O2 + i2 + s3]);
+    } catch (t4) {
+    }
+    return e2;
+  }), this.setPersistedData = ((t3) => t3 ? (localStorage?.setItem(O2 + t3 + "/v", 1), (e2, s3) => {
+    let i3 = "/" + s3, a3 = JSON.stringify(e2);
+    e2 && s3 && (localStorage?.setItem(O2 + t3 + i3, a3), dispatchEvent(new Event("storage")));
+  }) : () => {
+  })(s2.id), this.clearPersistedData = /* @__PURE__ */ ((t3) => (e2) => {
+    const s3 = O2 + "/" + t3 + "/";
+    if (e2) localStorage.removeItem(s3 + e2);
+    else for (let t4 in localStorage) t4.includes(s3) && localStorage.removeItem(t4);
+  })(s2.id), this.applySettings(t2, s2), this.state = { inputText: "", editing: false, composing: false, actions: {}, mixMode: {}, dropdown: {}, flaggedTags: {} }, this.value = [], this.listeners = {}, this.DOM = {}, this.build(t2), x.call(this), this.getCSSVars(), this.loadOriginalValues(), this.events.customBinding.call(this), this.events.binding.call(this), t2.autofocus && this.DOM.input.focus(), t2.__tagify = this;
 }
-tt.prototype = { _dropdown: k, placeCaretAfterNode: T, getSetTagData: y2, helpers: { sameStr: a2, removeCollectionProp: s, omit: o, isObject: c2, parseHTML: r, escapeHTML: d2, extend: u, concatWithoutDups: g2, getUID: f2, isNodeTag: v }, customEventsList: ["change", "add", "remove", "invalid", "input", "paste", "click", "keydown", "focus", "blur", "edit:input", "edit:beforeUpdate", "edit:updated", "edit:start", "edit:keydown", "dropdown:show", "dropdown:hide", "dropdown:select", "dropdown:updated", "dropdown:noMatch", "dropdown:scroll"], dataProps: ["__isValid", "__removed", "__originalData", "__originalHTML", "__tagId"], trim: function(t2) {
+N.prototype = { _dropdown: D2, placeCaretAfterNode: w2, getSetTagData: T, helpers: { sameStr: s, removeCollectionProp: i, omit: a2, isObject: l, parseHTML: n, escapeHTML: r, extend: d2, concatWithoutDups: h2, getUID: p2, isNodeTag: u }, customEventsList: ["change", "add", "remove", "invalid", "input", "paste", "click", "keydown", "focus", "blur", "edit:input", "edit:beforeUpdate", "edit:updated", "edit:start", "edit:keydown", "dropdown:show", "dropdown:hide", "dropdown:select", "dropdown:updated", "dropdown:noMatch", "dropdown:scroll"], dataProps: ["__isValid", "__removed", "__originalData", "__originalHTML", "__tagId"], trim(t2) {
   return this.settings.trim && t2 && "string" == typeof t2 ? t2.trim() : t2;
-}, parseHTML: r, templates: j, parseTemplate: function(t2, e2) {
-  return r((t2 = this.settings.templates[t2] || t2).apply(this, e2));
+}, parseHTML: n, templates: M, parseTemplate(t2, e2) {
+  return n((t2 = this.settings.templates[t2] || t2).apply(this, e2));
 }, set whitelist(t2) {
-  var e2 = t2 && Array.isArray(t2);
+  const e2 = t2 && Array.isArray(t2);
   this.settings.whitelist = e2 ? t2 : [], this.setPersistedData(e2 ? t2 : [], "whitelist");
 }, get whitelist() {
   return this.settings.whitelist;
@@ -19558,573 +19222,488 @@ tt.prototype = { _dropdown: k, placeCaretAfterNode: T, getSetTagData: y2, helper
   this.settings.userInput = !!t2, this.setContentEditable(!!t2);
 }, get userInput() {
   return this.settings.userInput;
-}, generateClassSelectors: function(t2) {
-  var e2 = function(e3) {
-    var i3 = e3;
-    Object.defineProperty(t2, i3 + "Selector", { get: function() {
-      return "." + this[i3].split(" ")[0];
+}, generateClassSelectors(t2) {
+  for (let e2 in t2) {
+    let s2 = e2;
+    Object.defineProperty(t2, s2 + "Selector", { get() {
+      return "." + this[s2].split(" ")[0];
     } });
-  };
-  for (var i2 in t2) e2(i2);
-}, applySettings: function(t2, e2) {
-  var i2, n2;
-  x.templates = this.templates;
-  var a3 = u({}, x, "mix" == e2.mode ? { pasteAsTags: false, dropdown: { position: "text" } } : {});
-  this.origSettings = u({}, e2);
-  var s2 = this.settings = u({}, a3, e2);
-  if (s2.disabled = t2.hasAttribute("disabled"), s2.readonly = s2.readonly || t2.hasAttribute("readonly"), s2.placeholder = d2(t2.getAttribute("placeholder") || s2.placeholder || ""), s2.required = t2.hasAttribute("required"), this.generateClassSelectors(s2.classNames), this.isIE && (s2.autoComplete = false), ["whitelist", "blacklist"].forEach((function(e3) {
-    var i3 = t2.getAttribute("data-" + e3);
-    i3 && G(i3 = i3.split(s2.delimiters), Array) && (s2[e3] = i3);
-  })), "autoComplete" in e2 && !c2(e2.autoComplete) && (s2.autoComplete = x.autoComplete, s2.autoComplete.enabled = e2.autoComplete), "mix" == s2.mode && (s2.pattern = s2.pattern || /@/, s2.autoComplete.rightKey = true, s2.delimiters = e2.delimiters || null, s2.tagTextProp && !s2.dropdown.searchKeys.includes(s2.tagTextProp) && s2.dropdown.searchKeys.push(s2.tagTextProp)), t2.pattern) try {
-    s2.pattern = new RegExp(t2.pattern);
+  }
+}, applySettings(t2, e2) {
+  y2.templates = this.templates;
+  var s2 = d2({}, y2, "mix" == e2.mode ? { pasteAsTags: false, dropdown: { position: "text" } } : {});
+  this.origSettings = d2({}, e2);
+  var i2 = this.settings = d2({}, s2, e2);
+  if (i2.disabled = t2.hasAttribute("disabled"), i2.readonly = i2.readonly || t2.hasAttribute("readonly"), i2.placeholder = r(t2.getAttribute("placeholder") || i2.placeholder || ""), i2.required = t2.hasAttribute("required"), this.generateClassSelectors(i2.classNames), this.isIE && (i2.autoComplete = false), ["whitelist", "blacklist"].forEach(((e3) => {
+    var s3 = t2.getAttribute("data-" + e3);
+    s3 && (s3 = s3.split(i2.delimiters)) instanceof Array && (i2[e3] = s3);
+  })), "autoComplete" in e2 && !l(e2.autoComplete) && (i2.autoComplete = y2.autoComplete, i2.autoComplete.enabled = e2.autoComplete), "mix" == i2.mode && (i2.pattern = i2.pattern || /@/, i2.autoComplete.rightKey = true, i2.delimiters = e2.delimiters || null, i2.tagTextProp && !i2.dropdown.searchKeys.includes(i2.tagTextProp) && i2.dropdown.searchKeys.push(i2.tagTextProp)), t2.pattern) try {
+    i2.pattern = new RegExp(t2.pattern);
   } catch (t3) {
   }
-  if (s2.delimiters) {
-    s2._delimiters = s2.delimiters;
+  if (i2.delimiters) {
+    i2._delimiters = i2.delimiters;
     try {
-      s2.delimiters = new RegExp(this.settings.delimiters, "g");
+      i2.delimiters = new RegExp(this.settings.delimiters, "g");
     } catch (t3) {
     }
   }
-  (s2.disabled || s2.readonly) && (s2.userInput = false), this.TEXTS = $2({}, P, s2.texts || {}), "select" == s2.mode && (s2.dropdown.includeSelectedTags = true), ("select" != s2.mode || (null === (i2 = e2.dropdown) || void 0 === i2 ? void 0 : i2.enabled)) && s2.userInput || (s2.dropdown.enabled = 0), s2.disabled && (s2.dropdown.enabled = false), s2.dropdown.appendTarget = (null === (n2 = e2.dropdown) || void 0 === n2 ? void 0 : n2.appendTarget) || document.body, void 0 === s2.dropdown.includeSelectedTags && (s2.dropdown.includeSelectedTags = s2.duplicates);
-  var o2 = this.getPersistedData("whitelist");
-  Array.isArray(o2) && (this.whitelist = Array.isArray(s2.whitelist) ? g2(s2.whitelist, o2) : o2);
-}, getAttributes: function(t2) {
-  var e2, i2 = this.getCustomAttributes(t2), n2 = "";
-  for (e2 in i2) n2 += " " + e2 + (void 0 !== t2[e2] ? '="'.concat(i2[e2], '"') : "");
-  return n2;
-}, getCustomAttributes: function(t2) {
-  if (!c2(t2)) return "";
-  var e2, i2 = {};
-  for (e2 in t2) "__" != e2.slice(0, 2) && "class" != e2 && t2.hasOwnProperty(e2) && void 0 !== t2[e2] && (i2[e2] = d2(t2[e2]));
+  (i2.disabled || i2.readonly) && (i2.userInput = false), this.TEXTS = { ...I2, ...i2.texts || {} }, "select" == i2.mode && (i2.dropdown.includeSelectedTags = true), ("select" != i2.mode || e2.dropdown?.enabled) && i2.userInput || (i2.dropdown.enabled = 0), i2.disabled && (i2.dropdown.enabled = false), i2.dropdown.appendTarget = e2.dropdown?.appendTarget || document.body, void 0 === i2.dropdown.includeSelectedTags && (i2.dropdown.includeSelectedTags = i2.duplicates);
+  let a3 = this.getPersistedData("whitelist");
+  Array.isArray(a3) && (this.whitelist = Array.isArray(i2.whitelist) ? h2(i2.whitelist, a3) : a3);
+}, getAttributes(t2) {
+  var e2, s2 = this.getCustomAttributes(t2), i2 = "";
+  for (e2 in s2) i2 += " " + e2 + (void 0 !== t2[e2] ? `="${s2[e2]}"` : "");
   return i2;
-}, setStateSelection: function() {
+}, getCustomAttributes(t2) {
+  if (!l(t2)) return "";
+  var e2, s2 = {};
+  for (e2 in t2) "__" != e2.slice(0, 2) && "class" != e2 && t2.hasOwnProperty(e2) && void 0 !== t2[e2] && (s2[e2] = r(t2[e2]));
+  return s2;
+}, setStateSelection() {
   var t2 = window.getSelection(), e2 = { anchorOffset: t2.anchorOffset, anchorNode: t2.anchorNode, range: t2.getRangeAt && t2.rangeCount && t2.getRangeAt(0) };
   return this.state.selection = e2, e2;
-}, getCSSVars: function() {
-  var t2, e2, i2, n2 = getComputedStyle(this.DOM.scope, null);
-  this.CSSVars = { tagHideTransition: (t2 = (function(t3) {
+}, getCSSVars() {
+  var t2 = getComputedStyle(this.DOM.scope, null);
+  var e2;
+  this.CSSVars = { tagHideTransition: (({ value: t3, unit: e3 }) => "s" == e3 ? 1e3 * t3 : t3)((function(t3) {
     if (!t3) return {};
-    var e3 = (t3 = t3.trim().split(" ")[0]).split(/\d+/g).filter((function(t4) {
-      return t4;
-    })).pop().trim();
-    return { value: +t3.split(e3).filter((function(t4) {
-      return t4;
-    }))[0].trim(), unit: e3 };
-  })((i2 = "tag-hide-transition", n2.getPropertyValue("--" + i2))), e2 = t2.value, "s" == t2.unit ? 1e3 * e2 : e2) };
-}, build: function(t2) {
-  var e2 = this.DOM, i2 = t2.closest("label");
-  this.settings.mixMode.integrated ? (e2.originalInput = null, e2.scope = t2, e2.input = t2) : (e2.originalInput = t2, e2.originalInput_tabIndex = t2.tabIndex, e2.scope = this.parseTemplate("wrapper", [t2, this.settings]), e2.input = e2.scope.querySelector(this.settings.classNames.inputSelector), t2.parentNode.insertBefore(e2.scope, t2), t2.tabIndex = -1), i2 && i2.setAttribute("for", "");
-}, destroy: function() {
-  var t2, e2, i2;
-  this.events.unbindGlobal.call(this), null === (t2 = this.DOM.scope.parentNode) || void 0 === t2 || t2.removeChild(this.DOM.scope), this.DOM.originalInput.tabIndex = this.DOM.originalInput_tabIndex, delete this.DOM.originalInput.__tagify, this.dropdown.hide(true), this.removeAllCustomListeners(), clearTimeout(this.dropdownHide__bindEventsTimeout), clearInterval(null === (i2 = this.listeners) || void 0 === i2 || null === (e2 = i2.main) || void 0 === e2 ? void 0 : e2.originalInputValueObserverInterval);
-}, loadOriginalValues: function(t2) {
-  var e2, i2 = this.settings;
+    var e3 = (t3 = t3.trim().split(" ")[0]).split(/\d+/g).filter(((t4) => t4)).pop().trim();
+    return { value: +t3.split(e3).filter(((t4) => t4))[0].trim(), unit: e3 };
+  })((e2 = "tag-hide-transition", t2.getPropertyValue("--" + e2)))) };
+}, build(t2) {
+  var e2 = this.DOM, s2 = t2.closest("label");
+  this.settings.mixMode.integrated ? (e2.originalInput = null, e2.scope = t2, e2.input = t2) : (e2.originalInput = t2, e2.originalInput_tabIndex = t2.tabIndex, e2.scope = this.parseTemplate("wrapper", [t2, this.settings]), e2.input = e2.scope.querySelector(this.settings.classNames.inputSelector), t2.parentNode.insertBefore(e2.scope, t2), t2.tabIndex = -1), s2 && s2.setAttribute("for", "");
+}, destroy() {
+  this.events.unbindGlobal.call(this), this.DOM.scope.parentNode?.removeChild(this.DOM.scope), this.DOM.originalInput.tabIndex = this.DOM.originalInput_tabIndex, delete this.DOM.originalInput.__tagify, this.dropdown.hide(true), this.removeAllCustomListeners(), clearTimeout(this.dropdownHide__bindEventsTimeout), clearInterval(this.listeners?.main?.originalInputValueObserverInterval);
+}, loadOriginalValues(t2) {
+  var e2, s2 = this.settings;
   if (this.state.blockChangeEvent = true, void 0 === t2) {
-    var n2 = this.getPersistedData("value");
-    t2 = n2 && !this.DOM.originalInput.value ? n2 : i2.mixMode.integrated ? this.DOM.input.textContent : this.DOM.originalInput.value;
+    const e3 = this.getPersistedData("value");
+    t2 = e3 && !this.DOM.originalInput.value ? e3 : s2.mixMode.integrated ? this.DOM.input.textContent : this.DOM.originalInput.value;
   }
-  if (this.removeAllTags(), t2) if ("mix" == i2.mode) this.parseMixTags(t2), (e2 = this.DOM.input.lastChild) && "BR" == e2.tagName || this.DOM.input.insertAdjacentHTML("beforeend", "<br>");
+  if (this.removeAllTags(), t2) if ("mix" == s2.mode) this.parseMixTags(t2), (e2 = this.DOM.input.lastChild) && "BR" == e2.tagName || this.DOM.input.insertAdjacentHTML("beforeend", "<br>");
   else {
     try {
-      G(JSON.parse(t2), Array) && (t2 = JSON.parse(t2));
+      JSON.parse(t2) instanceof Array && (t2 = JSON.parse(t2));
     } catch (t3) {
     }
-    this.addTags(t2, true).forEach((function(t3) {
-      return t3 && t3.classList.add(i2.classNames.tagNoAnimation);
-    }));
+    this.addTags(t2, true).forEach(((t3) => t3 && t3.classList.add(s2.classNames.tagNoAnimation)));
   }
   else this.postUpdate();
-  this.state.lastOriginalValueReported = i2.mixMode.integrated ? "" : this.DOM.originalInput.value;
-}, cloneEvent: function(t2) {
+  this.state.lastOriginalValueReported = s2.mixMode.integrated ? "" : this.DOM.originalInput.value;
+}, cloneEvent(t2) {
   var e2 = {};
-  for (var i2 in t2) "path" != i2 && (e2[i2] = t2[i2]);
+  for (var s2 in t2) "path" != s2 && (e2[s2] = t2[s2]);
   return e2;
-}, loading: function(t2) {
+}, loading(t2) {
   return this.state.isLoading = t2, this.DOM.scope.classList[t2 ? "add" : "remove"](this.settings.classNames.scopeLoading), this;
-}, tagLoading: function(t2, e2) {
+}, tagLoading(t2, e2) {
   return t2 && t2.classList[e2 ? "add" : "remove"](this.settings.classNames.tagLoading), this;
-}, toggleClass: function(t2, e2) {
+}, toggleClass(t2, e2) {
   "string" == typeof t2 && this.DOM.scope.classList.toggle(t2, e2);
-}, toggleScopeValidation: function(t2) {
+}, toggleScopeValidation(t2) {
   var e2 = true === t2 || void 0 === t2;
   !this.settings.required && t2 && t2 === this.TEXTS.empty && (e2 = true), this.toggleClass(this.settings.classNames.tagInvalid, !e2), this.DOM.scope.title = e2 ? "" : t2;
-}, toggleFocusClass: function(t2) {
+}, toggleFocusClass(t2) {
   this.toggleClass(this.settings.classNames.focus, !!t2);
-}, setPlaceholder: function(t2) {
-  var e2 = this;
-  ["data", "aria"].forEach((function(i2) {
-    return e2.DOM.input.setAttribute("".concat(i2, "-placeholder"), t2);
-  }));
+}, setPlaceholder(t2) {
+  ["data", "aria"].forEach(((e2) => this.DOM.input.setAttribute(`${e2}-placeholder`, t2)));
 }, triggerChangeEvent: function() {
   if (!this.settings.mixMode.integrated) {
-    var t2 = this.DOM.originalInput, e2 = this.state.lastOriginalValueReported !== t2.value, i2 = new CustomEvent("change", { bubbles: true });
-    e2 && (this.state.lastOriginalValueReported = t2.value, i2.simulated = true, t2._valueTracker && t2._valueTracker.setValue(Math.random()), t2.dispatchEvent(i2), this.trigger("change", this.state.lastOriginalValueReported), t2.value = this.state.lastOriginalValueReported);
+    var t2 = this.DOM.originalInput, e2 = this.state.lastOriginalValueReported !== t2.value, s2 = new CustomEvent("change", { bubbles: true });
+    e2 && (this.state.lastOriginalValueReported = t2.value, s2.simulated = true, t2._valueTracker && t2._valueTracker.setValue(Math.random()), t2.dispatchEvent(s2), this.trigger("change", this.state.lastOriginalValueReported), t2.value = this.state.lastOriginalValueReported);
   }
-}, events: z, fixFirefoxLastTagNoCaret: function() {
-}, setRangeAtStartEnd: function(t2, e2) {
+}, events: E2, fixFirefoxLastTagNoCaret() {
+}, setRangeAtStartEnd(t2, e2) {
   if (e2) {
     t2 = "number" == typeof t2 ? t2 : !!t2, e2 = e2.lastChild || e2;
-    var i2 = document.getSelection();
-    if (G(i2.focusNode, Element) && !this.DOM.input.contains(i2.focusNode)) return true;
+    var s2 = document.getSelection();
+    if (s2.focusNode instanceof Element && !this.DOM.input.contains(s2.focusNode)) return true;
     try {
-      i2.rangeCount >= 1 && ["Start", "End"].forEach((function(n2) {
-        return i2.getRangeAt(0)["set" + n2](e2, t2 || e2.length);
-      }));
+      s2.rangeCount >= 1 && ["Start", "End"].forEach(((i2) => s2.getRangeAt(0)["set" + i2](e2, t2 || e2.length)));
     } catch (t3) {
       console.warn(t3);
     }
   }
-}, insertAfterTag: function(t2, e2) {
+}, insertAfterTag(t2, e2) {
   if (e2 = e2 || this.settings.mixMode.insertAfterTag, t2 && t2.parentNode && e2) return e2 = "string" == typeof e2 ? document.createTextNode(e2) : e2, t2.parentNode.insertBefore(e2, t2.nextSibling), e2;
-}, editTagChangeDetected: function(t2) {
+}, editTagChangeDetected(t2) {
   var e2 = t2.__originalData;
-  for (var i2 in e2) if (!this.dataProps.includes(i2) && t2[i2] != e2[i2]) return true;
+  for (var s2 in e2) if (!this.dataProps.includes(s2) && t2[s2] != e2[s2]) return true;
   return false;
-}, getTagTextNode: function(t2) {
+}, getTagTextNode(t2) {
   return t2.querySelector(this.settings.classNames.tagTextSelector);
-}, setTagTextNode: function(t2, e2) {
-  this.getTagTextNode(t2).innerHTML = d2(e2);
-}, editTag: function(t2, e2) {
-  var i2 = this;
-  t2 = t2 || this.getLastTag(), e2 = e2 || {};
-  var a3 = this.settings, s2 = this.getTagTextNode(t2), o2 = this.getNodeIndex(t2), r2 = y2(t2), l4 = this.events.callbacks, d4 = true, c3 = "select" == a3.mode;
-  if (!c3 && this.dropdown.hide(), s2) {
-    if (!G(r2, Object) || !("editable" in r2) || r2.editable) return r2 = y2(t2, { __originalData: u({}, r2), __originalHTML: t2.cloneNode(true) }), y2(r2.__originalHTML, r2.__originalData), s2.setAttribute("contenteditable", true), t2.classList.add(a3.classNames.tagEditing), this.events.callbacks.onEditTagFocus.call(this, t2), s2.addEventListener("click", l4.onEditTagClick.bind(this, t2)), s2.addEventListener("blur", l4.onEditTagBlur.bind(this, this.getTagTextNode(t2))), s2.addEventListener("input", l4.onEditTagInput.bind(this, s2)), s2.addEventListener("paste", l4.onEditTagPaste.bind(this, s2)), s2.addEventListener("keydown", (function(e3) {
-      return l4.onEditTagkeydown.call(i2, e3, t2);
-    })), s2.addEventListener("compositionstart", l4.onCompositionStart.bind(this)), s2.addEventListener("compositionend", l4.onCompositionEnd.bind(this)), e2.skipValidation || (d4 = this.editTagToggleValidity(t2)), s2.originalIsValid = d4, this.trigger("edit:start", { tag: t2, index: o2, data: r2, isValid: d4 }), s2.focus(), !c3 && this.setRangeAtStartEnd(false, s2), 0 === a3.dropdown.enabled && !c3 && this.dropdown.show(), this.state.hasFocus = true, this;
-  } else n.warn("Cannot find element in Tag template: .", a3.classNames.tagTextSelector);
-}, editTagToggleValidity: function(t2, e2) {
+}, setTagTextNode(t2, e2) {
+  this.getTagTextNode(t2).innerHTML = r(e2);
+}, editTag(t2, s2) {
+  t2 = t2 || this.getLastTag(), s2 = s2 || {};
+  var i2 = this.settings, a3 = this.getTagTextNode(t2), n2 = this.getNodeIndex(t2), o2 = T(t2), r2 = this.events.callbacks, l4 = true, h3 = "select" == i2.mode;
+  if (!h3 && this.dropdown.hide(), a3) {
+    if (!(o2 instanceof Object && "editable" in o2) || o2.editable) return o2 = T(t2, { __originalData: d2({}, o2), __originalHTML: t2.cloneNode(true) }), T(o2.__originalHTML, o2.__originalData), a3.setAttribute("contenteditable", true), t2.classList.add(i2.classNames.tagEditing), this.events.callbacks.onEditTagFocus.call(this, t2), a3.addEventListener("click", r2.onEditTagClick.bind(this, t2)), a3.addEventListener("blur", r2.onEditTagBlur.bind(this, this.getTagTextNode(t2))), a3.addEventListener("input", r2.onEditTagInput.bind(this, a3)), a3.addEventListener("paste", r2.onEditTagPaste.bind(this, a3)), a3.addEventListener("keydown", ((e2) => r2.onEditTagkeydown.call(this, e2, t2))), a3.addEventListener("compositionstart", r2.onCompositionStart.bind(this)), a3.addEventListener("compositionend", r2.onCompositionEnd.bind(this)), s2.skipValidation || (l4 = this.editTagToggleValidity(t2)), a3.originalIsValid = l4, this.trigger("edit:start", { tag: t2, index: n2, data: o2, isValid: l4 }), a3.focus(), !h3 && this.setRangeAtStartEnd(false, a3), 0 === i2.dropdown.enabled && !h3 && this.dropdown.show(), this.state.hasFocus = true, this;
+  } else e.warn("Cannot find element in Tag template: .", i2.classNames.tagTextSelector);
+}, editTagToggleValidity(t2, s2) {
   var i2;
-  if (e2 = e2 || y2(t2)) return (i2 = !("__isValid" in e2) || true === e2.__isValid) || this.removeTagsFromValue(t2), this.update(), t2.classList.toggle(this.settings.classNames.tagNotAllowed, !i2), e2.__isValid = i2, e2.__isValid;
-  n.warn("tag has no data: ", t2, e2);
-}, onEditTagDone: function(t2, e2) {
+  if (s2 = s2 || T(t2)) return (i2 = !("__isValid" in s2) || true === s2.__isValid) || this.removeTagsFromValue(t2), this.update(), t2.classList.toggle(this.settings.classNames.tagNotAllowed, !i2), s2.__isValid = i2, s2.__isValid;
+  e.warn("tag has no data: ", t2, s2);
+}, onEditTagDone(t2, e2) {
   t2 = t2 || this.state.editing.scope, e2 = e2 || {};
-  var i2, n2, a3 = this.settings, s2 = { tag: t2, index: this.getNodeIndex(t2), previousData: y2(t2), data: e2 };
-  this.trigger("edit:beforeUpdate", s2, { cloneData: false }), this.state.editing = false, delete e2.__originalData, delete e2.__originalHTML, t2 && t2.parentNode && ((void 0 !== (n2 = e2[a3.tagTextProp]) ? null === (i2 = (n2 += "").trim) || void 0 === i2 ? void 0 : i2.call(n2) : a3.tagTextProp in e2 ? void 0 : e2.value) ? (t2 = this.replaceTag(t2, e2), this.editTagToggleValidity(t2, e2), a3.a11y.focusableTags ? t2.focus() : "select" != a3.mode && T(t2)) : this.removeTags(t2)), this.trigger("edit:updated", s2), a3.dropdown.closeOnSelect && this.dropdown.hide(), this.settings.keepInvalidTags && this.reCheckInvalidTags();
-}, replaceTag: function(t2, e2) {
-  e2 && "" !== e2.value && void 0 !== e2.value || (e2 = t2.__tagifyTagData), e2.__isValid && 1 != e2.__isValid && u(e2, this.getInvalidTagAttrs(e2, e2.__isValid));
-  var i2 = this.createTagElem(e2);
-  return t2.parentNode.replaceChild(i2, t2), this.updateValueByDOMTags(), i2;
-}, updateValueByDOMTags: function() {
-  var t2 = this;
+  var s2, i2 = this.settings, a3 = { tag: t2, index: this.getNodeIndex(t2), previousData: T(t2), data: e2 };
+  this.trigger("edit:beforeUpdate", a3, { cloneData: false }), this.state.editing = false, delete e2.__originalData, delete e2.__originalHTML, t2 && t2.parentNode && ((void 0 !== (s2 = e2[i2.tagTextProp]) ? (s2 += "", s2.trim?.()) : i2.tagTextProp in e2 ? void 0 : e2.value) ? (t2 = this.replaceTag(t2, e2), this.editTagToggleValidity(t2, e2), i2.a11y.focusableTags ? t2.focus() : "select" != i2.mode && w2(t2)) : this.removeTags(t2)), this.trigger("edit:updated", a3), i2.dropdown.closeOnSelect && this.dropdown.hide(), this.settings.keepInvalidTags && this.reCheckInvalidTags();
+}, replaceTag(t2, e2) {
+  e2 && "" !== e2.value && void 0 !== e2.value || (e2 = t2.__tagifyTagData), e2.__isValid && 1 != e2.__isValid && d2(e2, this.getInvalidTagAttrs(e2, e2.__isValid));
+  var s2 = this.createTagElem(e2);
+  return t2.parentNode.replaceChild(s2, t2), this.updateValueByDOMTags(), s2;
+}, updateValueByDOMTags() {
   this.value.length = 0;
-  var e2 = this.settings.classNames, i2 = [e2.tagNotAllowed.split(" ")[0], e2.tagHide];
-  [].forEach.call(this.getTagElms(), (function(e3) {
-    Y(e3.classList).some((function(t3) {
-      return i2.includes(t3);
-    })) || t2.value.push(y2(e3));
+  var t2 = this.settings.classNames, e2 = [t2.tagNotAllowed.split(" ")[0], t2.tagHide];
+  [].forEach.call(this.getTagElms(), ((t3) => {
+    [...t3.classList].some(((t4) => e2.includes(t4))) || this.value.push(T(t3));
   })), this.update(), this.dropdown.refilter();
-}, injectAtCaret: function(t2, e2) {
-  var i2;
-  if (e2 = e2 || (null === (i2 = this.state.selection) || void 0 === i2 ? void 0 : i2.range), "string" == typeof t2 && (t2 = document.createTextNode(t2)), !t2) return this;
-  var n2 = 11 === t2.nodeType ? Array.prototype.slice.call(t2.childNodes) : [t2];
-  if (!n2.length) return this;
+}, injectAtCaret(t2, e2) {
+  if (e2 = e2 || this.state.selection?.range, "string" == typeof t2 && (t2 = document.createTextNode(t2)), !t2) return this;
+  const s2 = 11 === t2.nodeType ? Array.prototype.slice.call(t2.childNodes) : [t2];
+  if (!s2.length) return this;
   if (!e2) return this.appendMixTags(t2), this;
-  if (!this.DOM.scope.contains(null == e2 ? void 0 : e2.startContainer)) return this;
-  w2(t2, e2);
-  var a3 = n2[n2.length - 1] || t2;
-  return (null == a3 ? void 0 : a3.parentNode) && T(a3), this.setStateSelection(), this.updateValueByDOMTags(), this.update(), this;
-}, input: { set: function() {
-  var t2 = arguments.length > 0 && void 0 !== arguments[0] ? arguments[0] : "", e2 = !(arguments.length > 1 && void 0 !== arguments[1]) || arguments[1], i2 = this.settings, n2 = i2.dropdown.closeOnSelect;
-  this.state.inputText = t2, e2 && (this.DOM.input.innerHTML = d2("" + t2), t2 && this.toggleClass(i2.classNames.empty, !this.DOM.input.innerHTML)), !t2 && n2 && this.dropdown.hide.bind(this), this.input.autocomplete.suggest.call(this), this.input.validate.call(this);
-}, raw: function() {
+  if (!this.DOM.scope.contains(e2?.startContainer)) return this;
+  f2(t2, e2);
+  const i2 = s2[s2.length - 1] || t2;
+  return i2?.parentNode && w2(i2), this.setStateSelection(), this.updateValueByDOMTags(), this.update(), this;
+}, input: { set(t2 = "", e2 = true) {
+  var s2 = this.settings, i2 = s2.dropdown.closeOnSelect;
+  this.state.inputText = t2, e2 && (this.DOM.input.innerHTML = r("" + t2), t2 && this.toggleClass(s2.classNames.empty, !this.DOM.input.innerHTML)), !t2 && i2 && this.dropdown.hide.bind(this), this.input.autocomplete.suggest.call(this), this.input.validate.call(this);
+}, raw() {
   return this.DOM.input.textContent;
-}, validate: function() {
+}, validate() {
   var t2 = !this.state.inputText || true === this.validateTag({ value: this.state.inputText });
   return this.DOM.input.classList.toggle(this.settings.classNames.inputInvalid, !t2), t2;
-}, normalize: function(t2, e2) {
-  var i2 = t2 || this.DOM.input, n2 = [];
-  i2.childNodes.forEach((function(t3) {
-    return 3 == t3.nodeType && n2.push(t3.nodeValue);
-  })), n2 = n2.join("\n");
+}, normalize(t2, e2) {
+  var s2 = t2 || this.DOM.input, i2 = [];
+  s2.childNodes.forEach(((t3) => 3 == t3.nodeType && i2.push(t3.nodeValue))), i2 = i2.join("\n");
   try {
-    n2 = n2.replace(/(?:\r\n|\r|\n)/g, this.settings.delimiters.source.charAt(0));
+    i2 = i2.replace(/(?:\r\n|\r|\n)/g, this.settings.delimiters.source.charAt(0));
   } catch (t3) {
   }
-  return n2 = n2.replace(/\s/g, " "), (null == e2 ? void 0 : e2.trim) ? this.trim(n2) : n2;
-}, autocomplete: { suggest: function(t2) {
+  return i2 = i2.replace(/\s/g, " "), e2?.trim ? this.trim(i2) : i2;
+}, autocomplete: { suggest(t2) {
   if (this.settings.autoComplete.enabled) {
-    "object" !== (void 0 === (t2 = t2 || { value: "" }) ? "undefined" : Z2(t2)) && (t2 = { value: t2 });
+    "object" != typeof (t2 = t2 || { value: "" }) && (t2 = { value: t2 });
     var e2 = this.dropdown.getMappedValue(t2);
     if ("number" != typeof e2) {
-      var i2 = this.state.inputText.toLowerCase(), n2 = e2.substr(0, this.state.inputText.length).toLowerCase(), a3 = e2.substring(this.state.inputText.length);
-      e2 && this.state.inputText && n2 == i2 ? (this.DOM.input.setAttribute("data-suggest", a3), this.state.inputSuggestion = t2) : (this.DOM.input.removeAttribute("data-suggest"), delete this.state.inputSuggestion);
+      var s2 = this.state.inputText.toLowerCase(), i2 = e2.substr(0, this.state.inputText.length).toLowerCase(), a3 = e2.substring(this.state.inputText.length);
+      e2 && this.state.inputText && i2 == s2 ? (this.DOM.input.setAttribute("data-suggest", a3), this.state.inputSuggestion = t2) : (this.DOM.input.removeAttribute("data-suggest"), delete this.state.inputSuggestion);
     }
   }
-}, set: function(t2) {
-  var e2 = this.DOM.input.getAttribute("data-suggest"), i2 = t2 || (e2 ? this.state.inputText + e2 : null);
-  return !!i2 && ("mix" == this.settings.mode ? this.replaceTextWithNode(document.createTextNode(this.state.tag.prefix + i2)) : (this.input.set.call(this, i2), this.setRangeAtStartEnd(false, this.DOM.input)), this.input.autocomplete.suggest.call(this), this.dropdown.hide(), true);
-} } }, getTagIdx: function(t2) {
-  return this.value.findIndex((function(e2) {
-    return e2.__tagId == (t2 || {}).__tagId;
-  }));
-}, getNodeIndex: function(t2) {
+}, set(t2) {
+  var e2 = this.DOM.input.getAttribute("data-suggest"), s2 = t2 || (e2 ? this.state.inputText + e2 : null);
+  return !!s2 && ("mix" == this.settings.mode ? this.replaceTextWithNode(document.createTextNode(this.state.tag.prefix + s2)) : (this.input.set.call(this, s2), this.setRangeAtStartEnd(false, this.DOM.input)), this.input.autocomplete.suggest.call(this), this.dropdown.hide(), true);
+} } }, getTagIdx(t2) {
+  return this.value.findIndex(((e2) => e2.__tagId == (t2 || {}).__tagId));
+}, getNodeIndex(t2) {
   var e2 = 0;
   if (t2) for (; t2 = t2.previousElementSibling; ) e2++;
   return e2;
-}, getTagElms: function() {
-  for (var t2 = arguments.length, e2 = new Array(t2), i2 = 0; i2 < t2; i2++) e2[i2] = arguments[i2];
-  var n2 = "." + Y(this.settings.classNames.tag.split(" ")).concat(Y(e2)).join(".");
-  return [].slice.call(this.DOM.scope.querySelectorAll(n2));
-}, getLastTag: function() {
-  var t2 = this.settings.classNames, e2 = this.DOM.scope.querySelectorAll("".concat(t2.tagSelector, ":not(.").concat(t2.tagHide, "):not([readonly])"));
+}, getTagElms(...t2) {
+  var e2 = "." + [...this.settings.classNames.tag.split(" "), ...t2].join(".");
+  return [].slice.call(this.DOM.scope.querySelectorAll(e2));
+}, getLastTag() {
+  var t2 = this.settings.classNames, e2 = this.DOM.scope.querySelectorAll(`${t2.tagSelector}:not(.${t2.tagHide}):not([readonly])`);
   return e2[e2.length - 1];
-}, getTagElmBeforeInput: function() {
+}, getTagElmBeforeInput() {
   var t2 = this.DOM.input && this.DOM.input.previousElementSibling;
-  return v.call(this, t2) ? t2 : void 0;
-}, isTagDuplicate: function(t2, e2, i2) {
-  var n2 = 0, s2 = true, o2 = false, r2 = void 0;
-  try {
-    for (var l4, d4 = this.value[Symbol.iterator](); !(s2 = (l4 = d4.next()).done); s2 = true) {
-      var c3 = l4.value;
-      a2(this.trim("" + t2), c3.value, e2) && i2 != c3.__tagId && n2++;
-    }
-  } catch (t3) {
-    o2 = true, r2 = t3;
-  } finally {
-    try {
-      s2 || null == d4.return || d4.return();
-    } finally {
-      if (o2) throw r2;
-    }
+  return u.call(this, t2) ? t2 : void 0;
+}, isTagDuplicate(t2, e2, i2) {
+  var a3 = 0;
+  for (let n2 of this.value) {
+    s(this.trim("" + t2), n2.value, e2) && i2 != n2.__tagId && a3++;
   }
-  return n2;
-}, getTagIndexByValue: function(t2) {
-  var e2 = this, i2 = [], n2 = this.settings.dropdown.caseSensitive;
-  return this.getTagElms().forEach((function(s2, o2) {
-    s2.__tagifyTagData && a2(e2.trim(s2.__tagifyTagData.value), t2, n2) && i2.push(o2);
-  })), i2;
-}, getTagElmByValue: function(t2) {
+  return a3;
+}, getTagIndexByValue(t2) {
+  var e2 = [], i2 = this.settings.dropdown.caseSensitive;
+  return this.getTagElms().forEach(((a3, n2) => {
+    a3.__tagifyTagData && s(this.trim(a3.__tagifyTagData.value), t2, i2) && e2.push(n2);
+  })), e2;
+}, getTagElmByValue(t2) {
   var e2 = this.getTagIndexByValue(t2)[0];
   return this.getTagElms()[e2];
-}, flashTag: function(t2) {
-  var e2 = this;
-  t2 && (t2.classList.add(this.settings.classNames.tagFlash), setTimeout((function() {
-    t2.classList.remove(e2.settings.classNames.tagFlash);
+}, flashTag(t2) {
+  t2 && (t2.classList.add(this.settings.classNames.tagFlash), setTimeout((() => {
+    t2.classList.remove(this.settings.classNames.tagFlash);
   }), 100));
-}, isTagBlacklisted: function(t2) {
-  return t2 = this.trim(t2.toLowerCase()), this.settings.blacklist.filter((function(e2) {
-    return ("" + e2).toLowerCase() == t2;
-  })).length;
-}, isTagWhitelisted: function(t2) {
+}, isTagBlacklisted(t2) {
+  return t2 = this.trim(t2.toLowerCase()), this.settings.blacklist.filter(((e2) => ("" + e2).toLowerCase() == t2)).length;
+}, isTagWhitelisted(t2) {
   return !!this.getWhitelistItem(t2);
-}, getWhitelistItem: function(t2, e2, i2) {
+}, getWhitelistItem(t2, e2, i2) {
   e2 = e2 || "value";
-  var n2, s2 = this.settings;
-  return (i2 = i2 || s2.whitelist).some((function(i3) {
-    var o2 = "object" == (void 0 === i3 ? "undefined" : Z2(i3)) ? i3[e2] || i3.value : i3;
-    if (a2(o2, t2, s2.dropdown.caseSensitive, s2.trim)) return n2 = "object" == (void 0 === i3 ? "undefined" : Z2(i3)) ? i3 : { value: i3 }, true;
-  })), n2 || "value" != e2 || "value" == s2.tagTextProp || (n2 = this.getWhitelistItem(t2, s2.tagTextProp, i2)), n2;
-}, validateTag: function(t2) {
-  var e2 = this.settings, i2 = "value" in t2 ? "value" : e2.tagTextProp, n2 = this.trim(t2[i2] + "");
-  return (t2[i2] + "").trim() ? "mix" != e2.mode && e2.pattern && G(e2.pattern, RegExp) && !e2.pattern.test(n2) ? this.TEXTS.pattern : !e2.duplicates && this.isTagDuplicate(n2, e2.dropdown.caseSensitive, t2.__tagId) ? this.TEXTS.duplicate : this.isTagBlacklisted(n2) || e2.enforceWhitelist && !this.isTagWhitelisted(n2) ? this.TEXTS.notAllowed : !e2.validate || e2.validate(t2) : this.TEXTS.empty;
-}, getInvalidTagAttrs: function(t2, e2) {
-  return { "aria-invalid": true, class: "".concat(t2.class || "", " ").concat(this.settings.classNames.tagNotAllowed).trim(), title: e2 };
-}, hasMaxTags: function() {
+  var a3, n2 = this.settings;
+  return (i2 = i2 || n2.whitelist).some(((i3) => {
+    var o2 = "object" == typeof i3 ? i3[e2] || i3.value : i3;
+    if (s(o2, t2, n2.dropdown.caseSensitive, n2.trim)) return a3 = "object" == typeof i3 ? i3 : { value: i3 }, true;
+  })), a3 || "value" != e2 || "value" == n2.tagTextProp || (a3 = this.getWhitelistItem(t2, n2.tagTextProp, i2)), a3;
+}, validateTag(t2) {
+  var e2 = this.settings, s2 = "value" in t2 ? "value" : e2.tagTextProp, i2 = this.trim(t2[s2] + "");
+  return (t2[s2] + "").trim() ? "mix" != e2.mode && e2.pattern && e2.pattern instanceof RegExp && !e2.pattern.test(i2) ? this.TEXTS.pattern : !e2.duplicates && this.isTagDuplicate(i2, e2.dropdown.caseSensitive, t2.__tagId) ? this.TEXTS.duplicate : this.isTagBlacklisted(i2) || e2.enforceWhitelist && !this.isTagWhitelisted(i2) ? this.TEXTS.notAllowed : !e2.validate || e2.validate(t2) : this.TEXTS.empty;
+}, getInvalidTagAttrs(t2, e2) {
+  return { "aria-invalid": true, class: `${t2.class || ""} ${this.settings.classNames.tagNotAllowed}`.trim(), title: e2 };
+}, hasMaxTags() {
   return this.value.length >= this.settings.maxTags && this.TEXTS.exceed;
-}, setReadonly: function(t2, e2) {
-  var i2 = this.settings;
-  this.DOM.scope.contains(document.activeElement) && document.activeElement.blur(), i2[e2 || "readonly"] = t2, this.DOM.scope[(t2 ? "set" : "remove") + "Attribute"](e2 || "readonly", true), this.settings.userInput = true, this.setContentEditable(!t2), t2 || (this.events.binding.call(this, true), this.events.binding.call(this), i2.dropdown.enabled = this.origSettings.dropdown.enabled);
-}, setContentEditable: function(t2) {
-  this.DOM.scope.querySelectorAll("[data-can-editable]").forEach((function(e2) {
+}, setReadonly(t2, e2) {
+  var s2 = this.settings;
+  this.DOM.scope.contains(document.activeElement) && document.activeElement.blur(), s2[e2 || "readonly"] = t2, this.DOM.scope[(t2 ? "set" : "remove") + "Attribute"](e2 || "readonly", true), this.settings.userInput = true, this.setContentEditable(!t2), t2 || (this.events.binding.call(this, true), this.events.binding.call(this), s2.dropdown.enabled = this.origSettings.dropdown.enabled);
+}, setContentEditable(t2) {
+  this.DOM.scope.querySelectorAll("[data-can-editable]").forEach(((e2) => {
     e2.contentEditable = t2, e2.tabIndex = t2 ? 0 : -1;
   }));
-}, setDisabled: function(t2) {
+}, setDisabled(t2) {
   this.setReadonly(t2, "disabled");
-}, normalizeTags: function(t2) {
-  var e2 = this, i2 = this.settings, n2 = i2.whitelist, a3 = i2.delimiters, s2 = i2.mode, o2 = i2.tagTextProp, r2 = [], l4 = !!n2 && G(n2[0], Object), d4 = Array.isArray(t2), g4 = d4 && t2[0].value, h3 = function(t3) {
-    return (t3 + "").split(a3).reduce((function(t4, i3) {
-      var n3, a4 = e2.trim(i3);
-      return a4 && t4.push((J2(n3 = {}, o2, a4), J2(n3, "value", a4), n3)), t4;
-    }), []);
-  };
+}, normalizeTags(t2) {
+  var { whitelist: e2, delimiters: s2, mode: i2, tagTextProp: a3 } = this.settings, n2 = [], o2 = !!e2 && e2[0] instanceof Object, r2 = Array.isArray(t2), h3 = r2 && t2[0].value, g4 = (t3) => (t3 + "").split(s2).reduce(((t4, e3) => {
+    const s3 = this.trim(e3);
+    return s3 && t4.push({ [a3]: s3, value: s3 }), t4;
+  }), []);
   if ("number" == typeof t2 && (t2 = t2.toString()), "string" == typeof t2) {
     if (!t2.trim()) return [];
-    t2 = h3(t2);
-  } else d4 && (t2 = t2.reduce((function(t3, i3) {
-    if (c2(i3)) {
-      var n3 = u({}, i3);
-      o2 in n3 || (o2 = "value"), n3[o2] = e2.trim(n3[o2]), (n3[o2] || 0 === n3[o2]) && t3.push(n3);
-    } else if (null != i3 && "" !== i3 && void 0 !== i3) {
-      var a4;
-      (a4 = t3).push.apply(a4, Y(h3(i3)));
-    }
+    t2 = g4(t2);
+  } else r2 && (t2 = t2.reduce(((t3, e3) => {
+    if (l(e3)) {
+      var s3 = d2({}, e3);
+      a3 in s3 || (a3 = "value"), s3[a3] = this.trim(s3[a3]), (s3[a3] || 0 === s3[a3]) && t3.push(s3);
+    } else null != e3 && "" !== e3 && void 0 !== e3 && t3.push(...g4(e3));
     return t3;
   }), []));
-  return l4 && !g4 && (t2.forEach((function(t3) {
-    var i3 = r2.map((function(t4) {
-      return t4.value;
-    })), n3 = e2.dropdown.filterListItems.call(e2, t3[o2], { exact: true });
-    e2.settings.duplicates || (n3 = n3.filter((function(t4) {
-      return !i3.includes(t4.value);
-    })));
-    var a4 = n3.length > 1 ? e2.getWhitelistItem(t3[o2], o2, n3) : n3[0];
-    a4 && G(a4, Object) ? r2.push(a4) : "mix" != s2 && (null == t3.value && (t3.value = t3[o2]), r2.push(t3));
-  })), r2.length && (t2 = r2)), t2;
-}, parseMixTags: function(t2, e2) {
-  var i2 = this, n2 = this.settings, a3 = n2.mixTagsInterpolator, s2 = n2.duplicates, o2 = n2.transformTag, r2 = n2.enforceWhitelist, l4 = n2.maxTags, d4 = n2.tagTextProp, c3 = null == e2 ? void 0 : e2.skipDOM, u2 = c3 ? document.createDocumentFragment() : null, g4 = [];
-  if (t2 = t2.split(a3[0]).map((function(t3, e3) {
-    var n3, h4, p3, f3 = t3.split(a3[1]), v3 = f3[0], m4 = g4.length == l4;
-    if (c3 && 0 == e3 && t3) return u2.appendChild(document.createTextNode(t3)), "";
+  return o2 && !h3 && (t2.forEach(((t3) => {
+    var e3 = n2.map(((t4) => t4.value)), s3 = this.dropdown.filterListItems.call(this, t3[a3], { exact: true });
+    this.settings.duplicates || (s3 = s3.filter(((t4) => !e3.includes(t4.value))));
+    var o3 = s3.length > 1 ? this.getWhitelistItem(t3[a3], a3, s3) : s3[0];
+    o3 && o3 instanceof Object ? n2.push(o3) : "mix" != i2 && (null == t3.value && (t3.value = t3[a3]), n2.push(t3));
+  })), n2.length && (t2 = n2)), t2;
+}, parseMixTags(t2, e2) {
+  var { mixTagsInterpolator: s2, duplicates: i2, transformTag: a3, enforceWhitelist: n2, maxTags: o2, tagTextProp: r2 } = this.settings, l4 = e2?.skipDOM, d4 = l4 ? document.createDocumentFragment() : null, h3 = [];
+  if (t2 = t2.split(s2[0]).map(((t3, e3) => {
+    var g5, c3, p3, u2 = t3.split(s2[1]), m4 = u2[0], v3 = h3.length == o2;
+    if (l4 && 0 == e3 && t3) return d4.appendChild(document.createTextNode(t3)), "";
     try {
-      if (v3 == +v3) throw Error;
-      h4 = JSON.parse(v3);
+      if (m4 == +m4) throw Error;
+      c3 = JSON.parse(m4);
     } catch (t4) {
-      h4 = i2.normalizeTags(v3)[0] || { value: v3 };
+      c3 = this.normalizeTags(m4)[0] || { value: m4 };
     }
-    if (o2.call(i2, h4), m4 || !(f3.length > 1) || r2 && !i2.isTagWhitelisted(h4.value) || !s2 && i2.isTagDuplicate(h4.value)) {
-      if (t3) return c3 ? (u2.appendChild(document.createTextNode(a3[0] + t3)), "") : e3 ? a3[0] + t3 : t3;
+    if (a3.call(this, c3), v3 || !(u2.length > 1) || n2 && !this.isTagWhitelisted(c3.value) || !i2 && this.isTagDuplicate(c3.value)) {
+      if (t3) return l4 ? (d4.appendChild(document.createTextNode(s2[0] + t3)), "") : e3 ? s2[0] + t3 : t3;
     } else {
-      if (h4[n3 = h4[d4] ? d4 : "value"] = i2.trim(h4[n3]), p3 = i2.createTagElem(h4), g4.push(h4), p3.classList.add(i2.settings.classNames.tagNoAnimation), c3) return u2.appendChild(p3), f3[1] && u2.appendChild(document.createTextNode(f3[1])), "";
-      f3[0] = p3.outerHTML, i2.value.push(h4);
+      if (c3[g5 = c3[r2] ? r2 : "value"] = this.trim(c3[g5]), p3 = this.createTagElem(c3), h3.push(c3), p3.classList.add(this.settings.classNames.tagNoAnimation), l4) return d4.appendChild(p3), u2[1] && d4.appendChild(document.createTextNode(u2[1])), "";
+      u2[0] = p3.outerHTML, this.value.push(c3);
     }
-    return f3.join("");
-  })).join(""), c3) return u2.__tagifyTagsData = g4, u2;
+    return u2.join("");
+  })).join(""), l4) return d4.__tagifyTagsData = h3, d4;
   this.DOM.input.innerHTML = t2, this.DOM.input.appendChild(document.createTextNode("")), this.DOM.input.normalize();
-  var h3 = this.getTagElms();
-  return h3.forEach((function(t3, e3) {
-    return y2(t3, g4[e3]);
-  })), this.update({ withoutChangeEvent: true }), O2(h3, this.state.hasFocus), t2;
-}, convertPastedTextToMixTags: function(t2) {
-  var e2 = this.settings, i2 = e2.pattern, n2 = e2.whitelist, a3 = e2.mixTagsInterpolator, s2 = e2.mixTagsAllowedAfter, o2 = e2.tagTextProp;
-  if (!i2 || !(null == n2 ? void 0 : n2.length)) return t2;
-  var r2 = i2.source ? i2.source.split("|") : [i2], l4 = {};
-  r2.forEach((function(t3) {
-    var e3 = t3.replace(/\\/g, "");
-    l4[e3] = n2.map((function(t4) {
-      var e4;
-      return e4 = "string" == typeof t4 ? t4 : t4[o2] || t4.value, { originalItem: t4, value: e4 = String(e4), searchValue: e4.toLowerCase() };
-    })).sort((function(t4, e4) {
-      return e4.value.length - t4.value.length;
-    }));
+  var g4 = this.getTagElms();
+  return g4.forEach(((t3, e3) => T(t3, h3[e3]))), this.update({ withoutChangeEvent: true }), b2(g4, this.state.hasFocus), t2;
+}, convertPastedTextToMixTags(t2) {
+  const { pattern: e2, whitelist: s2, mixTagsInterpolator: i2, mixTagsAllowedAfter: a3, tagTextProp: n2 } = this.settings;
+  if (!e2 || !s2?.length) return t2;
+  const o2 = e2.source ? e2.source.split("|") : [e2], r2 = {};
+  o2.forEach(((t3) => {
+    const e3 = t3.replace(/\\/g, "");
+    r2[e3] = s2.map(((t4) => {
+      let e4;
+      return e4 = "string" == typeof t4 ? t4 : t4[n2] || t4.value, e4 = String(e4), { originalItem: t4, value: e4, searchValue: e4.toLowerCase() };
+    })).sort(((t4, e4) => e4.value.length - t4.value.length));
   }));
-  for (var d4, c3 = new RegExp(i2.source, "g"), u2 = []; null !== (d4 = c3.exec(t2)); ) {
-    var g4 = d4[0], h3 = d4.index, p3 = h3 + g4.length, f3 = t2.slice(p3), v3 = l4[g4];
-    if (v3) {
-      var m4 = null, b4 = 0, w4 = true, y4 = false, T3 = void 0;
-      try {
-        for (var O4, x3 = v3[Symbol.iterator](); !(w4 = (O4 = x3.next()).done); w4 = true) {
-          var D4 = O4.value, S3 = D4.value.length;
-          if (f3.slice(0, S3).toLowerCase() === D4.searchValue) {
-            var I4 = f3[S3];
-            if (!I4 || s2.test(I4)) {
-              m4 = D4, b4 = S3;
-              break;
-            }
-          }
-        }
-      } catch (t3) {
-        y4 = true, T3 = t3;
-      } finally {
-        try {
-          w4 || null == x3.return || x3.return();
-        } finally {
-          if (y4) throw T3;
+  const l4 = new RegExp(e2.source, "g"), d4 = [];
+  let h3;
+  for (; null !== (h3 = l4.exec(t2)); ) {
+    const e3 = h3[0], s3 = h3.index, n3 = s3 + e3.length, o3 = t2.slice(n3), g5 = r2[e3];
+    if (!g5) continue;
+    let c3 = null, p3 = 0;
+    for (const t3 of g5) {
+      const e4 = t3.value.length;
+      if (o3.slice(0, e4).toLowerCase() === t3.searchValue) {
+        const s4 = o3[e4];
+        if (!s4 || a3.test(s4)) {
+          c3 = t3, p3 = e4;
+          break;
         }
       }
-      if (m4) {
-        var E4 = "string" == typeof m4.originalItem ? { value: m4.value, prefix: g4 } : Q($2({}, m4.originalItem), { prefix: g4 });
-        if (true === this.validateTag(E4)) {
-          var M3 = "".concat(a3[0]).concat(JSON.stringify(E4)).concat(a3[1]);
-          u2.push({ start: h3, end: p3 + b4, replacement: M3 }), c3.lastIndex = p3 + b4;
-        }
+    }
+    if (c3) {
+      const t3 = "string" == typeof c3.originalItem ? { value: c3.value, prefix: e3 } : { ...c3.originalItem, prefix: e3 };
+      if (true === this.validateTag(t3)) {
+        const e4 = `${i2[0]}${JSON.stringify(t3)}${i2[1]}`;
+        d4.push({ start: s3, end: n3 + p3, replacement: e4 }), l4.lastIndex = n3 + p3;
       }
     }
   }
-  var N3 = t2;
-  return u2.reverse().forEach((function(t3) {
-    var e3 = t3.start, i3 = t3.end, n3 = t3.replacement;
-    N3 = N3.slice(0, e3) + n3 + N3.slice(i3);
-  })), N3;
-}, replaceTextWithNode: function(t2, e2) {
+  let g4 = t2;
+  return d4.reverse().forEach((({ start: t3, end: e3, replacement: s3 }) => {
+    g4 = g4.slice(0, t3) + s3 + g4.slice(e3);
+  })), g4;
+}, replaceTextWithNode(t2, e2) {
   if (this.state.tag || e2) {
     e2 = e2 || this.state.tag.prefix + this.state.tag.value;
-    var i2, n2, a3 = this.state.selection || window.getSelection(), s2 = a3.anchorNode, o2 = this.state.tag.delimiters ? this.state.tag.delimiters.length : 0;
-    return s2.splitText(a3.anchorOffset - o2), -1 == (i2 = s2.nodeValue.lastIndexOf(e2)) ? true : (n2 = s2.splitText(i2), t2 && s2.parentNode.replaceChild(t2, n2), true);
+    var s2, i2, a3 = this.state.selection || window.getSelection(), n2 = a3.anchorNode, o2 = this.state.tag.delimiters ? this.state.tag.delimiters.length : 0;
+    return n2.splitText(a3.anchorOffset - o2), -1 == (s2 = n2.nodeValue.lastIndexOf(e2)) ? true : (i2 = n2.splitText(s2), t2 && n2.parentNode.replaceChild(t2, i2), true);
   }
-}, prepareNewTagNode: function(t2, e2) {
+}, prepareNewTagNode(t2, e2) {
   e2 = e2 || {};
-  var i2 = this.settings, n2 = [], a3 = {}, s2 = Object.assign({}, t2, { value: t2.value + "" });
-  if (t2 = Object.assign({}, s2), i2.transformTag.call(this, t2), t2.__isValid = this.hasMaxTags() || this.validateTag(t2), true !== t2.__isValid) {
+  var s2 = this.settings, i2 = [], a3 = {}, n2 = Object.assign({}, t2, { value: t2.value + "" });
+  if (t2 = Object.assign({}, n2), s2.transformTag.call(this, t2), t2.__isValid = this.hasMaxTags() || this.validateTag(t2), true !== t2.__isValid) {
     if (e2.skipInvalid) return;
-    if (u(a3, this.getInvalidTagAttrs(t2, t2.__isValid), { __preInvalidData: s2 }), t2.__isValid == this.TEXTS.duplicate && this.flashTag(this.getTagElmByValue(t2.value)), !i2.createInvalidTags) return void n2.push(t2.value);
+    if (d2(a3, this.getInvalidTagAttrs(t2, t2.__isValid), { __preInvalidData: n2 }), t2.__isValid == this.TEXTS.duplicate && this.flashTag(this.getTagElmByValue(t2.value)), !s2.createInvalidTags) return void i2.push(t2.value);
   }
-  return "readonly" in t2 && (t2.readonly ? a3["aria-readonly"] = true : delete t2.readonly), { tagElm: this.createTagElem(t2, a3), tagData: t2, aggregatedInvalidInput: n2 };
-}, postProcessNewTagNode: function(t2, e2) {
-  var i2 = this, n2 = this.settings, a3 = e2.__isValid;
-  a3 && true === a3 ? this.value.push(e2) : (this.trigger("invalid", { data: e2, index: this.value.length, tag: t2, message: a3 }), n2.keepInvalidTags || setTimeout((function() {
-    return i2.removeTags(t2, true);
-  }), 1e3)), this.dropdown.position();
-}, selectTag: function(t2, e2) {
-  var i2 = this;
+  return "readonly" in t2 && (t2.readonly ? a3["aria-readonly"] = true : delete t2.readonly), { tagElm: this.createTagElem(t2, a3), tagData: t2, aggregatedInvalidInput: i2 };
+}, postProcessNewTagNode(t2, e2) {
+  var s2 = this.settings, i2 = e2.__isValid;
+  i2 && true === i2 ? this.value.push(e2) : (this.trigger("invalid", { data: e2, index: this.value.length, tag: t2, message: i2 }), s2.keepInvalidTags || setTimeout((() => this.removeTags(t2, true)), 1e3)), this.dropdown.position();
+}, selectTag(t2, e2) {
   if (!this.settings.enforceWhitelist || this.isTagWhitelisted(e2.value)) {
-    this.state.actions.selectOption && setTimeout((function() {
-      return i2.setRangeAtStartEnd(false, i2.DOM.input);
-    }));
-    var n2 = this.getLastTag();
-    return n2 ? this.replaceTag(n2, e2) : this.appendTag(t2), this.value[0] = e2, this.update(), this.trigger("add", { tag: t2, data: e2 }), [t2];
+    this.state.actions.selectOption && setTimeout((() => this.setRangeAtStartEnd(false, this.DOM.input)));
+    var s2 = this.getLastTag();
+    return s2 ? this.replaceTag(s2, e2) : this.appendTag(t2), this.value[0] = e2, this.update(), this.trigger("add", { tag: t2, data: e2 }), [t2];
   }
-}, addEmptyTag: function(t2) {
-  var e2 = u({ value: "" }, t2 || {}), i2 = this.createTagElem(e2);
-  y2(i2, e2), this.appendTag(i2), this.editTag(i2, { skipValidation: true }), this.toggleFocusClass(true);
-}, addTags: function(t2, e2, i2) {
-  var n2 = this, a3 = [], s2 = this.settings, o2 = [], r2 = document.createDocumentFragment(), l4 = [];
-  if (!t2 || 0 == t2.length) return a3;
-  switch (t2 = this.normalizeTags(t2), s2.mode) {
+}, addEmptyTag(t2) {
+  var e2 = d2({ value: "" }, t2 || {}), s2 = this.createTagElem(e2);
+  T(s2, e2), this.appendTag(s2), this.editTag(s2, { skipValidation: true }), this.toggleFocusClass(true);
+}, addTags(t2, e2, s2) {
+  var i2 = [], a3 = this.settings, n2 = [], o2 = document.createDocumentFragment(), r2 = [];
+  if (!t2 || 0 == t2.length) return i2;
+  switch (t2 = this.normalizeTags(t2), a3.mode) {
     case "mix":
       return this.addMixTags(t2);
     case "select":
       e2 = false, this.removeAllTags();
   }
-  return this.DOM.input.removeAttribute("style"), t2.forEach((function(t3) {
-    var e3 = n2.prepareNewTagNode(t3, { skipInvalid: i2 || s2.skipInvalid });
-    if (e3) {
-      var d4 = e3.tagElm;
-      if (t3 = e3.tagData, o2 = e3.aggregatedInvalidInput, a3.push(d4), "select" == s2.mode) return n2.selectTag(d4, t3);
-      r2.appendChild(d4), n2.postProcessNewTagNode(d4, t3), l4.push({ tagElm: d4, tagData: t3 });
-    }
-  })), this.appendTag(r2), l4.forEach((function(t3) {
-    var e3 = t3.tagElm, i3 = t3.tagData;
-    return n2.trigger("add", { tag: e3, index: n2.getTagIdx(i3), data: i3 });
-  })), this.update(), t2.length && e2 && (this.input.set.call(this, s2.createInvalidTags ? "" : o2.join(s2._delimiters)), this.setRangeAtStartEnd(false, this.DOM.input)), this.dropdown.refilter(), a3;
-}, addMixTags: function(t2) {
-  var e2 = this;
+  return this.DOM.input.removeAttribute("style"), t2.forEach(((t3) => {
+    const e3 = this.prepareNewTagNode(t3, { skipInvalid: s2 || a3.skipInvalid });
+    if (!e3) return;
+    const l4 = e3.tagElm;
+    if (t3 = e3.tagData, n2 = e3.aggregatedInvalidInput, i2.push(l4), "select" == a3.mode) return this.selectTag(l4, t3);
+    o2.appendChild(l4), this.postProcessNewTagNode(l4, t3), r2.push({ tagElm: l4, tagData: t3 });
+  })), this.appendTag(o2), r2.forEach((({ tagElm: t3, tagData: e3 }) => this.trigger("add", { tag: t3, index: this.getTagIdx(e3), data: e3 }))), this.update(), t2.length && e2 && (this.input.set.call(this, a3.createInvalidTags ? "" : n2.join(a3._delimiters)), this.setRangeAtStartEnd(false, this.DOM.input)), this.dropdown.refilter(), i2;
+}, addMixTags(t2) {
   if ((t2 = this.normalizeTags(t2))[0].prefix || this.state.tag) return this.prefixedTextToTag(t2[0]);
-  var i2 = document.createDocumentFragment(), n2 = [];
-  return t2.forEach((function(t3) {
-    var a3 = e2.prepareNewTagNode(t3);
-    i2.appendChild(a3.tagElm), e2.insertAfterTag(a3.tagElm), e2.postProcessNewTagNode(a3.tagElm, a3.tagData), n2.push({ tagElm: a3.tagElm, tagData: a3.tagData });
-  })), this.appendMixTags(i2, n2), i2.children;
-}, appendMixTags: function(t2, e2) {
-  var i2, n2 = null === (i2 = this.state.selection) || void 0 === i2 ? void 0 : i2.range, a3 = !!n2 && this.DOM.scope.contains(n2.startContainer), s2 = t2 ? 11 === t2.nodeType ? Array.prototype.slice.call(t2.childNodes) : [t2] : [];
-  if (a3) this.injectAtCaret(t2);
+  var e2 = document.createDocumentFragment(), s2 = [];
+  return t2.forEach(((t3) => {
+    const i2 = this.prepareNewTagNode(t3);
+    e2.appendChild(i2.tagElm), this.insertAfterTag(i2.tagElm), this.postProcessNewTagNode(i2.tagElm, i2.tagData), s2.push({ tagElm: i2.tagElm, tagData: i2.tagData });
+  })), this.appendMixTags(e2, s2), e2.children;
+}, appendMixTags(t2, e2) {
+  const s2 = this.state.selection?.range, i2 = !!s2 && this.DOM.scope.contains(s2.startContainer), a3 = t2 ? 11 === t2.nodeType ? Array.prototype.slice.call(t2.childNodes) : [t2] : [];
+  if (i2) this.injectAtCaret(t2);
   else {
     this.DOM.input.focus();
-    var o2 = this.setStateSelection();
-    (null == o2 ? void 0 : o2.range) && (o2.range.setStart(this.DOM.input, o2.range.endOffset), o2.range.setEnd(this.DOM.input, o2.range.endOffset)), this.DOM.input.appendChild(t2), this.updateValueByDOMTags(), this.update();
-    var r2 = s2[s2.length - 1];
-    (null == r2 ? void 0 : r2.parentNode) && T(r2), this.setStateSelection();
+    const e3 = this.setStateSelection();
+    e3?.range && (e3.range.setStart(this.DOM.input, e3.range.endOffset), e3.range.setEnd(this.DOM.input, e3.range.endOffset)), this.DOM.input.appendChild(t2), this.updateValueByDOMTags(), this.update();
+    const s3 = a3[a3.length - 1];
+    s3?.parentNode && w2(s3), this.setStateSelection();
   }
-  var l4 = (null == e2 ? void 0 : e2.length) ? e2 : s2.filter((function(t3) {
-    return 1 === t3.nodeType;
-  }));
-  (null == l4 ? void 0 : l4.length) && this.trigger("add", { tags: l4 });
-}, prefixedTextToTag: function(t2) {
-  var e2, i2, n2, a3 = this, s2 = this.settings, o2 = null === (e2 = this.state.tag) || void 0 === e2 ? void 0 : e2.delimiters;
-  if (t2.prefix = t2.prefix || this.state.tag ? this.state.tag.prefix : (s2.pattern.source || s2.pattern)[0], n2 = this.prepareNewTagNode(t2), i2 = n2.tagElm, this.replaceTextWithNode(i2) || this.DOM.input.appendChild(i2), setTimeout((function() {
-    return i2.classList.add(a3.settings.classNames.tagNoAnimation);
-  }), 300), this.update(), !o2) {
-    var r2 = this.insertAfterTag(i2) || i2;
-    setTimeout(T, 0, r2);
+  const n2 = e2?.length ? e2 : a3.filter(((t3) => 1 === t3.nodeType));
+  n2?.length && this.trigger("add", { tags: n2 });
+}, prefixedTextToTag(t2) {
+  var e2, s2, i2 = this.settings, a3 = this.state.tag?.delimiters;
+  if (t2.prefix = t2.prefix || this.state.tag ? this.state.tag.prefix : (i2.pattern.source || i2.pattern)[0], s2 = this.prepareNewTagNode(t2), e2 = s2.tagElm, this.replaceTextWithNode(e2) || this.DOM.input.appendChild(e2), setTimeout((() => e2.classList.add(this.settings.classNames.tagNoAnimation)), 300), this.update(), !a3) {
+    var n2 = this.insertAfterTag(e2) || e2;
+    setTimeout(w2, 0, n2);
   }
-  return this.state.tag = null, this.postProcessNewTagNode(i2, n2.tagData), this.trigger("add", { tag: n2, data: t2 }), i2;
-}, appendTag: function(t2) {
-  var e2 = this.DOM, i2 = e2.input;
-  e2.scope.insertBefore(t2, i2);
-}, repositionScopeInput: function(t2) {
-  var e2 = arguments.length > 1 && void 0 !== arguments[1] ? arguments[1] : {}, i2 = this.DOM.input, n2 = this.DOM.scope, a3 = this.settings, s2 = i2 && i2.parentNode, o2 = "reset" === t2, r2 = void 0 !== e2.focus ? e2.focus : !o2;
+  return this.state.tag = null, this.postProcessNewTagNode(e2, s2.tagData), this.trigger("add", { tag: s2, data: t2 }), e2;
+}, appendTag(t2) {
+  var e2 = this.DOM, s2 = e2.input;
+  e2.scope.insertBefore(t2, s2);
+}, repositionScopeInput(t2, e2 = {}) {
+  var s2 = this.DOM.input, i2 = this.DOM.scope, a3 = this.settings, n2 = s2 && s2.parentNode, o2 = "reset" === t2, r2 = void 0 !== e2.focus ? e2.focus : !o2;
   if ("mix" == a3.mode || this.state.dropdown.visible) return false;
-  if (!i2 || !n2 || s2 != n2) return false;
+  if (!s2 || !i2 || n2 != i2) return false;
   if (o2) {
     var l4 = this.getTagElms(), d4 = l4[l4.length - 1];
-    return !!d4 && (d4.nextElementSibling !== i2 && (d4.after(i2), r2 && i2.focus(), true));
+    return !!d4 && (d4.nextElementSibling !== s2 && (d4.after(s2), r2 && s2.focus(), true));
   }
   if (!a3.allowCaretBetweenTags) return false;
   if ("left" === t2 || "ArrowLeft" === t2) {
-    var c3 = this.getTagElmBeforeInput();
-    return !!c3 && (n2.insertBefore(i2, c3), r2 && i2.focus(), true);
+    var h3 = this.getTagElmBeforeInput();
+    return !!h3 && (i2.insertBefore(s2, h3), r2 && s2.focus(), true);
   }
   if ("right" === t2 || "ArrowRight" === t2) {
-    var u2 = i2.nextElementSibling;
-    return !!v.call(this, u2) && (u2.after(i2), r2 && i2.focus(), true);
+    var g4 = s2.nextElementSibling;
+    return !!u.call(this, g4) && (g4.after(s2), r2 && s2.focus(), true);
   }
   return false;
-}, createTagElem: function(t2, e2) {
-  var i2;
-  t2.__tagId = f2();
-  var n2, a3 = u({}, t2, $2((J2(i2 = {}, this.settings.tagTextProp, d2((t2[this.settings.tagTextProp] || t2.value) + "")), J2(i2, "title", d2((t2.title || t2.value) + "")), J2(i2, "value", d2(t2.value + "")), i2), e2));
+}, createTagElem(t2, e2) {
+  t2.__tagId = p2();
+  var s2, i2 = d2({}, t2, { [this.settings.tagTextProp]: r((t2[this.settings.tagTextProp] || t2.value) + ""), title: r((t2.title || t2.value) + ""), value: r(t2.value + ""), ...e2 });
   return (function(t3) {
-    for (var e3, i3 = document.createNodeIterator(t3, NodeFilter.SHOW_TEXT, null, false); e3 = i3.nextNode(); ) e3.textContent.trim() || e3.parentNode.removeChild(e3);
-  })(n2 = this.parseTemplate("tag", [a3, this])), y2(n2, t2), n2;
-}, reCheckInvalidTags: function() {
-  var t2 = this, e2 = this.settings;
-  this.getTagElms(e2.classNames.tagNotAllowed).forEach((function(i2, n2) {
-    var a3 = y2(i2), s2 = t2.hasMaxTags(), o2 = t2.validateTag(a3), r2 = true === o2 && !s2;
-    if ("select" == e2.mode && t2.toggleScopeValidation(o2), r2) return a3 = a3.__preInvalidData ? a3.__preInvalidData : { value: a3.value }, t2.replaceTag(i2, a3);
-    i2.title = s2 || o2;
+    for (var e3, s3 = document.createNodeIterator(t3, NodeFilter.SHOW_TEXT, null, false); e3 = s3.nextNode(); ) e3.textContent.trim() || e3.parentNode.removeChild(e3);
+  })(s2 = this.parseTemplate("tag", [i2, this])), T(s2, t2), s2;
+}, reCheckInvalidTags() {
+  var t2 = this.settings;
+  this.getTagElms(t2.classNames.tagNotAllowed).forEach(((e2, s2) => {
+    var i2 = T(e2), a3 = this.hasMaxTags(), n2 = this.validateTag(i2), o2 = true === n2 && !a3;
+    if ("select" == t2.mode && this.toggleScopeValidation(n2), o2) return i2 = i2.__preInvalidData ? i2.__preInvalidData : { value: i2.value }, this.replaceTag(e2, i2);
+    e2.title = a3 || n2;
   }));
-}, removeTags: function(t2, e2, i2) {
-  var n2, a3 = this, s2 = this.settings;
-  if (t2 = t2 && G(t2, HTMLElement) ? [t2] : G(t2, Array) ? t2 : t2 ? [t2] : [this.getLastTag()].filter((function(t3) {
-    return t3;
-  })), n2 = t2.reduce((function(t3, e3) {
-    e3 && "string" == typeof e3 && (e3 = a3.getTagElmByValue(e3));
-    var i3 = y2(e3);
-    return e3 && i3 && !i3.readonly && t3.push({ node: e3, idx: a3.getTagIdx(i3), data: y2(e3, { __removed: true }) }), t3;
-  }), []), i2 = "number" == typeof i2 ? i2 : this.CSSVars.tagHideTransition, "select" == s2.mode && (i2 = 0, this.input.set.call(this)), 1 == n2.length && "select" != s2.mode && n2[0].node.classList.contains(s2.classNames.tagNotAllowed) && (e2 = true), n2.length) return s2.hooks.beforeRemoveTag(n2, { tagify: this }).then((function() {
-    var t3 = function(t4) {
-      t4.node.parentNode && (t4.node.parentNode.removeChild(t4.node), e2 ? s2.keepInvalidTags && this.trigger("remove", { tag: t4.node, index: t4.idx }) : (this.dropdown.refilter(), this.dropdown.position(), this.DOM.input.normalize(), s2.keepInvalidTags && this.reCheckInvalidTags(), this.trigger("remove", { tag: t4.node, index: t4.idx, data: t4.data })));
-    };
-    e2 || (a3.removeTagsFromValue(n2.map((function(t4) {
-      return t4.node;
-    }))), a3.update(), "select" == s2.mode && s2.userInput && a3.setContentEditable(true)), i2 && i2 > 10 && 1 == n2.length ? function(e3) {
-      e3.node.style.width = parseFloat(window.getComputedStyle(e3.node).width) + "px", document.body.clientTop, e3.node.classList.add(s2.classNames.tagHide), setTimeout(t3.bind(this), i2, e3);
-    }.call(a3, n2[0]) : n2.forEach(t3.bind(a3));
-  })).catch((function(t3) {
+}, removeTags(t2, e2, s2) {
+  var i2, a3 = this.settings;
+  if (t2 = t2 && t2 instanceof HTMLElement ? [t2] : t2 instanceof Array ? t2 : t2 ? [t2] : [this.getLastTag()].filter(((t3) => t3)), i2 = t2.reduce(((t3, e3) => {
+    e3 && "string" == typeof e3 && (e3 = this.getTagElmByValue(e3));
+    var s3 = T(e3);
+    return e3 && s3 && !s3.readonly && t3.push({ node: e3, idx: this.getTagIdx(s3), data: T(e3, { __removed: true }) }), t3;
+  }), []), s2 = "number" == typeof s2 ? s2 : this.CSSVars.tagHideTransition, "select" == a3.mode && (s2 = 0, this.input.set.call(this)), 1 == i2.length && "select" != a3.mode && i2[0].node.classList.contains(a3.classNames.tagNotAllowed) && (e2 = true), i2.length) return a3.hooks.beforeRemoveTag(i2, { tagify: this }).then((() => {
+    function t3(t4) {
+      t4.node.parentNode && (t4.node.parentNode.removeChild(t4.node), e2 ? a3.keepInvalidTags && this.trigger("remove", { tag: t4.node, index: t4.idx }) : (this.dropdown.refilter(), this.dropdown.position(), this.DOM.input.normalize(), a3.keepInvalidTags && this.reCheckInvalidTags(), this.trigger("remove", { tag: t4.node, index: t4.idx, data: t4.data })));
+    }
+    e2 || (this.removeTagsFromValue(i2.map(((t4) => t4.node))), this.update(), "select" == a3.mode && a3.userInput && this.setContentEditable(true)), s2 && s2 > 10 && 1 == i2.length ? function(e3) {
+      e3.node.style.width = parseFloat(window.getComputedStyle(e3.node).width) + "px", document.body.clientTop, e3.node.classList.add(a3.classNames.tagHide), setTimeout(t3.bind(this), s2, e3);
+    }.call(this, i2[0]) : i2.forEach(t3.bind(this));
+  })).catch(((t3) => {
   }));
-}, removeTagsFromDOM: function() {
-  this.getTagElms().forEach((function(t2) {
-    return t2.remove();
+}, removeTagsFromDOM() {
+  this.getTagElms().forEach(((t2) => t2.remove()));
+}, removeTagsFromValue(t2) {
+  (t2 = Array.isArray(t2) ? t2 : [t2]).forEach(((t3) => {
+    var e2 = T(t3), s2 = this.getTagIdx(e2);
+    s2 > -1 && this.value.splice(s2, 1);
   }));
-}, removeTagsFromValue: function(t2) {
-  var e2 = this;
-  (t2 = Array.isArray(t2) ? t2 : [t2]).forEach((function(t3) {
-    var i2 = y2(t3), n2 = e2.getTagIdx(i2);
-    n2 > -1 && e2.value.splice(n2, 1);
-  }));
-}, removeAllTags: function(t2) {
-  var e2 = this;
-  t2 = t2 || {}, this.value = [], "mix" == this.settings.mode ? this.DOM.input.innerHTML = "" : this.removeTagsFromDOM(), this.dropdown.refilter(), this.dropdown.position(), this.state.dropdown.visible && setTimeout((function() {
-    e2.DOM.input.focus();
+}, removeAllTags(t2) {
+  t2 = t2 || {}, this.value = [], "mix" == this.settings.mode ? this.DOM.input.innerHTML = "" : this.removeTagsFromDOM(), this.dropdown.refilter(), this.dropdown.position(), this.state.dropdown.visible && setTimeout((() => {
+    this.DOM.input.focus();
   })), "select" == this.settings.mode && (this.input.set.call(this), this.settings.userInput && this.setContentEditable(true));
-  var i2 = this.state.blockChangeEvent ? void 0 : function() {
-    !e2.state.blockChangeEvent && e2.trigger("remove", {});
+  const e2 = this.state.blockChangeEvent ? void 0 : () => {
+    !this.state.blockChangeEvent && this.trigger("remove", {});
   };
-  this.update(t2, i2);
-}, postUpdate: function() {
+  this.update(t2, e2);
+}, postUpdate() {
   this.state.blockChangeEvent = false;
-  var t2, e2, i2 = this.settings, n2 = i2.classNames, a3 = "mix" == i2.mode ? i2.mixMode.integrated ? this.DOM.input.textContent : this.DOM.originalInput.value.trim() : this.value.length + this.input.raw.call(this).length;
-  (this.toggleClass(n2.hasMaxTags, this.value.length >= i2.maxTags), this.toggleClass(n2.hasNoTags, !this.value.length), this.toggleClass(n2.empty, !a3), "select" == i2.mode) && this.toggleScopeValidation(null === (e2 = this.value) || void 0 === e2 || null === (t2 = e2[0]) || void 0 === t2 ? void 0 : t2.__isValid);
-}, setOriginalInputValue: function(t2) {
+  var t2 = this.settings, e2 = t2.classNames, s2 = "mix" == t2.mode ? t2.mixMode.integrated ? this.DOM.input.textContent : this.DOM.originalInput.value.trim() : this.value.length + this.input.raw.call(this).length;
+  this.toggleClass(e2.hasMaxTags, this.value.length >= t2.maxTags), this.toggleClass(e2.hasNoTags, !this.value.length), this.toggleClass(e2.empty, !s2), "select" == t2.mode && this.toggleScopeValidation(this.value?.[0]?.__isValid);
+}, setOriginalInputValue(t2) {
   var e2 = this.DOM.originalInput;
   this.settings.mixMode.integrated || (e2.value = t2, e2.tagifyValue = e2.value);
-}, update: function(t2, e2) {
+}, update(t2, e2) {
   clearTimeout(this.debouncedUpdateTimeout), this.debouncedUpdateTimeout = setTimeout(function() {
-    this.setPersistedData(i2, "value"), this.settings.onChangeAfterBlur && (t2 || {}).withoutChangeEvent || this.state.blockChangeEvent || this.triggerChangeEvent();
-    this.postUpdate(), null == e2 || e2();
+    this.setPersistedData(s2, "value"), this.settings.onChangeAfterBlur && (t2 || {}).withoutChangeEvent || this.state.blockChangeEvent || this.triggerChangeEvent();
+    this.postUpdate(), e2?.();
   }.bind(this), 100), this.events.bindOriginaInputListener.call(this, 100);
-  var i2 = this.getInputValue();
-  this.setOriginalInputValue(i2);
-}, getInputValue: function() {
+  var s2 = this.getInputValue();
+  this.setOriginalInputValue(s2);
+}, getInputValue() {
   var t2 = this.getCleanValue();
   return "mix" == this.settings.mode ? this.getMixedTagsAsString(t2) : t2.length ? this.settings.originalInputValueFormat ? this.settings.originalInputValueFormat(t2) : JSON.stringify(t2) : "";
-}, getCleanValue: function(t2) {
-  return s(t2 || this.value, this.dataProps);
-}, getMixedTagsAsString: function() {
-  var t2 = "", e2 = this, i2 = this.settings, n2 = i2.originalInputValueFormat || JSON.stringify, a3 = i2.mixTagsInterpolator;
-  return (function i3(s2) {
-    s2.childNodes.forEach((function(s3) {
-      if (1 == s3.nodeType) {
-        var r2 = y2(s3);
-        if ("BR" == s3.tagName && (t2 += "\r\n"), r2 && v.call(e2, s3)) {
+}, getCleanValue(t2) {
+  return i(t2 || this.value, this.dataProps);
+}, getMixedTagsAsString() {
+  var t2 = "", e2 = this, s2 = this.settings, i2 = s2.originalInputValueFormat || JSON.stringify, n2 = s2.mixTagsInterpolator;
+  return (function s3(o2) {
+    o2.childNodes.forEach(((o3) => {
+      if (1 == o3.nodeType) {
+        const r2 = T(o3);
+        if ("BR" == o3.tagName && (t2 += "\r\n"), r2 && u.call(e2, o3)) {
           if (r2.__removed) return;
-          t2 += a3[0] + n2(o(r2, e2.dataProps)) + a3[1];
-        } else s3.getAttribute("style") || ["B", "I", "U"].includes(s3.tagName) ? t2 += s3.textContent : "DIV" != s3.tagName && "P" != s3.tagName || (t2 += "\r\n", i3(s3));
-      } else t2 += s3.textContent;
+          t2 += n2[0] + i2(a2(r2, e2.dataProps)) + n2[1];
+        } else o3.getAttribute("style") || ["B", "I", "U"].includes(o3.tagName) ? t2 += o3.textContent : "DIV" != o3.tagName && "P" != o3.tagName || (t2 += "\r\n", s3(o3));
+      } else t2 += o3.textContent;
     }));
   })(this.DOM.input), t2;
-} }, tt.prototype.removeTag = tt.prototype.removeTags;
+} }, N.prototype.removeTag = N.prototype.removeTags;
 
 // node_modules/.pnpm/tom-select@2.6.1/node_modules/tom-select/dist/esm/contrib/microevent.js
 function forEvents(events, callback) {
@@ -20492,8 +20071,8 @@ var sequencesToPattern = (sequences, all = true) => {
   return arrayToPattern(sequences.map((sequence) => {
     let seq = [];
     const len = all ? sequence.length() : sequence.length() - 1;
-    for (let j3 = 0; j3 < len; j3++) {
-      seq.push(substringsToPattern(sequence.substrs[j3] || "", min_replacement));
+    for (let j2 = 0; j2 < len; j2++) {
+      seq.push(substringsToPattern(sequence.substrs[j2] || "", min_replacement));
     }
     return sequencePattern(seq);
   }));
@@ -20932,7 +20511,7 @@ var Sifter = class {
         }
       });
     } else {
-      iterate(self2.items, (_4, id) => {
+      iterate(self2.items, (_3, id) => {
         search.items.push({ "score": 1, "id": id });
       });
     }
@@ -22517,7 +22096,7 @@ var TomSelect = class extends MicroPlugin(MicroEvent) {
    *
    */
   refreshOptions(triggerDropdown = true) {
-    var i2, j3, k2, n2, optgroup, optgroups, html, has_create_option, active_group;
+    var i2, j2, k, n2, optgroup, optgroups, html, has_create_option, active_group;
     var create;
     const groups = {};
     const groups_order = [];
@@ -22569,8 +22148,8 @@ var TomSelect = class extends MicroPlugin(MicroEvent) {
       }
       optgroup = option2[self2.settings.optgroupField] || "";
       optgroups = Array.isArray(optgroup) ? optgroup : [optgroup];
-      for (j3 = 0, k2 = optgroups && optgroups.length; j3 < k2; j3++) {
-        optgroup = optgroups[j3];
+      for (j2 = 0, k = optgroups && optgroups.length; j2 < k; j2++) {
+        optgroup = optgroups[j2];
         let order2 = option2.$order;
         let self_optgroup = self2.optgroups[optgroup];
         if (self_optgroup === void 0 && typeof self2.settings.optionGroupRegister === "function") {
@@ -22586,9 +22165,9 @@ var TomSelect = class extends MicroPlugin(MicroEvent) {
           order2 = self_optgroup.$order;
         }
         const [group_order_i, group_fragment] = getGroupFragment(optgroup, order2);
-        if (j3 > 0) {
+        if (j2 > 0) {
           option_el = option_el.cloneNode(true);
-          setAttr(option_el, { id: option2.$id + "-clone-" + j3, "aria-selected": null });
+          setAttr(option_el, { id: option2.$id + "-clone-" + j2, "aria-selected": null });
           option_el.classList.add("ts-cloned");
           removeClasses(option_el, "active");
           if (self2.activeOption && self2.activeOption.dataset.value == opt_value) {
@@ -24041,8 +23620,8 @@ function plugin6() {
     } else {
       new_pos = Math.max(0, Math.min(self2.items.length, new_pos));
       if (new_pos != self2.caretPos && !self2.isPending) {
-        self2.controlChildren().forEach((child, j3) => {
-          if (j3 < new_pos) {
+        self2.controlChildren().forEach((child, j2) => {
+          if (j2 < new_pos) {
             self2.control_input.insertAdjacentElement("beforebegin", child);
           } else {
             self2.control.appendChild(child);
@@ -24614,7 +24193,7 @@ var T2 = M2();
 function N2(l4) {
   T2 = l4;
 }
-var _3 = { exec: () => null };
+var _2 = { exec: () => null };
 function E3(l4) {
   let e2 = [];
   return (t2) => {
@@ -24640,35 +24219,35 @@ var m3 = { codeRemoveIndent: /^(?: {1,4}| {0,3}\t)/gm, outputLinkReplace: /\\([\
 var Oe = /^(?:[ \t]*(?:\n|$))+/;
 var we = /^((?: {4}| {0,3}\t)[^\n]+(?:\n(?:[ \t]*(?:\n|$))*)?)+/;
 var ye = /^ {0,3}(`{3,}(?=[^`\n]*(?:\n|$))|~{3,})([^\n]*)(?:\n|$)(?:|([\s\S]*?)(?:\n|$))(?: {0,3}\1[~`]* *(?=\n|$)|$)/;
-var B2 = /^ {0,3}((?:-[\t ]*){3,}|(?:_[ \t]*){3,}|(?:\*[ \t]*){3,})(?:\n+|$)/;
+var B = /^ {0,3}((?:-[\t ]*){3,}|(?:_[ \t]*){3,}|(?:\*[ \t]*){3,})(?:\n+|$)/;
 var Pe = /^ {0,3}(#{1,6})(?=\s|$)(.*)(?:\n+|$)/;
-var j2 = / {0,3}(?:[*+-]|\d{1,9}[.)])/;
+var j = / {0,3}(?:[*+-]|\d{1,9}[.)])/;
 var oe = /^(?!bull |blockCode|fences|blockquote|heading|html|table)((?:.|\n(?!\s*?\n|bull |blockCode|fences|blockquote|heading|html|table))+?)\n {0,3}(=+|-+) *(?:\n+|$)/;
-var ae = d3(oe).replace(/bull/g, j2).replace(/blockCode/g, /(?: {4}| {0,3}\t)/).replace(/fences/g, / {0,3}(?:`{3,}|~{3,})/).replace(/blockquote/g, / {0,3}>/).replace(/heading/g, / {0,3}#{1,6}/).replace(/html/g, / {0,3}<[^\n>]+>\n/).replace(/\|table/g, "").getRegex();
-var Se = d3(oe).replace(/bull/g, j2).replace(/blockCode/g, /(?: {4}| {0,3}\t)/).replace(/fences/g, / {0,3}(?:`{3,}|~{3,})/).replace(/blockquote/g, / {0,3}>/).replace(/heading/g, / {0,3}#{1,6}/).replace(/html/g, / {0,3}<[^\n>]+>\n/).replace(/table/g, / {0,3}\|?(?:[:\- ]*\|)+[\:\- ]*\n/).getRegex();
-var F2 = /^([^\n]+(?:\n(?!hr|heading|lheading|blockquote|fences|list|html|table| +\n)[^\n]+)*)/;
+var ae = d3(oe).replace(/bull/g, j).replace(/blockCode/g, /(?: {4}| {0,3}\t)/).replace(/fences/g, / {0,3}(?:`{3,}|~{3,})/).replace(/blockquote/g, / {0,3}>/).replace(/heading/g, / {0,3}#{1,6}/).replace(/html/g, / {0,3}<[^\n>]+>\n/).replace(/\|table/g, "").getRegex();
+var Se = d3(oe).replace(/bull/g, j).replace(/blockCode/g, /(?: {4}| {0,3}\t)/).replace(/fences/g, / {0,3}(?:`{3,}|~{3,})/).replace(/blockquote/g, / {0,3}>/).replace(/heading/g, / {0,3}#{1,6}/).replace(/html/g, / {0,3}<[^\n>]+>\n/).replace(/table/g, / {0,3}\|?(?:[:\- ]*\|)+[\:\- ]*\n/).getRegex();
+var F = /^([^\n]+(?:\n(?!hr|heading|lheading|blockquote|fences|list|html|table| +\n)[^\n]+)*)/;
 var $e = /^[^\n]+/;
-var U3 = /(?!\s*\])(?:\\[\s\S]|[^\[\]\\])+/;
-var Le = d3(/^ {0,3}\[(label)\]: *(?:\n[ \t]*)?([^<\s][^\s]*|<.*?>)(?:(?: +(?:\n[ \t]*)?| *\n[ \t]*)(title))? *(?:\n+|$)/).replace("label", U3).replace("title", /(?:"(?:\\"?|[^"\\])*"|'[^'\n]*(?:\n[^'\n]+)*\n?'|\([^()]*\))/).getRegex();
-var _e = d3(/^(bull)([ \t][^\n]*?)?(?:\n|$)/).replace(/bull/g, j2).getRegex();
-var H2 = "address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|meta|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul";
-var K2 = /<!--(?:-?>|[\s\S]*?(?:-->|$))/;
-var ze = d3("^ {0,3}(?:<(script|pre|style|textarea)[\\s>][\\s\\S]*?(?:</\\1>[^\\n]*\\n+|$)|comment[^\\n]*(\\n+|$)|<\\?[\\s\\S]*?(?:\\?>\\n*|$)|<![A-Z][\\s\\S]*?(?:>\\n*|$)|<!\\[CDATA\\[[\\s\\S]*?(?:\\]\\]>\\n*|$)|</?(tag)(?: +|\\n|/?>)[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$)|<(?!script|pre|style|textarea)([a-z][\\w-]*)(?:attribute)*? */?>(?=[ \\t]*(?:\\n|$))[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$)|</(?!script|pre|style|textarea)[a-z][\\w-]*\\s*>(?=[ \\t]*(?:\\n|$))[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$))", "i").replace("comment", K2).replace("tag", H2).replace("attribute", / +[a-zA-Z:_][\w.:-]*(?: *= *"[^"\n]*"| *= *'[^'\n]*'| *= *[^\s"'=<>`]+)?/).getRegex();
-var le = d3(F2).replace("hr", B2).replace("heading", " {0,3}#{1,6}(?:\\s|$)").replace("|lheading", "").replace("|table", "").replace("blockquote", " {0,3}>").replace("fences", " {0,3}(?:`{3,}(?=[^`\\n]*\\n)|~{3,})[^\\n]*\\n").replace("list", " {0,3}(?:[*+-]|1[.)])[ \\t]+[^ \\t\\n]").replace("html", "</?(?:tag)(?: +|\\n|/?>)|<(?:script|pre|style|textarea|!--)").replace("tag", H2).getRegex();
+var U2 = /(?!\s*\])(?:\\[\s\S]|[^\[\]\\])+/;
+var Le = d3(/^ {0,3}\[(label)\]: *(?:\n[ \t]*)?([^<\s][^\s]*|<.*?>)(?:(?: +(?:\n[ \t]*)?| *\n[ \t]*)(title))? *(?:\n+|$)/).replace("label", U2).replace("title", /(?:"(?:\\"?|[^"\\])*"|'[^'\n]*(?:\n[^'\n]+)*\n?'|\([^()]*\))/).getRegex();
+var _e = d3(/^(bull)([ \t][^\n]*?)?(?:\n|$)/).replace(/bull/g, j).getRegex();
+var H = "address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|meta|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul";
+var K = /<!--(?:-?>|[\s\S]*?(?:-->|$))/;
+var ze = d3("^ {0,3}(?:<(script|pre|style|textarea)[\\s>][\\s\\S]*?(?:</\\1>[^\\n]*\\n+|$)|comment[^\\n]*(\\n+|$)|<\\?[\\s\\S]*?(?:\\?>\\n*|$)|<![A-Z][\\s\\S]*?(?:>\\n*|$)|<!\\[CDATA\\[[\\s\\S]*?(?:\\]\\]>\\n*|$)|</?(tag)(?: +|\\n|/?>)[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$)|<(?!script|pre|style|textarea)([a-z][\\w-]*)(?:attribute)*? */?>(?=[ \\t]*(?:\\n|$))[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$)|</(?!script|pre|style|textarea)[a-z][\\w-]*\\s*>(?=[ \\t]*(?:\\n|$))[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$))", "i").replace("comment", K).replace("tag", H).replace("attribute", / +[a-zA-Z:_][\w.:-]*(?: *= *"[^"\n]*"| *= *'[^'\n]*'| *= *[^\s"'=<>`]+)?/).getRegex();
+var le = d3(F).replace("hr", B).replace("heading", " {0,3}#{1,6}(?:\\s|$)").replace("|lheading", "").replace("|table", "").replace("blockquote", " {0,3}>").replace("fences", " {0,3}(?:`{3,}(?=[^`\\n]*\\n)|~{3,})[^\\n]*\\n").replace("list", " {0,3}(?:[*+-]|1[.)])[ \\t]+[^ \\t\\n]").replace("html", "</?(?:tag)(?: +|\\n|/?>)|<(?:script|pre|style|textarea|!--)").replace("tag", H).getRegex();
 var Me = d3(/^( {0,3}> ?(paragraph|[^\n]*)(?:\n|$))+/).replace("paragraph", le).getRegex();
-var W2 = { blockquote: Me, code: we, def: Le, fences: ye, heading: Pe, hr: B2, html: ze, lheading: ae, list: _e, newline: Oe, paragraph: le, table: _3, text: $e };
-var se = d3("^ *([^\\n ].*)\\n {0,3}((?:\\| *)?:?-+:? *(?:\\| *:?-+:? *)*(?:\\| *)?)(?:\\n((?:(?! *\\n|hr|heading|blockquote|code|fences|list|html).*(?:\\n|$))*)\\n*|$)").replace("hr", B2).replace("heading", " {0,3}#{1,6}(?:\\s|$)").replace("blockquote", " {0,3}>").replace("code", "(?: {4}| {0,3}	)[^\\n]").replace("fences", " {0,3}(?:`{3,}(?=[^`\\n]*\\n)|~{3,})[^\\n]*\\n").replace("list", " {0,3}(?:[*+-]|1[.)])[ \\t]").replace("html", "</?(?:tag)(?: +|\\n|/?>)|<(?:script|pre|style|textarea|!--)").replace("tag", H2).getRegex();
-var Ee = { ...W2, lheading: Se, table: se, paragraph: d3(F2).replace("hr", B2).replace("heading", " {0,3}#{1,6}(?:\\s|$)").replace("|lheading", "").replace("table", se).replace("blockquote", " {0,3}>").replace("fences", " {0,3}(?:`{3,}(?=[^`\\n]*\\n)|~{3,})[^\\n]*\\n").replace("list", " {0,3}(?:[*+-]|1[.)])[ \\t]+[^ \\t\\n]").replace("html", "</?(?:tag)(?: +|\\n|/?>)|<(?:script|pre|style|textarea|!--)").replace("tag", H2).getRegex() };
-var Ie = { ...W2, html: d3(`^ *(?:comment *(?:\\n|\\s*$)|<(tag)[\\s\\S]+?</\\1> *(?:\\n{2,}|\\s*$)|<tag(?:"[^"]*"|'[^']*'|\\s[^'"/>\\s]*)*?/?> *(?:\\n{2,}|\\s*$))`).replace("comment", K2).replace(/tag/g, "(?!(?:a|em|strong|small|s|cite|q|dfn|abbr|data|time|code|var|samp|kbd|sub|sup|i|b|u|mark|ruby|rt|rp|bdi|bdo|span|br|wbr|ins|del|img)\\b)\\w+(?!:|[^\\w\\s@]*@)\\b").getRegex(), def: /^ *\[([^\]]+)\]: *<?([^\s>]+)>?(?: +(["(][^\n]+[")]))? *(?:\n+|$)/, heading: /^(#{1,6})(.*)(?:\n+|$)/, fences: _3, lheading: /^(.+?)\n {0,3}(=+|-+) *(?:\n+|$)/, paragraph: d3(F2).replace("hr", B2).replace("heading", ` *#{1,6} *[^
+var W = { blockquote: Me, code: we, def: Le, fences: ye, heading: Pe, hr: B, html: ze, lheading: ae, list: _e, newline: Oe, paragraph: le, table: _2, text: $e };
+var se = d3("^ *([^\\n ].*)\\n {0,3}((?:\\| *)?:?-+:? *(?:\\| *:?-+:? *)*(?:\\| *)?)(?:\\n((?:(?! *\\n|hr|heading|blockquote|code|fences|list|html).*(?:\\n|$))*)\\n*|$)").replace("hr", B).replace("heading", " {0,3}#{1,6}(?:\\s|$)").replace("blockquote", " {0,3}>").replace("code", "(?: {4}| {0,3}	)[^\\n]").replace("fences", " {0,3}(?:`{3,}(?=[^`\\n]*\\n)|~{3,})[^\\n]*\\n").replace("list", " {0,3}(?:[*+-]|1[.)])[ \\t]").replace("html", "</?(?:tag)(?: +|\\n|/?>)|<(?:script|pre|style|textarea|!--)").replace("tag", H).getRegex();
+var Ee = { ...W, lheading: Se, table: se, paragraph: d3(F).replace("hr", B).replace("heading", " {0,3}#{1,6}(?:\\s|$)").replace("|lheading", "").replace("table", se).replace("blockquote", " {0,3}>").replace("fences", " {0,3}(?:`{3,}(?=[^`\\n]*\\n)|~{3,})[^\\n]*\\n").replace("list", " {0,3}(?:[*+-]|1[.)])[ \\t]+[^ \\t\\n]").replace("html", "</?(?:tag)(?: +|\\n|/?>)|<(?:script|pre|style|textarea|!--)").replace("tag", H).getRegex() };
+var Ie = { ...W, html: d3(`^ *(?:comment *(?:\\n|\\s*$)|<(tag)[\\s\\S]+?</\\1> *(?:\\n{2,}|\\s*$)|<tag(?:"[^"]*"|'[^']*'|\\s[^'"/>\\s]*)*?/?> *(?:\\n{2,}|\\s*$))`).replace("comment", K).replace(/tag/g, "(?!(?:a|em|strong|small|s|cite|q|dfn|abbr|data|time|code|var|samp|kbd|sub|sup|i|b|u|mark|ruby|rt|rp|bdi|bdo|span|br|wbr|ins|del|img)\\b)\\w+(?!:|[^\\w\\s@]*@)\\b").getRegex(), def: /^ *\[([^\]]+)\]: *<?([^\s>]+)>?(?: +(["(][^\n]+[")]))? *(?:\n+|$)/, heading: /^(#{1,6})(.*)(?:\n+|$)/, fences: _2, lheading: /^(.+?)\n {0,3}(=+|-+) *(?:\n+|$)/, paragraph: d3(F).replace("hr", B).replace("heading", ` *#{1,6} *[^
 ]`).replace("lheading", ae).replace("|table", "").replace("blockquote", " {0,3}>").replace("|fences", "").replace("|list", "").replace("|html", "").replace("|tag", "").getRegex() };
 var Ae = /^\\([!"#$%&'()*+,\-./:;<=>?@\[\]\\^_`{|}~])/;
 var Ce = /^(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/;
 var ue = /^( {2,}|\\)\n(?!\s*$)/;
 var Be = /^(`+|[^`])(?:(?= {2,}\n)|[\s\S]*?(?:(?=[\\<!\[`*_]|\b_|$)|[^ ](?= {2,}\n)))/;
 var I3 = /[\p{P}\p{S}]/u;
-var Z3 = /[\s\p{P}\p{S}]/u;
-var X2 = /[^\s\p{P}\p{S}]/u;
-var De = d3(/^((?![*_])punctSpace)/, "u").replace(/punctSpace/g, Z3).getRegex();
+var Z2 = /[\s\p{P}\p{S}]/u;
+var X = /[^\s\p{P}\p{S}]/u;
+var De = d3(/^((?![*_])punctSpace)/, "u").replace(/punctSpace/g, Z2).getRegex();
 var pe = /(?!~)[\p{P}\p{S}]/u;
 var qe = /(?!~)[\s\p{P}\p{S}]/u;
 var ve = /(?:[^\s\p{P}\p{S}]|~)/u;
@@ -24677,28 +24256,28 @@ var ce = /^(?:\*+(?:((?!\*)punct)|([^\s*]))?)|^_+(?:((?!_)punct)|([^\s_]))?/;
 var Ze = d3(ce, "u").replace(/punct/g, I3).getRegex();
 var Ge = d3(ce, "u").replace(/punct/g, pe).getRegex();
 var he = "^[^_*]*?__[^_*]*?\\*[^_*]*?(?=__)|[^*]+(?=[^*])|(?!\\*)punct(\\*+)(?=[\\s]|$)|notPunctSpace(\\*+)(?!\\*)(?=punctSpace|$)|(?!\\*)punctSpace(\\*+)(?=notPunctSpace)|[\\s](\\*+)(?!\\*)(?=punct)|(?!\\*)punct(\\*+)(?!\\*)(?=punct)|notPunctSpace(\\*+)(?=notPunctSpace)";
-var Ne = d3(he, "gu").replace(/notPunctSpace/g, X2).replace(/punctSpace/g, Z3).replace(/punct/g, I3).getRegex();
+var Ne = d3(he, "gu").replace(/notPunctSpace/g, X).replace(/punctSpace/g, Z2).replace(/punct/g, I3).getRegex();
 var Qe = d3(he, "gu").replace(/notPunctSpace/g, ve).replace(/punctSpace/g, qe).replace(/punct/g, pe).getRegex();
-var je = d3("^[^_*]*?\\*\\*[^_*]*?_[^_*]*?(?=\\*\\*)|[^_]+(?=[^_])|(?!_)punct(_+)(?=[\\s]|$)|notPunctSpace(_+)(?!_)(?=punctSpace|$)|(?!_)punctSpace(_+)(?=notPunctSpace)|[\\s](_+)(?!_)(?=punct)|(?!_)punct(_+)(?!_)(?=punct)", "gu").replace(/notPunctSpace/g, X2).replace(/punctSpace/g, Z3).replace(/punct/g, I3).getRegex();
+var je = d3("^[^_*]*?\\*\\*[^_*]*?_[^_*]*?(?=\\*\\*)|[^_]+(?=[^_])|(?!_)punct(_+)(?=[\\s]|$)|notPunctSpace(_+)(?!_)(?=punctSpace|$)|(?!_)punctSpace(_+)(?=notPunctSpace)|[\\s](_+)(?!_)(?=punct)|(?!_)punct(_+)(?!_)(?=punct)", "gu").replace(/notPunctSpace/g, X).replace(/punctSpace/g, Z2).replace(/punct/g, I3).getRegex();
 var Fe = d3(/^~~?(?:((?!~)punct)|[^\s~])/, "u").replace(/punct/g, I3).getRegex();
 var Ue = "^[^~]+(?=[^~])|(?!~)punct(~~?)(?=[\\s]|$)|notPunctSpace(~~?)(?!~)(?=punctSpace|$)|(?!~)punctSpace(~~?)(?=notPunctSpace)|[\\s](~~?)(?!~)(?=punct)|(?!~)punct(~~?)(?!~)(?=punct)|notPunctSpace(~~?)(?=notPunctSpace)";
-var Ke = d3(Ue, "gu").replace(/notPunctSpace/g, X2).replace(/punctSpace/g, Z3).replace(/punct/g, I3).getRegex();
+var Ke = d3(Ue, "gu").replace(/notPunctSpace/g, X).replace(/punctSpace/g, Z2).replace(/punct/g, I3).getRegex();
 var We = d3(/\\(punct)/, "gu").replace(/punct/g, I3).getRegex();
 var Xe = d3(/^<(scheme:[^\s\x00-\x1f<>]*|email)>/).replace("scheme", /[a-zA-Z][a-zA-Z0-9+.-]{1,31}/).replace("email", /[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+(@)[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+(?![-_])/).getRegex();
-var Je = d3(K2).replace("(?:-->|$)", "-->").getRegex();
+var Je = d3(K).replace("(?:-->|$)", "-->").getRegex();
 var Ve = d3("^comment|^</[a-zA-Z][\\w:-]*\\s*>|^<[a-zA-Z][\\w-]*(?:attribute)*?\\s*/?>|^<\\?[\\s\\S]*?\\?>|^<![a-zA-Z]+\\s[\\s\\S]*?>|^<!\\[CDATA\\[[\\s\\S]*?\\]\\]>").replace("comment", Je).replace("attribute", /\s+[a-zA-Z:_][\w.:-]*(?:\s*=\s*"[^"]*"|\s*=\s*'[^']*'|\s*=\s*[^\s"'=<>`]+)?/).getRegex();
 var v2 = /(?:\[(?:\\[\s\S]|[^\[\]\\])*\]|\\[\s\S]|`+(?!`)[^`]*?`+(?!`)|``+(?=\])|[^\[\]\\`])*?/;
 var Ye = d3(/^!?\[(label)\]\(\s*(href)(?:(?:[ \t]+(?:\n[ \t]*)?|\n[ \t]*)(title))?\s*\)/).replace("label", v2).replace("href", /<(?:\\.|[^\n<>\\])+>|[^ \t\n\x00-\x1f]*/).replace("title", /"(?:\\"?|[^"\\])*"|'(?:\\'?|[^'\\])*'|\((?:\\\)?|[^)\\])*\)/).getRegex();
-var ke = d3(/^!?\[(label)\]\[(ref)\]/).replace("label", v2).replace("ref", U3).getRegex();
-var de = d3(/^!?\[(ref)\](?:\[\])?/).replace("ref", U3).getRegex();
+var ke = d3(/^!?\[(label)\]\[(ref)\]/).replace("label", v2).replace("ref", U2).getRegex();
+var de = d3(/^!?\[(ref)\](?:\[\])?/).replace("ref", U2).getRegex();
 var et = d3("reflink|nolink(?!\\()", "g").replace("reflink", ke).replace("nolink", de).getRegex();
 var ie = /[hH][tT][tT][pP][sS]?|[fF][tT][pP]/;
-var J3 = { _backpedal: _3, anyPunctuation: We, autolink: Xe, blockSkip: He, br: ue, code: Ce, del: _3, delLDelim: _3, delRDelim: _3, emStrongLDelim: Ze, emStrongRDelimAst: Ne, emStrongRDelimUnd: je, escape: Ae, link: Ye, nolink: de, punctuation: De, reflink: ke, reflinkSearch: et, tag: Ve, text: Be, url: _3 };
-var tt2 = { ...J3, link: d3(/^!?\[(label)\]\((.*?)\)/).replace("label", v2).getRegex(), reflink: d3(/^!?\[(label)\]\s*\[([^\]]*)\]/).replace("label", v2).getRegex() };
-var Q2 = { ...J3, emStrongRDelimAst: Qe, emStrongLDelim: Ge, delLDelim: Fe, delRDelim: Ke, url: d3(/^((?:protocol):\/\/|www\.)(?:[a-zA-Z0-9\-]+\.?)+[^\s<]*|^email/).replace("protocol", ie).replace("email", /[A-Za-z0-9._+-]+(@)[a-zA-Z0-9-_]+(?:\.[a-zA-Z0-9-_]*[a-zA-Z0-9])+(?![-_])/).getRegex(), _backpedal: /(?:[^?!.,:;*_'"~()&]+|\([^)]*\)|&(?![a-zA-Z0-9]+;$)|[?!.,:;*_'"~)]+(?!$))+/, del: /^(~~?)(?=[^\s~])((?:\\[\s\S]|[^\\])*?(?:\\[\s\S]|[^\s~\\]))\1(?=[^~]|$)/, text: d3(/^([`~]+|[^`~])(?:(?= {2,}\n)|(?=[a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-]+@)|[\s\S]*?(?:(?=[\\<!\[`*~_]|\b_|protocol:\/\/|www\.|$)|[^ ](?= {2,}\n)|[^a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-](?=[a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-]+@)))/).replace("protocol", ie).getRegex() };
-var nt = { ...Q2, br: d3(ue).replace("{2,}", "*").getRegex(), text: d3(Q2.text).replace("\\b_", "\\b_| {2,}\\n").replace(/\{2,\}/g, "*").getRegex() };
-var D3 = { normal: W2, gfm: Ee, pedantic: Ie };
-var A3 = { normal: J3, gfm: Q2, breaks: nt, pedantic: tt2 };
+var J2 = { _backpedal: _2, anyPunctuation: We, autolink: Xe, blockSkip: He, br: ue, code: Ce, del: _2, delLDelim: _2, delRDelim: _2, emStrongLDelim: Ze, emStrongRDelimAst: Ne, emStrongRDelimUnd: je, escape: Ae, link: Ye, nolink: de, punctuation: De, reflink: ke, reflinkSearch: et, tag: Ve, text: Be, url: _2 };
+var tt = { ...J2, link: d3(/^!?\[(label)\]\((.*?)\)/).replace("label", v2).getRegex(), reflink: d3(/^!?\[(label)\]\s*\[([^\]]*)\]/).replace("label", v2).getRegex() };
+var Q = { ...J2, emStrongRDelimAst: Qe, emStrongLDelim: Ge, delLDelim: Fe, delRDelim: Ke, url: d3(/^((?:protocol):\/\/|www\.)(?:[a-zA-Z0-9\-]+\.?)+[^\s<]*|^email/).replace("protocol", ie).replace("email", /[A-Za-z0-9._+-]+(@)[a-zA-Z0-9-_]+(?:\.[a-zA-Z0-9-_]*[a-zA-Z0-9])+(?![-_])/).getRegex(), _backpedal: /(?:[^?!.,:;*_'"~()&]+|\([^)]*\)|&(?![a-zA-Z0-9]+;$)|[?!.,:;*_'"~)]+(?!$))+/, del: /^(~~?)(?=[^\s~])((?:\\[\s\S]|[^\\])*?(?:\\[\s\S]|[^\s~\\]))\1(?=[^~]|$)/, text: d3(/^([`~]+|[^`~])(?:(?= {2,}\n)|(?=[a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-]+@)|[\s\S]*?(?:(?=[\\<!\[`*~_]|\b_|protocol:\/\/|www\.|$)|[^ ](?= {2,}\n)|[^a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-](?=[a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-]+@)))/).replace("protocol", ie).getRegex() };
+var nt = { ...Q, br: d3(ue).replace("{2,}", "*").getRegex(), text: d3(Q.text).replace("\\b_", "\\b_| {2,}\\n").replace(/\{2,\}/g, "*").getRegex() };
+var D3 = { normal: W, gfm: Ee, pedantic: Ie };
+var A2 = { normal: J2, gfm: Q, breaks: nt, pedantic: tt };
 var rt = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 var ge = (l4) => rt[l4];
 function O3(l4, e2) {
@@ -24707,7 +24286,7 @@ function O3(l4, e2) {
   } else if (m3.escapeTestNoEncode.test(l4)) return l4.replace(m3.escapeReplaceNoEncode, ge);
   return l4;
 }
-function V2(l4) {
+function V(l4) {
   try {
     l4 = encodeURI(l4).replace(m3.percentDecode, "%");
   } catch {
@@ -24715,7 +24294,7 @@ function V2(l4) {
   }
   return l4;
 }
-function Y2(l4, e2) {
+function Y(l4, e2) {
   let t2 = l4.replace(m3.findPipe, (r2, i2, o2) => {
     let u2 = false, a3 = i2;
     for (; --a3 >= 0 && o2[a3] === "\\"; ) u2 = !u2;
@@ -24726,7 +24305,7 @@ function Y2(l4, e2) {
   for (; s2 < n2.length; s2++) n2[s2] = n2[s2].trim().replace(m3.slashPipe, "|");
   return n2;
 }
-function $3(l4, e2, t2) {
+function $2(l4, e2, t2) {
   let n2 = l4.length;
   if (n2 === 0) return "";
   let s2 = 0;
@@ -24810,22 +24389,22 @@ var w3 = class {
     if (t2) {
       let n2 = t2[2].trim();
       if (this.rules.other.endingHash.test(n2)) {
-        let s2 = $3(n2, "#");
+        let s2 = $2(n2, "#");
         (this.options.pedantic || !s2 || this.rules.other.endingSpaceChar.test(s2)) && (n2 = s2.trim());
       }
-      return { type: "heading", raw: $3(t2[0], `
+      return { type: "heading", raw: $2(t2[0], `
 `), depth: t2[1].length, text: n2, tokens: this.lexer.inline(n2) };
     }
   }
   hr(e2) {
     let t2 = this.rules.block.hr.exec(e2);
-    if (t2) return { type: "hr", raw: $3(t2[0], `
+    if (t2) return { type: "hr", raw: $2(t2[0], `
 `) };
   }
   blockquote(e2) {
     let t2 = this.rules.block.blockquote.exec(e2);
     if (t2) {
-      let n2 = $3(t2[0], `
+      let n2 = $2(t2[0], `
 `).split(`
 `), s2 = "", r2 = "", i2 = [];
       for (; n2.length > 0; ) {
@@ -24840,21 +24419,21 @@ var w3 = class {
         s2 = s2 ? `${s2}
 ${c3}` : c3, r2 = r2 ? `${r2}
 ${p3}` : p3;
-        let k2 = this.lexer.state.top;
-        if (this.lexer.state.top = true, this.lexer.blockTokens(p3, i2, true), this.lexer.state.top = k2, n2.length === 0) break;
+        let k = this.lexer.state.top;
+        if (this.lexer.state.top = true, this.lexer.blockTokens(p3, i2, true), this.lexer.state.top = k, n2.length === 0) break;
         let h3 = i2.at(-1);
         if (h3?.type === "code") break;
         if (h3?.type === "blockquote") {
-          let R3 = h3, f3 = R3.raw + `
+          let R2 = h3, f3 = R2.raw + `
 ` + n2.join(`
-`), S3 = this.blockquote(f3);
-          i2[i2.length - 1] = S3, s2 = s2.substring(0, s2.length - R3.raw.length) + S3.raw, r2 = r2.substring(0, r2.length - R3.text.length) + S3.text;
+`), S2 = this.blockquote(f3);
+          i2[i2.length - 1] = S2, s2 = s2.substring(0, s2.length - R2.raw.length) + S2.raw, r2 = r2.substring(0, r2.length - R2.text.length) + S2.text;
           break;
         } else if (h3?.type === "list") {
-          let R3 = h3, f3 = R3.raw + `
+          let R2 = h3, f3 = R2.raw + `
 ` + n2.join(`
-`), S3 = this.list(f3);
-          i2[i2.length - 1] = S3, s2 = s2.substring(0, s2.length - h3.raw.length) + S3.raw, r2 = r2.substring(0, r2.length - R3.raw.length) + S3.raw, n2 = f3.substring(i2.at(-1).raw.length).split(`
+`), S2 = this.list(f3);
+          i2[i2.length - 1] = S2, s2 = s2.substring(0, s2.length - h3.raw.length) + S2.raw, r2 = r2.substring(0, r2.length - R2.raw.length) + S2.raw, n2 = f3.substring(i2.at(-1).raw.length).split(`
 `);
           continue;
         }
@@ -24872,25 +24451,25 @@ ${p3}` : p3;
         let a3 = false, c3 = "", p3 = "";
         if (!(t2 = i2.exec(e2)) || this.rules.block.hr.test(e2)) break;
         c3 = t2[0], e2 = e2.substring(c3.length);
-        let k2 = me(t2[2].split(`
+        let k = me(t2[2].split(`
 `, 1)[0], t2[1].length), h3 = e2.split(`
-`, 1)[0], R3 = !k2.trim(), f3 = 0;
-        if (this.options.pedantic ? (f3 = 2, p3 = k2.trimStart()) : R3 ? f3 = t2[1].length + 1 : (f3 = k2.search(this.rules.other.nonSpaceChar), f3 = f3 > 4 ? 1 : f3, p3 = k2.slice(f3), f3 += t2[1].length), R3 && this.rules.other.blankLine.test(h3) && (c3 += h3 + `
+`, 1)[0], R2 = !k.trim(), f3 = 0;
+        if (this.options.pedantic ? (f3 = 2, p3 = k.trimStart()) : R2 ? f3 = t2[1].length + 1 : (f3 = k.search(this.rules.other.nonSpaceChar), f3 = f3 > 4 ? 1 : f3, p3 = k.slice(f3), f3 += t2[1].length), R2 && this.rules.other.blankLine.test(h3) && (c3 += h3 + `
 `, e2 = e2.substring(h3.length + 1), a3 = true), !a3) {
-          let S3 = this.rules.other.nextBulletRegex(f3), te = this.rules.other.hrRegex(f3), ne = this.rules.other.fencesBeginRegex(f3), re = this.rules.other.headingBeginRegex(f3), be = this.rules.other.htmlBeginRegex(f3), Re = this.rules.other.blockquoteBeginRegex(f3);
+          let S2 = this.rules.other.nextBulletRegex(f3), te = this.rules.other.hrRegex(f3), ne = this.rules.other.fencesBeginRegex(f3), re = this.rules.other.headingBeginRegex(f3), be = this.rules.other.htmlBeginRegex(f3), Re = this.rules.other.blockquoteBeginRegex(f3);
           for (; e2; ) {
-            let G2 = e2.split(`
-`, 1)[0], C3;
-            if (h3 = G2, this.options.pedantic ? (h3 = h3.replace(this.rules.other.listReplaceNesting, "  "), C3 = h3) : C3 = h3.replace(this.rules.other.tabCharGlobal, "    "), ne.test(h3) || re.test(h3) || be.test(h3) || Re.test(h3) || S3.test(h3) || te.test(h3)) break;
-            if (C3.search(this.rules.other.nonSpaceChar) >= f3 || !h3.trim()) p3 += `
-` + C3.slice(f3);
+            let G = e2.split(`
+`, 1)[0], C2;
+            if (h3 = G, this.options.pedantic ? (h3 = h3.replace(this.rules.other.listReplaceNesting, "  "), C2 = h3) : C2 = h3.replace(this.rules.other.tabCharGlobal, "    "), ne.test(h3) || re.test(h3) || be.test(h3) || Re.test(h3) || S2.test(h3) || te.test(h3)) break;
+            if (C2.search(this.rules.other.nonSpaceChar) >= f3 || !h3.trim()) p3 += `
+` + C2.slice(f3);
             else {
-              if (R3 || k2.replace(this.rules.other.tabCharGlobal, "    ").search(this.rules.other.nonSpaceChar) >= 4 || ne.test(k2) || re.test(k2) || te.test(k2)) break;
+              if (R2 || k.replace(this.rules.other.tabCharGlobal, "    ").search(this.rules.other.nonSpaceChar) >= 4 || ne.test(k) || re.test(k) || te.test(k)) break;
               p3 += `
 ` + h3;
             }
-            R3 = !h3.trim(), c3 += G2 + `
-`, e2 = e2.substring(G2.length + 1), k2 = C3.slice(f3);
+            R2 = !h3.trim(), c3 += G + `
+`, e2 = e2.substring(G.length + 1), k = C2.slice(f3);
           }
         }
         r2.loose || (o2 ? r2.loose = true : this.rules.other.doubleBlankLine.test(c3) && (o2 = true)), r2.items.push({ type: "list_item", raw: c3, task: !!this.options.gfm && this.rules.other.listIsTask.test(p3), loose: false, text: p3, tokens: [] }), r2.raw += c3;
@@ -24904,19 +24483,19 @@ ${p3}` : p3;
         let c3 = a3.tokens[0];
         if (a3.task && (c3?.type === "text" || c3?.type === "paragraph")) {
           a3.text = a3.text.replace(this.rules.other.listReplaceTask, ""), c3.raw = c3.raw.replace(this.rules.other.listReplaceTask, ""), c3.text = c3.text.replace(this.rules.other.listReplaceTask, "");
-          for (let k2 = this.lexer.inlineQueue.length - 1; k2 >= 0; k2--) if (this.rules.other.listIsTask.test(this.lexer.inlineQueue[k2].src)) {
-            this.lexer.inlineQueue[k2].src = this.lexer.inlineQueue[k2].src.replace(this.rules.other.listReplaceTask, "");
+          for (let k = this.lexer.inlineQueue.length - 1; k >= 0; k--) if (this.rules.other.listIsTask.test(this.lexer.inlineQueue[k].src)) {
+            this.lexer.inlineQueue[k].src = this.lexer.inlineQueue[k].src.replace(this.rules.other.listReplaceTask, "");
             break;
           }
           let p3 = this.rules.other.listTaskCheckbox.exec(a3.raw);
           if (p3) {
-            let k2 = { type: "checkbox", raw: p3[0] + " ", checked: p3[0] !== "[ ]" };
-            a3.checked = k2.checked, r2.loose ? a3.tokens[0] && ["paragraph", "text"].includes(a3.tokens[0].type) && "tokens" in a3.tokens[0] && a3.tokens[0].tokens ? (a3.tokens[0].raw = k2.raw + a3.tokens[0].raw, a3.tokens[0].text = k2.raw + a3.tokens[0].text, a3.tokens[0].tokens.unshift(k2)) : a3.tokens.unshift({ type: "paragraph", raw: k2.raw, text: k2.raw, tokens: [k2] }) : a3.tokens.unshift(k2);
+            let k = { type: "checkbox", raw: p3[0] + " ", checked: p3[0] !== "[ ]" };
+            a3.checked = k.checked, r2.loose ? a3.tokens[0] && ["paragraph", "text"].includes(a3.tokens[0].type) && "tokens" in a3.tokens[0] && a3.tokens[0].tokens ? (a3.tokens[0].raw = k.raw + a3.tokens[0].raw, a3.tokens[0].text = k.raw + a3.tokens[0].text, a3.tokens[0].tokens.unshift(k)) : a3.tokens.unshift({ type: "paragraph", raw: k.raw, text: k.raw, tokens: [k] }) : a3.tokens.unshift(k);
           }
         } else a3.task && (a3.task = false);
         if (!r2.loose) {
-          let p3 = a3.tokens.filter((h3) => h3.type === "space"), k2 = p3.length > 0 && p3.some((h3) => this.rules.other.anyLine.test(h3.raw));
-          r2.loose = k2;
+          let p3 = a3.tokens.filter((h3) => h3.type === "space"), k = p3.length > 0 && p3.some((h3) => this.rules.other.anyLine.test(h3.raw));
+          r2.loose = k;
         }
       }
       if (r2.loose) for (let a3 of r2.items) {
@@ -24937,20 +24516,20 @@ ${p3}` : p3;
     let t2 = this.rules.block.def.exec(e2);
     if (t2) {
       let n2 = t2[1].toLowerCase().replace(this.rules.other.multipleSpaceGlobal, " "), s2 = t2[2] ? t2[2].replace(this.rules.other.hrefBrackets, "$1").replace(this.rules.inline.anyPunctuation, "$1") : "", r2 = t2[3] ? t2[3].substring(1, t2[3].length - 1).replace(this.rules.inline.anyPunctuation, "$1") : t2[3];
-      return { type: "def", tag: n2, raw: $3(t2[0], `
+      return { type: "def", tag: n2, raw: $2(t2[0], `
 `), href: s2, title: r2 };
     }
   }
   table(e2) {
     let t2 = this.rules.block.table.exec(e2);
     if (!t2 || !this.rules.other.tableDelimiter.test(t2[2])) return;
-    let n2 = Y2(t2[1]), s2 = t2[2].replace(this.rules.other.tableAlignChars, "").split("|"), r2 = t2[3]?.trim() ? t2[3].replace(this.rules.other.tableRowBlankLine, "").split(`
-`) : [], i2 = { type: "table", raw: $3(t2[0], `
+    let n2 = Y(t2[1]), s2 = t2[2].replace(this.rules.other.tableAlignChars, "").split("|"), r2 = t2[3]?.trim() ? t2[3].replace(this.rules.other.tableRowBlankLine, "").split(`
+`) : [], i2 = { type: "table", raw: $2(t2[0], `
 `), header: [], align: [], rows: [] };
     if (n2.length === s2.length) {
       for (let o2 of s2) this.rules.other.tableAlignRight.test(o2) ? i2.align.push("right") : this.rules.other.tableAlignCenter.test(o2) ? i2.align.push("center") : this.rules.other.tableAlignLeft.test(o2) ? i2.align.push("left") : i2.align.push(null);
       for (let o2 = 0; o2 < n2.length; o2++) i2.header.push({ text: n2[o2], tokens: this.lexer.inline(n2[o2]), header: true, align: i2.align[o2] });
-      for (let o2 of r2) i2.rows.push(Y2(o2, i2.header.length).map((u2, a3) => ({ text: u2, tokens: this.lexer.inline(u2), header: false, align: i2.align[a3] })));
+      for (let o2 of r2) i2.rows.push(Y(o2, i2.header.length).map((u2, a3) => ({ text: u2, tokens: this.lexer.inline(u2), header: false, align: i2.align[a3] })));
       return i2;
     }
   }
@@ -24958,7 +24537,7 @@ ${p3}` : p3;
     let t2 = this.rules.block.lheading.exec(e2);
     if (t2) {
       let n2 = t2[1].trim();
-      return { type: "heading", raw: $3(t2[0], `
+      return { type: "heading", raw: $2(t2[0], `
 `), depth: t2[2].charAt(0) === "=" ? 1 : 2, text: n2, tokens: this.lexer.inline(n2) };
     }
   }
@@ -24988,7 +24567,7 @@ ${p3}` : p3;
       let n2 = t2[2].trim();
       if (!this.options.pedantic && this.rules.other.startAngleBracket.test(n2)) {
         if (!this.rules.other.endAngleBracket.test(n2)) return;
-        let i2 = $3(n2.slice(0, -1), "\\");
+        let i2 = $2(n2.slice(0, -1), "\\");
         if ((n2.length - i2.length) % 2 === 0) return;
       } else {
         let i2 = fe(t2[2], "()");
@@ -25033,13 +24612,13 @@ ${p3}` : p3;
         }
         if (a3 -= u2, a3 > 0) continue;
         u2 = Math.min(u2, u2 + a3 + c3);
-        let k2 = [...s2[0]][0].length, h3 = e2.slice(0, i2 + s2.index + k2 + u2);
+        let k = [...s2[0]][0].length, h3 = e2.slice(0, i2 + s2.index + k + u2);
         if (Math.min(i2, u2) % 2) {
           let f3 = h3.slice(1, -1);
           return { type: "em", raw: h3, text: f3, tokens: this.lexer.inlineTokens(f3) };
         }
-        let R3 = h3.slice(2, -2);
-        return { type: "strong", raw: h3, text: R3, tokens: this.lexer.inlineTokens(R3) };
+        let R2 = h3.slice(2, -2);
+        return { type: "strong", raw: h3, text: R2, tokens: this.lexer.inlineTokens(R2) };
       }
     }
   }
@@ -25067,8 +24646,8 @@ ${p3}` : p3;
         }
         if (a3 -= u2, a3 > 0) continue;
         u2 = Math.min(u2, u2 + a3);
-        let p3 = [...s2[0]][0].length, k2 = e2.slice(0, i2 + s2.index + p3 + u2), h3 = k2.slice(i2, -i2);
-        return { type: "del", raw: k2, text: h3, tokens: this.lexer.inlineTokens(h3) };
+        let p3 = [...s2[0]][0].length, k = e2.slice(0, i2 + s2.index + p3 + u2), h3 = k.slice(i2, -i2);
+        return { type: "del", raw: k, text: h3, tokens: this.lexer.inlineTokens(h3) };
       }
     }
   }
@@ -25110,11 +24689,11 @@ var x2 = class l2 {
     __publicField(this, "inlineQueue");
     __publicField(this, "tokenizer");
     this.tokens = [], this.tokens.links = /* @__PURE__ */ Object.create(null), this.options = e2 || T2, this.options.tokenizer = this.options.tokenizer || new w3(), this.tokenizer = this.options.tokenizer, this.tokenizer.options = this.options, this.tokenizer.lexer = this, this.inlineQueue = [], this.state = { inLink: false, inRawBlock: false, top: true };
-    let t2 = { other: m3, block: D3.normal, inline: A3.normal };
-    this.options.pedantic ? (t2.block = D3.pedantic, t2.inline = A3.pedantic) : this.options.gfm && (t2.block = D3.gfm, this.options.breaks ? t2.inline = A3.breaks : t2.inline = A3.gfm), this.tokenizer.rules = t2;
+    let t2 = { other: m3, block: D3.normal, inline: A2.normal };
+    this.options.pedantic ? (t2.block = D3.pedantic, t2.inline = A2.pedantic) : this.options.gfm && (t2.block = D3.gfm, this.options.breaks ? t2.inline = A2.breaks : t2.inline = A2.gfm), this.tokenizer.rules = t2;
   }
   static get rules() {
-    return { block: D3, inline: A3 };
+    return { block: D3, inline: A2 };
   }
   static lex(e2, t2) {
     return new l2(t2).lex(e2);
@@ -25298,9 +24877,9 @@ var x2 = class l2 {
       }
       let c3 = e2;
       if (this.options.extensions?.startInline) {
-        let p3 = 1 / 0, k2 = e2.slice(1), h3;
-        this.options.extensions.startInline.forEach((R3) => {
-          h3 = R3.call({ lexer: this }, k2), typeof h3 == "number" && h3 >= 0 && (p3 = Math.min(p3, h3));
+        let p3 = 1 / 0, k = e2.slice(1), h3;
+        this.options.extensions.startInline.forEach((R2) => {
+          h3 = R2.call({ lexer: this }, k), typeof h3 == "number" && h3 >= 0 && (p3 = Math.min(p3, h3));
         }), p3 < 1 / 0 && p3 >= 0 && (c3 = e2.substring(0, p3 + 1));
       }
       if (a3 = this.tokenizer.inlineText(c3)) {
@@ -25422,7 +25001,7 @@ ${e2}</tr>
     return `<del>${this.parser.parseInline(e2)}</del>`;
   }
   link({ href: e2, title: t2, tokens: n2 }) {
-    let s2 = this.parser.parseInline(n2), r2 = V2(e2);
+    let s2 = this.parser.parseInline(n2), r2 = V(e2);
     if (r2 === null) return s2;
     e2 = r2;
     let i2 = '<a href="' + e2 + '"';
@@ -25430,7 +25009,7 @@ ${e2}</tr>
   }
   image({ href: e2, title: t2, text: n2, tokens: s2 }) {
     s2 && (n2 = this.parser.parseInline(s2, this.parser.textRenderer));
-    let r2 = V2(e2);
+    let r2 = V(e2);
     if (r2 === null) return O3(n2);
     e2 = r2;
     let i2 = `<img src="${e2}" alt="${O3(n2)}"`;
@@ -25440,7 +25019,7 @@ ${e2}</tr>
     return "tokens" in e2 && e2.tokens ? this.parser.parseInline(e2.tokens) : "escaped" in e2 && e2.escaped ? e2.text : O3(e2.text);
   }
 };
-var L2 = class {
+var L = class {
   strong({ text: e2 }) {
     return e2;
   }
@@ -25477,7 +25056,7 @@ var b3 = class l3 {
     __publicField(this, "options");
     __publicField(this, "renderer");
     __publicField(this, "textRenderer");
-    this.options = e2 || T2, this.options.renderer = this.options.renderer || new y3(), this.renderer = this.options.renderer, this.renderer.options = this.options, this.renderer.parser = this, this.textRenderer = new L2();
+    this.options = e2 || T2, this.options.renderer = this.options.renderer || new y3(), this.renderer = this.options.renderer, this.renderer.options = this.options, this.renderer.parser = this, this.textRenderer = new L();
   }
   static parse(e2, t2) {
     return new l3(t2).parse(e2);
@@ -25625,7 +25204,7 @@ var b3 = class l3 {
   }
 };
 var _a;
-var P2 = (_a = class {
+var P = (_a = class {
   constructor(e2) {
     __publicField(this, "options");
     __publicField(this, "block");
@@ -25650,7 +25229,7 @@ var P2 = (_a = class {
     return e2 ? b3.parse : b3.parseInline;
   }
 }, __publicField(_a, "passThroughHooks", /* @__PURE__ */ new Set(["preprocess", "postprocess", "processAllTokens", "emStrongMask"])), __publicField(_a, "passThroughHooksRespectAsync", /* @__PURE__ */ new Set(["preprocess", "postprocess", "processAllTokens"])), _a);
-var q2 = class {
+var q = class {
   constructor(...e2) {
     __publicField(this, "defaults", M2());
     __publicField(this, "options", this.setOptions);
@@ -25658,10 +25237,10 @@ var q2 = class {
     __publicField(this, "parseInline", this.parseMarkdown(false));
     __publicField(this, "Parser", b3);
     __publicField(this, "Renderer", y3);
-    __publicField(this, "TextRenderer", L2);
+    __publicField(this, "TextRenderer", L);
     __publicField(this, "Lexer", x2);
     __publicField(this, "Tokenizer", w3);
-    __publicField(this, "Hooks", P2);
+    __publicField(this, "Hooks", P);
     this.use(...e2);
   }
   walkTokens(e2, t2) {
@@ -25734,22 +25313,22 @@ var q2 = class {
         s2.tokenizer = r2;
       }
       if (n2.hooks) {
-        let r2 = this.defaults.hooks || new P2();
+        let r2 = this.defaults.hooks || new P();
         for (let i2 in n2.hooks) {
           if (!(i2 in r2)) throw new Error(`hook '${i2}' does not exist`);
           if (["options", "block"].includes(i2)) continue;
           let o2 = i2, u2 = n2.hooks[o2], a3 = r2[o2];
-          P2.passThroughHooks.has(i2) ? r2[o2] = (c3) => {
-            if (this.defaults.async && P2.passThroughHooksRespectAsync.has(i2)) return (async () => {
-              let k2 = await u2.call(r2, c3);
-              return a3.call(r2, k2);
+          P.passThroughHooks.has(i2) ? r2[o2] = (c3) => {
+            if (this.defaults.async && P.passThroughHooksRespectAsync.has(i2)) return (async () => {
+              let k = await u2.call(r2, c3);
+              return a3.call(r2, k);
             })();
             let p3 = u2.call(r2, c3);
             return a3.call(r2, p3);
           } : r2[o2] = (...c3) => {
             if (this.defaults.async) return (async () => {
-              let k2 = await u2.apply(r2, c3);
-              return k2 === false && (k2 = await a3.apply(r2, c3)), k2;
+              let k = await u2.apply(r2, c3);
+              return k === false && (k = await a3.apply(r2, c3)), k;
             })();
             let p3 = u2.apply(r2, c3);
             return p3 === false && (p3 = a3.apply(r2, c3)), p3;
@@ -25811,30 +25390,30 @@ Please report this to https://github.com/markedjs/marked.`, e2) {
     };
   }
 };
-var z2 = new q2();
+var z = new q();
 function g3(l4, e2) {
-  return z2.parse(l4, e2);
+  return z.parse(l4, e2);
 }
 g3.options = g3.setOptions = function(l4) {
-  return z2.setOptions(l4), g3.defaults = z2.defaults, N2(g3.defaults), g3;
+  return z.setOptions(l4), g3.defaults = z.defaults, N2(g3.defaults), g3;
 };
 g3.getDefaults = M2;
 g3.defaults = T2;
 g3.use = function(...l4) {
-  return z2.use(...l4), g3.defaults = z2.defaults, N2(g3.defaults), g3;
+  return z.use(...l4), g3.defaults = z.defaults, N2(g3.defaults), g3;
 };
 g3.walkTokens = function(l4, e2) {
-  return z2.walkTokens(l4, e2);
+  return z.walkTokens(l4, e2);
 };
-g3.parseInline = z2.parseInline;
+g3.parseInline = z.parseInline;
 g3.Parser = b3;
 g3.parser = b3.parse;
 g3.Renderer = y3;
-g3.TextRenderer = L2;
+g3.TextRenderer = L;
 g3.Lexer = x2;
 g3.lexer = x2.lex;
 g3.Tokenizer = w3;
-g3.Hooks = P2;
+g3.Hooks = P;
 g3.parse = g3;
 var Ft = g3.options;
 var Ut = g3.setOptions;
@@ -25889,7 +25468,7 @@ import_sweetalert2.default.fire = (...args) => {
 window.Swal = import_sweetalert2.default;
 window.JSURL = dist_exports;
 window.FilePond = FilePond;
-window.Tagify = tt;
+window.Tagify = N;
 window.TomSelect = tom_select_complete_default;
 window.marked = g3;
 window.BsModal = Modal;
@@ -25906,7 +25485,7 @@ export {
   Offcanvas,
   export_Swal as Swal,
   Tab,
-  tt as Tagify,
+  N as Tagify,
   Toast,
   tom_select_complete_default as TomSelect,
   Tooltip,

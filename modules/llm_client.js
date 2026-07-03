@@ -229,35 +229,6 @@ export async function chatModelCompletion({ messages, stream = false, maxTokens 
 }
 
 /**
- * Convenience: email chat completion using the Email AI model.
- */
-export async function emailAiCompletion({ messages, stream = false, maxTokens = 4096, hostId = null }) {
-	return chatCompletion({
-		messages,
-		stream,
-		provider: config.llm.emailAiProvider,
-		model: config.llm.emailAiModel,
-		maxTokens,
-		hostId,
-		scope: 'email',
-	});
-}
-
-/**
- * Convenience: email triage completion using the Email triage model.
- */
-export async function emailTriageCompletion({ messages, maxTokens = 4096, hostId = null }) {
-	return chatCompletion({
-		messages,
-		provider: config.llm.emailTriageProvider,
-		model: config.llm.emailTriageModel,
-		maxTokens,
-		hostId,
-		scope: 'email',
-	});
-}
-
-/**
  * Parse an LLM streaming response body into an async iterator of text chunks.
  * Handles both OpenAI-compatible SSE and Google Gemini SSE formats.
  */

@@ -13,18 +13,12 @@ function baseByoAi() {
 			openai_api_key: '',
 			gemini_api_key: '',
 		},
-		email: {
-			openai_api_key: '',
-			gemini_api_key: '',
-		},
 	};
 }
 
 function baseAiInstructions() {
 	return {
 		global: '',
-		email: '',
-		email_triage: '',
 	};
 }
 
@@ -54,7 +48,7 @@ describe('BYO AI service', () => {
 		config.isHosted = true;
 		config.llm.googleApiKey = 'env-gemini';
 		config.llm.openaiApiKey = 'env-openai';
-		tenant = { host_id: 'host-1', plan: 'pro', settings: { byo_ai: baseByoAi(), ai_instructions: baseAiInstructions(), email: {} } };
+		tenant = { host_id: 'host-1', plan: 'pro', settings: { byo_ai: baseByoAi(), ai_instructions: baseAiInstructions() } };
 
 		Tenant.findOne = () => ({
 			select: () => ({
@@ -166,33 +160,6 @@ describe('BYO AI service', () => {
 		);
 	});
 
-	it('falls back from email to global to environment keys', async () => {
-		assert.equal(
-			await resolveLlmApiKey({ hostId: 'host-1', provider: 'openai', scope: 'email' }),
-			'env-openai',
-		);
-
-		await updateByoAiSettings('host-1', {
-			global: {
-				openai_api_key: 'global-openai',
-			},
-		});
-		assert.equal(
-			await resolveLlmApiKey({ hostId: 'host-1', provider: 'openai', scope: 'email' }),
-			'global-openai',
-		);
-
-		await updateByoAiSettings('host-1', {
-			email: {
-				openai_api_key: 'email-openai',
-			},
-		});
-		assert.equal(
-			await resolveLlmApiKey({ hostId: 'host-1', provider: 'openai', scope: 'email' }),
-			'email-openai',
-		);
-	});
-
 	it('validates BYO AI scope and provider keys', async () => {
 		await assert.rejects(
 			updateByoAiSettings('host-1', { personal: { openai_api_key: 'x' } }),
@@ -208,64 +175,16 @@ describe('BYO AI service', () => {
 		const settings = await updateByoAiSettings('host-1', {
 			instructions: {
 				global: 'Use account context.',
-				email: 'Prioritize support replies.',
-				email_triage: 'Escalate billing issues.',
 			},
 		});
 
 		assert.equal(tenant.settings.ai_instructions.global, 'Use account context.');
-		assert.equal(tenant.settings.ai_instructions.email, 'Prioritize support replies.');
-		assert.equal(tenant.settings.ai_instructions.email_triage, 'Escalate billing issues.');
 		assert.deepEqual(settings.instructions, {
 			global: 'Use account context.',
-			email: 'Prioritize support replies.',
-			email_triage: 'Escalate billing issues.',
 		});
-	});
-
-	it('stores email settings as booleans with false defaults', async () => {
-		let settings = await getByoAiSettings('host-1');
-		assert.deepEqual(settings.email_settings, {
-			auto_triage_incoming: false,
-			send_draft_emails_automatically: false,
-			spam_guard: '',
-		});
-
-		settings = await updateByoAiSettings('host-1', {
-			email_settings: {
-				auto_triage_incoming: true,
-				send_draft_emails_automatically: true,
-				spam_guard: 'spam@example.com\nexample.com',
-			},
-		});
-
-		assert.equal(tenant.settings.email.auto_triage_incoming, true);
-		assert.equal(tenant.settings.email.send_draft_emails_automatically, true);
-		assert.equal(tenant.settings.email.spam_guard, 'spam@example.com\nexample.com');
-		assert.deepEqual(settings.email_settings, {
-			auto_triage_incoming: true,
-			send_draft_emails_automatically: true,
-			spam_guard: 'spam@example.com\nexample.com',
-		});
-	});
-
-	it('validates email setting keys and types', async () => {
-		await assert.rejects(
-			updateByoAiSettings('host-1', { email_settings: { unknown: true } }),
-			/Unknown email setting/,
-		);
-		await assert.rejects(
-			updateByoAiSettings('host-1', { email_settings: { auto_triage_incoming: 'true' } }),
-			/auto_triage_incoming must be a boolean/,
-		);
-		await assert.rejects(
-			updateByoAiSettings('host-1', { email_settings: { spam_guard: true } }),
-			/spam_guard must be a string/,
-		);
 	});
 
 	it('uses distinct Typesense conversation model IDs per LLM scope', () => {
 		assert.equal(getConversationModelId('host-1', 'user-1', 'global'), 'convo-host-1-user-1');
-		assert.equal(getConversationModelId('host-1', 'user-1', 'email'), 'convo-host-1-user-1-email');
 	});
 });

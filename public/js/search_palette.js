@@ -177,17 +177,15 @@
 		debounceTimer = window.setTimeout(runSearch, 180);
 	}
 
-	function eccHref(target) {
-		var state = { ecc: { email_id: target.id || '', mailbox: target.mailbox || 'inbox' } };
-		if (target.project_id) state.project_id = target.project_id;
-		if (window.JSURL) return '/ecc?g=' + window.JSURL.stringify(state);
-		return '/ecc';
-	}
-
 	function openTarget(item) {
 		var target = item.open_target || {};
 		if (target.kind === 'ecc') {
-			window.location.href = eccHref(target);
+			window.openResultModal?.({
+				_type: 'emails',
+				id: target.id,
+				title: item.title,
+				text_content: item.excerpt,
+			});
 			return;
 		}
 		if (typeof window.openResultModal === 'function') {
@@ -264,4 +262,3 @@
 		bindEvents();
 	});
 })();
-

@@ -22,7 +22,7 @@ html(lang="en")
 		link(href=`/static/v-${v}/css/app.css` rel="stylesheet")
 		link(href=`/static/v-${v}/css/kumbukum-template1-strict.css` rel="stylesheet")
 		block head
-	body.kk-template1(class=((hide_chat_sidebar ? 'kk-no-chat-sidebar ' : '') + (page === 'ecc' ? 'kk-ecc-page' : '')))
+	body.kk-template1(class=(hide_chat_sidebar ? 'kk-no-chat-sidebar ' : ''))
 		block body
 			include includes/avatar
 			if impersonating
@@ -45,10 +45,8 @@ html(lang="en")
 							span.kk-logo-light
 								include includes/logo_black
 					nav.kk-topnav
-						a.kk-navbtn(href="/dashboard" class={active: page !== 'graph' && page !== 'ecc'}) Projects
+						a.kk-navbtn(href="/dashboard" class={active: page !== 'graph'}) Projects
 						a.kk-navbtn(href="/graph" class={active: page === 'graph'}) Graph
-						a.kk-navbtn(href="/ecc" class={active: page === 'ecc'}) Email
-						span.kk-triage-nav-status.d-none#ecc-triage-nav-status Triage: 0 remaining
 					.ms-auto.d-flex.align-items-center.kk-navbar-actions
 						.kk-global-search
 							button.kk-global-search-trigger#kk-global-search-trigger(type="button" aria-haspopup="dialog" aria-controls="kk-search-palette")
@@ -389,7 +387,6 @@ html(lang="en")
 		script(src=`/static/v-${v}/js/memories.js`)
 		script(src=`/static/v-${v}/js/urls.js`)
 		script(src=`/static/v-${v}/js/emails.js`)
-		script(src=`/static/v-${v}/js/ecc.js`)
 		script(src=`/static/v-${v}/js/trash.js`)
 		script(src=`/static/v-${v}/js/batch.js`)
 		include includes/openpanel

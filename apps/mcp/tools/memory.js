@@ -13,7 +13,7 @@ const MCP_KNOWLEDGE_SEARCH_INCLUDE_FIELDS = {
   notes: 'id,source_id,title,text_content,tags,project_id,created_at,updated_at',
   memory: 'id,source_id,title,content,source,tags,project_id,created_at,updated_at',
   urls: 'id,source_id,title,url,description,text_content,project_id,created_at,updated_at',
-  emails: 'id,source_id,subject,from,to,cc,bcc,from_emails,to_emails,cc_emails,bcc_emails,participant_emails,mailbox,labels,triaged,triage_summary,triage_primary_action,text_content,attachment_text_content,project_id,created_at,updated_at',
+  emails: 'id,source_id,subject,from,to,cc,bcc,from_emails,to_emails,cc_emails,bcc_emails,participant_emails,mailbox,labels,text_content,attachment_text_content,project_id,created_at,updated_at',
   pages: 'id,source_id,title,url,parent_url_id,text_content,project_id,crawled_at',
 };
 const MCP_MEMORY_SEARCH_EXCLUDE_FIELDS = 'embedding';

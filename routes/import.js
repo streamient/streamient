@@ -3,7 +3,6 @@ import mongoose from '../model/mongoose.js';
 
 import config from '../config.js';
 import { Project } from '../model/project.js';
-import { EmailIdentity } from '../model/email_identity.js';
 import { Tenant } from '../modules/tenancy.js';
 import { getBillingUserForHost, hasProFeatureAccess } from '../services/subscription_access_service.js';
 import * as emailIngestService from '../services/email_ingest_service.js';
@@ -143,54 +142,6 @@ function findForwardRecipient(payload, email) {
 	return { error: 'Forwarded email recipient must use EMAIL_FORWARD_DOMAIN' };
 }
 
-function isHiddenDeliveryRecipientSource(source) {
-	return source && source !== 'to';
-}
-
-function projectForwardAddress(project) {
-	const forwardDomain = String(config.emailForwardDomain || '').trim().replace(/^@+/, '').toLowerCase();
-	const projectId = project?._id?.toString ? project._id.toString() : String(project?._id || '');
-	return projectId && forwardDomain ? `${projectId}@${forwardDomain}` : '';
-}
-
-function hasAddress(addresses, address) {
-	const normalized = String(address || '').trim().toLowerCase();
-	if (!normalized) return false;
-	return (addresses || []).some((item) => String(item || '').trim().toLowerCase() === normalized);
-}
-
-function hasHeaderAddress(parsed, headerName, address) {
-	const normalized = String(address || '').trim().toLowerCase();
-	if (!normalized) return false;
-	return getHeaderValuesFromParsed(parsed, headerName)
-		.flatMap((value) => extractEmailAddresses(value))
-		.some((value) => String(value || '').trim().toLowerCase() === normalized);
-}
-
-async function isProjectBccReply(project, email, recipient, payload) {
-	const forwardAddress = projectForwardAddress(project);
-	if (!forwardAddress) {
-		return false;
-	}
-
-	const deliveredToProject = String(recipient?.address || '').trim().toLowerCase() === forwardAddress || hasAddress(email.bcc, forwardAddress);
-	if (!deliveredToProject) return false;
-
-	const parsed = payload?.parsed_email || payload?.mailparser || payload || {};
-	const visibleProjectRecipient = hasHeaderAddress(parsed, 'to', forwardAddress) || hasHeaderAddress(parsed, 'cc', forwardAddress) || hasAddress(email.cc, forwardAddress) || (recipient?.source === 'to' && hasAddress(email.to, forwardAddress));
-	const hiddenProjectRecipient = hasAddress(email.bcc, forwardAddress) || (isHiddenDeliveryRecipientSource(recipient?.source) && !visibleProjectRecipient);
-	if (!hiddenProjectRecipient) return false;
-
-	const sender = String((email.from || [])[0] || '').trim().toLowerCase();
-	if (!sender) return false;
-	const identity = await EmailIdentity.findOne({
-		host_id: project.host_id,
-		project: project._id,
-		email: sender,
-	}).select('_id').lean();
-	return Boolean(identity);
-}
-
 async function emailForwardingEnabled(host_id) {
 	if (!is_hosted) return true;
 	const [tenant, billingUser] = await Promise.all([
@@ -238,28 +189,26 @@ router.post('/email', raw({ type: () => true, limit: '25mb' }), async (req, res)
 		return res.json({ accepted: false });
 	}
 
-	const bccReply = await isProjectBccReply(project, normalized, recipient, payload);
-	const filtered = !bccReply && emailIngestService.matchesEmailFilter(project.email_filter, {
+	const filtered = emailIngestService.matchesEmailFilter(project.email_filter, {
 		from: normalized.from,
 		subject: normalized.subject,
 	});
 
 	try {
+		const ingestContext = req.app?.locals?.emailIngestContext || {};
 		const email = await emailIngestService.ingestForwardedEmail(project.owner, project.host_id, {
 			...payload,
 			project: project._id,
-			mailbox: bccReply ? 'archived' : 'inbox',
-			labels: bccReply ? [] : payload.labels,
-			triaged: bccReply ? false : payload.triaged,
-			triaged_at: bccReply ? null : payload.triaged_at,
+			mailbox: 'inbox',
+			labels: payload.labels,
 			in_trash: filtered,
 			trashed_at: filtered ? new Date() : null,
 		}, {
+			...ingestContext,
 			user_id: project.owner,
 			channel: 'emailforwarding',
 			ip: req.ip,
 			user_agent: req.headers['user-agent'],
-			archiveBccReplyThread: bccReply,
 		});
 
 		res.json({ accepted: true, email_id: email._id.toString() });

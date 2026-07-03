@@ -67,20 +67,12 @@ describe('record infinite scroll wiring', () => {
 		});
 	});
 
-	it('uses shared infinite scroll for email record sections only', () => {
+	it('uses shared infinite scroll for email record sections', () => {
 		const emails = read('public/js/emails.js');
-		const ecc = read('public/js/ecc.js');
 
 		assert.ok(emails.includes('window.kkInfiniteScroll?.create'));
 		assert.ok(emails.includes("sentinelClass: 'emails-scroll-sentinel'"));
 		assert.ok(!emails.includes('new IntersectionObserver'));
-
-		assert.ok(ecc.includes('window.kkInfiniteScroll?.create'));
-		assert.ok(ecc.includes("sentinelClass: 'ecc-scroll-sentinel'"));
-		assert.ok(ecc.includes('rootMarginPx: 900'));
-		assert.ok(ecc.includes("activeMailbox !== 'drafts'"));
-		assert.ok(ecc.includes('!detailActive'));
-		assert.ok(!ecc.includes('new IntersectionObserver'));
 	});
 
 	it('uses shared infinite scroll for global trash', () => {

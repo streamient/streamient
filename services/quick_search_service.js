@@ -13,7 +13,7 @@ const CONTENT_FIELDS = {
 	notes: ['text_content'],
 	memory: ['content'],
 	urls: ['description', 'text_content', 'url'],
-	emails: ['triage_summary', 'text_content', 'attachment_text_content'],
+	emails: ['text_content', 'attachment_text_content'],
 	pages: ['text_content', 'url'],
 };
 const TITLE_FIELDS = {

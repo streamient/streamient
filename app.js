@@ -30,7 +30,6 @@ import adminRoutes from './routes/admin.js';
 import billingRoutes from './routes/billing.js';
 import healthRoutes from './routes/health.js';
 import importRoutes from './routes/import.js';
-import { backfillEmailTriageState, backfillForwardedSentReplies, backfillTerminalEmailLabels, buildEmailCountsPayload } from './services/email_ingest_service.js';
 import { backfillGitSyncMode } from './services/git_sync_service.js';
 import { backfillTypesenseTrashFields } from './services/typesense_backfill_service.js';
 import { getWhiteLabelAssetsDir, resolveWhiteLabelRequest } from './services/white_label_service.js';
@@ -236,9 +235,6 @@ OtelRuntime.setupExpressErrorHandler(app);
 
 async function start() {
 	await connectDB();
-	await backfillEmailTriageState();
-	await backfillTerminalEmailLabels();
-	await backfillForwardedSentReplies();
 	await backfillGitSyncMode();
 	await backfillTypesenseTrashFields();
 	await backfillStarterPlan();
@@ -252,22 +248,11 @@ async function start() {
 		return;
 	}
 
-	if (SERVER_MODE === 'email-worker') {
-		const { startOutgoingEmailWorker } = await import('./services/outgoing_email_service.js');
-		const { startEmailActionSyncWorker } = await import('./services/email_action_sync_service.js');
-		await startOutgoingEmailWorker();
-		await startEmailActionSyncWorker();
-		log.info({ env: config.env }, 'Kumbukum email worker running');
-		return;
-	}
-
 	const server = app.listen(config.port, () => {
 		log.info({ mode: SERVER_MODE, port: config.port, env: config.env }, `Kumbukum ${SERVER_MODE} running on port ${config.port}`);
 	});
 
-	await setupSocketIO(server, sessionMiddleware, {
-		emailCountsHandler: (host_id, options) => buildEmailCountsPayload(host_id, options),
-	});
+	await setupSocketIO(server, sessionMiddleware);
 }
 
 process.on('unhandledRejection', (reason, promise) => {
