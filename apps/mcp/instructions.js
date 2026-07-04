@@ -24,4 +24,4 @@ Before work: make one specific retrieval call.
 - **Projects**: Organize all data into projects — create, update, delete, and list projects
 
 ## Email AI Context
-For email triage, email replies, and email analysis, check Kumbukum records in the current project first. If no usable current-project records are found, broaden to all projects. This is the default behavior for Kumbukum email API flows and should also guide MCP clients when composing email-related answers or drafts.`;
+For email analysis, check Kumbukum records in the current project first. If no usable current-project records are found, broaden to all projects. This is the default behavior for Kumbukum email API flows.`;

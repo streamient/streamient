@@ -500,7 +500,7 @@ const swaggerSpec = {
 	            get: {
 	                tags: ['Projects'],
 	                summary: 'Get project settings payload',
-	                description: 'Returns project details, feature availability, forwarding domain, masked git repo settings, and masked outbound email identities. Requires owner/admin access.',
+	                description: 'Returns project details, feature availability, forwarding domain, and masked git repo settings. Requires owner/admin access.',
 	                parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
 	                responses: {
 	                    200: {

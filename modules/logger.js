@@ -8,8 +8,8 @@
 //
 // Usage:
 //   import { createLogger } from '../modules/logger.js';
-//   const log = createLogger('email-send');
-//   log.info({ outgoing_id: id, to: count }, 'queued outgoing email');
+//   const log = createLogger('email-ingest');
+//   log.info({ email_id: id, project_id: projectId }, 'ingested email');
 //
 // Mode control:
 //   LOG_LEVEL        log level (default: info in production, debug otherwise)

@@ -173,10 +173,7 @@ router.get('/projects/:id/settings', requireProjectSettingsAccess, async (req, r
 	const tenant = await Tenant.findOne({ host_id: req.host_id }).select('plan').lean();
 	const plan = tenant?.plan || 'free';
 	const proOnlyFeatureEnabled = hasProFeatureAccess(req.billingUser, plan, req.isHosted);
-	const [gitRepos, emailIdentities] = await Promise.all([
-		proOnlyFeatureEnabled ? gitSyncService.listGitRepos(req.host_id, req.params.id).catch(() => []) : [],
-		proOnlyFeatureEnabled ? emailIdentityService.listEmailIdentities(req.host_id, req.params.id).catch(() => []) : [],
-	]);
+	const gitRepos = proOnlyFeatureEnabled ? await gitSyncService.listGitRepos(req.host_id, req.params.id).catch(() => []) : [];
 
 	res.json({
 		project,
@@ -186,7 +183,6 @@ router.get('/projects/:id/settings', requireProjectSettingsAccess, async (req, r
 		},
 		email_forward_domain: String(config.emailForwardDomain || '').trim().replace(/^@+/, ''),
 		git_repos: gitRepos,
-		email_identities: emailIdentities,
 	});
 });
 
@@ -1016,7 +1012,6 @@ router.post('/search/quick', async (req, res) => {
 			includeEmails: emailEnabled,
 			perPage: req.body.per_page,
 			limit: req.body.limit,
-			emailOpenMode: 'modal',
 		});
 		res.json({ query, ...result });
 	} catch (err) {

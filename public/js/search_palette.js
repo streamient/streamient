@@ -178,16 +178,6 @@
 	}
 
 	function openTarget(item) {
-		var target = item.open_target || {};
-		if (target.kind === 'ecc') {
-			window.openResultModal?.({
-				_type: 'emails',
-				id: target.id,
-				title: item.title,
-				text_content: item.excerpt,
-			});
-			return;
-		}
 		if (typeof window.openResultModal === 'function') {
 			window.openResultModal({
 				_type: item.type,

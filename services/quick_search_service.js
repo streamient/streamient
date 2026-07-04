@@ -134,14 +134,9 @@ function scoreValue(hit = {}) {
 	return Number.isFinite(score) ? score : 0;
 }
 
-function openTarget(type, doc, options = {}) {
+function openTarget(type, doc) {
 	const id = doc.source_id || doc.id || '';
 	const projectId = doc.project_id || '';
-	if (type === 'emails') {
-		return options.emailOpenMode === 'ecc'
-			? { kind: 'ecc', id, project_id: projectId, mailbox: doc.mailbox || '' }
-			: { kind: 'modal', type, id, project_id: projectId };
-	}
 	return { kind: 'modal', type, id, project_id: projectId };
 }
 
@@ -163,7 +158,7 @@ export function normalizeQuickSearchHit(type, hit, options = {}) {
 		highlight_segments: highlight?.segments || [],
 		project_id: doc.project_id || '',
 		updated_at: doc.updated_at || doc.crawled_at || doc.created_at || null,
-		open_target: openTarget(type, doc, options),
+		open_target: openTarget(type, doc),
 		_score: scoreValue(hit),
 	};
 }
@@ -196,7 +191,6 @@ export async function quickSearchKnowledge(hostId, query, options = {}) {
 	});
 	const results = normalizeQuickSearchResults(raw, {
 		limit: options.limit,
-		emailOpenMode: options.emailOpenMode,
 	});
 	return { results, found: results.length };
 }

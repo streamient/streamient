@@ -303,12 +303,6 @@ body.kk-template1 .navbar .container-fluid{padding:0 14px}
 
 /* top nav from template */
 body.kk-template1 .kk-topnav{display:flex;gap:10px;align-items:center;margin-left:14px;margin-right:auto}
-body.kk-template1 .kk-triage-nav-status{
-  color: #ff8a00;
-  font-weight: 700;
-  margin-left: 28px;
-  white-space: nowrap;
-}
 body.kk-template1 .kk-navbtn{
   padding:8px 12px;
   border:1px solid var(--line-btn);
@@ -348,20 +342,6 @@ body.kk-template1 .row.h-100 {
 body.kk-template1 #sidebar,
 body.kk-template1 #main-content,
 body.kk-template1 #chat-sidebar {
-  border:1px solid var(--line)!important;
-  border-radius:12px;
-  background: var(--panel-gradient);
-  padding:12px!important;
-}
-body.kk-template1.kk-ecc-page #main-content {
-  border:0!important;
-  border-radius:0;
-  background:transparent;
-  padding:0!important;
-}
-body.kk-template1.kk-ecc-page .ecc-left,
-body.kk-template1.kk-ecc-page .ecc-main,
-body.kk-template1.kk-ecc-page .ecc-ai {
   border:1px solid var(--line)!important;
   border-radius:12px;
   background: var(--panel-gradient);
@@ -504,9 +484,6 @@ body.kk-template1 #main-content .preview-container{
 body.kk-template1 #main-content:has(.kk-list-toolbar){
   padding-top: 0 !important;
 }
-body.kk-template1.kk-ecc-page .ecc-main{
-  padding-top: 0 !important;
-}
 body.kk-template1 .kk-list-toolbar{
   position: sticky;
   top: 0;
@@ -515,20 +492,9 @@ body.kk-template1 .kk-list-toolbar{
   padding-top: 12px;      /* restores the top spacing removed from the container */
   margin-bottom: 4px;
 }
-body.kk-template1 #ecc-view-header{
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  background: var(--panel-solid);
-  padding-top: 12px;
-}
-
 /* ── List items ── */
 body.kk-template1 #main-content .list-group-item + .list-group-item {
   margin-top: 6px;
-}
-body.kk-template1 #main-content .ecc-detail-message {
-  border: 0 !important;
 }
 body.kk-template1 #main-content .list-group-item strong {
   color: var(--text-soft);
@@ -552,60 +518,6 @@ body.kk-template1 #main-content .email-item .email-item-date {
 body.kk-template1 #main-content .email-item .email-item-excerpt {
   font-size: 0.85rem;
 }
-
-body.kk-template1 .ecc-left .list-group-item,
-body.kk-template1 .ecc-ai .list-group-item,
-body.kk-template1 .ecc-email-item {
-  color: var(--text) !important;
-}
-
-body.kk-template1 #main-content .ecc-email-item .ecc-email-sender,
-body.kk-template1 #main-content .ecc-email-item .ecc-email-date {
-  font-size: 0.7rem;
-}
-
-body.kk-template1 #main-content .ecc-email-item .ecc-email-excerpt {
-  font-size: 0.85rem;
-}
-
-body.kk-template1 .ecc-left .list-group-item.active,
-body.kk-template1 .ecc-email-item.is-active {
-  color: var(--text-strong) !important;
-  border-color: color-mix(in srgb, var(--brand-strong) 35%, transparent) !important;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-strong) 35%, transparent);
-}
-
-body.kk-template1 .ecc-left .list-group-item:hover,
-body.kk-template1 .ecc-left .list-group-item.active {
-  background: var(--hover) !important;
-}
-
-body.kk-template1 .ecc-email-item.is-selected {
-  border-color: color-mix(in srgb, var(--brand-strong) 35%, transparent) !important;
-  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--brand-strong) 35%, transparent);
-}
-
-body.kk-template1 .ecc-email-item.is-selected.is-active {
-  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--brand-strong) 35%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--brand-strong) 35%, transparent);
-}
-
-body.kk-template1 .ecc-ai-section,
-body.kk-template1 .ecc-ai-empty {
-  border-color: var(--line-soft) !important;
-  background: var(--panel2b);
-  color: var(--text);
-}
-
-body.kk-template1 .ecc-email-ai-message.assistant {
-  background: var(--panel-solid);
-  color: var(--text);
-}
-
-body.kk-template1 .ecc-email-ai-message.user {
-  background: var(--brand-soft);
-  color: #fff;
-}
-
 /* ── Settings cards & misc overrides ── */
 body.kk-template1 .bg-light {
   background: var(--panel2b) !important;
@@ -638,7 +550,6 @@ body.kk-template1 .alert {
   color: var(--muted-5) !important;
 }
 
-
 body.kk-template1 #main-content .btn.btn-primary,
 body.kk-template1 #chat-sidebar .btn.btn-primary{
   border:1px solid var(--brand-border)!important;
@@ -655,15 +566,6 @@ body.kk-template1 #chat-sidebar .btn.btn-outline-secondary{
   color:var(--muted)!important;
   background:var(--panel-solid)!important;
 }
-
-body.kk-template1 #main-content .ecc-ai-action-btn {
-  --bs-btn-padding-y: 0.12rem;
-  --bs-btn-padding-x: 0.38rem;
-  --bs-btn-font-size: 0.7rem;
-  border-radius:7px;
-  line-height:1.15;
-}
-
 body.kk-template1 .kk-email-body-controls .btn.btn-outline-secondary {
   padding:4px 9px;
   font-size:.82rem;
@@ -953,15 +855,6 @@ body.kk-template1 .row.h-100 > #main-content {
   overflow-y: auto;
   overflow-x: hidden;
 }
-body.kk-template1.kk-ecc-page .row.h-100 > #main-content {
-  flex: 1 1 100%;
-  width: 100%;
-  max-width: 100%;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
-}
 body.kk-template1 .row.h-100 > #chat-sidebar {
   flex: 0 0 auto;
   width: calc(25% - 8px);
@@ -978,13 +871,6 @@ body.kk-template1.kk-no-chat-sidebar .row.h-100 > #main-content {
 body.kk-template1.kk-no-chat-sidebar .row.h-100 > #chat-sidebar {
   display: none !important;
 }
-@media (max-width: 991.98px) {
-  body.kk-template1.kk-ecc-page .row.h-100 > #main-content {
-    display: block;
-    overflow-y: auto;
-  }
-}
-
 /* ── Chat sidebar scrolling fix ── */
 body.kk-template1 #chat-sidebar .chat-sidebar {
   display: flex;
@@ -1113,22 +999,6 @@ body.kk-template1 .text-bg-secondary {
   background: var(--tag-bg) !important;
   color: var(--muted-6) !important;
 }
-
-[data-theme="dark"] body.kk-template1.kk-ecc-page .ecc-email-label,
-[data-theme="dark"] body.kk-template1.kk-ecc-page .ecc-email-status-badge {
-  background: var(--panel-elev) !important;
-  border-color: var(--line-btn) !important;
-  color: var(--text-bright-4) !important;
-}
-
-[data-theme="dark"] body.kk-template1.kk-ecc-page .ecc-status-remove {
-  color: var(--muted-2);
-}
-
-[data-theme="dark"] body.kk-template1.kk-ecc-page .ecc-status-remove:hover {
-  color: var(--text-strong);
-}
-
 /* ── Badges ── */
 body.kk-template1 .badge.bg-warning {
   background: var(--warning-bg) !important;
@@ -1245,14 +1115,6 @@ body.kk-template1 #rm-email-html-frame {
   width: 100%;
   min-height: 220px;
   border: 0;
-  background: var(--email-iframe-bg);
-  display: block;
-}
-body.kk-template1 .ecc-detail-html-frame {
-  width: 100%;
-  min-height: 220px;
-  border: 0 !important;
-  border-radius: 0;
   background: var(--email-iframe-bg);
   display: block;
 }

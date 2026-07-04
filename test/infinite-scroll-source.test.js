@@ -12,7 +12,7 @@ describe('record infinite scroll wiring', () => {
 		const helperIndex = layout.indexOf('/js/infinite_scroll.js');
 		assert.notEqual(helperIndex, -1);
 
-		['notes', 'memories', 'urls', 'emails', 'ecc', 'trash'].forEach((name) => {
+		['notes', 'memories', 'urls', 'emails', 'trash'].forEach((name) => {
 			const sectionIndex = layout.indexOf('/js/' + name + '.js');
 			assert.notEqual(sectionIndex, -1);
 			assert.ok(helperIndex < sectionIndex);
@@ -94,6 +94,6 @@ describe('record infinite scroll wiring', () => {
 	it('gives scroll sentinels nonzero dimensions', () => {
 		const css = read('public/css/app.css');
 
-		assert.match(css, /\.kk-scroll-sentinel,\n\.emails-scroll-sentinel,\n\.ecc-scroll-sentinel\s*\{[\s\S]*min-height:\s*1px;[\s\S]*height:\s*1px;/);
+		assert.match(css, /\.kk-scroll-sentinel,\n\.emails-scroll-sentinel\s*\{[\s\S]*min-height:\s*1px;[\s\S]*height:\s*1px;/);
 	});
 });

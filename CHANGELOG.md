@@ -4,6 +4,8 @@ Kumbukum uses date tags in `YYYYMMDDN` format. Use the latest dated section as t
 
 ## Unreleased
 
+- Removed remaining ECC (email triage) leftovers: dead ECC CSS, quick-search ECC open mode, unused email AI/triage config, and stale triage wording in MCP instructions and API docs. Email triage lives in Mailtwine; Kumbukum keeps email storage, import, and search.
+- Fixed project settings API failing for Pro tenants due to a removed email identity service reference.
 - Reindex button text now stays stable while reindex status updates.
 
 ## 2026-06-11

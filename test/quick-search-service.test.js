@@ -27,7 +27,7 @@ describe('Quick search service', () => {
 				},
 			],
 			text_match_info: { score: '42' },
-		}, { emailOpenMode: 'modal' });
+		});
 
 		assert.equal(result.id, 'email-1');
 		assert.equal(result.type, 'emails');
@@ -74,7 +74,6 @@ describe('Quick search service', () => {
 		let receivedOptions = null;
 		const result = await quickSearchKnowledge('host-1', 'invoice', {
 			includeEmails: false,
-			emailOpenMode: 'modal',
 			searchFn: async (hostId, query, options) => {
 				receivedOptions = { hostId, query, options };
 				return {
