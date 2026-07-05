@@ -173,7 +173,7 @@ app.use(sessionMiddleware);
 
 app.use(resolveWhiteLabelRequest);
 
-// Per-request hosted (SaaS) detection from the Host header — app.k.lan / *.streamient.com
+// Per-request hosted (SaaS) detection from the Host header — app.s.lan / *.streamient.com
 // are hosted; bare k.lan is plain dev. Routes read req.isHosted instead of a global.
 app.use((req, res, next) => {
 	req.isHosted = Boolean(req.whiteLabelHostId) || resolveRequestHosted(req);

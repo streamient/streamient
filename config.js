@@ -61,10 +61,10 @@ function parseRedisConfig() {
 export function isHostedHostname(hostname) {
 	if (!hostname) return false;
 	const normalized = hostname.toLowerCase();
-	// Hosted (SaaS) hostnames. Local dev: app.k.lan = hosted edition, while bare
+	// Hosted (SaaS) hostnames. Local dev: app.s.lan = hosted edition, while bare
 	// k.lan is the plain (self-hosted) dev. app.streamient.local is a legacy alias.
 	return normalized === 'app.streamient.local'
-		|| normalized === 'app.k.lan'
+		|| normalized === 'app.s.lan'
 		|| normalized.endsWith('streamient.com');
 }
 
@@ -78,7 +78,7 @@ export function isHostedAppUrl(appUrl) {
 
 // Per-request hosted detection from the request's Host (or X-Forwarded-Host behind
 // a proxy). Lets one dev instance serve a self-hosted host (k.lan) and a hosted
-// host (app.k.lan). Falls back to the X-Forwarded-Host header when proxied.
+// host (app.s.lan). Falls back to the X-Forwarded-Host header when proxied.
 export function resolveRequestHosted(req) {
 	if (!req) return false;
 	const forwarded = String(req.headers?.['x-forwarded-host'] || '').split(',')[0].trim();
