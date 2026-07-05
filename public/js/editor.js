@@ -6768,7 +6768,7 @@ function sinkListItem(itemType) {
   };
 }
 
-// node_modules/.pnpm/prosemirror-view@1.41.9/node_modules/prosemirror-view/dist/index.js
+// node_modules/.pnpm/prosemirror-view@1.42.0/node_modules/prosemirror-view/dist/index.js
 var domIndex = function(node) {
   for (var index = 0; ; index++) {
     node = node.previousSibling;
@@ -7913,7 +7913,7 @@ var MarkViewDesc = class _MarkViewDesc extends ViewDesc {
   }
 };
 var NodeViewDesc = class _NodeViewDesc extends ViewDesc {
-  constructor(parent, node, outerDeco, innerDeco, dom, contentDOM, nodeDOM, view, pos) {
+  constructor(parent, node, outerDeco, innerDeco, dom, contentDOM, nodeDOM) {
     super(parent, [], dom, contentDOM);
     this.node = node;
     this.outerDeco = outerDeco;
@@ -7956,11 +7956,11 @@ var NodeViewDesc = class _NodeViewDesc extends ViewDesc {
     let nodeDOM = dom;
     dom = applyOuterDeco(dom, outerDeco, node);
     if (spec)
-      return descObj = new CustomNodeViewDesc(parent, node, outerDeco, innerDeco, dom, contentDOM || null, nodeDOM, spec, view, pos + 1);
+      return descObj = new CustomNodeViewDesc(parent, node, outerDeco, innerDeco, dom, contentDOM || null, nodeDOM, spec);
     else if (node.isText)
-      return new TextViewDesc(parent, node, outerDeco, innerDeco, dom, nodeDOM, view);
+      return new TextViewDesc(parent, node, outerDeco, innerDeco, dom, nodeDOM);
     else
-      return new _NodeViewDesc(parent, node, outerDeco, innerDeco, dom, contentDOM || null, nodeDOM, view, pos + 1);
+      return new _NodeViewDesc(parent, node, outerDeco, innerDeco, dom, contentDOM || null, nodeDOM);
   }
   parseRule() {
     if (this.node.type.spec.reparseInView)
@@ -8116,14 +8116,14 @@ var NodeViewDesc = class _NodeViewDesc extends ViewDesc {
 };
 function docViewDesc(doc3, outerDeco, innerDeco, dom, view) {
   applyOuterDeco(dom, outerDeco, doc3);
-  let docView = new NodeViewDesc(void 0, doc3, outerDeco, innerDeco, dom, dom, dom, view, 0);
+  let docView = new NodeViewDesc(void 0, doc3, outerDeco, innerDeco, dom, dom, dom);
   if (docView.contentDOM)
     docView.updateChildren(view, 0);
   return docView;
 }
 var TextViewDesc = class _TextViewDesc extends NodeViewDesc {
-  constructor(parent, node, outerDeco, innerDeco, dom, nodeDOM, view) {
-    super(parent, node, outerDeco, innerDeco, dom, null, nodeDOM, view, 0);
+  constructor(parent, node, outerDeco, innerDeco, dom, nodeDOM) {
+    super(parent, node, outerDeco, innerDeco, dom, null, nodeDOM);
   }
   parseRule() {
     let skip = this.nodeDOM.parentNode;
@@ -8162,9 +8162,9 @@ var TextViewDesc = class _TextViewDesc extends NodeViewDesc {
   ignoreMutation(mutation) {
     return mutation.type != "characterData" && mutation.type != "selection";
   }
-  slice(from2, to, view) {
+  slice(from2, to, _view) {
     let node = this.node.cut(from2, to), dom = document.createTextNode(node.text);
-    return new _TextViewDesc(this.parent, node, this.outerDeco, this.innerDeco, dom, dom, view);
+    return new _TextViewDesc(this.parent, node, this.outerDeco, this.innerDeco, dom, dom);
   }
   markDirty(from2, to) {
     super.markDirty(from2, to);
@@ -8193,8 +8193,8 @@ var TrailingHackViewDesc = class extends ViewDesc {
   }
 };
 var CustomNodeViewDesc = class extends NodeViewDesc {
-  constructor(parent, node, outerDeco, innerDeco, dom, contentDOM, nodeDOM, spec, view, pos) {
-    super(parent, node, outerDeco, innerDeco, dom, contentDOM, nodeDOM, view, pos);
+  constructor(parent, node, outerDeco, innerDeco, dom, contentDOM, nodeDOM, spec) {
+    super(parent, node, outerDeco, innerDeco, dom, contentDOM, nodeDOM);
     this.spec = spec;
   }
   // A custom `update` method gets to decide whether the update goes
@@ -8409,6 +8409,14 @@ var ViewTreeUpdater = class {
         if (next.matchesMark(marks[depth]) && !this.isLocked(next.dom)) {
           found3 = i2;
           break;
+        }
+      }
+      if (found3 < 0 && this.index < this.top.children.length) {
+        let cur = this.top.children[this.index];
+        if (cur instanceof MarkViewDesc && cur.dirty != NODE_DIRTY && cur.mark.type == marks[depth].type && cur.spec.update && !this.isLocked(cur.dom) && cur.spec.update(marks[depth])) {
+          cur.mark = marks[depth];
+          found3 = this.index;
+          this.changed = true;
         }
       }
       if (found3 > -1) {
@@ -9444,9 +9452,8 @@ var wrapMap = {
   td: ["table", "tbody", "tr"],
   th: ["table", "tbody", "tr"]
 };
-var _detachedDoc = null;
 function detachedDoc() {
-  return _detachedDoc || (_detachedDoc = document.implementation.createHTMLDocument("title"));
+  return document.implementation.createHTMLDocument("title");
 }
 var _policy = null;
 function maybeWrapTrusted(html) {
@@ -9461,7 +9468,7 @@ function readHTML(html) {
   let metas = /^(\s*<meta [^>]*>)*/.exec(html);
   if (metas)
     html = html.slice(metas[0].length);
-  let elt = detachedDoc().createElement("div");
+  let doc3 = detachedDoc(), elt = doc3.body;
   let firstTag = /<([a-z][^>\s]+)/i.exec(html), wrap2;
   if (wrap2 = firstTag && wrapMap[firstTag[1].toLowerCase()])
     html = wrap2.map((n) => "<" + n + ">").join("") + html + wrap2.map((n) => "</" + n + ">").reverse().join("");
@@ -9469,6 +9476,17 @@ function readHTML(html) {
   if (wrap2)
     for (let i2 = 0; i2 < wrap2.length; i2++)
       elt = elt.querySelector(wrap2[i2]) || elt;
+  for (let i2 = 0; i2 < doc3.styleSheets.length; i2++) {
+    let style2 = doc3.styleSheets[i2];
+    for (let j = 0; j < style2.rules.length; j++) {
+      let rule = style2.rules[j];
+      if (rule instanceof CSSStyleRule) {
+        let matches2 = elt.querySelectorAll(rule.selectorText);
+        for (let k = 0; k < matches2.length; k++)
+          matches2[k].style.cssText += rule.style.cssText;
+      }
+    }
+  }
   return elt;
 }
 function restoreReplacedSpaces(dom) {

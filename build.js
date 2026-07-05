@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isProd = process.env.NODE_ENV === 'production';
 
-// Vendor bundle: Bootstrap JS + SweetAlert2
+// Vendor bundle: Tabler JS + SweetAlert2
 await build({
 	entryPoints: ['src/vendor.js'],
 	bundle: true,
@@ -15,16 +15,19 @@ await build({
 	format: 'esm',
 	platform: 'browser',
 	target: ['es2020'],
+	define: {
+		global: 'globalThis',
+	},
 	minify: isProd,
 	sourcemap: !isProd,
 });
 console.log('Vendor built → public/js/vendor.js');
 
-// Bootstrap CSS
+// Authenticated app vendor CSS: Tabler + supporting controls
 await build({
-	entryPoints: ['src/vendor.css'],
+	entryPoints: ['src/admin_vendor.css'],
 	bundle: true,
-	outfile: 'public/css/vendor.css',
+	outfile: 'public/css/admin_vendor.css',
 	platform: 'browser',
 	minify: isProd,
 	sourcemap: !isProd,
@@ -36,7 +39,7 @@ await build({
 		'.svg': 'file',
 	},
 });
-console.log('Vendor CSS built → public/css/vendor.css');
+console.log('Admin vendor CSS built → public/css/admin_vendor.css');
 
 // TipTap Editor
 await build({

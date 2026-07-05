@@ -9,17 +9,13 @@ block chat
 block head
 	style.
 		html, body.kk-template1 { height: 100%; overflow: hidden; }
-		body.kk-template1 { display: flex; flex-direction: column; }
 		#sidebar { display: none !important; }
 		#chat-sidebar { display: none !important; }
 		#chat-results-panel { display: none !important; }
-		.row.h-100 { gap: 0 !important; }
 		#main-content {
-			flex: 1 1 100% !important;
+			margin-left: 0 !important;
 			max-width: 100% !important;
 			width: 100% !important;
-			display: flex !important;
-			flex-direction: column !important;
 			overflow: hidden !important;
 		}
 		#page-content {
@@ -43,17 +39,17 @@ block head
 		#graph-container {
 			width: 100%;
 			height: 100%;
-			border: 1px solid var(--line, var(--bs-border-color));
+			border: 1px solid var(--kk-line, var(--bs-border-color));
 			border-radius: 12px;
-			background: var(--bg, var(--bs-body-bg));
+			background: var(--kk-bg, var(--bs-body-bg));
 		}
 		#graph-info-panel {
 			flex: 0 0 260px;
 			overflow-y: auto;
-			border: 1px solid var(--line, var(--bs-border-color));
+			border: 1px solid var(--kk-line, var(--bs-border-color));
 			border-radius: 12px;
-			background: var(--panel-gradient);
-			color: var(--text);
+			background: var(--kk-panel);
+			color: var(--kk-text);
 			padding: 12px;
 		}
 		.graph-legend-dot {

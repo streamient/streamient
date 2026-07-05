@@ -6,12 +6,42 @@ html(lang="en")
 		title #{title || 'Kumbukum'}
 		- const __wlFavicon = typeof white_label !== 'undefined' && white_label && white_label.favicon_url ? white_label.favicon_url : '/static/images/favicon.ico'
 		link(href=__wlFavicon rel="shortcut icon")
-		link(href=`/static/v-${v}/css/vendor.css` rel="stylesheet")
+		script.
+			(function () {
+				try {
+					var t = localStorage.getItem('kk-theme');
+					if (t !== 'light' && t !== 'dark') t = 'dark';
+					document.documentElement.setAttribute('data-theme', t);
+					document.documentElement.setAttribute('data-bs-theme', t);
+				} catch (e) {
+					document.documentElement.setAttribute('data-theme', 'dark');
+					document.documentElement.setAttribute('data-bs-theme', 'dark');
+				}
+			})();
+		link(href=`/static/v-${v}/css/admin_vendor.css` rel="stylesheet")
 		link(href=`/static/v-${v}/css/app.css` rel="stylesheet")
-		link(href=`/static/v-${v}/css/kumbukum-login-split-production.css` rel="stylesheet")
+		link(href=`/static/v-${v}/css/kumbukum-tabler.css` rel="stylesheet")
 		block head
-	body
-		block body
+	- const _authCoverUrl = typeof getAuthLoginCoverUrl === 'function' ? getAuthLoginCoverUrl() : authLoginCoverUrl
+	- const _authCoverStyle = typeof _authCoverUrl === 'string' && _authCoverUrl ? `--kk-auth-cover-image: url("${_authCoverUrl}");` : undefined
+	body.kk-auth-page.d-flex.flex-column(style=_authCoverStyle)
+		.row.g-0.flex-fill.kk-auth-shell
+			.col-12.col-lg-6.col-xl-4.border-top-wide.border-primary.d-flex.flex-column.justify-content-center.kk-auth-panel
+				.container.container-tight.my-5.px-lg-5
+					.mb-5.logo-form
+						a.navbar-brand.justify-content-center(href="/login" aria-label="Kumbukum login")
+							- const __wlAuth = typeof white_label !== 'undefined' ? white_label : null
+							- const __wlAuthLogo = __wlAuth && (__wlAuth.login_logo_url || __wlAuth.logo_url)
+							if __wlAuthLogo
+								img.img-fluid.kk-white-label-auth-logo(src=__wlAuthLogo alt="Logo")
+							else
+								span.kk-logo-light
+									include includes/logo_black
+								span.kk-logo-dark
+									include includes/logo_white
+					block body
+			.col-12.col-lg-6.col-xl-8.d-none.d-lg-block.kk-auth-cover-column
+				.kk-auth-cover.bg-cover.h-100.min-vh-100
 		script(src=`/static/v-${v}/js/icons.js`)
 		include includes/openpanel
 		block scripts

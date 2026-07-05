@@ -38,7 +38,7 @@
     "ignore": [
       "public/js/vendor.js",
       "public/js/editor.js",
-      "public/css/vendor.css"
+      "public/css/admin_vendor.css"
     ],
     "exec": "node build.js && node --import ./tracing.js app.js"
   },
@@ -62,6 +62,8 @@
     "@opentelemetry/semantic-conventions": "1.41.1",
     "@simplewebauthn/server": "^13.3.2",
     "@socket.io/redis-streams-adapter": "^0.3.1",
+    "@tabler/core": "^1.4.0",
+    "@tabler/icons-webfont": "^3.44.0",
     "@tiptap/core": "^3.27.1",
     "@tiptap/extension-blockquote": "^3.27.1",
     "@tiptap/extension-bullet-list": "^3.27.1",
@@ -109,7 +111,7 @@
     "mongoose": "^9.7.3",
     "mongoose-lean-virtuals": "^2.1.0",
     "n-readlines": "^3.4.1",
-    "nodemailer": "^9.0.1",
+    "nodemailer": "^9.0.3",
     "otplib": "^13.4.1",
     "pdfjs-parse": "^1.1.1",
     "pino": "^10.3.1",
@@ -119,7 +121,7 @@
     "pug": "^3.0.4",
     "rate-limit-redis": "^5.0.0",
     "sanitize-html": "^2.17.5",
-    "sharp": "^0.35.2",
+    "sharp": "^0.35.3",
     "simple-git": "^3.36.0",
     "socket.io": "^4.8.3",
     "stripe": "^22.3.0",

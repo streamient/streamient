@@ -60,4 +60,4 @@ This starts the app with `nodemon` for auto-reload on file changes.
 pnpm build
 ```
 
-Builds frontend assets (vendor.js, vendor.css, editor.js, graph_bundle.js) with esbuild.
+Builds frontend assets (vendor.js, admin_vendor.css, editor.js, graph_bundle.js) with esbuild.

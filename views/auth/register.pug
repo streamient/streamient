@@ -4,30 +4,23 @@ block head
 	title Sign Up — Kumbukum
 
 block body
-	.container
-		.row.justify-content-center.mt-5
-			.col-md-5.my-auto
-				.card.shadow
-					.card-body
-						.text-center.logo-form
-							.mb-5
-								include ../includes/white_label_auth_logo
-
-						if process.env.ENABLE_SIGNUP === "true"
-							#signup-result
-							form#signup-form
-								h3.mb-4 Create your account
-								.mb-3
-									label.form-label(for="name") Name
-									input.form-control#name(type="text" name="name" required autofocus)
-								.mb-4
-									label.form-label(for="email") Email
-									input.form-control#email(type="email" name="email" required)
-								button.btn.btn-primary.w-100(type="submit") Sign Up
-								.mt-5.text-center
-									a(href="/login") Already have an account?
-						else
-							h3.mb-4 Sign up is currently disabled
+	if process.env.ENABLE_SIGNUP === "true"
+		#signup-result
+		form#signup-form
+			h1.h2.mb-2 Create your account
+			p.text-muted.mb-5 Start using Kumbukum.
+			.mb-3
+				label.form-label(for="name") Name
+				input.form-control.form-control-sm#name(type="text" name="name" required autofocus)
+			.mb-4
+				label.form-label(for="email") Email
+				input.form-control.form-control-sm#email(type="email" name="email" required)
+			button.btn.btn-primary.btn-sm.w-100(type="submit") Sign Up
+			.mt-5.text-center
+				a(href="/login") Already have an account?
+	else
+		h1.h2.mb-2 Sign up disabled
+		p.text-muted.mb-0 Sign up is currently disabled.
 
 block scripts
 	script(src=`/static/v-${v}/js/vendor.js` type="module")

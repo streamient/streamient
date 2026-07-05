@@ -4,62 +4,58 @@ block head
 	title Login — Kumbukum
 
 block body
-	.container
-		.row.justify-content-center.mt-5
-			.col-md-5.my-auto
-				.card.shadow
-					.card-body
-						.text-center.logo-form
-							.mb-5
-								include ../includes/white_label_auth_logo
-
-						#login-form
-							if error
-								.alert.alert-danger= error
-							if oauth_continue
-								.alert.alert-secondary.small.login-header Sign in to continue authorizing an MCP app for this account.
-							form(action="/login" method="POST")
-								.mb-3
-									label.form-label(for="email") Email
-									input.form-control#email(type="email" name="email" required autofocus)
-								.mb-4
-									.d-flex.align-items-center.w-100
-										label.form-label(for="password") Password
-										.ms-auto
-											a.small(href="/forgot-password") Forgot password?
-									input.form-control#password(type="password" name="password" required)
-
-								button.btn.btn-primary.w-100(type="submit") Sign In
-
-							hr.my-3
-							.small.mb-2 Sign in with one of the following
-							.d-grid.gap-2
-								button.btn.btn-outline-secondary.kk-icon-xl#magic-link-btn(type="button")
-									!= icon('email')
-									span.ms-2 Magic Link
-								button.btn.btn-outline-secondary.kk-icon-xl#passkey-btn(type="button")
-									!= icon('fingerprint')
-									span.ms-2 Passkey
-
-						if process.env.ENABLE_SIGNUP === "true"
-							.text-center.mt-5#create-account
-								a(href="/signup") Create an account
-
-						#magic-link-form.d-none
-							h5.mb-3 Enter your email to receive a magic link
-							form(id="form-magic-link")
-								.mb-1
-									input.form-control#magic-link-email(type="email" name="email" required autofocus)
-								button.btn.btn-primary.w-100(type="submit") Send Magic Link
-							.mt-5
-								a#magic-link-back(href="#") Back to login
-
-						#totp-form.d-none
-							form(id="form-2fa")
-								.mb-3
-									label.form-label(for="totp-code") Enter your 2FA code
-									input.form-control#totp-code(type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" required autofocus)
-								button.btn.btn-primary.w-100(type="submit") Verify
+	#login-form
+		if error
+			.my-3.alert.alert-danger= error
+		if oauth_continue
+			.alert.alert-secondary.small.login-header Sign in to continue authorizing an MCP app for this account.
+		.text-secondary.small.mb-2 Sign in with
+		.kk-auth-methods
+			button.btn.btn-primary.btn-sm.kk-auth-method-btn#magic-link-btn(type="button")
+				!= icon('email')
+				span.ms-2 Magic Link
+			button.btn.btn-primary.btn-sm.kk-auth-method-btn#passkey-btn(type="button")
+				!= icon('fingerprint')
+				span.ms-2 Passkey
+		.text-secondary.small.mb-3 Or continue with email and password
+		form(action="/login" method="POST")
+			if redirect_to
+				input(type="hidden" name="redirect_to" value=redirect_to)
+			.mb-3
+				label.form-label(for="email") Email address
+				input.form-control.form-control-sm#email(type="email" name="email" autocomplete="email" required autofocus)
+			.mb-2
+				label.form-label(for="password")
+					span Password
+					span.form-label-description
+						a(href="/forgot-password") Forgot password?
+				input.form-control.form-control-sm#password(type="password" name="password" autocomplete="current-password" required)
+			.form-footer
+				button.btn.btn-primary.btn-sm.w-100(type="submit") Sign in
+	if process.env.ENABLE_SIGNUP === "true"
+		.text-secondary.mt-3#create-account
+			span No account yet?
+			a.ms-1(href="/signup") Create one
+	#magic-link-form.d-none
+		.mb-4
+			.text-secondary.mb-0 Enter your email to receive a login link.
+		form(id="form-magic-link")
+			.mb-3
+				label.form-label(for="magic-link-email") Email address
+				input.form-control.form-control-sm#magic-link-email(type="email" name="email" autocomplete="email" required autofocus)
+			.form-footer
+				button.btn.btn-primary.btn-sm.w-100(type="submit") Send magic link
+		.mt-3
+			a#magic-link-back(href="#") Back to login
+	#totp-form.d-none
+		.mb-4
+			.text-secondary.mb-0 Enter your six-digit code.
+		form(id="form-2fa")
+			.mb-3
+				label.form-label(for="totp-code") Authentication code
+				input.form-control.form-control-sm#totp-code(type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" required autofocus)
+			.form-footer
+				button.btn.btn-primary.btn-sm.w-100(type="submit") Verify
 
 block scripts
 	script(src=`/static/v-${v}/js/vendor.js` type="module")

@@ -315,7 +315,7 @@ var ROUTES = {
 };
 
 function shouldHideChatSidebar(path) {
-	return path === '/settings' || path.indexOf('/settings/') === 0;
+	return path === '/graph' || path === '/settings' || path.indexOf('/settings/') === 0;
 }
 
 function syncLayoutForPath(path) {
@@ -820,6 +820,7 @@ function getCurrentTheme() {
 function setTheme(theme) {
 	const next = theme === 'light' ? 'light' : 'dark';
 	document.documentElement.setAttribute('data-theme', next);
+	document.documentElement.setAttribute('data-bs-theme', next);
 	try { localStorage.setItem('kk-theme', next); } catch (e) {}
 	window.dispatchEvent(new CustomEvent('kk-theme-change', { detail: { theme: next } }));
 }

@@ -1,5 +1,6 @@
-/* Vendor CSS bundle */
-@import "bootstrap/dist/css/bootstrap.css";
+/* Authenticated/auth vendor CSS bundle */
+@import "@tabler/core/dist/css/tabler.css";
+@import "@tabler/icons-webfont/dist/tabler-icons.css";
 @import "@fontsource-variable/noto-sans";
 @import "@fontsource-variable/noto-sans-mono";
 @import "@fontsource-variable/material-symbols-outlined";

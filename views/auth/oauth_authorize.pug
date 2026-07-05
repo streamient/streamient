@@ -2,359 +2,69 @@ extends ../auth_layout
 
 block head
 	title Authorize App — Kumbukum
-	style.
-		body {
-			align-items: flex-start;
-			padding: 40px 16px;
-		}
-
-		.oauth-authorize-page.container {
-			width: min(560px, 100%);
-			min-height: auto;
-			display: block;
-			padding: 0 !important;
-			border: 0 !important;
-			border-radius: 0;
-			background: transparent !important;
-			box-shadow: none !important;
-			overflow: visible;
-		}
-
-		.oauth-authorize-page.container::after {
-			display: none;
-		}
-
-		.oauth-authorize-page .row {
-			margin: 0;
-			justify-content: center;
-		}
-
-		.oauth-authorize-page .oauth-authorize-column {
-			width: 100%;
-			max-width: none;
-			padding: 0;
-		}
-
-		.oauth-authorize-page .card.shadow {
-			background: rgba(10, 16, 34, 0.96) !important;
-			border: 1px solid var(--kk-line) !important;
-			border-radius: 18px;
-			box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35) !important;
-		}
-
-		.oauth-authorize-page .card-body.p-4 {
-			padding: 30px !important;
-		}
-
-		.oauth-authorize-page .oauth-authorize-logo {
-			text-align: center;
-			margin-bottom: 26px !important;
-		}
-
-		.oauth-authorize-page .oauth-authorize-logo img {
-			width: min(220px, 74%);
-			height: auto;
-		}
-
-		.oauth-authorize-page .oauth-authorize-hero {
-			display: grid;
-			gap: 12px;
-			margin-bottom: 24px;
-			text-align: center;
-		}
-
-		.oauth-authorize-page .oauth-eyebrow {
-			font-size: 0.78rem;
-			font-weight: 700;
-			letter-spacing: 0.08em;
-			text-transform: uppercase;
-			color: var(--kk-primary);
-		}
-
-		.oauth-authorize-page h1 {
-			margin: 0;
-			font-size: 1.9rem;
-			line-height: 1.18;
-			color: var(--kk-text);
-			font-weight: 800;
-		}
-
-		.oauth-authorize-page .oauth-subtitle {
-			max-width: 430px;
-			margin: 0 auto;
-			font-size: 1rem;
-			line-height: 1.5;
-			color: var(--kk-muted) !important;
-		}
-
-		.oauth-authorize-page .oauth-subtitle strong {
-			color: var(--kk-text);
-		}
-
-		.oauth-authorize-page .oauth-section {
-			padding-top: 18px;
-			margin-top: 18px;
-			border-top: 1px solid var(--kk-line);
-		}
-
-		.oauth-authorize-page .oauth-section-title {
-			margin: 0 0 10px;
-			font-size: 0.78rem;
-			font-weight: 700;
-			letter-spacing: 0.08em;
-			text-transform: uppercase;
-			color: #98a7e7;
-		}
-
-		.oauth-authorize-page .oauth-account-card,
-		.oauth-authorize-page .oauth-scope-list .list-group-item,
-		.oauth-authorize-page .oauth-warning {
-			background: rgba(15, 23, 50, 0.86);
-			border: 1px solid #314179;
-			border-radius: 14px !important;
-			box-shadow: none;
-		}
-
-		.oauth-authorize-page .oauth-account-card {
-			display: flex;
-			align-items: center;
-			gap: 12px;
-			padding: 14px;
-		}
-
-		.oauth-authorize-page .oauth-account-avatar {
-			width: 42px;
-			height: 42px;
-			display: inline-flex;
-			align-items: center;
-			justify-content: center;
-			flex: 0 0 auto;
-			border-radius: 12px;
-			background: rgba(111, 97, 255, 0.18);
-			color: #dbe2ff;
-			font-weight: 800;
-		}
-
-		.oauth-authorize-page .oauth-account-label {
-			font-size: 0.82rem;
-			color: var(--kk-muted);
-		}
-
-		.oauth-authorize-page .oauth-account-name {
-			min-width: 0;
-			color: var(--kk-text);
-			font-weight: 700;
-			overflow-wrap: anywhere;
-		}
-
-		.oauth-authorize-page .oauth-scope-list {
-			margin: 0;
-			padding: 0;
-			list-style: none;
-			display: grid;
-			gap: 10px;
-		}
-
-		.oauth-authorize-page .oauth-scope-list .list-group-item {
-			display: grid;
-			gap: 4px;
-			padding: 14px;
-		}
-
-		.oauth-authorize-page .oauth-scope-name {
-			font-size: 0.98rem;
-			font-weight: 700;
-			color: var(--kk-text);
-		}
-
-		.oauth-authorize-page .oauth-scope-list small {
-			color: var(--kk-muted) !important;
-		}
-
-		.oauth-authorize-page .oauth-details {
-			color: var(--kk-muted);
-		}
-
-		.oauth-authorize-page .oauth-details summary {
-			cursor: pointer;
-			font-size: 0.92rem;
-			font-weight: 700;
-			color: #dbe2ff;
-		}
-
-		.oauth-authorize-page .oauth-meta-list {
-			margin: 12px 0 0;
-			padding: 0;
-			list-style: none;
-			display: grid;
-			gap: 10px;
-		}
-
-		.oauth-authorize-page .oauth-meta-key {
-			margin-bottom: 3px;
-			font-size: 0.76rem;
-			font-weight: 700;
-			letter-spacing: 0.06em;
-			text-transform: uppercase;
-			color: #98a7e7;
-		}
-
-		.oauth-authorize-page .oauth-meta-value a {
-			color: #dbe2ff;
-			text-decoration: none;
-			overflow-wrap: anywhere;
-		}
-
-		.oauth-authorize-page .oauth-meta-value a:hover {
-			text-decoration: underline;
-		}
-
-		.oauth-authorize-page code.small {
-			display: block;
-			white-space: normal;
-			overflow-wrap: anywhere;
-			font-size: 0.84rem;
-			color: #d6deff;
-			background: rgba(7, 11, 22, 0.46);
-			border-radius: 8px;
-			padding: 8px 10px;
-			font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-		}
-
-		.oauth-authorize-page .oauth-warning {
-			padding: 12px 14px;
-			background: rgba(255, 213, 128, 0.12);
-			border-color: rgba(255, 213, 128, 0.34);
-			color: #ffe29a !important;
-		}
-
-		.oauth-authorize-page .oauth-footer-note {
-			margin-top: 16px;
-			text-align: center;
-			font-size: 0.88rem;
-			color: var(--kk-muted);
-		}
-
-		.oauth-authorize-page .oauth-actions {
-			margin-top: 24px;
-			display: grid;
-			gap: 10px;
-		}
-
-		.oauth-authorize-page .oauth-actions .btn {
-			width: 100%;
-			border-radius: 12px !important;
-			padding: 12px 14px !important;
-			font-weight: 800;
-		}
-
-		.oauth-authorize-page .btn.btn-primary {
-			background: linear-gradient(135deg, var(--kk-primary), var(--kk-primary-2)) !important;
-			border-color: #4f61bf !important;
-		}
-
-		.oauth-authorize-page .btn.btn-outline-secondary {
-			border-color: #44579e !important;
-			color: #dbe2ff !important;
-			background: #17234b !important;
-		}
-
-		@media (max-width: 768px) {
-			body {
-				padding: 18px 12px;
-			}
-
-			.oauth-authorize-page.container {
-				width: 100%;
-			}
-
-			.oauth-authorize-page .card-body.p-4 {
-				padding: 22px !important;
-			}
-
-			.oauth-authorize-page h1 {
-				font-size: 1.55rem;
-			}
-		}
 
 block body
-	.container.oauth-authorize-page.py-5
-		.row.justify-content-center
-			.col-12.oauth-authorize-column
-				.card.shadow
-					.card-body.p-4
-						.oauth-authorize-logo.mb-4
-							include ../includes/white_label_auth_logo
-						if error
-							.alert.alert-danger.mt-4= error
-						else if client && oauth_request
-							.oauth-authorize-hero
-								div.oauth-eyebrow OAuth consent
-								h1 #{client.client_name} wants to access your account
-								p.oauth-subtitle.text-muted.mb-0
-									| Allow access to
-									strong= ' ' + ((active_tenant && active_tenant.name) || 'this account')
-									|  through Kumbukum MCP.
+	if error
+		h1.h2.mb-2 Authorize app
+		.alert.alert-danger.mt-4= error
+	else if client && oauth_request
+		.oauth-authorize-page
+			.oauth-authorize-hero.mb-5
+				.text-uppercase.text-muted.fw-bold.small.mb-2 OAuth consent
+				h1.h2.mb-2= client.client_name + ' wants to access your account'
+				p.text-muted.mb-0
+					span Allow access to
+					strong.ms-1= (active_tenant && active_tenant.name) || 'this account'
+					span.ms-1 through Kumbukum MCP.
 
-							section.oauth-section
-								h2.oauth-section-title Signed in as
-								.oauth-account-card
-									.oauth-account-avatar= ((active_tenant && active_tenant.name) || 'K').trim().slice(0, 1).toUpperCase()
+			section.oauth-section.mb-4
+				h2.h6.mb-2 Signed in as
+				.oauth-account-card
+					.oauth-account-avatar= ((active_tenant && active_tenant.name) || 'K').trim().slice(0, 1).toUpperCase()
+					div
+						div.text-muted.small Kumbukum account
+						div.fw-semibold= (active_tenant && active_tenant.name) || 'This account'
+
+			if scope_details && scope_details.length
+				section.oauth-section.mb-4
+					h2.h6.mb-2 Requested access
+					ul.list-group.oauth-scope-list
+						each item in scope_details
+							li.list-group-item
+								div.fw-semibold= item.label
+								small.text-muted= item.description
+
+			section.oauth-section.mb-4
+				details.oauth-details
+					summary App details
+					ul.oauth-meta-list.mt-3
+						li
+							div.text-muted.small App
+							div
+								strong= client.client_name
+								if client.client_uri
 									div
-										div.oauth-account-label Kumbukum account
-										div.oauth-account-name= (active_tenant && active_tenant.name) || 'This account'
+										a(href=client.client_uri target="_blank" rel="noreferrer")= client.client_uri
+						li
+							div.text-muted.small Client ID
+							code.small= client.client_id
+						li
+							div.text-muted.small Redirect URI
+							code.small= oauth_request.redirect_uri
+						li
+							div.text-muted.small MCP Resource
+							code.small= oauth_request.resource
 
-							if scope_details && scope_details.length
-								section.oauth-section
-									h2.oauth-section-title Requested access
-									ul.list-group.oauth-scope-list
-										each item in scope_details
-											li.list-group-item
-												div.oauth-scope-name= item.label
-												small.text-muted= item.description
-
-							//- if oauth_request.redirect_uri.startsWith('http://localhost') || oauth_request.redirect_uri.startsWith('http://127.0.0.1')
-							//- 	div.oauth-section
-							//- 		div.oauth-warning.small
-							//- 			strong Local redirect URI.
-							//- 			|  Only continue if you trust this app.
-
-							section.oauth-section
-								details.oauth-details
-									summary App details
-									ul.oauth-meta-list
-										li.oauth-meta-item
-											div.oauth-meta-key App
-											div.oauth-meta-value
-												strong= client.client_name
-												if client.client_uri
-													div
-														a(href=client.client_uri target='_blank' rel='noreferrer')= client.client_uri
-										li.oauth-meta-item
-											div.oauth-meta-key Client ID
-											div.oauth-meta-value
-												code.small= client.client_id
-										li.oauth-meta-item
-											div.oauth-meta-key Redirect URI
-											div.oauth-meta-value
-												code.small= oauth_request.redirect_uri
-										li.oauth-meta-item
-											div.oauth-meta-key MCP Resource
-											div.oauth-meta-value
-												code.small= oauth_request.resource
-
-							form(method='POST' action='/oauth/authorize')
-								input(type='hidden' name='client_id' value=oauth_request.client_id)
-								input(type='hidden' name='redirect_uri' value=oauth_request.redirect_uri)
-								input(type='hidden' name='response_type' value=oauth_request.response_type)
-								input(type='hidden' name='scope' value=oauth_request.scopes.join(' '))
-								input(type='hidden' name='state' value=oauth_request.state)
-								input(type='hidden' name='code_challenge' value=oauth_request.code_challenge)
-								input(type='hidden' name='code_challenge_method' value=oauth_request.code_challenge_method)
-								input(type='hidden' name='resource' value=oauth_request.resource)
-								.oauth-actions
-									button.btn.btn-primary(type='submit' name='decision' value='approve') Allow access
-									button.btn.btn-outline-secondary(type='submit' name='decision' value='deny') Cancel
-
-							div.oauth-footer-note
-								| Only authorize access if you trust this application.
+			form(method="POST" action="/oauth/authorize")
+				input(type="hidden" name="client_id" value=oauth_request.client_id)
+				input(type="hidden" name="redirect_uri" value=oauth_request.redirect_uri)
+				input(type="hidden" name="response_type" value=oauth_request.response_type)
+				input(type="hidden" name="scope" value=oauth_request.scopes.join(' '))
+				input(type="hidden" name="state" value=oauth_request.state)
+				input(type="hidden" name="code_challenge" value=oauth_request.code_challenge)
+				input(type="hidden" name="code_challenge_method" value=oauth_request.code_challenge_method)
+				input(type="hidden" name="resource" value=oauth_request.resource)
+				.d-grid.gap-2
+					button.btn.btn-primary.btn-sm(type="submit" name="decision" value="approve") Allow access
+					button.btn.btn-outline-secondary.btn-sm(type="submit" name="decision" value="deny") Cancel
+			p.text-muted.small.text-center.mt-4.mb-0 Only authorize access if you trust this application.

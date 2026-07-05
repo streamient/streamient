@@ -12,17 +12,19 @@ html(lang="en")
 					var t = localStorage.getItem('kk-theme');
 					if (t !== 'light' && t !== 'dark') t = 'dark';
 					document.documentElement.setAttribute('data-theme', t);
+					document.documentElement.setAttribute('data-bs-theme', t);
 				} catch (e) {
 					document.documentElement.setAttribute('data-theme', 'dark');
+					document.documentElement.setAttribute('data-bs-theme', 'dark');
 				}
 			})();
 		script(type="importmap").
 			{ "imports": { "/static/js/vendor.js": "/static/v-#{v}/js/vendor.js" } }
-		link(href=`/static/v-${v}/css/vendor.css` rel="stylesheet")
+		link(href=`/static/v-${v}/css/admin_vendor.css` rel="stylesheet")
 		link(href=`/static/v-${v}/css/app.css` rel="stylesheet")
-		link(href=`/static/v-${v}/css/kumbukum-template1-strict.css` rel="stylesheet")
+		link(href=`/static/v-${v}/css/kumbukum-tabler.css` rel="stylesheet")
 		block head
-	body.kk-template1(class=(hide_chat_sidebar ? 'kk-no-chat-sidebar ' : ''))
+	body.kk-template1(class=((hide_chat_sidebar || page === 'graph') ? 'kk-no-chat-sidebar ' : ''))
 		block body
 			include includes/avatar
 			if impersonating
@@ -32,111 +34,133 @@ html(lang="en")
 					|  — viewing as #{impersonatingName}
 					button.btn.btn-sm.btn-outline-dark.ms-3#exit-impersonation Exit
 
-
-			nav.navbar.navbar-expand-lg.navbar-dark.bg-dark.sticky-top
+			aside.navbar.navbar-vertical.navbar-expand-lg.kk-app-sidebar#sidebar
 				.container-fluid
-					a.navbar-brand(href="/dashboard")
-						- const __wlTopNavLogo = typeof white_label !== 'undefined' && white_label && white_label.logo_url ? white_label.logo_url : ''
-						if __wlTopNavLogo
-							img.kk-white-label-navbar-logo(src=__wlTopNavLogo alt="Logo")
-						else
-							span.kk-logo-dark
-								include includes/logo_white
-							span.kk-logo-light
-								include includes/logo_black
-					nav.kk-topnav
-						a.kk-navbtn(href="/dashboard" class={active: page !== 'graph'}) Projects
-						a.kk-navbtn(href="/graph" class={active: page === 'graph'}) Graph
-					.ms-auto.d-flex.align-items-center.kk-navbar-actions
+					button.navbar-toggler(type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-menu" aria-controls="sidebar-menu" aria-expanded="false" aria-label="Toggle navigation")
+						span.navbar-toggler-icon
+					h1.navbar-brand.navbar-brand-autodark.mb-0
+						a.d-flex.align-items-center(href="/dashboard" aria-label="Kumbukum")
+							- const __wlSidebarLogo = typeof white_label !== 'undefined' && white_label && white_label.logo_url ? white_label.logo_url : ''
+							if __wlSidebarLogo
+								img.kk-white-label-navbar-logo(src=__wlSidebarLogo alt="Logo")
+							else
+								span.kk-logo-dark
+									include includes/logo_white
+								span.kk-logo-light
+									include includes/logo_black
+					.collapse.navbar-collapse.flex-column.align-items-stretch.flex-grow-1#sidebar-menu
+						.kk-sidebar-body
+							block sidebar
+								if projects_unlimited
+									.d-flex.justify-content-between.align-items-center.mb-3
+										h6.mb-0 My Projects
+										button.btn.btn-sm.btn-outline-primary#new-project-btn(title="New project")
+											!= icon('add')
+								#project-list
+
+								if !projects_unlimited && is_hosted
+									a.d-block.text-center.small.my-3.text-primary(href="/settings/subscription") Need unlimited projects?
+
+								a.kk-sidebar-trash.d-flex.align-items-center.text-decoration-none.text-muted.small(href="/trash")
+									!= icon('delete')
+									span.ms-2 Global Trash
+									span.ms-auto.d-none#trash-count-badge
+
+			main.page-wrapper#main-content
+				header.navbar.navbar-expand-md.d-print-none.kk-topbar
+					.container-fluid
+						.kk-navbar-left.d-flex.align-items-center.gap-2.min-w-0
+							button.btn.btn-icon.btn-ghost-secondary.d-lg-none(type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-menu" aria-controls="sidebar-menu" aria-expanded="false" aria-label="Toggle navigation")
+								span.navbar-toggler-icon
+							//- The sidebar (and its logo) is hidden on the graph page, so carry the brand in the topbar there
+							if page === 'graph'
+								a.kk-topbar-brand.d-flex.align-items-center.me-2(href="/dashboard" aria-label="Kumbukum")
+									- const __wlTopbarLogo = typeof white_label !== 'undefined' && white_label && white_label.logo_url ? white_label.logo_url : ''
+									if __wlTopbarLogo
+										img.kk-white-label-navbar-logo(src=__wlTopbarLogo alt="Logo")
+									else
+										span.kk-logo-dark
+											include includes/logo_white
+										span.kk-logo-light
+											include includes/logo_black
+							nav.kk-topnav
+								a.kk-navbtn(href="/dashboard" class={active: page !== 'graph'}) Projects
+								a.kk-navbtn(href="/graph" class={active: page === 'graph'}) Graph
 						.kk-global-search
 							button.kk-global-search-trigger#kk-global-search-trigger(type="button" aria-haspopup="dialog" aria-controls="kk-search-palette")
 								!= icon('search', 'kk-global-search-icon')
 								span.kk-global-search-text Type
 								kbd /
 								span.kk-global-search-text to search
-						if user
-							if is_trialing
-								a.btn.btn-warning.btn-sm.me-3(href="/settings/subscription" style="padding-top:0.45rem;padding-bottom:0.45rem;")
-									!= icon('creditCard', 'me-1')
-									span= trial_ends_text || 'Trial'
-							else if trial_available
-								form.me-3.mb-0(action="/billing/trial" method="post")
-									button.btn.btn-warning.btn-sm(type="submit" style="padding-top:0.45rem;padding-bottom:0.45rem;")
+								span.kk-global-search-spacer
+						.ms-auto.d-flex.align-items-center.kk-navbar-actions
+							if user
+								if is_trialing
+									a.btn.btn-warning.btn-sm.me-3(href="/settings/subscription")
 										!= icon('creditCard', 'me-1')
-										span Start 7-day Pro trial
-							else if can_upgrade
-								a.btn.btn-outline-warning.btn-sm.me-3(href="/settings/subscription" style="padding-top:0.45rem;padding-bottom:0.45rem;")
-									!= icon('creditCard', 'me-1')
-									span Upgrade to Pro
-							if accessible_tenants && accessible_tenants.length > 1
-								.dropdown.me-2
-									button.btn.btn-outline-light.btn-sm.dropdown-toggle.d-flex.align-items-center.gap-1(type="button" data-bs-toggle="dropdown")
-										!= icon('apartment')
-										span= active_tenant ? active_tenant.name : 'Select account'
+										span= trial_ends_text || 'Trial'
+								else if trial_available
+									form.me-3.mb-0(action="/billing/trial" method="post")
+										button.btn.btn-warning.btn-sm(type="submit")
+											!= icon('creditCard', 'me-1')
+											span Start 7-day Pro trial
+								else if can_upgrade
+									a.btn.btn-outline-warning.btn-sm.me-3(href="/settings/subscription")
+										!= icon('creditCard', 'me-1')
+										span Upgrade to Pro
+								if accessible_tenants && accessible_tenants.length > 1
+									.dropdown.me-2
+										button.btn.btn-outline-secondary.btn-sm.dropdown-toggle.d-flex.align-items-center.gap-1(type="button" data-bs-toggle="dropdown")
+											!= icon('apartment')
+											span= active_tenant ? active_tenant.name : 'Select account'
+										ul.dropdown-menu.dropdown-menu-end
+											each tenant in accessible_tenants
+												li
+													- var isCurrentTenant = active_tenant && tenant.tenantId === active_tenant.tenantId
+													a.dropdown-item.account-switch-link(href="#" data-tenant-id=tenant.tenantId class=(isCurrentTenant ? 'is-current' : '') aria-current=(isCurrentTenant ? 'true' : undefined) tabindex=(isCurrentTenant ? '-1' : undefined))
+														.d-flex.justify-content-between.align-items-center.gap-3
+															span= tenant.name
+															span.kk-account-role-badge= tenant.role
+								.dropdown
+									button.btn.btn-outline-secondary.btn-sm.dropdown-toggle.d-flex.align-items-center.gap-1(type="button" data-bs-toggle="dropdown")
+										+avatar(user.name, 'xs')
+										span= user.name
 									ul.dropdown-menu.dropdown-menu-end
-										each tenant in accessible_tenants
-											li
-												- var isCurrentTenant = active_tenant && tenant.tenantId === active_tenant.tenantId
-												a.dropdown-item.account-switch-link(href="#" data-tenant-id=tenant.tenantId class=(isCurrentTenant ? 'is-current' : '') aria-current=(isCurrentTenant ? 'true' : undefined) tabindex=(isCurrentTenant ? '-1' : undefined))
-													.d-flex.justify-content-between.align-items-center.gap-3
-														span= tenant.name
-														span.kk-account-role-badge= tenant.role
-							.dropdown
-								button.btn.btn-outline-light.btn-sm.dropdown-toggle.d-flex.align-items-center.gap-1(type="button" data-bs-toggle="dropdown")
-									+avatar(user.name, 'xs')
-									= user.name
-								ul.dropdown-menu.dropdown-menu-end
-									li: a.dropdown-item(href="/settings/profile") Profile & Settings
-									li: hr.dropdown-divider
-									li: a.dropdown-item(href="/docs" target="_blank") Guides & Help
-									li: a.dropdown-item(href="/api/doc" target="_blank") API Docs
-									li: hr.dropdown-divider
-									li: a.dropdown-item(href="/docs/guide/browser-extension" target="_blank") Browser Extension
-									if is_hosted
+										li: a.dropdown-item(href="/settings/profile") Profile & Settings
 										li: hr.dropdown-divider
-										li: a.dropdown-item(href="/settings/subscription") My Subscription
-									li: hr.dropdown-divider
-									li
-										a.dropdown-item#theme-toggle(href="#" role="button")
-											span.kk-theme-label-dark Light theme
-											span.kk-theme-label-light Dark theme
-									li: hr.dropdown-divider
-									li: a.dropdown-item(href="#" onclick="logout()") Logout
+										li: a.dropdown-item(href="/docs" target="_blank") Guides & Help
+										li: a.dropdown-item(href="/api/doc" target="_blank") API Docs
+										li: hr.dropdown-divider
+										li: a.dropdown-item(href="/docs/guide/browser-extension" target="_blank") Browser Extension
+										if is_hosted
+											li: hr.dropdown-divider
+											li: a.dropdown-item(href="/settings/subscription") My Subscription
+										li: hr.dropdown-divider
+										li
+											a.dropdown-item#theme-toggle(href="#" role="button")
+												span.kk-theme-label-dark Light theme
+												span.kk-theme-label-light Dark theme
+										li: hr.dropdown-divider
+										li: a.dropdown-item(href="#" onclick="logout()") Logout
 
-			.container-fluid.flex-grow-1
-				.row.h-100
-					aside.col-md-2.bg-light.p-0.sidebar#sidebar
-						block sidebar
-							if projects_unlimited
-								.d-flex.justify-content-between.align-items-center.mb-3.px-3.pt-3
-									h6.mb-0 My Projects
-									button.btn.btn-sm.btn-outline-primary#new-project-btn(title="New project")
-										!= icon('add')
-							#project-list
+				.page-body.kk-page-body
+					.container-fluid.kk-page-container
+						.kk-content-grid
+							.kk-content-main
+								#chat-results-panel.d-none.mb-4
+									.d-flex.justify-content-between.align-items-center.mb-3
+										h6.mb-0
+											!= icon('search', 'me-1')
+											| Chat Results
+										button.btn.btn-sm.btn-outline-secondary#close-chat-results(title="Close results")
+											!= icon('close')
+									#chat-results-list
+								#page-content
+									block content
 
-							if !projects_unlimited && is_hosted
-								a.d-block.text-center.small.my-3.px-3.text-primary(href="/settings/subscription") Need unlimited projects?
-
-							a.d-flex.align-items-center.text-decoration-none.text-muted.small(href="/trash")
-								!= icon('delete', 'ms-2')
-								span.ms-2 Global Trash
-								span.ms-auto.d-none#trash-count-badge
-
-					main.col-md-7.p-4#main-content
-						#chat-results-panel.d-none.mb-4
-							.d-flex.justify-content-between.align-items-center.mb-3
-								h6.mb-0
-									!= icon('search', 'me-1')
-									| Chat Results
-								button.btn.btn-sm.btn-outline-secondary#close-chat-results(title="Close results")
-									!= icon('close')
-							#chat-results-list
-						#page-content
-							block content
-
-					aside.col-md-3.p-3.border-start#chat-sidebar
-						block chat
-							include includes/chat_sidebar
+							aside.kk-chat-rail#chat-sidebar
+								block chat
+									include includes/chat_sidebar
 
 		#kk-search-backdrop.kk-search-backdrop.d-none
 		#kk-search-palette.kk-search-palette.d-none(role="dialog" aria-modal="true" aria-labelledby="kk-search-title")

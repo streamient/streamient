@@ -5,8 +5,21 @@ html(lang="en")
 		meta(name="viewport" content="width=device-width, initial-scale=1")
 		title #{title || 'Admin — Kumbukum'}
 		link(href='/static/images/favicon.ico' rel="shortcut icon")
-		link(href=`/static/v-${v}/css/vendor.css` rel="stylesheet")
+		script.
+			(function () {
+				try {
+					var t = localStorage.getItem('kk-theme');
+					if (t !== 'light' && t !== 'dark') t = 'dark';
+					document.documentElement.setAttribute('data-theme', t);
+					document.documentElement.setAttribute('data-bs-theme', t);
+				} catch (e) {
+					document.documentElement.setAttribute('data-theme', 'dark');
+					document.documentElement.setAttribute('data-bs-theme', 'dark');
+				}
+			})();
+		link(href=`/static/v-${v}/css/admin_vendor.css` rel="stylesheet")
 		link(href=`/static/v-${v}/css/app.css` rel="stylesheet")
+		link(href=`/static/v-${v}/css/kumbukum-tabler.css` rel="stylesheet")
 		block head
 		style.
 			html, body { height: 100%; }

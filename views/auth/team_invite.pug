@@ -4,45 +4,39 @@ block head
 	title Team Invite — Kumbukum
 
 block body
-	.container
-		.row.justify-content-center.mt-5
-			.col-md-10.my-auto
-				.card.shadow
-					.card-body
-						.text-center.logo-form
-							.mb-4
-								include ../includes/white_label_auth_logo
-						if error
-							.alert.alert-danger= error
-						if invite
-							h4.mb-3 Join #{invite.tenant.name}
-							p.text-muted.mb-4
-								| You were invited to join this account as a 
-								strong.text-capitalize= invite.role
-								| .
-							if wrongUser
-								.alert.alert-warning
-									| You are signed in as #{currentUser.email}. This invite is for #{invite.email}.
-								p.small.text-muted.mb-0 Sign out, then sign in with the invited email and open this link again.
-							else if currentUser
-								p.mb-3 Signed in as 
-									strong= currentUser.email
-								form(action="/team-invite" method="POST")
-									input(type="hidden" name="token" value=token)
-									button.btn.btn-primary.w-100(type="submit") Accept invitation
-							else if existingUser
-								p.mb-3 This email already has a Kumbukum account.
-								a.btn.btn-primary.w-100(href="/login") Sign in first
-								p.small.text-muted.mt-3.mb-0 After signing in, open this invitation link again to join the account.
-							else
-								form(action="/team-invite" method="POST")
-									input(type="hidden" name="token" value=token)
-									.mb-3
-										label.form-label(for="name") Name
-										input.form-control#name(type="text" name="name" value=suggestedName required)
-									.mb-4
-										label.form-label(for="password") Choose a password
-										input.form-control#password(type="password" name="password" minlength="8" required)
-									button.btn.btn-primary.w-100(type="submit") Create account and join
-						else
-							p.text-muted This invite is no longer available.
+	if error
+		.alert.alert-danger= error
+	if invite
+		h1.h2.mb-2= 'Join ' + invite.tenant.name
+		p.text-muted.mb-5
+			span You were invited to join this account as a
+			strong.text-capitalize.ms-1= invite.role
+			span .
+		if wrongUser
+			.alert.alert-warning
+				span= 'You are signed in as ' + currentUser.email + '. This invite is for ' + invite.email + '.'
+			p.small.text-muted.mb-0 Sign out, then sign in with the invited email and open this link again.
+		else if currentUser
+			p.mb-3
+				span Signed in as
+				strong.ms-1= currentUser.email
+			form(action="/team-invite" method="POST")
+				input(type="hidden" name="token" value=token)
+				button.btn.btn-primary.btn-sm.w-100(type="submit") Accept invitation
+		else if existingUser
+			p.mb-3 This email already has a Kumbukum account.
+			a.btn.btn-primary.btn-sm.w-100(href="/login") Sign in first
+			p.small.text-muted.mt-3.mb-0 After signing in, open this invitation link again to join the account.
+		else
+			form(action="/team-invite" method="POST")
+				input(type="hidden" name="token" value=token)
+				.mb-3
+					label.form-label(for="name") Name
+					input.form-control.form-control-sm#name(type="text" name="name" value=suggestedName required)
+				.mb-4
+					label.form-label(for="password") Choose a password
+					input.form-control.form-control-sm#password(type="password" name="password" minlength="8" required)
+				button.btn.btn-primary.btn-sm.w-100(type="submit") Create account and join
+	else
+		h1.h2.mb-2 Invitation unavailable
+		p.text-muted.mb-0 This invite is no longer available.

@@ -33,6 +33,7 @@ import importRoutes from './routes/import.js';
 import { backfillGitSyncMode } from './services/git_sync_service.js';
 import { backfillTypesenseTrashFields } from './services/typesense_backfill_service.js';
 import { getWhiteLabelAssetsDir, resolveWhiteLabelRequest } from './services/white_label_service.js';
+import { getAuthAssetUrl, getRandomAuthBackgroundUrl, preloadAuthAssets, preloadAuthBackgrounds, serveAuthAsset } from './services/auth_asset_service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -155,6 +156,7 @@ app.use('/static', (req, res, next) => {
 });
 app.use('/static', express.static(path.join(__dirname, 'public'), _static_cache_control));
 app.use('/white-label-assets', express.static(getWhiteLabelAssetsDir(), _static_cache_control));
+app.get('/auth-assets/:name', serveAuthAsset);
 
 // No cache for dynamic content
 app.use((req, res, next) => {
@@ -239,6 +241,18 @@ async function start() {
 	await backfillTypesenseTrashFields();
 	await backfillStarterPlan();
 	await initRedis();
+	if (SERVER_MODE === 'app') {
+		try {
+			await preloadAuthAssets();
+			await preloadAuthBackgrounds();
+			app.locals.getAuthLoginCoverUrl = () => getRandomAuthBackgroundUrl(app.locals.v) || getAuthAssetUrl('login-cover');
+			app.locals.authLoginCoverUrl = app.locals.getAuthLoginCoverUrl();
+		} catch (err) {
+			log.warn({ err }, 'Auth asset preload failed');
+			app.locals.getAuthLoginCoverUrl = () => '';
+			app.locals.authLoginCoverUrl = '';
+		}
+	}
 	await initTypesense();
 
 	if (SERVER_MODE === 'scheduler') {

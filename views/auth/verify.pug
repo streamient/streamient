@@ -4,24 +4,17 @@ block head
 	title Confirm Your Account — Kumbukum
 
 block body
-	.container
-		.row.justify-content-center.mt-5
-			.col-md-5.my-auto
-				.card.shadow
-					.card-body
-						.text-center.logo-form
-							.mb-5
-								include ../includes/white_label_auth_logo
-
-						if error
-							.alert.alert-danger= error
-							.mt-3.text-center
-								a(href="/signup") Sign up again
-						else
-							h3.mb-4 Confirm your account
-							form(method="POST" action="/verify")
-								input(type="hidden" name="token" value=token)
-								button.btn.btn-primary.w-100(type="submit") Yes, activate my account
+	if error
+		h1.h2.mb-2 Confirm account
+		.alert.alert-danger= error
+		.mt-4
+			a(href="/signup") Sign up again
+	else
+		h1.h2.mb-2 Confirm your account
+		p.text-muted.mb-5 Activate your Kumbukum account.
+		form(method="POST" action="/verify")
+			input(type="hidden" name="token" value=token)
+			button.btn.btn-primary.btn-sm.w-100(type="submit") Yes, activate my account
 
 block scripts
 	script(src=`/static/v-${v}/js/vendor.js` type="module")

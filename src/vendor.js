@@ -1,5 +1,5 @@
-// Vendor JS bundle — Bootstrap + SweetAlert2 + Huebee + JSURL + FilePond + Tagify + Tom Select
-export { Collapse, Dropdown, Modal, Offcanvas, Tab, Toast, Tooltip } from 'bootstrap';
+// Vendor JS bundle — Tabler + SweetAlert2 + Huebee + JSURL + FilePond + Tagify + Tom Select
+export { Collapse, Dropdown, Modal, Offcanvas, Tab, Toast, Tooltip } from '@tabler/core';
 export { default as Huebee } from 'huebee';
 import * as JSURL from 'jsurl2';
 export { JSURL };
@@ -25,11 +25,11 @@ const alertIcons = {
 };
 
 const alertGlyphs = {
-	checkCircle: 'check_circle',
-	cancel: 'cancel',
-	warning: 'warning',
-	info: 'info',
-	question: 'help',
+	checkCircle: 'circle-check',
+	cancel: 'circle-x',
+	warning: 'alert-triangle',
+	info: 'info-circle',
+	question: 'help-circle',
 };
 
 const decorateSwalOptions = (options) => {
@@ -38,7 +38,7 @@ const decorateSwalOptions = (options) => {
 	const glyph = alertGlyphs[alertIcons[options.icon]];
 	return {
 		...options,
-		iconHtml: `<span class="kk-icon material-symbols-outlined" aria-hidden="true">${glyph}</span>`,
+		iconHtml: `<span class="kk-icon ti ti-${glyph}" aria-hidden="true"></span>`,
 		customClass: {
 			...options.customClass,
 			icon: ['swal2-kk-icon', options.customClass?.icon].filter(Boolean).join(' '),
@@ -61,8 +61,8 @@ Swal.fire = (...args) => {
 	return originalSwalFire(...args);
 };
 
-// Make SweetAlert2 + JSURL + FilePond + Tagify + Tom Select + marked + Bootstrap Modal/Dropdown available globally for non-module scripts
-import { Modal as BsModal, Dropdown as BsDropdown } from 'bootstrap';
+// Make SweetAlert2 + JSURL + FilePond + Tagify + Tom Select + marked + Tabler Modal/Dropdown available globally for non-module scripts
+import { Modal as BsModal, Dropdown as BsDropdown } from '@tabler/core';
 window.Swal = Swal;
 window.JSURL = JSURL;
 window.FilePond = FilePond;
