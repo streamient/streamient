@@ -31,7 +31,7 @@
 				else
 					.alert.alert-secondary.mb-3
 						!= icon('info', 'me-2')
-						| You're on the Free plan — bring your own AI key, 1 project, and up to 5 users.
+						| You're on the Free plan — 1 project, unlimited users, and AI included (50 requests/day, or bring your own key for unlimited).
 
 				table.table.table-sm.mb-4
 					tbody
@@ -62,7 +62,9 @@
 									span.ms-2 Start 7-day Pro trial
 						a.btn.btn-primary(href="/billing/checkout?plan=pro")
 							!= icon('creditCard')
-							span.ms-2 Upgrade to Pro — $99/mo
+							span.ms-2 Upgrade to Pro — $49/mo
+							span.ms-2.text-decoration-line-through.opacity-75 $99
+						.text-muted.fs-9.w-100 Launch pricing — locked in for as long as you stay subscribed.
 
 				.mt-4
 					h6.text-muted.text-uppercase.fs-9.mb-2 Plans
@@ -70,18 +72,20 @@
 						.col-md-6
 							.border.rounded.p-3.h-100
 								.fw-bold.mb-1 Free
-								.text-muted.small.mb-2 Bring your own key
+								.text-muted.small.mb-2 AI included
 								ul.small.mb-0.ps-3
-									li Connect your OpenAI or Gemini API key
+									li Built-in AI (50 requests/day) — or bring your own key
 									li Unlimited notes, memories, URLs, emails
+									li Unlimited users
 									li 1 project
-									li 5 users
 						.col-md-6
 							.border.rounded.p-3.h-100
-								.fw-bold.mb-1 Pro / Team — $99/mo
-								.text-muted.small.mb-2 Turnkey AI included
+								.fw-bold.mb-1
+									| Pro / Team — $49/mo
+									span.ms-1.text-muted.text-decoration-line-through.fw-normal $99
+								.text-muted.small.mb-2 Launch pricing — advanced AI, unlimited everything
 								ul.small.mb-0.ps-3
-									li Managed OpenAI & Gemini models out of the box
+									li Advanced AI model with unlimited requests
 									li Email storage and imports
 									li Git Sync
 									li Unlimited projects & users

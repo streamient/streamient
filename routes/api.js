@@ -37,6 +37,7 @@ import * as teamService from '../services/team_service.js';
 import * as byoAiService from '../services/byo_ai_service.js';
 import * as whiteLabelService from '../services/white_label_service.js';
 import { getBillingUserForHost, hasProFeatureAccess, effectiveResourceLimits, isAtLimit } from '../services/subscription_access_service.js';
+import { createAiDailyLimiter } from '../middleware/rate_limit.js';
 import { decorateEmailForClient } from '../modules/email_display.js';
 import config from '../config.js';
 import crypto from 'node:crypto';
@@ -1033,7 +1034,12 @@ router.post('/search/knowledge', async (req, res) => {
 
 // ---- AI Chat ----
 
-router.post('/chat', async (req, res) => {
+// Daily managed-AI cap for hosted Free workspaces on the platform key (BYOK,
+// Pro, trials, and self-hosted skip). Per-route so it runs after auth/tenant
+// middleware; MCP's chat tool proxies to these endpoints, so it's covered too.
+const aiDailyLimiter = createAiDailyLimiter();
+
+router.post('/chat', aiDailyLimiter, async (req, res) => {
 	try {
 		const { query, conversation_id, project_id } = req.body;
 		if (!query) return res.status(400).json({ error: 'query required' });
@@ -1068,7 +1074,7 @@ router.post('/chat', async (req, res) => {
 	}
 });
 
-router.post('/chat/stream', async (req, res) => {
+router.post('/chat/stream', aiDailyLimiter, async (req, res) => {
 	res.setHeader('Content-Type', 'text/event-stream');
 	res.setHeader('Cache-Control', 'no-cache');
 	res.setHeader('Connection', 'keep-alive');
@@ -1163,7 +1169,7 @@ router.delete('/chat/conversations/:id', async (req, res) => {
 });
 
 // Legacy endpoint — deprecated, use POST /chat instead
-router.post('/chat/search', async (req, res) => {
+router.post('/chat/search', aiDailyLimiter, async (req, res) => {
 	try {
 		const { query, stream: useStream } = req.body;
 		if (!query) return res.status(400).json({ error: 'query required' });

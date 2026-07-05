@@ -1,5 +1,5 @@
 import config from '../config.js';
-import { resolveLlmApiKey } from '../services/byo_ai_service.js';
+import { resolveLlmKeyContext } from '../services/byo_ai_service.js';
 import * as OtelRuntime from './otel_runtime.js';
 
 const PROVIDERS = {
@@ -45,25 +45,27 @@ const BYO_FALLBACK_ORDER = {
 };
 
 /**
- * Resolve provider name and API key.
- * Accepts an explicit provider string or falls back to config.llm.chatProvider.
- * If the requested provider has no key but the other provider does, it switches
- * (the caller should then use the resolved provider's default model).
+ * Resolve provider name, API key, and key context.
+ * Accepts an explicit provider string or falls back to config.llm.chatProvider —
+ * except for managed (platform-key) tenants, whose provider comes from the
+ * plan's model matrix (config.llm.planModels) regardless of the deployment's
+ * global provider setting. If the resolved provider has no key but the other
+ * one does, it switches (the caller then uses that provider's default model).
  */
 async function resolveProvider(providerName, options = {}) {
-	const requested = providerName || config.llm.chatProvider || 'google';
+	const ctx = await resolveLlmKeyContext({ hostId: options.hostId, scope: options.scope });
+	let requested = providerName || config.llm.chatProvider || 'google';
+	if (ctx.mode === 'managed') {
+		requested = config.llm.planModels[ctx.plan]?.provider || 'google';
+	}
 	if (!PROVIDERS[requested]) throw new Error(`Unknown LLM provider: ${requested}`);
 	const candidates = BYO_FALLBACK_ORDER[requested] || [requested];
 
 	for (const name of candidates) {
 		const provider = PROVIDERS[name];
 		if (!provider) continue;
-		const apiKey = await resolveLlmApiKey({
-			hostId: options.hostId,
-			provider: name,
-			scope: options.scope,
-		});
-		if (apiKey) return { name, provider, apiKey, switched: name !== requested };
+		const apiKey = ctx.keys[name] || '';
+		if (apiKey) return { name, provider, apiKey, ctx, switched: name !== requested };
 	}
 
 	const err = new Error('No AI API key is configured. Add your OpenAI or Gemini API key in Settings → AI to enable AI features.');
@@ -98,13 +100,20 @@ export async function hasLlmApiKey({ hostId = null, provider, scope = 'global' }
  *   maxTokens - Max tokens (default 4096)
  *   hostId    - Tenant host ID for account-scoped API key resolution
  *   scope     - LLM key scope: global or email
+ *   purpose   - Managed model matrix slot: 'chat' | 'nlSearch' (default 'chat')
  */
-export async function chatCompletion({ messages, stream = false, provider: providerOverride, model: modelOverride, maxTokens = 4096, hostId = null, scope = 'global' }) {
-	const { name, provider, apiKey, switched } = await resolveProvider(providerOverride, { hostId, scope });
+export async function chatCompletion({ messages, stream = false, provider: providerOverride, model: modelOverride, maxTokens = 4096, hostId = null, scope = 'global', purpose = 'chat' }) {
+	const { name, provider, apiKey, ctx, switched } = await resolveProvider(providerOverride, { hostId, scope });
 	// When we fell back to a different provider than requested, the configured
 	// model override was for the original provider — use the resolved provider's
-	// default model instead.
-	const model = (switched ? '' : modelOverride) || provider.defaultModel;
+	// default model instead. Managed (platform-key) tenants are forced onto their
+	// plan's model — the caller's override only applies to BYOK/self-hosted.
+	let model;
+	if (ctx.mode === 'managed') {
+		model = (switched ? '' : config.llm.planModels[ctx.plan]?.[purpose]) || provider.defaultModel;
+	} else {
+		model = (switched ? '' : modelOverride) || provider.defaultModel;
+	}
 
 	return OtelRuntime.createCustomSpan('gen_ai.chat.completion', async (span) => {
 		span.setAttribute('gen_ai.system', name);
@@ -210,6 +219,7 @@ export async function nlSearchCompletion({ messages, maxTokens = 1024, hostId = 
 		maxTokens,
 		hostId,
 		scope,
+		purpose: 'nlSearch',
 	});
 }
 
@@ -225,6 +235,7 @@ export async function chatModelCompletion({ messages, stream = false, maxTokens 
 		maxTokens,
 		hostId,
 		scope,
+		purpose: 'chat',
 	});
 }
 

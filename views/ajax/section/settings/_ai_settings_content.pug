@@ -27,7 +27,13 @@ h4.mb-4 AI
 							span.d-block - Use our internal product names exactly as written.
 				.col-lg-5
 					h6.mb-3 AI provider keys
-					p.text-muted.small Used for general AI chat and search.
+					p.text-muted.small
+						| Optional — Kumbukum's built-in AI works without any key. Add your own
+						| OpenAI or Gemini key to run AI chat and search on your own account
+						| instead
+						if is_hosted && plan !== 'pro'
+							|  (and remove the Free plan's daily AI limit)
+						| .
 					.mb-3
 						label.form-label(for="byo-global-openai") OpenAI API key
 						.input-group.input-group-sm

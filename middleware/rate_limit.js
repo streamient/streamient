@@ -2,6 +2,9 @@ import crypto from 'node:crypto';
 import rateLimit from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import { getRedisClient } from '../modules/redis.js';
+import { Tenant } from '../modules/tenancy.js';
+import { tenantHasByoKey } from '../services/byo_ai_service.js';
+import { hasProFeatureAccess } from '../services/subscription_access_service.js';
 import config from '../config.js';
 import { createLogger } from '../modules/logger.js';
 
@@ -260,6 +263,50 @@ export function createGeneralApiLimiter() {
 		limit: rateLimitConfig.generalPerMinute,
 		skip: function skipGeneral(request) {
 			return shouldSkipCommon(request) || isSearchReadApi(request);
+		},
+	});
+}
+
+/**
+ * Daily managed-AI request cap, keyed per workspace (host). Applies only to
+ * hosted Free tenants on the platform key: self-hosted installs, tenants with
+ * their own BYO key, and Pro / active-trial accounts are skipped. Mount
+ * per-route on the AI (chat) endpoints AFTER auth/tenant middleware so
+ * req.host_id / req.isHosted / req.billingUser are set — not in the app-level
+ * limiter stack, which runs before auth.
+ */
+export function createAiDailyLimiter() {
+	const limit = config.plans?.free?.aiDaily || 0;
+	if (!limit) return createNoopLimiter();
+
+	return rateLimit({
+		windowMs: 24 * 60 * 60 * 1000,
+		limit,
+		keyGenerator: (request) => `host:${request.host_id}`,
+		store: getRedisStore('ai-daily'),
+		standardHeaders: 'draft-7',
+		legacyHeaders: false,
+		skip: async (request) => {
+			if (!request.isHosted || !request.host_id) return true;
+			try {
+				const tenant = await Tenant.findOne({ host_id: request.host_id }).select('plan settings.byo_ai').lean();
+				if (!tenant) return true;
+				if (tenantHasByoKey(tenant)) return true;
+				return hasProFeatureAccess(request.billingUser, tenant.plan || 'free', true);
+			} catch (err) {
+				// Fail open: a broken plan lookup must not take AI down.
+				log.warn({ err, host_id: request.host_id }, 'AI daily limit skip check failed; failing open');
+				return true;
+			}
+		},
+		handler: (request, response) => {
+			log.warn({ host_id: request.host_id, path: getRequestPath(request) }, 'Daily AI limit reached');
+			return response.status(429).json({
+				error: `Daily AI limit reached — the Free plan includes ${limit} AI requests per day. Add your own OpenAI or Gemini key in Settings → AI for unlimited use of your own quota, or upgrade to Pro.`,
+				code: 'AI_DAILY_LIMIT',
+				limit,
+				upgrade_url: '/settings/subscription',
+			});
 		},
 	});
 }

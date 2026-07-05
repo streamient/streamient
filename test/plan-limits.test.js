@@ -11,7 +11,8 @@ describe('plan resource limits', () => {
 		const freeUser = { subscription_status: 'incomplete' };
 		assert.deepEqual(effectiveResourceLimits(freeUser, 'free', true, now), config.planLimits.free);
 		assert.equal(config.planLimits.free.projects, 1);
-		assert.equal(config.planLimits.free.users, 5);
+		// Users are unlimited on Free (0 = unlimited); only projects are capped.
+		assert.equal(config.planLimits.free.users, 0);
 	});
 
 	it('treats Pro, active trials, and self-hosted as unlimited', () => {

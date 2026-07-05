@@ -385,6 +385,24 @@ const swaggerSpec = {
             limit: { name: 'limit', in: 'query', schema: { type: 'integer', default: 50 } },
             project: { name: 'project', in: 'query', schema: { type: 'string' }, description: 'Filter by project ID' },
         },
+        responses: {
+            AiDailyLimit: {
+                description: 'Daily AI limit reached (hosted Free workspaces on the built-in AI). Add your own OpenAI/Gemini key in Settings → AI or upgrade to Pro for unlimited AI.',
+                content: {
+                    'application/json': {
+                        schema: {
+                            type: 'object',
+                            properties: {
+                                error: { type: 'string' },
+                                code: { type: 'string', enum: ['AI_DAILY_LIMIT'] },
+                                limit: { type: 'integer', description: 'AI requests allowed per day per workspace' },
+                                upgrade_url: { type: 'string' },
+                            },
+                        },
+                    },
+                },
+            },
+        },
     },
     security: [{ BearerAuth: [] }, { AccessToken: [] }],
     paths: {
@@ -1777,6 +1795,7 @@ const swaggerSpec = {
                             },
                         },
                     },
+                    429: { $ref: '#/components/responses/AiDailyLimit' },
                 },
             },
         },
@@ -1794,6 +1813,7 @@ const swaggerSpec = {
                         description: 'SSE stream with events: token ({"text":"..."}), done ({"conversation_id":"...", "results":[], "action":null, "display_in":"panel|chat"}), error ({"error":"..."})',
                         content: { 'text/event-stream': { schema: { type: 'string' } } },
                     },
+                    429: { $ref: '#/components/responses/AiDailyLimit' },
                 },
             },
         },
@@ -1829,6 +1849,7 @@ const swaggerSpec = {
                 },
                 responses: {
                     200: { description: 'OK (JSON or SSE stream)', content: { 'application/json': { schema: { type: 'object', properties: { answer: { type: 'string' } } } } } },
+                    429: { $ref: '#/components/responses/AiDailyLimit' },
                 },
             },
         },

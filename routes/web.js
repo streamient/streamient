@@ -76,11 +76,6 @@ router.use(async (req, res, next) => {
 	const plan = tenant?.plan || 'free';
 	const is_hosted = req.isHosted;
 	const proOnlyFeatureEnabled = hasProFeatureAccess(billingUser, plan, is_hosted);
-	// Free (BYOK) tenants with no managed AI must supply at least one key.
-	const hasByoKey = Boolean(
-		tenant?.settings?.byo_ai?.global?.openai_api_key ||
-		tenant?.settings?.byo_ai?.global?.gemini_api_key,
-	);
 	res.locals.user = user;
 	res.locals.billing_user = billingUser;
 	res.locals.projects = projects;
@@ -98,7 +93,6 @@ router.use(async (req, res, next) => {
 	// Pro/trial/self-hosted get unlimited projects; Free is capped (hide the +).
 	res.locals.projects_unlimited = proOnlyFeatureEnabled;
 	res.locals.byo_ai_enabled = isByoAiSettingsAccessEnabled(req);
-	res.locals.needs_api_key = is_hosted && !proOnlyFeatureEnabled && !hasByoKey;
 	res.locals.host_id = req.host_id;
 	res.locals.ws_url = config.wsUrl;
 	res.locals.impersonating = req.session.impersonating || false;
@@ -114,26 +108,9 @@ router.use(async (req, res, next) => {
 	next();
 });
 
-// Note: Free is a permanent, fully-usable plan, so there is no global
-// subscription gate. Pro-only features (Email, Git Sync, managed AI) are gated
-// individually.
-
-// Onboarding gate: hosted Free users with no AI key see only the key-entry page
-// until they add a key (or sign out). needs_api_key is per-request (false when the
-// request host isn't hosted), so these can register unconditionally.
-router.get('/onboarding/api-key', (req, res) => {
-	if (!res.locals.needs_api_key) return res.redirect('/dashboard');
-	res.render('onboarding/api_key', { title: 'Add your AI key' });
-});
-
-router.use((req, res, next) => {
-	if (!res.locals.needs_api_key) return next();
-	if (req.path === '/onboarding/api-key') return next();
-	if (req.path.startsWith('/ajax/')) {
-		return res.status(409).json({ error: 'API key required', redirect: '/onboarding/api-key' });
-	}
-	return res.redirect('/onboarding/api-key');
-});
+// Note: Free is a permanent, fully-usable plan with managed AI included, so
+// there is no global subscription gate and no API-key onboarding gate. Pro-only
+// features (Email AI, Git Sync) are gated individually.
 
 router.get('/dashboard', (req, res) => res.render('dashboard', { title: 'Dashboard' }));
 router.get('/notes', (req, res) => res.render('notes', { title: 'Notes' }));

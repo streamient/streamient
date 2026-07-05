@@ -120,6 +120,18 @@ function initChat() {
 				return;
 			}
 
+			if (res.status === 429) {
+				let data = null;
+				try { data = await res.json(); } catch { /* non-JSON body */ }
+				thinkingRow.remove();
+				let message = data?.error || 'Daily AI limit reached — please try again tomorrow.';
+				if (data?.code === 'AI_DAILY_LIMIT' && data?.upgrade_url) {
+					message += ` [Upgrade to Pro](${data.upgrade_url})`;
+				}
+				addMessage('assistant', message);
+				return;
+			}
+
 			if (!res.ok || !res.body) {
 				throw new Error('Stream request failed');
 			}

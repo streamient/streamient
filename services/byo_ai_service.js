@@ -33,12 +33,6 @@ function decryptStoredValue(value) {
 	return decrypt(value);
 }
 
-function envApiKey(providerName) {
-	if (providerName === 'google' || providerName === 'gemini') return config.llm.googleApiKey;
-	if (providerName === 'openai') return config.llm.openaiApiKey;
-	return '';
-}
-
 function summarizeProvider(tenant, scope, provider) {
 	const configured = !!getStoredValue(tenant, scope, provider);
 	return {
@@ -144,19 +138,6 @@ export async function getAiInstructions(hostId) {
 }
 
 /**
- * Resolve the API key to use for an LLM call.
- *
- * New pricing model:
- *  - Free plan = Bring Your Own Key. The tenant's own key is used for any plan
- *    (incl. Free); there is NO fallback to our managed (env) keys for Free.
- *  - Pro / active trial = Turnkey managed AI. Falls back to our env keys when
- *    no personal key is set (Pro users may still override with their own key).
- *  - Self-hosted = env keys only.
- *
- * Returns `null` when a hosted Free tenant has no key configured, so the caller
- * surfaces a "add your API key" error instead of silently using our managed key.
- */
-/**
  * Turn a failed provider response into a concise, user-facing reason. Distinguishes
  * a rejected key from a depleted-credits/quota state so the verify result reflects
  * whether the key can actually run AI (not just that it authenticates).
@@ -222,8 +203,8 @@ export async function verifyProviderKey(provider, apiKey) {
 
 /**
  * Return the tenant's own stored (decrypted) BYO key for a provider, or '' when
- * none is set. Unlike resolveLlmApiKey this never falls back to managed/env keys
- * — used to verify the key the user actually saved.
+ * none is set. Unlike resolveLlmKeyContext this never falls back to managed/env
+ * keys — used to verify the key the user actually saved.
  */
 export async function getStoredProviderKey(hostId, provider, scope = 'global') {
 	const byoProvider = normalizeProvider(provider);
@@ -234,26 +215,59 @@ export async function getStoredProviderKey(hostId, provider, scope = 'global') {
 	return value ? decryptStoredValue(value) : '';
 }
 
-export async function resolveLlmApiKey({ hostId = null, provider, scope = 'global' } = {}) {
-	const byoProvider = normalizeProvider(provider);
-	const fallback = envApiKey(provider);
-	if (!hostId || !byoProvider) return fallback;
-	const isHosted = config.isHosted;
-	if (!isHosted) return fallback;
+/**
+ * Resolve LLM key material + routing context for a host.
+ *
+ *  - mode 'env'     — self-hosted install or no hostId: deployment env keys and
+ *                     the global model config apply; plan is null.
+ *  - mode 'byok'    — hosted tenant with at least one stored key: the tenant's
+ *                     own (decrypted) keys are used — their cost, no daily cap,
+ *                     deployment-global model config applies.
+ *  - mode 'managed' — hosted tenant on our platform keys: env keys plus the
+ *                     plan's managed model matrix (config.llm.planModels);
+ *                     plan is 'pro' (Pro or active trial) or 'free'.
+ *
+ * keys.openai / keys.google are '' when unavailable — callers keep their
+ * provider-fallback behavior for one-key tenants.
+ */
+export async function resolveLlmKeyContext({ hostId = null, scope = 'global' } = {}) {
+	const envKeys = { openai: config.llm.openaiApiKey, google: config.llm.googleApiKey };
+	if (!hostId || !config.isHosted) return { mode: 'env', plan: null, keys: envKeys };
 
 	const tenant = await Tenant.findOne({ host_id: hostId }).select('plan settings.byo_ai').lean();
-	if (!tenant) return fallback;
+	if (!tenant) return { mode: 'env', plan: null, keys: envKeys };
 
-	// 1. Prefer the tenant's own BYO key (the Free BYOK path; also a Pro override).
-	const value = getStoredValue(tenant, normalizeLlmScope(scope), byoProvider);
-	if (value) return decryptStoredValue(value);
+	const normalizedScope = normalizeLlmScope(scope);
+	const storedOpenai = getStoredValue(tenant, normalizedScope, 'openai');
+	const storedGemini = getStoredValue(tenant, normalizedScope, 'gemini');
+	if (storedOpenai || storedGemini) {
+		return {
+			mode: 'byok',
+			plan: tenant.plan || 'free',
+			keys: {
+				openai: storedOpenai ? decryptStoredValue(storedOpenai) : '',
+				google: storedGemini ? decryptStoredValue(storedGemini) : '',
+			},
+		};
+	}
 
-	// 2. No personal key: managed (turnkey) fallback only for plans that include
-	//    managed AI — Pro or an active trial.
-	if (tenant.plan === 'pro') return fallback;
-	const billingUser = await getBillingUserForHost(hostId);
-	if (hasProFeatureAccess(billingUser, tenant.plan, isHosted)) return fallback;
+	// Managed (platform-key) AI: every hosted plan falls back to our env keys —
+	// the plan only decides which managed model matrix applies.
+	let plan = 'free';
+	if (tenant.plan === 'pro') {
+		plan = 'pro';
+	} else {
+		const billingUser = await getBillingUserForHost(hostId);
+		if (hasProFeatureAccess(billingUser, tenant.plan, true)) plan = 'pro';
+	}
+	return { mode: 'managed', plan, keys: envKeys };
+}
 
-	// 3. Free plan without a key: no managed fallback.
-	return null;
+/**
+ * Whether a tenant (lean doc with settings.byo_ai selected) has any stored BYO
+ * key. Cheap predicate for gate/limiter checks that already hold the tenant.
+ */
+export function tenantHasByoKey(tenant) {
+	const scope = tenant?.settings?.byo_ai?.global;
+	return Boolean(scope?.openai_api_key || scope?.gemini_api_key);
 }

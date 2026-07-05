@@ -9,10 +9,12 @@ import { createLogger } from '../modules/logger.js';
 
 const log = createLogger('ai-chat');
 
-// Shown when a hosted Free (BYOK) tenant has no API key — avoids a cryptic
-// provider/Typesense failure ("API key is not a string") deep in the pipeline.
+// Shown when no LLM key resolves at all — hosted plans now include managed AI,
+// so this only fires on self-hosted installs without env keys (or a hosted
+// misconfiguration). Avoids a cryptic provider/Typesense failure ("API key is
+// not a string") deep in the pipeline.
 const NO_AI_KEY_ANSWER =
-	"AI chat needs an API key to work. You're on the **Free plan** (bring your own key) — add your own OpenAI or Gemini API key in **Settings → AI** to enable chat and search, or upgrade to **Pro** for managed AI.";
+	'AI is not configured on this server. Set `OPENAI_API_KEY` or `GOOGLE_API_KEY` in the server environment, or add your own key in **Settings → AI**.';
 
 function noAiKeyResult(conversationId = null) {
 	return { answer: NO_AI_KEY_ANSWER, results: [], action: null, conversationId: conversationId || null, displayIn: 'chat' };
@@ -26,7 +28,7 @@ function noAiKeyResult(conversationId = null) {
 export function friendlyChatError(err) {
 	const msg = String(err?.message || '');
 	if (/credits?\s+are\s+depleted|RESOURCE_EXHAUSTED|insufficient_quota|\bquota\b/i.test(msg)) {
-		return 'Your AI provider reports no remaining credits or quota for this API key. Add billing to your OpenAI/Gemini key in Settings → AI, or upgrade to Pro for managed AI.';
+		return 'Your AI provider reports no remaining credits or quota for this API key. Add billing to your OpenAI/Gemini key in Settings → AI, or remove it to use the built-in AI.';
 	}
 	if (/API key not valid|api[\s_-]?key\b.*(invalid|not a string)|invalid\b.*api[\s_-]?key|PERMISSION_DENIED|unauthor|\b401\b|\b403\b/i.test(msg)) {
 		return 'Your AI API key was rejected by the provider. Re-check it in Settings → AI.';
@@ -667,7 +669,7 @@ export async function aiChatSearch(host_id, query, { stream = false } = {}) {
 		{ role: 'user', content: query },
 	];
 
-	return chatCompletion({ messages, stream });
+	return chatCompletion({ messages, stream, hostId: host_id });
 }
 
 function buildLegacyContext(results) {

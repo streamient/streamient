@@ -3,7 +3,7 @@ import Typesense from 'typesense';
 import config from '../config.js';
 import { emitToTenant } from './socket.js';
 import { getRedisClient } from './redis.js';
-import { normalizeLlmScope, resolveLlmApiKey } from '../services/byo_ai_service.js';
+import { normalizeLlmScope, resolveLlmKeyContext } from '../services/byo_ai_service.js';
 import { sanitizeDeep } from './text_sanitize.js';
 import { buildEmailExcerpt } from './email_display.js';
 import { createLogger } from './logger.js';
@@ -1470,21 +1470,32 @@ export async function ensureConversationModel(hostId, userId, options = {}) {
 	const llmScope = normalizeLlmScope(options.llmScope);
 	const modelId = getConversationModelId(hostId, userId, llmScope);
 
-	// 1. Resolve model configuration. Honor the BYO "one key is enough" rule:
-	//    prefer the configured provider/model, but fall back to the other provider
-	//    when its key isn't available — e.g. a Free (BYOK) tenant that supplied
-	//    only a Gemini key still gets a working conversation model instead of a
-	//    null OpenAI key (Typesense: "API key is not a string"). This mirrors the
-	//    LLM client's BYO_FALLBACK_ORDER used for chat/NL-search.
-	const configuredProvider = config.llm.tsConversationProvider || 'google';
-	const configuredModel = config.llm.tsConversationModel || TS_CONVERSATION_FALLBACK_MODELS[configuredProvider] || config.llm.googleModel;
+	// 1. Resolve model configuration. Managed (platform-key) tenants get their
+	//    plan's conversation model (config.llm.planModels); BYOK tenants and
+	//    self-hosted installs keep the deployment-global config. Honor the BYO
+	//    "one key is enough" rule: prefer the configured provider/model, but fall
+	//    back to the other provider when its key isn't available — e.g. a BYOK
+	//    tenant that supplied only a Gemini key still gets a working conversation
+	//    model instead of a null OpenAI key (Typesense: "API key is not a
+	//    string"). This mirrors the LLM client's BYO_FALLBACK_ORDER.
+	const ctx = await resolveLlmKeyContext({ hostId, scope: llmScope });
+	let configuredProvider;
+	let configuredModel;
+	if (ctx.mode === 'managed') {
+		const planModels = config.llm.planModels[ctx.plan] || {};
+		configuredProvider = planModels.provider || 'google';
+		configuredModel = planModels.conversation || TS_CONVERSATION_FALLBACK_MODELS[configuredProvider] || config.llm.googleModel;
+	} else {
+		configuredProvider = config.llm.tsConversationProvider || 'google';
+		configuredModel = config.llm.tsConversationModel || TS_CONVERSATION_FALLBACK_MODELS[configuredProvider] || config.llm.googleModel;
+	}
 	const providerOrder = configuredProvider === 'openai' ? ['openai', 'google'] : ['google', 'openai'];
 
 	let apiKey = null;
 	let resolvedProvider = configuredProvider;
 	let resolvedModel = configuredModel;
 	for (const prov of providerOrder) {
-		const candidate = await resolveLlmApiKey({ hostId, provider: prov, scope: llmScope });
+		const candidate = ctx.keys[prov];
 		if (candidate) {
 			apiKey = candidate;
 			resolvedProvider = prov;

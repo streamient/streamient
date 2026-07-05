@@ -34,6 +34,8 @@ x-env: &env
   SMTP_USER: ""
   SMTP_PASS: ""
   SMTP_FROM: "noreply@localhost"
+  # Global models: BYOK tenants and self-hosted installs. Managed (platform-key)
+  # hosted tenants use the per-plan matrix below instead.
   CHAT_AI_MODEL: "gpt-5.4-mini"
   CHAT_AI_MODEL_PROVIDER: openai
   NL_SEARCH_MODEL: "gpt-5.4-mini"
@@ -42,6 +44,17 @@ x-env: &env
   TS_CONVERSATION_MODEL_PROVIDER: openai
   OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
   GOOGLE_API_KEY: "${GOOGLE_API_KEY:-}"
+  # Managed per-plan AI (optional — config.js defaults: Free = google/gemini-2.5-flash-lite,
+  # Pro = google/gemini-3-flash, 50 Free AI requests/day per workspace).
+  FREE_AI_MODEL_PROVIDER: "${FREE_AI_MODEL_PROVIDER:-}"
+  FREE_CHAT_AI_MODEL: "${FREE_CHAT_AI_MODEL:-}"
+  FREE_NL_SEARCH_MODEL: "${FREE_NL_SEARCH_MODEL:-}"
+  FREE_TS_CONVERSATION_MODEL: "${FREE_TS_CONVERSATION_MODEL:-}"
+  PRO_AI_MODEL_PROVIDER: "${PRO_AI_MODEL_PROVIDER:-}"
+  PRO_CHAT_AI_MODEL: "${PRO_CHAT_AI_MODEL:-}"
+  PRO_NL_SEARCH_MODEL: "${PRO_NL_SEARCH_MODEL:-}"
+  PRO_TS_CONVERSATION_MODEL: "${PRO_TS_CONVERSATION_MODEL:-}"
+  FREE_AI_DAILY_LIMIT: "${FREE_AI_DAILY_LIMIT:-}"
   APP_URL: http://app.k.lan
   MCP_BASE_URL: http://mcp.k.lan
   WS_URL: ""

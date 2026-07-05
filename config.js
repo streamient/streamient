@@ -87,6 +87,14 @@ export function resolveRequestHosted(req) {
 	return isHostedHostname(hostname);
 }
 
+// Integer limit from env with a default; an explicit "0" means unlimited/off,
+// so `parseInt(x, 10) || fallback` would be wrong here.
+function parseLimitEnv(value, fallback) {
+	if (value === undefined || value === null || value === '') return fallback;
+	const parsed = parseInt(value, 10);
+	return Number.isNaN(parsed) || parsed < 0 ? fallback : parsed;
+}
+
 export function parseSmtpServersFromEnv(env = process.env) {
 	const defaultFrom = env.SMTP_FROM || 'noreply@localhost';
 	const serversEnv = (env.SMTP_SERVERS || '').trim();
@@ -204,17 +212,36 @@ const config = {
 		// verification and provider fallback. Override per deployment via env.
 		openaiModel: process.env.OPENAI_MODEL || 'gpt-4o',
 		googleModel: process.env.GOOGLE_MODEL || 'gemini-2.5-flash',
+		// Managed (platform-key) model matrix per plan — applies to hosted
+		// tenants without a BYO key. BYOK tenants and self-hosted installs keep
+		// the deployment-global chatModel/nlSearchModel/tsConversationModel above.
+		planModels: {
+			free: {
+				provider: process.env.FREE_AI_MODEL_PROVIDER || 'google',
+				chat: process.env.FREE_CHAT_AI_MODEL || 'gemini-2.5-flash-lite',
+				nlSearch: process.env.FREE_NL_SEARCH_MODEL || 'gemini-2.5-flash-lite',
+				conversation: process.env.FREE_TS_CONVERSATION_MODEL || 'gemini-2.5-flash-lite',
+			},
+			pro: {
+				provider: process.env.PRO_AI_MODEL_PROVIDER || 'google',
+				chat: process.env.PRO_CHAT_AI_MODEL || 'gemini-3-flash',
+				nlSearch: process.env.PRO_NL_SEARCH_MODEL || 'gemini-3-flash',
+				conversation: process.env.PRO_TS_CONVERSATION_MODEL || 'gemini-3-flash',
+			},
+		},
 	},
 
-	// Rate-limit tiers. Pro is unlimited; free is also treated as unlimited
-	// (free is BYOK, so AI cost is not ours). See middleware/rate_limit.js.
+	// Daily managed-AI request cap per workspace. 0 = unlimited. Applies only
+	// to hosted Free tenants on the platform key — BYOK, Pro, active trials,
+	// and self-hosted installs are uncapped. See middleware/rate_limit.js.
 	plans: {
-		pro: { apiRpm: 0, chatDaily: 0, mcpRpm: 0 },
+		free: { aiDaily: parseLimitEnv(process.env.FREE_AI_DAILY_LIMIT, 50) },
+		pro: { aiDaily: 0 },
 	},
 
 	// Hard resource limits per plan. 0 = unlimited.
 	planLimits: {
-		free: { projects: 1, users: 5 },
+		free: { projects: 1, users: 0 },
 		pro: { projects: 0, users: 0 },
 	},
 

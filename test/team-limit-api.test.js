@@ -116,7 +116,28 @@ describe('Free plan team user limit', () => {
 		AuditLog.create = originalAuditCreate;
 	});
 
-	it('blocks adding a 6th user on Free with an upgrade-worthy message', async () => {
+	it('allows adding a 6th user on Free (users are unlimited)', async () => {
+		memberCount = 5;
+		const server = await createServer();
+		try {
+			const res = await request(server, 'POST', '/team/members', {
+				name: 'New User', email: 'new@example.com', password: 'password123',
+			});
+			const json = await res.json();
+			assert.equal(res.status, 201);
+			assert.equal(json.member._id, 'membership-2');
+			assert.equal(json.member.user.email, 'new@example.com');
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
+	// The quota middleware stays mounted so a future cap is one config edit —
+	// prove the 403 path still works when a user cap is configured.
+	it('enforces a configured user cap with an upgrade-worthy message', async () => {
+		const originalUsers = config.planLimits.free.users;
+		config.planLimits.free.users = 5;
+		memberCount = 5;
 		const server = await createServer();
 		try {
 			const res = await request(server, 'POST', '/team/members', {
@@ -128,22 +149,7 @@ describe('Free plan team user limit', () => {
 			assert.equal(json.limit, 'users');
 			assert.match(json.error, /5 users/);
 		} finally {
-			await new Promise((resolve) => server.close(resolve));
-		}
-	});
-
-	it('allows adding a user when under the Free limit (quota guard passes)', async () => {
-		memberCount = 3;
-		const server = await createServer();
-		try {
-			const res = await request(server, 'POST', '/team/members', {
-				name: 'New User', email: 'new@example.com', password: 'password123',
-			});
-			const json = await res.json();
-			assert.equal(res.status, 201);
-			assert.equal(json.member._id, 'membership-2');
-			assert.equal(json.member.user.email, 'new@example.com');
-		} finally {
+			config.planLimits.free.users = originalUsers;
 			await new Promise((resolve) => server.close(resolve));
 		}
 	});

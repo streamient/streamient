@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 
 import config from '../config.js';
 import { Tenant } from '../modules/tenancy.js';
+import { User } from '../model/user.js';
 import { decrypt } from '../modules/encryption.js';
 import { getConversationModelId } from '../modules/typesense.js';
-import { getByoAiSettings, resolveLlmApiKey, updateByoAiSettings } from '../services/byo_ai_service.js';
+import { getByoAiSettings, resolveLlmKeyContext, tenantHasByoKey, updateByoAiSettings } from '../services/byo_ai_service.js';
 
 function baseByoAi() {
 	return {
@@ -115,16 +116,19 @@ describe('BYO AI service', () => {
 		assert.equal(settings.global.gemini_api_key.configured, false);
 	});
 
-	it('resolves global custom keys before environment keys', async () => {
+	it('prefers stored tenant keys (byok mode) over environment keys', async () => {
 		await updateByoAiSettings('host-1', {
 			global: {
 				gemini_api_key: 'custom-gemini',
 			},
 		});
 
-		const key = await resolveLlmApiKey({ hostId: 'host-1', provider: 'google', scope: 'global' });
+		const ctx = await resolveLlmKeyContext({ hostId: 'host-1', scope: 'global' });
 
-		assert.equal(key, 'custom-gemini');
+		assert.equal(ctx.mode, 'byok');
+		assert.equal(ctx.keys.google, 'custom-gemini');
+		assert.equal(ctx.keys.openai, '');
+		assert.equal(tenantHasByoKey(tenant), true);
 	});
 
 	it('uses stored keys for any hosted plan (BYOK), env keys when self-hosted', async () => {
@@ -134,30 +138,58 @@ describe('BYO AI service', () => {
 			},
 		});
 
-		// Free plan on hosted now uses the tenant's own key (Bring Your Own Key).
+		// Free plan on hosted uses the tenant's own key when one is stored.
 		tenant.plan = 'free';
-		assert.equal(
-			await resolveLlmApiKey({ hostId: 'host-1', provider: 'openai', scope: 'global' }),
-			'global-openai',
-		);
+		const freeCtx = await resolveLlmKeyContext({ hostId: 'host-1', scope: 'global' });
+		assert.equal(freeCtx.mode, 'byok');
+		assert.equal(freeCtx.keys.openai, 'global-openai');
 
 		// Self-hosted always uses env keys regardless of stored keys.
 		tenant.plan = 'pro';
 		config.isHosted = false;
-		assert.equal(
-			await resolveLlmApiKey({ hostId: 'host-1', provider: 'openai', scope: 'global' }),
-			'env-openai',
-		);
+		const selfCtx = await resolveLlmKeyContext({ hostId: 'host-1', scope: 'global' });
+		assert.equal(selfCtx.mode, 'env');
+		assert.equal(selfCtx.plan, null);
+		assert.equal(selfCtx.keys.openai, 'env-openai');
 	});
 
-	it('returns null for a hosted Free tenant with no key (no managed fallback)', async () => {
+	it('falls back to managed env keys for a hosted Free tenant with no key', async () => {
 		// Mocked tenant has no owner, so getBillingUserForHost resolves to no
-		// billing user → Free with no key → no managed fallback → null.
+		// billing user → no active trial → managed Free (platform key + Free models).
 		tenant.plan = 'free';
-		assert.equal(
-			await resolveLlmApiKey({ hostId: 'host-1', provider: 'openai', scope: 'global' }),
-			null,
-		);
+		const ctx = await resolveLlmKeyContext({ hostId: 'host-1', scope: 'global' });
+		assert.equal(ctx.mode, 'managed');
+		assert.equal(ctx.plan, 'free');
+		assert.deepEqual(ctx.keys, { openai: 'env-openai', google: 'env-gemini' });
+		assert.equal(tenantHasByoKey(tenant), false);
+	});
+
+	it('marks keyless Pro tenants as managed pro', async () => {
+		tenant.plan = 'pro';
+		const ctx = await resolveLlmKeyContext({ hostId: 'host-1', scope: 'global' });
+		assert.equal(ctx.mode, 'managed');
+		assert.equal(ctx.plan, 'pro');
+		assert.deepEqual(ctx.keys, { openai: 'env-openai', google: 'env-gemini' });
+	});
+
+	it('gives active no-card trials the pro managed tier', async () => {
+		const originalUserFindById = User.findById;
+		tenant.plan = 'free';
+		tenant.owner = 'owner-1';
+		User.findById = () => ({
+			select: async () => ({
+				subscription_status: 'trialing',
+				trial_source: 'no_card',
+				trial_ends_at: new Date(Date.now() + 24 * 60 * 60 * 1000),
+			}),
+		});
+		try {
+			const ctx = await resolveLlmKeyContext({ hostId: 'host-1', scope: 'global' });
+			assert.equal(ctx.mode, 'managed');
+			assert.equal(ctx.plan, 'pro');
+		} finally {
+			User.findById = originalUserFindById;
+		}
 	});
 
 	it('validates BYO AI scope and provider keys', async () => {
