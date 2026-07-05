@@ -6,6 +6,9 @@ html(lang="en")
 		title #{title || 'Kumbukum'}
 		- const __wlFavicon = typeof white_label !== 'undefined' && white_label && white_label.favicon_url ? white_label.favicon_url : '/static/images/favicon.ico'
 		link(href=__wlFavicon rel="shortcut icon")
+		if !(typeof white_label !== 'undefined' && white_label && white_label.favicon_url)
+			link(href="/static/images/favicon.svg" rel="icon" type="image/svg+xml")
+			link(href="/static/images/apple-touch-icon.png" rel="apple-touch-icon" sizes="180x180")
 		script.
 			(function () {
 				try {

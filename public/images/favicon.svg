@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Streamient">
+  <rect x="6" y="6" width="54" height="54" rx="7" fill="#0f0e0c"/>
+  <rect x="2" y="2" width="54" height="54" rx="7" fill="#fff6df" stroke="#0f0e0c" stroke-width="3"/>
+  <path d="M47 17H27C19 17 19 29 27 29H35C43 29 43 41 35 41H11" fill="none" stroke="#0f0e0c" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M47 17H27C19 17 19 29 27 29H35C43 29 43 41 35 41H11" fill="none" stroke="#6c7bff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
