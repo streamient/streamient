@@ -18,7 +18,7 @@
 		}
 
 		sentinel = document.createElement('div');
-		sentinel.className = ('kk-scroll-sentinel ' + sentinelClass).trim();
+		sentinel.className = ('st-scroll-sentinel ' + sentinelClass).trim();
 		sentinel.setAttribute('aria-hidden', 'true');
 		insertAfter.parentNode.insertBefore(sentinel, insertAfter.nextSibling);
 

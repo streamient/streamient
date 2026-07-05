@@ -99,11 +99,12 @@ function normalizeAttributes(tagName, attribs, state) {
 	}
 
 	if (tagName === 'img') {
+		delete clean['data-st-remote-src'];
 		delete clean['data-kk-remote-src'];
 		const src = String(clean.src || '').trim();
 		if (REMOTE_IMAGE_RE.test(src)) {
 			state.hasRemoteImages = true;
-			clean['data-kk-remote-src'] = src;
+			clean['data-st-remote-src'] = src;
 			delete clean.src;
 		}
 	}
@@ -123,7 +124,7 @@ export function sanitizeEmailHtml(value) {
 			a: [...GLOBAL_ATTRIBUTES, 'href', 'name', 'target', 'rel'],
 			area: [...GLOBAL_ATTRIBUTES, 'href', 'alt', 'shape', 'coords', 'target', 'rel'],
 			col: [...GLOBAL_ATTRIBUTES, 'span'],
-			img: [...GLOBAL_ATTRIBUTES, 'src', 'alt', 'border', 'data-kk-remote-src'],
+			img: [...GLOBAL_ATTRIBUTES, 'src', 'alt', 'border', 'data-st-remote-src'],
 			table: [...GLOBAL_ATTRIBUTES, 'border', 'cellpadding', 'cellspacing', 'role'],
 			td: [...GLOBAL_ATTRIBUTES, 'colspan', 'rowspan', 'scope'],
 			th: [...GLOBAL_ATTRIBUTES, 'colspan', 'rowspan', 'scope'],
@@ -132,7 +133,7 @@ export function sanitizeEmailHtml(value) {
 		allowedSchemesByTag: {
 			img: ['http', 'https', 'cid', 'data'],
 		},
-		allowedSchemesAppliedToAttributes: ['href', 'src', 'data-kk-remote-src'],
+		allowedSchemesAppliedToAttributes: ['href', 'src', 'data-st-remote-src'],
 		allowProtocolRelative: false,
 		parseStyleAttributes: false,
 		transformTags: {
@@ -142,7 +143,7 @@ export function sanitizeEmailHtml(value) {
 			}),
 		},
 		exclusiveFilter(frame) {
-			return frame.tag === 'img' && !frame.attribs?.src && !frame.attribs?.['data-kk-remote-src'];
+			return frame.tag === 'img' && !frame.attribs?.src && !frame.attribs?.['data-st-remote-src'];
 		},
 	});
 

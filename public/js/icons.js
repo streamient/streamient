@@ -96,7 +96,7 @@
 
 	function icon(name, extraClasses) {
 		var glyph = glyphs[name] || name;
-		var classes = ['kk-icon', 'ti', 'ti-' + glyph, extraClasses || ''].filter(Boolean).join(' ');
+		var classes = ['st-icon', 'ti', 'ti-' + glyph, extraClasses || ''].filter(Boolean).join(' ');
 		return '<span class="' + escapeHtml(classes) + '" aria-hidden="true"></span>';
 	}
 

@@ -24,7 +24,7 @@ const SLASH_COMMANDS = [
 	{ label: 'Horizontal Rule', icon: 'remove', command: (editor) => editor.chain().focus().setHorizontalRule().run() },
 ];
 
-const editorIcon = (name, extraClasses = '') => window.StreamientIcons?.icon(name, extraClasses) || `<span class="kk-icon material-symbols-outlined ${extraClasses}" aria-hidden="true">${name}</span>`;
+const editorIcon = (name, extraClasses = '') => window.StreamientIcons?.icon(name, extraClasses) || `<span class="st-icon material-symbols-outlined ${extraClasses}" aria-hidden="true">${name}</span>`;
 
 function createSlashMenu() {
 	const menu = document.createElement('div');
@@ -293,7 +293,7 @@ const EMAIL_TOOLBAR_BUTTONS = [
 
 function createEmailToolbar(editor) {
 	const toolbar = document.createElement('div');
-	toolbar.className = 'kk-email-editor-toolbar';
+	toolbar.className = 'st-email-editor-toolbar';
 	toolbar.setAttribute('role', 'toolbar');
 	toolbar.setAttribute('aria-label', 'Email formatting');
 
@@ -308,7 +308,7 @@ function createEmailToolbar(editor) {
 	EMAIL_TOOLBAR_BUTTONS.forEach((command) => {
 		const button = document.createElement('button');
 		button.type = 'button';
-		button.className = 'btn btn-sm btn-outline-secondary kk-email-editor-button';
+		button.className = 'btn btn-sm btn-outline-secondary st-email-editor-button';
 		button.dataset.command = command.name;
 		button.title = command.label;
 		button.setAttribute('aria-label', command.label);
@@ -331,7 +331,7 @@ export function createEmailEditor(element, { content = '', onUpdate = null, plac
 	element.innerHTML = '';
 	const toolbarMount = document.createElement('div');
 	const editorMount = document.createElement('div');
-	editorMount.className = 'kk-email-editor-body';
+	editorMount.className = 'st-email-editor-body';
 	element.appendChild(toolbarMount);
 	element.appendChild(editorMount);
 
@@ -348,7 +348,7 @@ export function createEmailEditor(element, { content = '', onUpdate = null, plac
 		content,
 		editorProps: {
 			attributes: {
-				class: 'kk-email-editor-prosemirror',
+				class: 'st-email-editor-prosemirror',
 			},
 		},
 	};

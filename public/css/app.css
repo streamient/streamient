@@ -1,24 +1,24 @@
 /* Streamient — App Styles */
 
 :root {
-	--kk-font-body: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
-	--kk-font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-	--bs-body-font-family: var(--kk-font-body);
+	--st-font-body: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+	--st-font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	--bs-body-font-family: var(--st-font-body);
 	--bs-body-font-size: 0.93rem;
 	--bs-badge-font-weight: 400;
 	--sidebar-bg: #f8f9fa;
 	--chat-bg: #f8f9fa;
 	--tag-color: #495057;
-	--bs-border-color: var(--kk-line-strong);
-	--bs-nav-tabs-link-hover-border-color: var(--kk-line-strong);
+	--bs-border-color: var(--st-line-strong);
+	--bs-nav-tabs-link-hover-border-color: var(--st-line-strong);
 }
 
 body {
 	height: 100vh;
-	font-family: var(--kk-font-body);
+	font-family: var(--st-font-body);
 }
 
-.kk-icon.material-symbols-outlined {
+.st-icon.material-symbols-outlined {
 	display: inline-block;
 	width: 1em;
 	overflow: hidden;
@@ -44,23 +44,23 @@ body {
 	-moz-osx-font-smoothing: grayscale;
 }
 
-.kk-icon,
-.btn .kk-icon,
-.nav-link .kk-icon,
-.dropdown-item .kk-icon,
-.list-group-item .kk-icon,
-.batch-floating-bar .kk-icon {
+.st-icon,
+.btn .st-icon,
+.nav-link .st-icon,
+.dropdown-item .st-icon,
+.list-group-item .st-icon,
+.batch-floating-bar .st-icon {
 	font-size: 1.22em;
 }
 
-.kk-icon-xl,
-.kk-icon.kk-icon-xl,
-.kk-icon-xl .kk-icon {
+.st-icon-xl,
+.st-icon.st-icon-xl,
+.st-icon-xl .st-icon {
 	font-size: 2em !important;
 	vertical-align: -0.255em;
 }
 
-.batch-floating-bar .btn .kk-icon {
+.batch-floating-bar .btn .st-icon {
 	font-size: 1.24em;
 	vertical-align: -0.25em;
 }
@@ -79,60 +79,60 @@ kbd,
 pre,
 samp,
 .font-monospace {
-	font-family: var(--kk-font-mono);
+	font-family: var(--st-font-mono);
 }
 
-body.kk-no-chat-sidebar #chat-sidebar,
-body.kk-no-chat-sidebar #chat-results-panel {
+body.st-no-chat-sidebar #chat-sidebar,
+body.st-no-chat-sidebar #chat-results-panel {
 	display: none !important;
 }
 
-.kk-global-search {
+.st-global-search {
 	flex: 0 0 210px;
 	max-width: 210px;
 	min-width: 210px;
 	margin-right: 1rem;
 }
 
-.kk-global-search-trigger {
+.st-global-search-trigger {
 	display: flex;
 	align-items: center;
 	gap: 0.55rem;
 	width: 100%;
 	height: 40px;
 	padding: 0 0.75rem;
-	border: 1px solid var(--kk-line);
+	border: 1px solid var(--st-line);
 	border-radius: 8px;
-	background: var(--kk-panel);
-	color: var(--kk-muted);
+	background: var(--st-panel);
+	color: var(--st-muted);
 	font-weight: 600;
 	text-align: left;
 	cursor: pointer;
 }
 
-.kk-global-search-trigger:hover,
-.kk-global-search-trigger:focus {
-	border-color: var(--kk-primary);
-	color: var(--kk-text);
+.st-global-search-trigger:hover,
+.st-global-search-trigger:focus {
+	border-color: var(--st-primary);
+	color: var(--st-text);
 	outline: none;
 }
 
-.kk-global-search-icon {
+.st-global-search-icon {
 	font-size: 1.35rem;
 	flex: 0 0 auto;
 }
 
-.kk-global-search-trigger kbd,
-.kk-search-palette kbd {
-	border: 1px solid var(--kk-line-strong);
-	background: var(--kk-panel-muted);
-	color: var(--kk-text);
+.st-global-search-trigger kbd,
+.st-search-palette kbd {
+	border: 1px solid var(--st-line-strong);
+	background: var(--st-panel-muted);
+	color: var(--st-text);
 	box-shadow: none;
 	font-size: 0.75rem;
 	font-weight: 700;
 }
 
-.kk-search-backdrop {
+.st-search-backdrop {
 	position: fixed;
 	inset: 0;
 	z-index: 1070;
@@ -140,7 +140,7 @@ body.kk-no-chat-sidebar #chat-results-panel {
 	backdrop-filter: blur(2px);
 }
 
-.kk-search-palette {
+.st-search-palette {
 	position: fixed;
 	top: 72px;
 	left: 50%;
@@ -149,59 +149,59 @@ body.kk-no-chat-sidebar #chat-results-panel {
 	transform: translateX(-50%);
 }
 
-.kk-search-dialog {
+.st-search-dialog {
 	overflow: hidden;
-	border: 1px solid var(--kk-line-strong);
+	border: 1px solid var(--st-line-strong);
 	border-radius: 8px;
-	background: var(--kk-panel);
-	color: var(--kk-text);
+	background: var(--st-panel);
+	color: var(--st-text);
 	box-shadow: 0 22px 70px rgba(0, 0, 0, 0.45);
 }
 
-.kk-search-input-row {
+.st-search-input-row {
 	display: flex;
 	align-items: center;
 	gap: 0.75rem;
 	padding: 0.8rem 0.9rem;
-	border-bottom: 1px solid var(--kk-line-strong);
+	border-bottom: 1px solid var(--st-line-strong);
 }
 
-.kk-search-input-icon {
-	color: var(--kk-muted);
+.st-search-input-icon {
+	color: var(--st-muted);
 	font-size: 1.35rem;
 	flex: 0 0 auto;
 }
 
-.kk-search-input-row .form-control {
+.st-search-input-row .form-control {
 	min-width: 0;
 	border: 0;
 	background: transparent;
-	color: var(--kk-text);
+	color: var(--st-text);
 	font-size: 1rem;
 	box-shadow: none;
 }
 
-.kk-search-help {
+.st-search-help {
 	padding: 0.45rem 0.9rem;
-	border-bottom: 1px solid var(--kk-line);
-	color: var(--kk-muted);
+	border-bottom: 1px solid var(--st-line);
+	color: var(--st-muted);
 	font-size: 0.78rem;
 }
 
-.kk-search-results {
+.st-search-results {
 	max-height: min(58vh, 520px);
 	overflow-y: auto;
 	padding: 0.35rem;
 }
 
-.kk-search-empty {
+.st-search-empty {
 	padding: 1.25rem;
-	color: var(--kk-muted);
+	color: var(--st-muted);
 	font-size: 0.9rem;
 	text-align: center;
 }
 
-.kk-search-result {
+.st-search-result {
 	display: flex;
 	align-items: flex-start;
 	gap: 0.75rem;
@@ -210,18 +210,18 @@ body.kk-no-chat-sidebar #chat-results-panel {
 	border: 1px solid transparent;
 	border-radius: 8px;
 	background: transparent;
-	color: var(--kk-text);
+	color: var(--st-text);
 	text-align: left;
 	cursor: pointer;
 }
 
-.kk-search-result:hover,
-.kk-search-result.is-active {
-	border-color: var(--kk-line-strong);
-	background: var(--kk-panel-muted);
+.st-search-result:hover,
+.st-search-result.is-active {
+	border-color: var(--st-line-strong);
+	background: var(--st-panel-muted);
 }
 
-.kk-search-result-body {
+.st-search-result-body {
 	display: flex;
 	flex: 1 1 auto;
 	flex-direction: column;
@@ -229,77 +229,77 @@ body.kk-no-chat-sidebar #chat-results-panel {
 	gap: 0.1rem;
 }
 
-.kk-search-result-title-row {
+.st-search-result-title-row {
 	display: flex;
 	align-items: center;
 	gap: 0.75rem;
 	min-width: 0;
 }
 
-.kk-search-result-title,
-.kk-search-result-subtitle,
-.kk-search-result-excerpt {
+.st-search-result-title,
+.st-search-result-subtitle,
+.st-search-result-excerpt {
 	display: block;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
-.kk-search-result-title {
+.st-search-result-title {
 	min-width: 0;
-	color: var(--kk-text);
+	color: var(--st-text);
 	font-weight: 700;
 }
 
-.kk-search-result-date,
-.kk-search-result-subtitle,
-.kk-search-result-excerpt {
-	color: var(--kk-muted);
+.st-search-result-date,
+.st-search-result-subtitle,
+.st-search-result-excerpt {
+	color: var(--st-muted);
 	font-size: 0.8rem;
 }
 
-.kk-search-result-date {
+.st-search-result-date {
 	flex: 0 0 auto;
 	margin-left: auto;
 }
 
-.kk-search-result-excerpt mark {
+.st-search-result-excerpt mark {
 	padding: 0 0.08rem;
 	border-radius: 3px;
 	background: rgba(253, 224, 71, 0.28);
-	color: var(--kk-text);
+	color: var(--st-text);
 }
 
-.kk-search-footer {
+.st-search-footer {
 	display: flex;
 	justify-content: space-between;
 	gap: 1rem;
 	padding: 0.55rem 0.9rem;
-	border-top: 1px solid var(--kk-line);
-	color: var(--kk-muted);
+	border-top: 1px solid var(--st-line);
+	color: var(--st-muted);
 	font-size: 0.75rem;
 }
 
-.kk-search-footer span {
+.st-search-footer span {
 	display: inline-flex;
 	align-items: center;
 	gap: 0.35rem;
 }
 
 @media (max-width: 991.98px) {
-	.kk-global-search {
+	.st-global-search {
 		flex-basis: 180px;
 		min-width: 180px;
 		margin-right: 0.5rem;
 	}
 
-	.kk-global-search-text {
+	.st-global-search-text {
 		display: none;
 	}
 }
 
 @media (max-width: 767.98px) {
-	.kk-navbar-actions {
+	.st-navbar-actions {
 		flex-wrap: wrap;
 		justify-content: flex-end;
 		width: 100%;
@@ -307,7 +307,7 @@ body.kk-no-chat-sidebar #chat-results-panel {
 		margin-left: 0 !important;
 	}
 
-	.kk-global-search {
+	.st-global-search {
 		order: 5;
 		flex: 1 1 100%;
 		max-width: none;
@@ -315,180 +315,180 @@ body.kk-no-chat-sidebar #chat-results-panel {
 		margin: 0.75rem 0 0;
 	}
 
-	.kk-search-palette {
+	.st-search-palette {
 		top: 1rem;
 	}
 }
 
-body.kk-template1 #settingsModal,
-body.kk-template1 #projectSettingsModal {
-	--bs-body-color: var(--kk-text);
-	--bs-body-bg: var(--kk-panel);
-	--bs-border-color: var(--kk-line);
-	--bs-secondary-color: var(--kk-muted);
-	--bs-tertiary-bg: var(--kk-panel-subtle);
-	color: var(--kk-text);
+body.st-template1 #settingsModal,
+body.st-template1 #projectSettingsModal {
+	--bs-body-color: var(--st-text);
+	--bs-body-bg: var(--st-panel);
+	--bs-border-color: var(--st-line);
+	--bs-secondary-color: var(--st-muted);
+	--bs-tertiary-bg: var(--st-panel-subtle);
+	color: var(--st-text);
 }
 
-body.kk-template1 #settingsModal .kk-settings-modal-dialog,
-body.kk-template1 #projectSettingsModal .kk-settings-modal-dialog {
+body.st-template1 #settingsModal .st-settings-modal-dialog,
+body.st-template1 #projectSettingsModal .st-settings-modal-dialog {
 	width: min(96vw, 1500px);
 	max-width: min(96vw, 1500px);
 	margin-right: auto;
 	margin-left: auto;
 }
 
-body.kk-template1 #settingsModal .modal-content,
-body.kk-template1 #projectSettingsModal .modal-content {
+body.st-template1 #settingsModal .modal-content,
+body.st-template1 #projectSettingsModal .modal-content {
 	min-height: calc(100vh - 3rem);
-	background: var(--kk-panel) !important;
-	border-color: var(--kk-line) !important;
-	color: var(--kk-text) !important;
+	background: var(--st-panel) !important;
+	border-color: var(--st-line) !important;
+	color: var(--st-text) !important;
 }
 
-body.kk-template1 #settingsModal .modal-header,
-body.kk-template1 #projectSettingsModal .modal-header {
-	background: var(--kk-panel) !important;
-	border-bottom-color: var(--kk-line) !important;
-	color: var(--kk-text) !important;
+body.st-template1 #settingsModal .modal-header,
+body.st-template1 #projectSettingsModal .modal-header {
+	background: var(--st-panel) !important;
+	border-bottom-color: var(--st-line) !important;
+	color: var(--st-text) !important;
 }
 
-body.kk-template1 #settingsModal .modal-body,
-body.kk-template1 #projectSettingsModal .modal-body {
+body.st-template1 #settingsModal .modal-body,
+body.st-template1 #projectSettingsModal .modal-body {
 	min-height: 72vh;
 	padding-bottom: 5rem;
-	background: var(--kk-panel) !important;
-	color: var(--kk-text) !important;
+	background: var(--st-panel) !important;
+	color: var(--st-text) !important;
 }
 
-body.kk-template1 #projectSettingsModal #project-email-filter-apply-modal .modal-content {
+body.st-template1 #projectSettingsModal #project-email-filter-apply-modal .modal-content {
 	min-height: 0;
 }
 
-body.kk-template1 #projectSettingsModal #project-email-filter-apply-modal .modal-body {
+body.st-template1 #projectSettingsModal #project-email-filter-apply-modal .modal-body {
 	min-height: 0;
 }
 
-body.kk-template1 #settingsModal .card,
-body.kk-template1 #settingsModal .list-group-item,
-body.kk-template1 #settingsModal .modal-body .border,
-body.kk-template1 #settingsModal .modal-body .preview-container,
-body.kk-template1 #settingsModal .modal-body .source-dropdown,
-body.kk-template1 #projectSettingsModal .card,
-body.kk-template1 #projectSettingsModal .list-group-item,
-body.kk-template1 #projectSettingsModal .modal-body .border,
-body.kk-template1 #projectSettingsModal .modal-body .preview-container,
-body.kk-template1 #projectSettingsModal .modal-body .source-dropdown {
-	background: var(--kk-panel-subtle) !important;
-	border-color: var(--kk-line) !important;
-	color: var(--kk-text) !important;
+body.st-template1 #settingsModal .card,
+body.st-template1 #settingsModal .list-group-item,
+body.st-template1 #settingsModal .modal-body .border,
+body.st-template1 #settingsModal .modal-body .preview-container,
+body.st-template1 #settingsModal .modal-body .source-dropdown,
+body.st-template1 #projectSettingsModal .card,
+body.st-template1 #projectSettingsModal .list-group-item,
+body.st-template1 #projectSettingsModal .modal-body .border,
+body.st-template1 #projectSettingsModal .modal-body .preview-container,
+body.st-template1 #projectSettingsModal .modal-body .source-dropdown {
+	background: var(--st-panel-subtle) !important;
+	border-color: var(--st-line) !important;
+	color: var(--st-text) !important;
 }
 
-body.kk-template1 #settingsModal h1,
-body.kk-template1 #settingsModal h2,
-body.kk-template1 #settingsModal h3,
-body.kk-template1 #settingsModal h4,
-body.kk-template1 #settingsModal h5,
-body.kk-template1 #settingsModal h6,
-body.kk-template1 #settingsModal label,
-body.kk-template1 #settingsModal .form-label,
-body.kk-template1 #settingsModal .card-title,
-body.kk-template1 #settingsModal .modal-title,
-body.kk-template1 #projectSettingsModal h1,
-body.kk-template1 #projectSettingsModal h2,
-body.kk-template1 #projectSettingsModal h3,
-body.kk-template1 #projectSettingsModal h4,
-body.kk-template1 #projectSettingsModal h5,
-body.kk-template1 #projectSettingsModal h6,
-body.kk-template1 #projectSettingsModal label,
-body.kk-template1 #projectSettingsModal .form-label,
-body.kk-template1 #projectSettingsModal .card-title,
-body.kk-template1 #projectSettingsModal .modal-title {
-	color: var(--kk-text) !important;
+body.st-template1 #settingsModal h1,
+body.st-template1 #settingsModal h2,
+body.st-template1 #settingsModal h3,
+body.st-template1 #settingsModal h4,
+body.st-template1 #settingsModal h5,
+body.st-template1 #settingsModal h6,
+body.st-template1 #settingsModal label,
+body.st-template1 #settingsModal .form-label,
+body.st-template1 #settingsModal .card-title,
+body.st-template1 #settingsModal .modal-title,
+body.st-template1 #projectSettingsModal h1,
+body.st-template1 #projectSettingsModal h2,
+body.st-template1 #projectSettingsModal h3,
+body.st-template1 #projectSettingsModal h4,
+body.st-template1 #projectSettingsModal h5,
+body.st-template1 #projectSettingsModal h6,
+body.st-template1 #projectSettingsModal label,
+body.st-template1 #projectSettingsModal .form-label,
+body.st-template1 #projectSettingsModal .card-title,
+body.st-template1 #projectSettingsModal .modal-title {
+	color: var(--st-text) !important;
 }
 
-body.kk-template1 #settingsModal .text-muted,
-body.kk-template1 #settingsModal .small,
-body.kk-template1 #settingsModal .form-text,
-body.kk-template1 #settingsModal .muted,
-body.kk-template1 #projectSettingsModal .text-muted,
-body.kk-template1 #projectSettingsModal .small,
-body.kk-template1 #projectSettingsModal .form-text,
-body.kk-template1 #projectSettingsModal .muted {
-	color: var(--kk-muted) !important;
+body.st-template1 #settingsModal .text-muted,
+body.st-template1 #settingsModal .small,
+body.st-template1 #settingsModal .form-text,
+body.st-template1 #settingsModal .muted,
+body.st-template1 #projectSettingsModal .text-muted,
+body.st-template1 #projectSettingsModal .small,
+body.st-template1 #projectSettingsModal .form-text,
+body.st-template1 #projectSettingsModal .muted {
+	color: var(--st-muted) !important;
 }
 
-body.kk-template1 #settingsModal .form-control,
-body.kk-template1 #settingsModal .form-select,
-body.kk-template1 #settingsModal .input-group-text,
-body.kk-template1 #projectSettingsModal .form-control,
-body.kk-template1 #projectSettingsModal .form-select,
-body.kk-template1 #projectSettingsModal .input-group-text {
-	background-color: var(--kk-panel-muted) !important;
-	border-color: var(--kk-line-strong) !important;
-	color: var(--kk-text) !important;
+body.st-template1 #settingsModal .form-control,
+body.st-template1 #settingsModal .form-select,
+body.st-template1 #settingsModal .input-group-text,
+body.st-template1 #projectSettingsModal .form-control,
+body.st-template1 #projectSettingsModal .form-select,
+body.st-template1 #projectSettingsModal .input-group-text {
+	background-color: var(--st-panel-muted) !important;
+	border-color: var(--st-line-strong) !important;
+	color: var(--st-text) !important;
 }
 
-body.kk-template1 #settingsModal .form-control:focus,
-body.kk-template1 #settingsModal .form-select:focus,
-body.kk-template1 #projectSettingsModal .form-control:focus,
-body.kk-template1 #projectSettingsModal .form-select:focus {
-	border-color: var(--kk-primary) !important;
-	box-shadow: 0 0 0 0.25rem rgba(var(--kk-primary-rgb), 0.3) !important;
+body.st-template1 #settingsModal .form-control:focus,
+body.st-template1 #settingsModal .form-select:focus,
+body.st-template1 #projectSettingsModal .form-control:focus,
+body.st-template1 #projectSettingsModal .form-select:focus {
+	border-color: var(--st-primary) !important;
+	box-shadow: 0 0 0 0.25rem rgba(var(--st-primary-rgb), 0.3) !important;
 }
 
-body.kk-template1 #settingsModal .form-control::placeholder,
-body.kk-template1 #projectSettingsModal .form-control::placeholder {
-	color: var(--kk-muted) !important;
+body.st-template1 #settingsModal .form-control::placeholder,
+body.st-template1 #projectSettingsModal .form-control::placeholder {
+	color: var(--st-muted) !important;
 }
 
-body.kk-template1 #settingsModal .btn-outline-secondary,
-body.kk-template1 #projectSettingsModal .btn-outline-secondary {
-	background: var(--kk-panel) !important;
-	border-color: var(--kk-line) !important;
-	color: var(--kk-muted) !important;
+body.st-template1 #settingsModal .btn-outline-secondary,
+body.st-template1 #projectSettingsModal .btn-outline-secondary {
+	background: var(--st-panel) !important;
+	border-color: var(--st-line) !important;
+	color: var(--st-muted) !important;
 }
 
-body.kk-template1 #settingsModal .btn-outline-secondary:hover,
-body.kk-template1 #settingsModal .btn-outline-secondary:focus,
-body.kk-template1 #projectSettingsModal .btn-outline-secondary:hover,
-body.kk-template1 #projectSettingsModal .btn-outline-secondary:focus {
-	background: var(--kk-panel-muted) !important;
-	border-color: var(--kk-line-strong) !important;
-	color: var(--kk-text) !important;
+body.st-template1 #settingsModal .btn-outline-secondary:hover,
+body.st-template1 #settingsModal .btn-outline-secondary:focus,
+body.st-template1 #projectSettingsModal .btn-outline-secondary:hover,
+body.st-template1 #projectSettingsModal .btn-outline-secondary:focus {
+	background: var(--st-panel-muted) !important;
+	border-color: var(--st-line-strong) !important;
+	color: var(--st-text) !important;
 }
 
-body.kk-template1 #settingsModal .list-group-item,
-body.kk-template1 #projectSettingsModal .list-group-item {
+body.st-template1 #settingsModal .list-group-item,
+body.st-template1 #projectSettingsModal .list-group-item {
 	cursor: pointer;
 }
 
-body.kk-template1 #settingsModal .list-group-item.active,
-body.kk-template1 #projectSettingsModal .list-group-item.active {
-	background: var(--kk-primary-soft) !important;
-	border-color: var(--kk-primary) !important;
-	color: var(--kk-primary) !important;
+body.st-template1 #settingsModal .list-group-item.active,
+body.st-template1 #projectSettingsModal .list-group-item.active {
+	background: var(--st-primary-soft) !important;
+	border-color: var(--st-primary) !important;
+	color: var(--st-primary) !important;
 }
 
-body.kk-template1 #settingsModal .table {
-	--bs-table-bg: var(--kk-panel);
-	--bs-table-color: var(--kk-text);
-	--bs-table-border-color: var(--kk-line);
-	--bs-table-hover-bg: var(--kk-panel-muted);
-	--bs-table-hover-color: var(--kk-text);
-	color: var(--kk-text) !important;
-	border-color: var(--kk-line) !important;
+body.st-template1 #settingsModal .table {
+	--bs-table-bg: var(--st-panel);
+	--bs-table-color: var(--st-text);
+	--bs-table-border-color: var(--st-line);
+	--bs-table-hover-bg: var(--st-panel-muted);
+	--bs-table-hover-color: var(--st-text);
+	color: var(--st-text) !important;
+	border-color: var(--st-line) !important;
 }
 
-body.kk-template1 #settingsModal .table th,
-body.kk-template1 #settingsModal .table td {
-	background: var(--kk-panel) !important;
-	color: var(--kk-text) !important;
-	border-color: var(--kk-line) !important;
+body.st-template1 #settingsModal .table th,
+body.st-template1 #settingsModal .table td {
+	background: var(--st-panel) !important;
+	color: var(--st-text) !important;
+	border-color: var(--st-line) !important;
 }
 
-body.kk-template1 #settingsModal .table thead th {
-	background: var(--kk-panel-muted) !important;
+body.st-template1 #settingsModal .table thead th {
+	background: var(--st-panel-muted) !important;
 }
 
 .project-forwarding-copy {
@@ -512,45 +512,45 @@ body.kk-template1 #settingsModal .table thead th {
 	position: relative;
 }
 
-body.kk-template1 .huebee__container {
-	background: var(--kk-panel-subtle) !important;
-	border: 1px solid var(--kk-line) !important;
+body.st-template1 .huebee__container {
+	background: var(--st-panel-subtle) !important;
+	border: 1px solid var(--st-line) !important;
 	box-shadow: 0 10px 24px rgba(0, 0, 0, .35) !important;
 }
 
-body.kk-template1 .huebee.is-static-open .huebee__container {
+body.st-template1 .huebee.is-static-open .huebee__container {
 	box-shadow: none !important;
 }
 
-body.kk-template1 .huebee__canvas {
+body.st-template1 .huebee__canvas {
 	border-radius: 4px;
 }
 
-body.kk-template1 .huebee__cursor {
+body.st-template1 .huebee__cursor {
 	border-color: #f8fafc !important;
 	box-shadow: 0 0 0 1px rgba(15, 23, 49, .65);
 }
 
-body.kk-template1 .huebee__close-button {
-	background: var(--kk-panel) !important;
-	border: 1px solid var(--kk-line);
+body.st-template1 .huebee__close-button {
+	background: var(--st-panel) !important;
+	border: 1px solid var(--st-line);
 }
 
 @media (min-width: 768px) {
-	body.kk-no-chat-sidebar #page-content > .row > .col-md-3:first-child {
+	body.st-no-chat-sidebar #page-content > .row > .col-md-3:first-child {
 		flex: 0 0 200px;
 		width: 200px;
 		max-width: 200px;
 	}
 
-	body.kk-no-chat-sidebar #page-content > .row > .col-md-9:last-child {
+	body.st-no-chat-sidebar #page-content > .row > .col-md-9:last-child {
 		flex: 1 1 0;
 		width: auto;
 		max-width: none;
 	}
 }
 
-.swal2-icon.swal2-kk-icon {
+.swal2-icon.swal2-st-icon {
 	border: 0;
 	display: flex;
 	align-items: center;
@@ -561,27 +561,27 @@ body.kk-template1 .huebee__close-button {
 	font-size: 1rem;
 }
 
-.swal2-icon.swal2-kk-icon .kk-icon {
+.swal2-icon.swal2-st-icon .st-icon {
 	width: auto;
 	font-size: 4.25rem;
 	line-height: 1;
 	vertical-align: 0;
 }
 
-.swal2-icon.swal2-success.swal2-kk-icon {
+.swal2-icon.swal2-success.swal2-st-icon {
 	color: #a5dc86;
 }
 
-.swal2-icon.swal2-error.swal2-kk-icon {
+.swal2-icon.swal2-error.swal2-st-icon {
 	color: #f27474;
 }
 
-.swal2-icon.swal2-warning.swal2-kk-icon {
+.swal2-icon.swal2-warning.swal2-st-icon {
 	color: #f8bb86;
 }
 
-.swal2-icon.swal2-info.swal2-kk-icon,
-.swal2-icon.swal2-question.swal2-kk-icon {
+.swal2-icon.swal2-info.swal2-st-icon,
+.swal2-icon.swal2-question.swal2-st-icon {
 	color: #3fc3ee;
 }
 
@@ -605,7 +605,7 @@ small,
 	color: initial !important;
 }
 
-.kk-scroll-sentinel,
+.st-scroll-sentinel,
 .emails-scroll-sentinel {
 	display: block;
 	width: 100%;
@@ -664,7 +664,7 @@ small,
 	min-width: 0 !important;
 }
 
-.kk-email-editor-toolbar {
+.st-email-editor-toolbar {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 0.15rem;
@@ -676,24 +676,24 @@ small,
 	color: var(--bs-body-color);
 }
 
-.kk-email-editor-button {
+.st-email-editor-button {
 	width: 1.45rem;
 	height: 1.45rem;
 	padding: 0;
 	cursor: pointer;
 }
 
-.kk-email-editor-button .kk-icon {
+.st-email-editor-button .st-icon {
 	font-size: 1rem;
 }
 
-.kk-email-editor-button.active {
+.st-email-editor-button.active {
 	background: rgba(var(--bs-primary-rgb), 0.14);
 	border-color: rgba(var(--bs-primary-rgb), 0.45);
 	color: var(--bs-primary);
 }
 
-.kk-email-editor-body .ProseMirror {
+.st-email-editor-body .ProseMirror {
 	min-height: 9rem;
 	padding: 0.65rem;
 	border: 1px solid var(--bs-border-color);
@@ -704,12 +704,12 @@ small,
 	overflow-wrap: anywhere;
 }
 
-.kk-email-editor-body .ProseMirror:focus {
-	border-color: var(--kk-primary);
-	box-shadow: 0 0 0 0.18rem rgba(var(--kk-primary-rgb), 0.18);
+.st-email-editor-body .ProseMirror:focus {
+	border-color: var(--st-primary);
+	box-shadow: 0 0 0 0.18rem rgba(var(--st-primary-rgb), 0.18);
 }
 
-.kk-email-editor-body .ProseMirror p.is-editor-empty:first-child::before {
+.st-email-editor-body .ProseMirror p.is-editor-empty:first-child::before {
 	content: attr(data-placeholder);
 	color: #adb5bd;
 	float: left;
@@ -726,8 +726,8 @@ small,
 }
 
 .chat-message.user {
-	background: var(--kk-primary);
-	color: var(--kk-ink);
+	background: var(--st-primary);
+	color: var(--st-ink);
 	margin-left: auto;
 }
 
@@ -783,7 +783,7 @@ small,
 }
 
 #chat-results-list .card {
-	border-left: 3px solid var(--kk-primary);
+	border-left: 3px solid var(--st-primary);
 	transition: box-shadow 0.15s;
 }
 
@@ -798,7 +798,7 @@ small,
 }
 
 .note-item:hover {
-	background: var(--kk-panel-muted);
+	background: var(--st-panel-muted);
 }
 
 .memory-item {
@@ -807,7 +807,7 @@ small,
 }
 
 .memory-item:hover {
-	background: var(--kk-panel-muted);
+	background: var(--st-panel-muted);
 }
 
 .email-item {
@@ -816,7 +816,7 @@ small,
 }
 
 .email-item:hover {
-	background: var(--kk-panel-muted);
+	background: var(--st-panel-muted);
 }
 
 .email-item-sender,
@@ -896,7 +896,7 @@ small,
 .section-link {
 	display: flex;
 	font-size: 0.85rem;
-	color: var(--kk-text);
+	color: var(--st-text);
 	text-decoration: none;
 }
 
@@ -932,13 +932,13 @@ small,
 	--bs-btn-close-filter: var(--tag-color) !important;
 }
 
-.kk-settings-tabs {
+.st-settings-tabs {
 	gap: 0.5rem;
 	border-bottom: 0;
 	margin-bottom: 0.25rem;
 }
 
-.kk-settings-tabs .nav-link {
+.st-settings-tabs .nav-link {
 	border: 1px solid var(--bs-border-color);
 	border-radius: 0.6rem;
 	padding: 0.45rem 0.9rem;
@@ -948,20 +948,20 @@ small,
 	transition: all 0.15s ease-in-out;
 }
 
-.kk-settings-tabs .nav-link:hover,
-.kk-settings-tabs .nav-link:focus {
+.st-settings-tabs .nav-link:hover,
+.st-settings-tabs .nav-link:focus {
 	color: #212529;
 	background: #f8f9fa;
 	border-color: var(--bs-border-color);
 	box-shadow: none;
 }
 
-.kk-settings-tabs .nav-link.active,
-.kk-settings-tabs .show > .nav-link {
-	color: var(--kk-ink);
-	background: var(--kk-primary);
-	border-color: var(--kk-ink);
-	box-shadow: 2px 2px 0 0 var(--kk-ink);
+.st-settings-tabs .nav-link.active,
+.st-settings-tabs .show > .nav-link {
+	color: var(--st-ink);
+	background: var(--st-primary);
+	border-color: var(--st-ink);
+	box-shadow: 2px 2px 0 0 var(--st-ink);
 }
 
 /* Editor container */
@@ -974,8 +974,8 @@ small,
 }
 
 #editor-container .ProseMirror:focus {
-	border-color: var(--kk-primary);
-	box-shadow: 0 0 0 0.25rem rgba(var(--kk-primary-rgb), 0.3);
+	border-color: var(--st-primary);
+	box-shadow: 0 0 0 0.25rem rgba(var(--st-primary-rgb), 0.3);
 }
 
 #editor-container .ProseMirror p.is-editor-empty:first-child::before,
@@ -998,8 +998,8 @@ small,
 }
 
 #memory-editor-container .ProseMirror:focus {
-	border-color: var(--kk-primary);
-	box-shadow: 0 0 0 0.25rem rgba(var(--kk-primary-rgb), 0.3);
+	border-color: var(--st-primary);
+	box-shadow: 0 0 0 0.25rem rgba(var(--st-primary-rgb), 0.3);
 }
 
 #rm-note-editor .ProseMirror,
@@ -1013,8 +1013,8 @@ small,
 
 #rm-note-editor .ProseMirror:focus,
 #rm-memory-editor .ProseMirror:focus {
-	border-color: var(--kk-primary);
-	box-shadow: 0 0 0 0.25rem rgba(var(--kk-primary-rgb), 0.3);
+	border-color: var(--st-primary);
+	box-shadow: 0 0 0 0.25rem rgba(var(--st-primary-rgb), 0.3);
 }
 
 .logo-form img {
@@ -1035,14 +1035,14 @@ small,
 .mailtwine-wordmark {
 	display: inline-flex;
 	align-items: center;
-	color: var(--kk-text);
+	color: var(--st-text);
 	font-size: 1.25rem;
 	font-weight: 800;
 	line-height: 1;
 	letter-spacing: 0;
 }
 
-.kk-white-label-navbar-logo {
+.st-white-label-navbar-logo {
 	max-width: 130px;
 	max-height: 24px;
 	width: auto;
@@ -1050,7 +1050,7 @@ small,
 	object-fit: contain;
 }
 
-.kk-white-label-preview {
+.st-white-label-preview {
 	max-width: 260px;
 	max-height: 48px;
 	width: auto;
@@ -1058,14 +1058,14 @@ small,
 	object-fit: contain;
 }
 
-.kk-white-label-favicon-preview {
+.st-white-label-favicon-preview {
 	width: 32px;
 	height: 32px;
 	object-fit: contain;
 }
 
-.kk-white-label-login-preview,
-.kk-white-label-auth-logo {
+.st-white-label-login-preview,
+.st-white-label-auth-logo {
 	max-width: 260px;
 	max-height: 80px;
 	width: auto;
@@ -1124,8 +1124,8 @@ small,
 #chat-result-modal .nav-tabs {
 	--bs-nav-tabs-border-color: var(--bs-border-color);
 	--bs-nav-tabs-link-hover-border-color: var(--bs-border-color);
-	--bs-nav-tabs-link-active-bg: var(--kk-panel-muted);
-	--bs-nav-tabs-link-active-border-color: var(--bs-border-color) var(--bs-border-color) var(--kk-panel-muted);
+	--bs-nav-tabs-link-active-bg: var(--st-panel-muted);
+	--bs-nav-tabs-link-active-border-color: var(--bs-border-color) var(--bs-border-color) var(--st-panel-muted);
 	border-bottom-color: var(--bs-border-color);
 }
 
@@ -1145,8 +1145,8 @@ small,
 
 #chat-result-modal .nav-tabs .nav-link.active,
 #chat-result-modal .nav-tabs .nav-item.show .nav-link {
-	border-color: var(--bs-border-color) var(--bs-border-color) var(--kk-panel-muted);
-	background: var(--kk-panel-muted);
+	border-color: var(--bs-border-color) var(--bs-border-color) var(--st-panel-muted);
+	background: var(--st-panel-muted);
 }
 
 #chat-result-modal .border,
@@ -1159,12 +1159,12 @@ small,
 }
 
 #chat-result-modal .preview-container {
-	background: var(--kk-panel-muted);
+	background: var(--st-panel-muted);
 }
 
 #chat-result-modal .preview-container pre {
 	border: 1px solid var(--bs-border-color);
-	background: var(--kk-panel);
+	background: var(--st-panel);
 }
 
 #chat-result-modal .preview-container blockquote {
@@ -1172,27 +1172,27 @@ small,
 }
 
 #rm-url-tab-pages-count {
-	background: var(--kk-panel-muted);
-	color: var(--kk-muted);
+	background: var(--st-panel-muted);
+	color: var(--st-muted);
 	font-weight: 500;
 }
 
 #rm-url-pane-pages .rm-crawl-item {
-	background: var(--kk-panel-subtle) !important;
-	border-color: var(--kk-line) !important;
-	color: var(--kk-text) !important;
+	background: var(--st-panel-subtle) !important;
+	border-color: var(--st-line) !important;
+	color: var(--st-text) !important;
 }
 
 #rm-url-pane-pages .rm-crawl-item:hover {
-	background: var(--kk-panel-muted) !important;
+	background: var(--st-panel-muted) !important;
 }
 
 #rm-url-pane-pages .rm-crawl-title {
-	color: var(--kk-text);
+	color: var(--st-text);
 }
 
 #rm-url-pane-pages .rm-crawl-url {
-	color: var(--kk-muted);
+	color: var(--st-muted);
 }
 
 #rm-email-thread {
@@ -1482,42 +1482,42 @@ body:not(.swal2-shown) > .swal2-container {
 }
 
 /* Streamient — global search result type badges */
-.kk-search-result-badge {
+.st-search-result-badge {
 	flex: 0 0 auto;
 	min-width: 58px;
 	margin-top: 0.1rem;
 	padding: 0.18rem 0.4rem;
-	border: 1px solid var(--kk-line);
+	border: 1px solid var(--st-line);
 	border-radius: 6px;
-	color: var(--kk-muted);
+	color: var(--st-muted);
 	font-size: 0.7rem;
 	font-weight: 700;
 	text-align: center;
 }
 
-.kk-search-type-emails {
+.st-search-type-emails {
 	color: #8bd3ff;
 	border-color: rgba(139, 211, 255, 0.5);
 }
 
-.kk-search-type-notes {
+.st-search-type-notes {
 	color: #a7f3d0;
 	border-color: rgba(167, 243, 208, 0.5);
 }
 
-.kk-search-type-memory {
+.st-search-type-memory {
 	color: #fbcfe8;
 	border-color: rgba(251, 207, 232, 0.5);
 }
 
-.kk-search-type-urls,
-.kk-search-type-pages {
+.st-search-type-urls,
+.st-search-type-pages {
 	color: #fde68a;
 	border-color: rgba(253, 230, 138, 0.5);
 }
 
-[data-bs-theme="light"] .kk-search-type-emails { color: #0b6aa8; }
-[data-bs-theme="light"] .kk-search-type-notes { color: #067a52; }
-[data-bs-theme="light"] .kk-search-type-memory { color: #b02a6e; }
-[data-bs-theme="light"] .kk-search-type-urls,
-[data-bs-theme="light"] .kk-search-type-pages { color: #8a6b00; }
+[data-bs-theme="light"] .st-search-type-emails { color: #0b6aa8; }
+[data-bs-theme="light"] .st-search-type-notes { color: #067a52; }
+[data-bs-theme="light"] .st-search-type-memory { color: #b02a6e; }
+[data-bs-theme="light"] .st-search-type-urls,
+[data-bs-theme="light"] .st-search-type-pages { color: #4149c9; }

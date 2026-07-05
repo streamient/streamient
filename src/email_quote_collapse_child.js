@@ -1,7 +1,7 @@
 (function () {
 	var QUOTE_SELECTOR = 'blockquote,.gmail_quote,.yahoo_quoted';
-	var COLLAPSE_CLASS = 'kk-email-quote-collapse';
-	var TOGGLE_CLASS = 'kk-email-quote-toggle';
+	var COLLAPSE_CLASS = 'st-email-quote-collapse';
+	var TOGGLE_CLASS = 'st-email-quote-toggle';
 	var QUOTE_HEADER_RE = /^(on\s.+wrote:|from:\s.+|sent:\s.+|to:\s.+|subject:\s.+|-----original message-----)$/i;
 
 	function normalizedText(value) {

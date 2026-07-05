@@ -155,7 +155,7 @@ async function commitAll(cwd, message, date = new Date()) {
 }
 
 async function createRemoteRepo() {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kk-git-sync-'));
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'st-git-sync-'));
 	const bare = path.join(root, 'remote.git');
 	const work = path.join(root, 'work');
 	await git(root, ['init', '--bare', bare]);

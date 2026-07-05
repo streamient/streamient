@@ -19,7 +19,7 @@ describe('settings search reindex markup', () => {
 			email_feature_enabled: true,
 			is_hosted: false,
 			icon(name, classes = '') {
-				return `<span class="kk-icon ${classes}">${name}</span>`;
+				return `<span class="st-icon ${classes}">${name}</span>`;
 			},
 		});
 

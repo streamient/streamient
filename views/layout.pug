@@ -12,7 +12,7 @@ html(lang="en")
 		script.
 			(function () {
 				try {
-					var t = localStorage.getItem('kk-theme');
+					var t = localStorage.getItem('st-theme') || localStorage.getItem('kk-theme');
 					if (t !== 'light' && t !== 'dark') t = 'dark';
 					document.documentElement.setAttribute('data-theme', t);
 					document.documentElement.setAttribute('data-bs-theme', t);
@@ -27,7 +27,7 @@ html(lang="en")
 		link(href=`/static/v-${v}/css/app.css` rel="stylesheet")
 		link(href=`/static/v-${v}/css/streamient-tabler.css` rel="stylesheet")
 		block head
-	body.kk-template1(class=((hide_chat_sidebar || page === 'graph') ? 'kk-no-chat-sidebar ' : ''))
+	body.st-template1(class=((hide_chat_sidebar || page === 'graph') ? 'st-no-chat-sidebar ' : ''))
 		block body
 			include includes/avatar
 			if impersonating
@@ -37,7 +37,7 @@ html(lang="en")
 					|  — viewing as #{impersonatingName}
 					button.btn.btn-sm.btn-outline-dark.ms-3#exit-impersonation Exit
 
-			aside.navbar.navbar-vertical.navbar-expand-lg.kk-app-sidebar#sidebar
+			aside.navbar.navbar-vertical.navbar-expand-lg.st-app-sidebar#sidebar
 				.container-fluid
 					button.navbar-toggler(type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-menu" aria-controls="sidebar-menu" aria-expanded="false" aria-label="Toggle navigation")
 						span.navbar-toggler-icon
@@ -45,14 +45,14 @@ html(lang="en")
 						a.d-flex.align-items-center(href="/dashboard" aria-label="Streamient")
 							- const __wlSidebarLogo = typeof white_label !== 'undefined' && white_label && white_label.logo_url ? white_label.logo_url : ''
 							if __wlSidebarLogo
-								img.kk-white-label-navbar-logo(src=__wlSidebarLogo alt="Logo")
+								img.st-white-label-navbar-logo(src=__wlSidebarLogo alt="Logo")
 							else
-								span.kk-logo-dark
+								span.st-logo-dark
 									include includes/logo_white
-								span.kk-logo-light
+								span.st-logo-light
 									include includes/logo_black
 					.collapse.navbar-collapse.flex-column.align-items-stretch.flex-grow-1#sidebar-menu
-						.kk-sidebar-body
+						.st-sidebar-body
 							block sidebar
 								if projects_unlimited
 									.d-flex.justify-content-between.align-items-center.mb-3
@@ -64,39 +64,39 @@ html(lang="en")
 								if !projects_unlimited && is_hosted
 									a.d-block.text-center.small.my-3.text-primary(href="/settings/subscription") Need unlimited projects?
 
-								a.kk-sidebar-trash.d-flex.align-items-center.text-decoration-none.text-muted.small(href="/trash")
+								a.st-sidebar-trash.d-flex.align-items-center.text-decoration-none.text-muted.small(href="/trash")
 									!= icon('delete')
 									span.ms-2 Global Trash
 									span.ms-auto.d-none#trash-count-badge
 
 			main.page-wrapper#main-content
-				header.navbar.navbar-expand-md.d-print-none.kk-topbar
+				header.navbar.navbar-expand-md.d-print-none.st-topbar
 					.container-fluid
-						.kk-navbar-left.d-flex.align-items-center.gap-2.min-w-0
+						.st-navbar-left.d-flex.align-items-center.gap-2.min-w-0
 							button.btn.btn-icon.btn-ghost-secondary.d-lg-none(type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-menu" aria-controls="sidebar-menu" aria-expanded="false" aria-label="Toggle navigation")
 								span.navbar-toggler-icon
 							//- The sidebar (and its logo) is hidden on the graph page, so carry the brand in the topbar there
 							if page === 'graph'
-								a.kk-topbar-brand.d-flex.align-items-center.me-2(href="/dashboard" aria-label="Streamient")
+								a.st-topbar-brand.d-flex.align-items-center.me-2(href="/dashboard" aria-label="Streamient")
 									- const __wlTopbarLogo = typeof white_label !== 'undefined' && white_label && white_label.logo_url ? white_label.logo_url : ''
 									if __wlTopbarLogo
-										img.kk-white-label-navbar-logo(src=__wlTopbarLogo alt="Logo")
+										img.st-white-label-navbar-logo(src=__wlTopbarLogo alt="Logo")
 									else
-										span.kk-logo-dark
+										span.st-logo-dark
 											include includes/logo_white
-										span.kk-logo-light
+										span.st-logo-light
 											include includes/logo_black
-							nav.kk-topnav
-								a.kk-navbtn(href="/dashboard" class={active: page !== 'graph'}) Projects
-								a.kk-navbtn(href="/graph" class={active: page === 'graph'}) Graph
-						.kk-global-search
-							button.kk-global-search-trigger#kk-global-search-trigger(type="button" aria-haspopup="dialog" aria-controls="kk-search-palette")
-								!= icon('search', 'kk-global-search-icon')
-								span.kk-global-search-text Type
+							nav.st-topnav
+								a.st-navbtn(href="/dashboard" class={active: page !== 'graph'}) Projects
+								a.st-navbtn(href="/graph" class={active: page === 'graph'}) Graph
+						.st-global-search
+							button.st-global-search-trigger#st-global-search-trigger(type="button" aria-haspopup="dialog" aria-controls="st-search-palette")
+								!= icon('search', 'st-global-search-icon')
+								span.st-global-search-text Type
 								kbd /
-								span.kk-global-search-text to search
-								span.kk-global-search-spacer
-						.ms-auto.d-flex.align-items-center.kk-navbar-actions
+								span.st-global-search-text to search
+								span.st-global-search-spacer
+						.ms-auto.d-flex.align-items-center.st-navbar-actions
 							if user
 								if is_trialing
 									a.btn.btn-warning.btn-sm.me-3(href="/settings/subscription")
@@ -123,7 +123,7 @@ html(lang="en")
 													a.dropdown-item.account-switch-link(href="#" data-tenant-id=tenant.tenantId class=(isCurrentTenant ? 'is-current' : '') aria-current=(isCurrentTenant ? 'true' : undefined) tabindex=(isCurrentTenant ? '-1' : undefined))
 														.d-flex.justify-content-between.align-items-center.gap-3
 															span= tenant.name
-															span.kk-account-role-badge= tenant.role
+															span.st-account-role-badge= tenant.role
 								.dropdown
 									button.btn.btn-outline-secondary.btn-sm.dropdown-toggle.d-flex.align-items-center.gap-1(type="button" data-bs-toggle="dropdown")
 										+avatar(user.name, 'xs')
@@ -141,15 +141,15 @@ html(lang="en")
 										li: hr.dropdown-divider
 										li
 											a.dropdown-item#theme-toggle(href="#" role="button")
-												span.kk-theme-label-dark Light theme
-												span.kk-theme-label-light Dark theme
+												span.st-theme-label-dark Light theme
+												span.st-theme-label-light Dark theme
 										li: hr.dropdown-divider
 										li: a.dropdown-item(href="#" onclick="logout()") Logout
 
-				.page-body.kk-page-body
-					.container-fluid.kk-page-container
-						.kk-content-grid
-							.kk-content-main
+				.page-body.st-page-body
+					.container-fluid.st-page-container
+						.st-content-grid
+							.st-content-main
 								#chat-results-panel.d-none.mb-4
 									.d-flex.justify-content-between.align-items-center.mb-3
 										h6.mb-0
@@ -161,21 +161,21 @@ html(lang="en")
 								#page-content
 									block content
 
-							aside.kk-chat-rail#chat-sidebar
+							aside.st-chat-rail#chat-sidebar
 								block chat
 									include includes/chat_sidebar
 
-		#kk-search-backdrop.kk-search-backdrop.d-none
-		#kk-search-palette.kk-search-palette.d-none(role="dialog" aria-modal="true" aria-labelledby="kk-search-title")
-			.kk-search-dialog
-				.kk-search-input-row
-					!= icon('search', 'kk-search-input-icon')
-					label.visually-hidden(for="kk-search-input") Search
-					input.form-control.form-control-sm#kk-search-input(type="search" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="kk-search-help")
+		#st-search-backdrop.st-search-backdrop.d-none
+		#st-search-palette.st-search-palette.d-none(role="dialog" aria-modal="true" aria-labelledby="st-search-title")
+			.st-search-dialog
+				.st-search-input-row
+					!= icon('search', 'st-search-input-icon')
+					label.visually-hidden(for="st-search-input") Search
+					input.form-control.form-control-sm#st-search-input(type="search" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="st-search-help")
 					kbd Esc
-				#kk-search-help.kk-search-help Search everything
-				#kk-search-results.kk-search-results(role="listbox" aria-label="Search results")
-				.kk-search-footer
+				#st-search-help.st-search-help Search everything
+				#st-search-results.st-search-results(role="listbox" aria-label="Search results")
+				.st-search-footer
 					span
 						kbd Up
 						kbd Down
@@ -329,7 +329,7 @@ html(lang="en")
 							#rm-email-pane-body.d-none.px-3.pb-2
 								.d-flex.justify-content-between.align-items-center.mb-2
 									.form-text Body
-									.d-flex.align-items-center.gap-2.kk-email-body-controls
+									.d-flex.align-items-center.gap-2.st-email-body-controls
 										.btn-group.btn-group-sm#rm-email-body-mode(role="group" aria-label="Email body mode")
 											button.btn.btn-outline-secondary.active#rm-email-html-btn(type="button")
 												span HTML
@@ -362,7 +362,7 @@ html(lang="en")
 
 		//- Settings modal keeps users anchored in the current app context
 		.modal.fade#settingsModal(tabindex="-1" aria-labelledby="settingsModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false")
-			.modal-dialog.modal-xl.modal-dialog-scrollable.kk-settings-modal-dialog
+			.modal-dialog.modal-xl.modal-dialog-scrollable.st-settings-modal-dialog
 				.modal-content
 					.modal-header
 						h5.modal-title#settingsModalLabel Settings
@@ -374,7 +374,7 @@ html(lang="en")
 
 		//- Project settings modal keeps project configuration anchored in dashboard context
 		.modal.fade#projectSettingsModal(tabindex="-1" aria-labelledby="projectSettingsModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false")
-			.modal-dialog.modal-xl.modal-dialog-scrollable.kk-settings-modal-dialog
+			.modal-dialog.modal-xl.modal-dialog-scrollable.st-settings-modal-dialog
 				.modal-content
 					.modal-header
 						h5.modal-title#projectSettingsModalLabel Project settings

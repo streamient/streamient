@@ -572,7 +572,7 @@
           },
           "html_content": {
             "type": "string",
-            "description": "Sanitized HTML email body. Remote image URLs are stored on data-kk-remote-src until explicitly loaded by a client."
+            "description": "Sanitized HTML email body. Remote image URLs are stored on data-st-remote-src until explicitly loaded by a client."
           },
           "html_content_has_remote_images": {
             "type": "boolean"
@@ -1054,6 +1054,36 @@
           "type": "string"
         },
         "description": "Filter by project ID"
+      }
+    },
+    "responses": {
+      "AiDailyLimit": {
+        "description": "Daily AI limit reached (hosted Free workspaces on the built-in AI). Add your own OpenAI/Gemini key in Settings → AI or upgrade to Pro for unlimited AI.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "type": "string"
+                },
+                "code": {
+                  "type": "string",
+                  "enum": [
+                    "AI_DAILY_LIMIT"
+                  ]
+                },
+                "limit": {
+                  "type": "integer",
+                  "description": "AI requests allowed per day per workspace"
+                },
+                "upgrade_url": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -5007,6 +5037,9 @@
                 }
               }
             }
+          },
+          "429": {
+            "$ref": "#/components/responses/AiDailyLimit"
           }
         }
       }
@@ -5055,6 +5088,9 @@
                 }
               }
             }
+          },
+          "429": {
+            "$ref": "#/components/responses/AiDailyLimit"
           }
         }
       }
@@ -5188,6 +5224,9 @@
                 }
               }
             }
+          },
+          "429": {
+            "$ref": "#/components/responses/AiDailyLimit"
           }
         }
       }

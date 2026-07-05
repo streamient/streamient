@@ -27442,7 +27442,7 @@ var SLASH_COMMANDS = [
   { label: "Blockquote", icon: "quote", command: (editor) => editor.chain().focus().toggleBlockquote().run() },
   { label: "Horizontal Rule", icon: "remove", command: (editor) => editor.chain().focus().setHorizontalRule().run() }
 ];
-var editorIcon = (name, extraClasses = "") => window.KumbukumIcons?.icon(name, extraClasses) || `<span class="kk-icon material-symbols-outlined ${extraClasses}" aria-hidden="true">${name}</span>`;
+var editorIcon = (name, extraClasses = "") => window.StreamientIcons?.icon(name, extraClasses) || `<span class="st-icon material-symbols-outlined ${extraClasses}" aria-hidden="true">${name}</span>`;
 function createSlashMenu() {
   const menu = document.createElement("div");
   menu.className = "slash-menu";
@@ -27691,7 +27691,7 @@ var EMAIL_TOOLBAR_BUTTONS = [
 ];
 function createEmailToolbar(editor) {
   const toolbar = document.createElement("div");
-  toolbar.className = "kk-email-editor-toolbar";
+  toolbar.className = "st-email-editor-toolbar";
   toolbar.setAttribute("role", "toolbar");
   toolbar.setAttribute("aria-label", "Email formatting");
   function refresh() {
@@ -27704,7 +27704,7 @@ function createEmailToolbar(editor) {
   EMAIL_TOOLBAR_BUTTONS.forEach((command2) => {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "btn btn-sm btn-outline-secondary kk-email-editor-button";
+    button.className = "btn btn-sm btn-outline-secondary st-email-editor-button";
     button.dataset.command = command2.name;
     button.title = command2.label;
     button.setAttribute("aria-label", command2.label);
@@ -27725,7 +27725,7 @@ function createEmailEditor(element, { content = "", onUpdate = null, placeholder
   element.innerHTML = "";
   const toolbarMount = document.createElement("div");
   const editorMount = document.createElement("div");
-  editorMount.className = "kk-email-editor-body";
+  editorMount.className = "st-email-editor-body";
   element.appendChild(toolbarMount);
   element.appendChild(editorMount);
   const editorOptions = {
@@ -27741,7 +27741,7 @@ function createEmailEditor(element, { content = "", onUpdate = null, placeholder
     content,
     editorProps: {
       attributes: {
-        class: "kk-email-editor-prosemirror"
+        class: "st-email-editor-prosemirror"
       }
     }
   };
@@ -27752,7 +27752,7 @@ function createEmailEditor(element, { content = "", onUpdate = null, placeholder
   toolbarMount.replaceWith(createEmailToolbar(editor));
   return editor;
 }
-window.KumbukumEditor = { createEditor, createEmailEditor };
+window.StreamientEditor = { createEditor, createEmailEditor };
 export {
   createEditor,
   createEmailEditor

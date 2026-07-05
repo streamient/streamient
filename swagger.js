@@ -226,7 +226,7 @@ const swaggerSpec = {
                     bcc: { type: 'array', items: { type: 'string' } },
                     subject: { type: 'string' },
                     text_content: { type: 'string' },
-                    html_content: { type: 'string', description: 'Sanitized HTML email body. Remote image URLs are stored on data-kk-remote-src until explicitly loaded by a client.' },
+                    html_content: { type: 'string', description: 'Sanitized HTML email body. Remote image URLs are stored on data-st-remote-src until explicitly loaded by a client.' },
                     html_content_has_remote_images: { type: 'boolean' },
                     attachment_text_content: { type: 'string' },
                     excerpt: { type: 'string', description: 'Compact list excerpt. Typesense-backed list rows return this without Mongo hydration.' },

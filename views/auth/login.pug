@@ -10,11 +10,11 @@ block body
 		if oauth_continue
 			.alert.alert-secondary.small.login-header Sign in to continue authorizing an MCP app for this account.
 		.text-secondary.small.mb-2 Sign in with
-		.kk-auth-methods
-			button.btn.btn-primary.btn-sm.kk-auth-method-btn#magic-link-btn(type="button")
+		.st-auth-methods
+			button.btn.btn-primary.btn-sm.st-auth-method-btn#magic-link-btn(type="button")
 				!= icon('email')
 				span.ms-2 Magic Link
-			button.btn.btn-primary.btn-sm.kk-auth-method-btn#passkey-btn(type="button")
+			button.btn.btn-primary.btn-sm.st-auth-method-btn#passkey-btn(type="button")
 				!= icon('fingerprint')
 				span.ms-2 Passkey
 		.text-secondary.small.mb-3 Or continue with email and password

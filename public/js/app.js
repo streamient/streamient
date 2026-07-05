@@ -319,7 +319,7 @@ function shouldHideChatSidebar(path) {
 }
 
 function syncLayoutForPath(path) {
-	document.body.classList.toggle('kk-no-chat-sidebar', shouldHideChatSidebar(path));
+	document.body.classList.toggle('st-no-chat-sidebar', shouldHideChatSidebar(path));
 }
 
 // Dashboard section — managed here since it depends on app.js functions
@@ -783,7 +783,7 @@ document.addEventListener('click', function (e) {
 	if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.shiftKey) return;
 	var link = e.target.closest('a[href]');
 	if (!link || link.target === '_blank') return;
-	if (link.classList.contains('kk-navbtn') || link.classList.contains('navbar-brand')) return;
+	if (link.classList.contains('st-navbtn') || link.classList.contains('navbar-brand')) return;
 	var href = link.getAttribute('href');
 	if (!href || href.startsWith('http') || href.startsWith('#') || href.startsWith('javascript')) return;
 	var pathname = href.split('?')[0];
@@ -821,8 +821,8 @@ function setTheme(theme) {
 	const next = theme === 'light' ? 'light' : 'dark';
 	document.documentElement.setAttribute('data-theme', next);
 	document.documentElement.setAttribute('data-bs-theme', next);
-	try { localStorage.setItem('kk-theme', next); } catch (e) {}
-	window.dispatchEvent(new CustomEvent('kk-theme-change', { detail: { theme: next } }));
+	try { localStorage.setItem('st-theme', next); } catch (e) {}
+	window.dispatchEvent(new CustomEvent('st-theme-change', { detail: { theme: next } }));
 }
 
 function initThemeToggle() {

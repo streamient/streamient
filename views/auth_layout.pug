@@ -12,7 +12,7 @@ html(lang="en")
 		script.
 			(function () {
 				try {
-					var t = localStorage.getItem('kk-theme');
+					var t = localStorage.getItem('st-theme') || localStorage.getItem('kk-theme');
 					if (t !== 'light' && t !== 'dark') t = 'dark';
 					document.documentElement.setAttribute('data-theme', t);
 					document.documentElement.setAttribute('data-bs-theme', t);
@@ -26,25 +26,25 @@ html(lang="en")
 		link(href=`/static/v-${v}/css/streamient-tabler.css` rel="stylesheet")
 		block head
 	- const _authCoverUrl = typeof getAuthLoginCoverUrl === 'function' ? getAuthLoginCoverUrl() : authLoginCoverUrl
-	- const _authCoverStyle = typeof _authCoverUrl === 'string' && _authCoverUrl ? `--kk-auth-cover-image: url("${_authCoverUrl}");` : undefined
-	body.kk-auth-page.d-flex.flex-column(style=_authCoverStyle)
-		.row.g-0.flex-fill.kk-auth-shell
-			.col-12.col-lg-6.col-xl-4.border-top-wide.border-primary.d-flex.flex-column.justify-content-center.kk-auth-panel
+	- const _authCoverStyle = typeof _authCoverUrl === 'string' && _authCoverUrl ? `--st-auth-cover-image: url("${_authCoverUrl}");` : undefined
+	body.st-auth-page.d-flex.flex-column(style=_authCoverStyle)
+		.row.g-0.flex-fill.st-auth-shell
+			.col-12.col-lg-6.col-xl-4.border-top-wide.border-primary.d-flex.flex-column.justify-content-center.st-auth-panel
 				.container.container-tight.my-5.px-lg-5
 					.mb-5.logo-form
 						a.navbar-brand.justify-content-center(href="/login" aria-label="Streamient login")
 							- const __wlAuth = typeof white_label !== 'undefined' ? white_label : null
 							- const __wlAuthLogo = __wlAuth && (__wlAuth.login_logo_url || __wlAuth.logo_url)
 							if __wlAuthLogo
-								img.img-fluid.kk-white-label-auth-logo(src=__wlAuthLogo alt="Logo")
+								img.img-fluid.st-white-label-auth-logo(src=__wlAuthLogo alt="Logo")
 							else
-								span.kk-logo-light
+								span.st-logo-light
 									include includes/logo_black
-								span.kk-logo-dark
+								span.st-logo-dark
 									include includes/logo_white
 					block body
-			.col-12.col-lg-6.col-xl-8.d-none.d-lg-block.kk-auth-cover-column
-				.kk-auth-cover.bg-cover.h-100.min-vh-100
+			.col-12.col-lg-6.col-xl-8.d-none.d-lg-block.st-auth-cover-column
+				.st-auth-cover.bg-cover.h-100.min-vh-100
 		script(src=`/static/v-${v}/js/icons.js`)
 		include includes/openpanel
 		block scripts

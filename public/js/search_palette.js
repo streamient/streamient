@@ -21,7 +21,7 @@
 		if (!palette || !backdrop || !input) return;
 		palette.classList.toggle('d-none', !open);
 		backdrop.classList.toggle('d-none', !open);
-		document.body.classList.toggle('kk-search-open', open);
+		document.body.classList.toggle('st-search-open', open);
 		if (open) {
 			input.value = '';
 			results = [];
@@ -45,7 +45,7 @@
 	}
 
 	function resultTypeClass(type) {
-		return 'kk-search-type-' + String(type || '').replace(/[^a-z0-9_-]/gi, '');
+		return 'st-search-type-' + String(type || '').replace(/[^a-z0-9_-]/gi, '');
 	}
 
 	function formatResultDate(value) {
@@ -72,14 +72,14 @@
 		if (!resultsEl) return;
 		resultsEl.innerHTML = '';
 		var empty = document.createElement('div');
-		empty.className = 'kk-search-empty';
+		empty.className = 'st-search-empty';
 		empty.textContent = message;
 		resultsEl.appendChild(empty);
 		if (helpEl) helpEl.textContent = 'Search everything';
 	}
 
 	function updateActive() {
-		resultsEl?.querySelectorAll('.kk-search-result').forEach(function (el, index) {
+		resultsEl?.querySelectorAll('.st-search-result').forEach(function (el, index) {
 			var active = index === activeIndex;
 			el.classList.toggle('is-active', active);
 			el.setAttribute('aria-selected', active ? 'true' : 'false');
@@ -100,29 +100,29 @@
 		results.forEach(function (item, index) {
 			var row = document.createElement('button');
 			row.type = 'button';
-			row.className = 'kk-search-result';
+			row.className = 'st-search-result';
 			row.setAttribute('role', 'option');
 			row.setAttribute('aria-selected', 'false');
 
 			var badge = document.createElement('span');
-			badge.className = 'kk-search-result-badge ' + resultTypeClass(item.type);
+			badge.className = 'st-search-result-badge ' + resultTypeClass(item.type);
 			badge.textContent = item.label || item.type || 'Item';
 
 			var body = document.createElement('span');
-			body.className = 'kk-search-result-body';
+			body.className = 'st-search-result-body';
 
 			var titleRow = document.createElement('span');
-			titleRow.className = 'kk-search-result-title-row';
+			titleRow.className = 'st-search-result-title-row';
 
 			var title = document.createElement('span');
-			title.className = 'kk-search-result-title';
+			title.className = 'st-search-result-title';
 			title.textContent = escapeText(item.title || 'Untitled');
 			titleRow.appendChild(title);
 
 			var date = formatResultDate(item.updated_at);
 			if (date) {
 				var dateEl = document.createElement('span');
-				dateEl.className = 'kk-search-result-date';
+				dateEl.className = 'st-search-result-date';
 				dateEl.textContent = date;
 				titleRow.appendChild(dateEl);
 			}
@@ -131,14 +131,14 @@
 
 			if (item.subtitle) {
 				var subtitle = document.createElement('span');
-				subtitle.className = 'kk-search-result-subtitle';
+				subtitle.className = 'st-search-result-subtitle';
 				subtitle.textContent = item.subtitle;
 				body.appendChild(subtitle);
 			}
 
 			if (item.excerpt || item.highlight_segments?.length) {
 				var excerpt = document.createElement('span');
-				excerpt.className = 'kk-search-result-excerpt';
+				excerpt.className = 'st-search-result-excerpt';
 				excerpt.appendChild(createHighlightedText(item));
 				body.appendChild(excerpt);
 			}
@@ -242,12 +242,12 @@
 	}
 
 	document.addEventListener('DOMContentLoaded', function () {
-		trigger = document.getElementById('kk-global-search-trigger');
-		backdrop = document.getElementById('kk-search-backdrop');
-		palette = document.getElementById('kk-search-palette');
-		input = document.getElementById('kk-search-input');
-		resultsEl = document.getElementById('kk-search-results');
-		helpEl = document.getElementById('kk-search-help');
+		trigger = document.getElementById('st-global-search-trigger');
+		backdrop = document.getElementById('st-search-backdrop');
+		palette = document.getElementById('st-search-palette');
+		input = document.getElementById('st-search-input');
+		resultsEl = document.getElementById('st-search-results');
+		helpEl = document.getElementById('st-search-help');
 		if (!trigger || !palette || !input || !resultsEl) return;
 		bindEvents();
 	});

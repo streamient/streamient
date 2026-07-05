@@ -27,5 +27,5 @@ Both are per‑Streamient‑account, so different accounts can route differently
 
 - [URL Capture](/guide/browser-extension/url-capture) — popup actions and automatic capture rules.
 - [Email Capture](/guide/browser-extension/email-capture) — the email side panel.
-- [Email Accounts](/guide/browser-extension/email-accounts) — connect a mailbox for reliable email sync.
+- [Email Accounts](/guide/browser-extension/email-capture) — connect a mailbox for reliable email sync.
 - [Multiple Accounts](/guide/browser-extension/multiple-accounts) — add a second Streamient account.

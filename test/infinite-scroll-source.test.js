@@ -94,6 +94,6 @@ describe('record infinite scroll wiring', () => {
 	it('gives scroll sentinels nonzero dimensions', () => {
 		const css = read('public/css/app.css');
 
-		assert.match(css, /\.kk-scroll-sentinel,\n\.emails-scroll-sentinel\s*\{[\s\S]*min-height:\s*1px;[\s\S]*height:\s*1px;/);
+		assert.match(css, /\.st-scroll-sentinel,\n\.emails-scroll-sentinel\s*\{[\s\S]*min-height:\s*1px;[\s\S]*height:\s*1px;/);
 	});
 });

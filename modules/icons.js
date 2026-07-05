@@ -94,7 +94,7 @@ const attrsToHtml = (attrs = {}) => Object.entries(attrs)
 
 export function icon(name, extraClasses = '', attrs = {}) {
 	const glyph = ICON_GLYPHS[name] || name;
-	const classes = ['kk-icon', 'ti', `ti-${glyph}`, extraClasses].filter(Boolean).join(' ');
+	const classes = ['st-icon', 'ti', `ti-${glyph}`, extraClasses].filter(Boolean).join(' ');
 	return `<span class="${escapeHtml(classes)}" aria-hidden="true"${attrsToHtml(attrs)}></span>`;
 }
 

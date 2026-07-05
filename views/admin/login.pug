@@ -8,7 +8,7 @@ html(lang="en")
 		script.
 			(function () {
 				try {
-					var t = localStorage.getItem('kk-theme');
+					var t = localStorage.getItem('st-theme') || localStorage.getItem('kk-theme');
 					if (t !== 'light' && t !== 'dark') t = 'dark';
 					document.documentElement.setAttribute('data-theme', t);
 					document.documentElement.setAttribute('data-bs-theme', t);

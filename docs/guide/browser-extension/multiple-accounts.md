@@ -22,7 +22,7 @@ Open the account menu, select the account you want to remove, and choose **Remov
 These settings live per account, so they don't bleed across:
 
 - Default Project, URL Project, Email Project
-- [Email Account connector](/guide/browser-extension/email-accounts) (IMAP/JMAP credentials)
+- [Email Account connector](/guide/browser-extension/email-capture) (IMAP/JMAP credentials)
 - [Automatic URL capture](/guide/browser-extension/url-capture#automatic-capture) toggle, delay, scroll trigger, and exclude list
 
 ## Automatic capture across multiple accounts

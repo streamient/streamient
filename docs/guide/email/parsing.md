@@ -17,7 +17,7 @@ Streamient parses email into a stored project record before indexing it.
 
 ## HTML
 
-HTML is sanitized before storage. Remote image URLs are moved to `data-kk-remote-src` and `html_content_has_remote_images` is set so clients can choose whether to load them.
+HTML is sanitized before storage. Remote image URLs are moved to `data-st-remote-src` and `html_content_has_remote_images` is set so clients can choose whether to load them.
 
 ## Attachments
 

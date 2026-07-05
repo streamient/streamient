@@ -38,10 +38,10 @@ const decorateSwalOptions = (options) => {
 	const glyph = alertGlyphs[alertIcons[options.icon]];
 	return {
 		...options,
-		iconHtml: `<span class="kk-icon ti ti-${glyph}" aria-hidden="true"></span>`,
+		iconHtml: `<span class="st-icon ti ti-${glyph}" aria-hidden="true"></span>`,
 		customClass: {
 			...options.customClass,
-			icon: ['swal2-kk-icon', options.customClass?.icon].filter(Boolean).join(' '),
+			icon: ['swal2-st-icon', options.customClass?.icon].filter(Boolean).join(' '),
 		},
 	};
 };
