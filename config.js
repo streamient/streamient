@@ -2,6 +2,9 @@ function parseTypesenseConfig() {
 	// Only override the connection timeout; let the client use its own sensible
 	// defaults for numRetries / retryIntervalSeconds / healthcheckIntervalSeconds.
 	const connectionTimeoutSeconds = Number(process.env.TYPESENSE_CONNECTION_TIMEOUT_SECONDS) || 30;
+	// Per-product collection prefix (st_/mt_/mg_) so multiple products can share
+	// one Typesense cluster. Set TYPESENSE_COLLECTION_PREFIX="" to disable.
+	const collectionPrefix = (process.env.TYPESENSE_COLLECTION_PREFIX ?? 'st').trim();
 	let nodesEnv = (process.env.TYPESENSE_NODES || '').trim();
 	// Strip wrapping single or double quotes (some orchestrators add them)
 	if ((nodesEnv.startsWith("'") && nodesEnv.endsWith("'")) || (nodesEnv.startsWith('"') && nodesEnv.endsWith('"') && nodesEnv[1] !== '{')) {
@@ -16,6 +19,7 @@ function parseTypesenseConfig() {
 			return {
 				connectionTimeoutSeconds,
 				...parsed,
+				collectionPrefix,
 			};
 		} catch (err) {
 			console.error('Invalid TYPESENSE_NODES JSON:', err.message);
@@ -33,6 +37,7 @@ function parseTypesenseConfig() {
 		],
 		apiKey: process.env.TYPESENSE_API_KEY || 'streamient-dev-key',
 		connectionTimeoutSeconds,
+		collectionPrefix,
 	};
 }
 

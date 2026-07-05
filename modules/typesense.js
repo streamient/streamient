@@ -18,7 +18,15 @@ const _chunk_overlap = 200;
 
 // Single shared collection for all tenants' conversation history.
 // Isolation is enforced via the conversation model_id, which encodes host + user.
+// Deliberately NOT prefixed: Typesense supports a single conversation store.
 const CONVERSATION_STORE_COLLECTION = 'conversation_store';
+
+// Per-product collection prefix (default 'st') so streamient, mailtwine, and
+// managani can share one Typesense cluster without colliding on `${type}_${host_id}`.
+export function buildCollectionName(type, host_id) {
+	const prefix = config.typesense.collectionPrefix || '';
+	return `${prefix ? `${prefix}_` : ''}${type}_${host_id}`;
+}
 // Default Typesense conversation model per provider, used when falling back to a
 // provider the tenant has a key for (the configured model may be provider-specific).
 const TS_CONVERSATION_FALLBACK_MODELS = { openai: config.llm.openaiModel, google: config.llm.googleModel };
@@ -359,7 +367,7 @@ export function toTypesenseDocs(type, doc) {
 }
 const schemas = {
 	notes: (host_id) => ({
-		name: `notes_${host_id}`,
+		name: buildCollectionName('notes', host_id),
 		enable_nested_fields: true,
 		fields: [
 			{ name: 'title', type: 'string' },
@@ -388,7 +396,7 @@ const schemas = {
 	}),
 	
 	memory: (host_id) => ({
-		name: `memory_${host_id}`,
+		name: buildCollectionName('memory', host_id),
 		enable_nested_fields: true,
 		fields: [
 			{ name: 'title', type: 'string' },
@@ -418,7 +426,7 @@ const schemas = {
 	}),
 	
 	urls: (host_id) => ({
-		name: `urls_${host_id}`,
+		name: buildCollectionName('urls', host_id),
 		enable_nested_fields: true,
 		fields: [
 			{ name: 'url', type: 'string' },
@@ -448,7 +456,7 @@ const schemas = {
 	}),
 
 	emails: (host_id) => ({
-		name: `emails_${host_id}`,
+		name: buildCollectionName('emails', host_id),
 		enable_nested_fields: true,
 		fields: [
 			{ name: 'subject', type: 'string', optional: true },
@@ -494,7 +502,7 @@ const schemas = {
 	}),
 	
 	pages: (host_id) => ({
-		name: `pages_${host_id}`,
+		name: buildCollectionName('pages', host_id),
 		enable_nested_fields: true,
 		fields: [
 			{ name: 'url', type: 'string' },
@@ -670,7 +678,7 @@ export async function indexDocument(host_id, type, doc) {
  */
 export async function importDocuments(host_id, type, docs, action = 'upsert') {
 	const ts = getTypesenseClient();
-	const collectionName = `${type}_${host_id}`;
+	const collectionName = buildCollectionName(type, host_id);
 	try {
 		return await withTypesenseResilience(
 			`import ${collectionName}`,
@@ -702,7 +710,7 @@ export async function removeDocument(host_id, type, docId) {
  */
 export async function removeDocumentsByFilter(host_id, type, filterBy) {
 	const ts = getTypesenseClient();
-	const collectionName = `${type}_${host_id}`;
+	const collectionName = buildCollectionName(type, host_id);
 	try {
 		return await ts.collections(collectionName).documents().delete({ filter_by: filterBy });
 	} catch (err) {
@@ -725,7 +733,7 @@ export async function removeDocumentsBySourceIds(host_id, type, sourceIds) {
 	const ids = [...new Set((sourceIds || []).map((id) => String(id)).filter(Boolean))];
 	if (!ids.length) return null;
 	const ts = getTypesenseClient();
-	const collectionName = `${type}_${host_id}`;
+	const collectionName = buildCollectionName(type, host_id);
 	const filterBy = `source_id:=[${ids.map(exactFilterValue).join(',')}]`;
 	return withTypesenseResilience(
 		`bulk delete ${collectionName} (${ids.length} sources)`,
@@ -753,7 +761,7 @@ export async function bulkRemoveDocuments(host_id, type, sourceIds) {
  */
 export async function searchCollection(host_id, type, query, options = {}) {
 	const ts = getTypesenseClient();
-	const collectionName = `${type}_${host_id}`;
+	const collectionName = buildCollectionName(type, host_id);
 	const isChunked = !!_chunk_fields[type] && options.group !== false;
 	const requested = options.perPage || 10;
 	// Over-fetch so source_id dedup (chunk collapse) can still fill the page.
@@ -791,7 +799,7 @@ export async function searchCollection(host_id, type, query, options = {}) {
  */
 export async function listDocuments(host_id, type, options = {}) {
 	const ts = getTypesenseClient();
-	const collectionName = `${type}_${host_id}`;
+	const collectionName = buildCollectionName(type, host_id);
 	const limit = options.perPage || 250;
 	const listQueryBy = type === 'emails' ? 'subject' : 'title';
 	const listIncludeFields = type === 'emails' ? 'id,source_id,subject,project_id,created_at,updated_at' : 'id,title,tags,project_id,created_at';
@@ -877,7 +885,7 @@ export async function searchAll(host_id, query, options = {}) {
 	const searchRequests = {
 		searches: types.map((type) => {
 			const includeFields = resolveIncludeFields(options.include_fields, type);
-			const search = { collection: `${type}_${host_id}` };
+			const search = { collection: buildCollectionName(type, host_id) };
 			const filters = [];
 			if (options.projectId) filters.push(`project_id:=${exactFilterValue(options.projectId)}`);
 			const filterBy = applyActiveTrashFilter(type, filters.join(' && '));
@@ -960,7 +968,7 @@ export async function quickSearch(host_id, query, options = {}) {
 		if (options.projectId) filters.push(`project_id:=${exactFilterValue(options.projectId)}`);
 		const filterBy = applyActiveTrashFilter(type, filters.join(' && '));
 		return {
-			collection: `${type}_${host_id}`,
+			collection: buildCollectionName(type, host_id),
 			q,
 			query_by: fields.query_by,
 			prefix: true,
@@ -1003,13 +1011,13 @@ export async function getCollectionCounts(host_id) {
 	await Promise.all(types.map(async (type) => {
 		try {
 			const col = await withTypesenseResilience(
-				`collection stats ${type}_${host_id}`,
-				() => ts.collections(`${type}_${host_id}`).retrieve({ 'exclude_fields': 'fields' }),
+				`collection stats ${buildCollectionName(type, host_id)}`,
+				() => ts.collections(buildCollectionName(type, host_id)).retrieve({ 'exclude_fields': 'fields' }),
 				{ fallback: { num_documents: 0 } },
 			);
 			counts[type] = col.num_documents || 0;
 		} catch (err) {
-			log.error({ err, collection: `${type}_${host_id}` }, 'getCollectionCounts failed');
+			log.error({ err, collection: buildCollectionName(type, host_id) }, 'getCollectionCounts failed');
 			counts[type] = 0;
 		}
 	}));
@@ -1022,7 +1030,7 @@ export async function getCollectionCounts(host_id) {
  */
 export async function getFilteredCount(host_id, type, projectId) {
 	const ts = getTypesenseClient();
-	const collectionName = `${type}_${host_id}`;
+	const collectionName = buildCollectionName(type, host_id);
 	try {
 		const countQueryBy = type === 'emails' ? 'subject' : 'title';
 		const search = {
@@ -1072,7 +1080,7 @@ export async function reindexHost(host_id, models) {
 
 	// Drop indexed content collections first. Keep conversation history intact:
 	// reindexing search data should not break chat history or existing convo models.
-	const allCollections = [...typeModelMap.map((t) => `${t.type}_${host_id}`), `pages_${host_id}`];
+	const allCollections = [...typeModelMap.map((t) => buildCollectionName(t.type, host_id)), buildCollectionName('pages', host_id)];
 	for (const collectionName of allCollections) {
 		try {
 			await ts.collections(collectionName).delete();
@@ -1094,7 +1102,7 @@ export async function reindexHost(host_id, models) {
 		// Recreate empty collection so scheduler can repopulate it
 		try {
 			await ts.collections().create(schemaFn(host_id));
-			log.info({ collection: `${type}_${host_id}` }, 'Created empty collection for reindex');
+			log.info({ collection: buildCollectionName(type, host_id) }, 'Created empty collection for reindex');
 		} catch (createErr) {
 			if (createErr.httpStatus !== 409) throw createErr;
 		}
@@ -1110,7 +1118,7 @@ export async function reindexHost(host_id, models) {
 	if (schemas.pages) {
 		try {
 			await ts.collections().create(schemas.pages(host_id));
-			log.info({ collection: `pages_${host_id}` }, 'Recreated empty pages collection');
+			log.info({ collection: buildCollectionName('pages', host_id) }, 'Recreated empty pages collection');
 		} catch (createErr) {
 			if (createErr.httpStatus !== 409) throw createErr;
 		}
@@ -1165,7 +1173,8 @@ function getIndexedTypeModelMap(models) {
 }
 
 function getReindexStatusKey(host_id) {
-	return `reindex-status:${host_id}`;
+	const prefix = config.typesense.collectionPrefix || '';
+	return `reindex-status:${prefix ? `${prefix}:` : ''}${host_id}`;
 }
 
 async function getStoredReindexStatus(host_id) {
@@ -1679,7 +1688,7 @@ export async function conversationSearch(hostId, userId, query, options = {}) {
 		if (projectId) filters.push(`project_id:=${exactFilterValue(projectId)}`);
 		const filterBy = applyActiveTrashFilter(type, filters.join(' && '));
 		return {
-			collection: `${type}_${hostId}`,
+			collection: buildCollectionName(type, hostId),
 			...(filterBy ? { filter_by: filterBy } : {}),
 		};
 	});

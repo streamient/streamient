@@ -19,7 +19,7 @@ import { MagicLink } from '../model/magic_link.js';
 import { Export } from '../model/export.js';
 import { AuditLog } from '../model/audit_log.js';
 import { Tenant } from '../modules/tenancy.js';
-import { getTypesenseClient, deleteConversationDataForHost } from '../modules/typesense.js';
+import { getTypesenseClient, deleteConversationDataForHost, buildCollectionName } from '../modules/typesense.js';
 import { deleteGitRepoHostDirectory } from './git_sync_service.js';
 import { createLogger } from '../modules/logger.js';
 
@@ -41,7 +41,7 @@ async function deleteTypesenseCollection(collectionName) {
 }
 
 export function getTenantTypesenseCollectionNames(hostId) {
-	return TENANT_COLLECTION_TYPES.map((type) => `${type}_${hostId}`);
+	return TENANT_COLLECTION_TYPES.map((type) => buildCollectionName(type, hostId));
 }
 
 async function deleteExportFiles(hostId, exportModel = Export, unlink = fs.unlink) {

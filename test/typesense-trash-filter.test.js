@@ -49,11 +49,11 @@ describe('Typesense trash filters', () => {
 
 			const searches = multiSearchCalls[0].searches.searches;
 			const filtersByCollection = new Map(searches.map((search) => [search.collection, search.filter_by || '']));
-			for (const collection of ['notes_host-1', 'memory_host-1', 'urls_host-1', 'emails_host-1']) {
+			for (const collection of ['st_notes_host-1', 'st_memory_host-1', 'st_urls_host-1', 'st_emails_host-1']) {
 				assert.match(filtersByCollection.get(collection), /project_id:=`project-1`/);
 				assert.match(filtersByCollection.get(collection), /in_trash:=false/);
 			}
-			assert.equal(filtersByCollection.get('pages_host-1'), 'project_id:=`project-1`');
+			assert.equal(filtersByCollection.get('st_pages_host-1'), 'project_id:=`project-1`');
 		} finally {
 			Typesense.Client = originalClient;
 		}

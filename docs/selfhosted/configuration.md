@@ -71,6 +71,7 @@ When `REDIS_SENTINEL` is set, the app connects via Sentinel for automatic failov
 | `TYPESENSE_PROTOCOL` | Protocol (`http` or `https`) | No | `http` |
 | `TYPESENSE_API_KEY` | Typesense API key | Yes | — |
 | `TYPESENSE_NODES` | Multi-node cluster config as JSON. Example: `[{"host":"ts1","port":8108,"protocol":"http"},{"host":"ts2","port":8108,"protocol":"http"}]` | No | — |
+| `TYPESENSE_COLLECTION_PREFIX` | Prefix added to all collection names (`st_emails_<id>`), so multiple products can share one Typesense cluster. Set to an empty string to keep unprefixed names on a dedicated cluster. | No | `st` |
 
 When `TYPESENSE_NODES` is set, the individual host/port/protocol variables are ignored and the cluster config is used instead.
 
