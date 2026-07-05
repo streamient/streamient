@@ -1435,11 +1435,6 @@ body:has(.sidebar) > .swal2-container {
 	position: fixed !important;
 }
 
-/* SweetAlert2 — navbar must stay above the overlay so the dropdown still works */
-body.swal2-shown .navbar {
-	z-index: 1070;
-}
-
 /* SweetAlert2 — after dialog closes the leftover container must not block clicks */
 body:not(.swal2-shown) > .swal2-container {
 	pointer-events: none !important;

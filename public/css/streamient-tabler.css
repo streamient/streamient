@@ -336,7 +336,11 @@ body.st-no-chat-sidebar .st-content-grid {
 	flex: 1 1 auto;
 	min-width: 0;
 	min-height: 0;
-	overflow: auto;
+	/* Vertical scroll only — .row negative gutter margins (e.g. project overview
+	   stat cards) hang 0.5rem past this unpadded pane and would otherwise
+	   produce a horizontal scrollbar. */
+	overflow-x: hidden;
+	overflow-y: auto;
 }
 
 .st-chat-rail {
