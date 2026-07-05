@@ -7,7 +7,7 @@ import { applyTenantContextToSession, createTenant, initializeSessionTenant } fr
 import { ensureCollections } from '../modules/typesense.js';
 import { generateToken } from '../middleware/auth.js';
 import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail } from '../services/email_service.js';
-import { buildHostedTrialFields, ensureStripeCustomerForAccountHolder } from '../services/billing_service.js';
+import { buildHostedTrialFields, ensureFreeSubscriptionForAccountHolder, ensureStripeCustomerForAccountHolder } from '../services/billing_service.js';
 import { sendMagicLink, isMagicLinkValid, verifyMagicLink } from '../services/magic_link_service.js';
 import * as passkeyService from '../services/passkey_service.js';
 import { createLogger } from '../modules/logger.js';
@@ -178,8 +178,10 @@ router.post('/verify', async (req, res) => {
 
 		try {
 			await ensureStripeCustomerForAccountHolder(user, tenant);
+			// Track Free accounts in Stripe with a $0 subscription.
+			await ensureFreeSubscriptionForAccountHolder(user, tenant);
 		} catch (e) {
-			log.error({ err: e, host_id: tenant.host_id, user_id: user._id.toString() }, 'Stripe customer creation failed during signup');
+			log.error({ err: e, host_id: tenant.host_id, user_id: user._id.toString() }, 'Stripe customer/free subscription setup failed during signup');
 		}
 
 		ensureCollections(tenant.host_id).catch((e) =>

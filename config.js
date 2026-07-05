@@ -254,6 +254,7 @@ const config = {
 		secretKey: process.env.STRIPE_SECRET_KEY || '',
 		webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
 		proPriceId: process.env.STRIPE_PRO_PRICE_ID || '',
+		freePriceId: process.env.STRIPE_FREE_PRICE_ID || '',
 		portalConfigId: process.env.STRIPE_PORTAL_CONFIG_ID || '',
 		trialDays: parseInt(process.env.STRIPE_TRIAL_DAYS, 10) || 7,
 	},

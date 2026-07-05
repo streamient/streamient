@@ -3,6 +3,9 @@ import { hydratedQuery } from '../model/mongoose.js';
 import { User } from '../model/user.js';
 import { Tenant } from '../modules/tenancy.js';
 import config from '../config.js';
+import { createLogger } from '../modules/logger.js';
+
+const log = createLogger('billing');
 
 export const BILLING_SUBSCRIPTION_URL = 'https://app.streamient.com/settings/subscription';
 
@@ -21,12 +24,21 @@ export function buildHostedTrialFields(now = new Date(), trialDays = config.stri
 /**
  * Resolve tenant plan from a Stripe subscription. Pro is the only paid plan, so
  * an entitled (active/trialing/past_due) subscription maps to 'pro'; anything
- * else (canceled/unpaid/incomplete) drops to 'free'.
+ * else (canceled/unpaid/incomplete) drops to 'free'. The $0 Free tracking
+ * price is always 'free', whatever its status.
  */
-function resolvePlanFromSubscription(subscription) {
+export function resolvePlanFromSubscription(subscription) {
     const status = subscription?.status;
     const entitled = status === 'active' || status === 'trialing' || status === 'past_due';
-    return entitled ? 'pro' : 'free';
+    if (!entitled) return 'free';
+    if (isFreePriceSubscription(subscription)) return 'free';
+    return 'pro';
+}
+
+/** True when the subscription's price is the $0 Free tracking price. */
+export function isFreePriceSubscription(subscription) {
+    const priceId = subscription?.items?.data?.[0]?.price?.id || '';
+    return Boolean(priceId && config.stripe.freePriceId && priceId === config.stripe.freePriceId);
 }
 
 export function resolveCheckoutPriceId() {
@@ -99,6 +111,77 @@ export async function ensureStripeCustomerForAccountHolder(user, tenant = null, 
 	await userModel.findByIdAndUpdate(user._id, { stripe_customer_id: customerId });
 	user.stripe_customer_id = customerId;
 	return customerId;
+}
+
+export function buildFreeSubscriptionParams(customerId, user, tenant = null) {
+	return {
+		customer: customerId,
+		items: [{ price: config.stripe.freePriceId }],
+		metadata: {
+			plan: 'free',
+			host_id: stringifyId(tenant?.host_id || user?.host_id),
+			streamient_user_id: stringifyId(user._id),
+		},
+	};
+}
+
+/**
+ * Subscribe a Free account holder to the $0 tracking price so every customer
+ * shows up in Stripe. Recorded only in stripe_free_subscription_id — never in
+ * stripe_subscription_id/subscription_status, which stay reserved for paid
+ * subscriptions (and would otherwise block checkout). No-op unless Stripe and
+ * STRIPE_FREE_PRICE_ID are configured. The caller must pass a user doc with
+ * stripe_customer_id selected; there is deliberately no fallback customer
+ * creation here (a legacy cus_* customer whose field simply wasn't selected
+ * would end up with a duplicate host_id customer).
+ */
+export async function ensureFreeSubscriptionForAccountHolder(user, tenant = null, options = {}) {
+	if (!user) {
+		throw new Error('user is required to create a free subscription');
+	}
+	if (!config.stripe.secretKey || !config.stripe.freePriceId) return null;
+	if (user.stripe_free_subscription_id) return user.stripe_free_subscription_id;
+	// Accounts carrying a live paid subscription need no tracking subscription.
+	// No-card trials have no stripe_subscription_id, so they still get one.
+	if (user.stripe_subscription_id && ['active', 'trialing', 'past_due'].includes(user.subscription_status)) return null;
+	const customerId = user.stripe_customer_id;
+	if (!customerId) return null;
+
+	const stripe = options.stripe || getStripe();
+	const userModel = options.userModel || User;
+	// Remote idempotency: reuse an existing active free-price subscription so
+	// webhook replays and re-runs never create duplicates.
+	const existing = await stripe.subscriptions.list({
+		customer: customerId,
+		price: config.stripe.freePriceId,
+		status: 'active',
+		limit: 1,
+	});
+	const subscription = existing?.data?.[0]
+		|| await stripe.subscriptions.create(buildFreeSubscriptionParams(customerId, user, tenant));
+	await userModel.findByIdAndUpdate(user._id, { stripe_free_subscription_id: subscription.id });
+	user.stripe_free_subscription_id = subscription.id;
+	return subscription.id;
+}
+
+/**
+ * Cancel the $0 tracking subscription (used when a paid subscription takes
+ * over). Tolerates already-canceled/missing subscriptions so webhook retries
+ * stay idempotent.
+ */
+export async function cancelFreeSubscriptionForUser(userId, options = {}) {
+	const userModel = options.userModel || User;
+	const user = await userModel.findById(userId).select('+stripe_free_subscription_id');
+	if (!user?.stripe_free_subscription_id) return false;
+	const stripe = options.stripe || getStripe();
+	try {
+		await stripe.subscriptions.cancel(user.stripe_free_subscription_id);
+	} catch (err) {
+		const code = err?.code || err?.raw?.code;
+		if (code !== 'resource_missing' && !/canceled/i.test(err?.message || '')) throw err;
+	}
+	await userModel.findByIdAndUpdate(userId, { $unset: { stripe_free_subscription_id: '' } });
+	return true;
 }
 
 export async function applySubscriptionToUser(userId, subscription, stripeCustomerId = undefined) {
@@ -207,13 +290,24 @@ export async function handleWebhook(rawBody, sig) {
             const userId = session.metadata?.streamient_user_id || session.metadata?.kumbukum_user_id;
             if (userId && session.subscription) {
                 const subscription = await stripe.subscriptions.retrieve(session.subscription);
+                // Checkout only sells Pro; a free-price session would be a
+                // misconfiguration and must not grant a paid plan.
+                if (isFreePriceSubscription(subscription)) break;
                 await applySubscriptionToUser(userId, subscription);
+                // The paid subscription replaces the $0 tracking subscription.
+                try {
+                    await cancelFreeSubscriptionForUser(userId, { stripe });
+                } catch (err) {
+                    log.error({ err, user_id: userId }, 'Free subscription cancel after upgrade failed');
+                }
             }
             break;
         }
 
         case 'customer.subscription.updated': {
             const subscription = event.data.object;
+            // The $0 tracking subscription never drives plan or status.
+            if (isFreePriceSubscription(subscription)) break;
             const user = await hydratedQuery(User.findOne({ stripe_subscription_id: subscription.id }));
             if (user) {
                 Object.assign(user, buildSubscriptionUserUpdate(subscription));
@@ -226,7 +320,12 @@ export async function handleWebhook(rawBody, sig) {
 
         case 'customer.subscription.deleted': {
             const subscription = event.data.object;
-            const user = await hydratedQuery(User.findOne({ stripe_subscription_id: subscription.id }));
+            // Deleting the $0 tracking subscription (e.g. on upgrade) must not
+            // re-enter paid-cancellation handling or re-create anything.
+            if (isFreePriceSubscription(subscription)) break;
+            const user = await hydratedQuery(
+                User.findOne({ stripe_subscription_id: subscription.id }).select('+stripe_customer_id +stripe_free_subscription_id'),
+            );
             if (user) {
                 user.subscription_status = 'canceled';
                 user.trial_source = null;
@@ -236,6 +335,12 @@ export async function handleWebhook(rawBody, sig) {
                 user.trial_locked_at = null;
                 await user.save();
                 await Tenant.findOneAndUpdate({ host_id: user.host_id }, { plan: 'free' });
+                // Back on Free — resume tracking with a fresh $0 subscription.
+                try {
+                    await ensureFreeSubscriptionForAccountHolder(user, null, { stripe });
+                } catch (err) {
+                    log.error({ err, user_id: user._id.toString() }, 'Free subscription recreate after downgrade failed');
+                }
             }
             break;
         }

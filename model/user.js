@@ -29,6 +29,9 @@ const userSchema = new mongoose.Schema(
 		// Billing (hosted edition only)
 		stripe_customer_id: { type: String, select: false },
 		stripe_subscription_id: { type: String, select: false },
+		// $0 tracking subscription for Free accounts — never mirrored into
+		// subscription_status, so it can't block checkout or the trial flow.
+		stripe_free_subscription_id: { type: String, select: false },
 		subscription_status: {
 			type: String,
 			enum: ['incomplete', 'trialing', 'trial_expired', 'active', 'past_due', 'canceled', 'unpaid'],
@@ -70,6 +73,7 @@ userSchema.methods.toSafe = function () {
 	delete obj.password_reset_expires;
 	delete obj.stripe_customer_id;
 	delete obj.stripe_subscription_id;
+	delete obj.stripe_free_subscription_id;
 	if (Array.isArray(obj.access_tokens)) obj.access_tokens = safeAccessTokens(obj.access_tokens);
 	return obj;
 };
