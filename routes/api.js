@@ -64,7 +64,8 @@ router.use(async (req, res, next) => {
 });
 
 function auditCtx(req) {
-	const skipExternalSyncHeader = req.headers['x-kumbukum-skip-external-sync'];
+	// old header name still sent by not-yet-updated browser extensions
+	const skipExternalSyncHeader = req.headers['x-streamient-skip-external-sync'] ?? req.headers['x-kumbukum-skip-external-sync'];
 	return {
 		user_id: req.userId,
 		channel: req.headers['x-mcp-client'] ? 'mcp' : (req.authMethod === 'session' ? 'web' : 'api'),
@@ -1715,7 +1716,7 @@ router.get('/export/download/:token', requireRestrictedSettingsAccess, async (re
 	try {
 		const filePath = await exportService.getExportFile(req.params.token, req.host_id);
 		if (!filePath) return res.status(404).json({ error: 'Export not found or expired' });
-		res.download(filePath, 'kumbukum-export.zip');
+		res.download(filePath, 'streamient-export.zip');
 	} catch (err) {
 		log.error({ err }, 'Export download error');
 		res.status(500).json({ error: 'Download failed' });

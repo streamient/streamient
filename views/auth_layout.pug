@@ -3,7 +3,7 @@ html(lang="en")
 	head
 		meta(charset="UTF-8")
 		meta(name="viewport" content="width=device-width, initial-scale=1")
-		title #{title || 'Kumbukum'}
+		title #{title || 'Streamient'}
 		- const __wlFavicon = typeof white_label !== 'undefined' && white_label && white_label.favicon_url ? white_label.favicon_url : '/static/images/favicon.ico'
 		link(href=__wlFavicon rel="shortcut icon")
 		if !(typeof white_label !== 'undefined' && white_label && white_label.favicon_url)
@@ -23,7 +23,7 @@ html(lang="en")
 			})();
 		link(href=`/static/v-${v}/css/admin_vendor.css` rel="stylesheet")
 		link(href=`/static/v-${v}/css/app.css` rel="stylesheet")
-		link(href=`/static/v-${v}/css/kumbukum-tabler.css` rel="stylesheet")
+		link(href=`/static/v-${v}/css/streamient-tabler.css` rel="stylesheet")
 		block head
 	- const _authCoverUrl = typeof getAuthLoginCoverUrl === 'function' ? getAuthLoginCoverUrl() : authLoginCoverUrl
 	- const _authCoverStyle = typeof _authCoverUrl === 'string' && _authCoverUrl ? `--kk-auth-cover-image: url("${_authCoverUrl}");` : undefined
@@ -32,7 +32,7 @@ html(lang="en")
 			.col-12.col-lg-6.col-xl-4.border-top-wide.border-primary.d-flex.flex-column.justify-content-center.kk-auth-panel
 				.container.container-tight.my-5.px-lg-5
 					.mb-5.logo-form
-						a.navbar-brand.justify-content-center(href="/login" aria-label="Kumbukum login")
+						a.navbar-brand.justify-content-center(href="/login" aria-label="Streamient login")
 							- const __wlAuth = typeof white_label !== 'undefined' ? white_label : null
 							- const __wlAuthLogo = __wlAuth && (__wlAuth.login_logo_url || __wlAuth.logo_url)
 							if __wlAuthLogo

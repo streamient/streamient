@@ -12,7 +12,7 @@ Edit your personal information:
 
 ## Accounts and teams
 
-Kumbukum supports multi-account membership.
+Streamient supports multi-account membership.
 
 - Owners and admins can invite teammates from **Settings > My Team**
 - Accepting an invite adds you to that shared account
@@ -63,7 +63,7 @@ Use the **OAuth** tab under **Settings > Access Tokens** to:
 - Revoke previously authorized apps
 - Create and manage pre-registered OAuth clients for MCP HTTP integrations
 
-When an MCP client asks for OAuth access, Kumbukum presents a consent screen before issuing tokens. Review the app name, the active account, and the requested access before choosing **Allow access**. Technical OAuth values such as the client ID, redirect URI, and MCP resource are available under **App details** on the consent screen.
+When an MCP client asks for OAuth access, Streamient presents a consent screen before issuing tokens. Review the app name, the active account, and the requested access before choosing **Allow access**. Technical OAuth values such as the client ID, redirect URI, and MCP resource are available under **App details** on the consent screen.
 
 ## Role-based visibility
 

@@ -6,7 +6,7 @@ import '../../modules/process_env.js';
 import * as OtelRuntime from '../../modules/otel_runtime.js';
 
 OtelRuntime.initializeOpenTelemetry({
-	serviceApp: process.env.KUMBUKUM_APP || 'mcp',
+	serviceApp: process.env.STREAMIENT_APP || process.env.KUMBUKUM_APP || 'mcp',
 });
 
 export const createCustomSpan = OtelRuntime.createCustomSpan;

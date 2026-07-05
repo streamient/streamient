@@ -113,7 +113,7 @@ export async function setupSocketIO(httpServer, sessionMiddleware, handlers = {}
 	return OtelRuntime.createCustomSpan('socketio.setup', async (span) => {
 		emailCountsHandler = handlers.emailCountsHandler || emailCountsHandler;
 		span.setAttribute('server.mode', process.env.SERVER_MODE || 'app');
-		span.setAttribute('service.app', process.env.KUMBUKUM_APP || 'web');
+		span.setAttribute('service.app', process.env.STREAMIENT_APP || 'web');
 		span.setAttribute('socket.redis.enabled', !!config.socketRedis);
 
 		io = new Server(httpServer, {
@@ -155,9 +155,9 @@ export async function setupSocketIO(httpServer, sessionMiddleware, handlers = {}
 			OtelRuntime.createCustomSpan('socketio.connection', (connectionSpan) => {
 				connectionSpan.setAttribute('socket.id', socket.id);
 				connectionSpan.setAttribute('server.mode', process.env.SERVER_MODE || 'app');
-				connectionSpan.setAttribute('service.app', process.env.KUMBUKUM_APP || 'web');
+				connectionSpan.setAttribute('service.app', process.env.STREAMIENT_APP || 'web');
 			});
-			log.info({ socketId: socket.id, app: process.env.KUMBUKUM_APP || 'web' }, 'Socket.IO client connected');
+			log.info({ socketId: socket.id, app: process.env.STREAMIENT_APP || 'web' }, 'Socket.IO client connected');
 
 			// Client subscribes to a tenant room
 			socket.on('subscribe', (room) => {
@@ -186,11 +186,11 @@ export async function setupSocketIO(httpServer, sessionMiddleware, handlers = {}
 					disconnectSpan.setAttribute('socket.id', socket.id);
 					disconnectSpan.setAttribute('server.mode', process.env.SERVER_MODE || 'app');
 				});
-				log.info({ socketId: socket.id, app: process.env.KUMBUKUM_APP || 'web' }, 'Socket.IO client disconnected');
+				log.info({ socketId: socket.id, app: process.env.STREAMIENT_APP || 'web' }, 'Socket.IO client disconnected');
 			});
 		});
 
-		log.info({ mode: process.env.SERVER_MODE || 'app', app: process.env.KUMBUKUM_APP || 'web', otel: OtelRuntime.isEnabled() ? 'enabled' : 'disabled' }, 'Socket.IO initialized');
+		log.info({ mode: process.env.SERVER_MODE || 'app', app: process.env.STREAMIENT_APP || 'web', otel: OtelRuntime.isEnabled() ? 'enabled' : 'disabled' }, 'Socket.IO initialized');
 		return io;
 	});
 }

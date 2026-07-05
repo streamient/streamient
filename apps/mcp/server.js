@@ -23,7 +23,7 @@ import { createLogger } from '../../modules/logger.js';
 
 const PORT = mcpConfig.port;
 const API_BASE_URL = mcpConfig.apiBaseUrl;
-const MCP_PRODUCT = 'kumbukum';
+const MCP_PRODUCT = 'streamient';
 const log = createLogger('mcp');
 // Default project id + feature flags change rarely, so cache them long enough
 // to stay warm across a user's session and normal gaps between calls. 60s was
@@ -126,7 +126,7 @@ async function createServer(apiAuth, { projectId, oauthClientId, cacheKey, toolP
   const bootstrapMs = Date.now() - bootstrapStart;
 
   const server = new McpServer({
-    name: 'kumbukum',
+    name: 'streamient',
     version: '0.1.0',
     instructions: MCP_SERVER_INSTRUCTIONS,
   });
@@ -214,7 +214,7 @@ if (transportArg === '--stdio' || !transportArg) {
     await server.connect(transport);
   } catch (err) {
     recordException(err);
-    log.error({ err }, 'Fatal error starting Kumbukum MCP stdio server');
+    log.error({ err }, 'Fatal error starting Streamient MCP stdio server');
     process.exit(1);
   }
 } else {
@@ -281,7 +281,7 @@ if (transportArg === '--stdio' || !transportArg) {
       await server.connect(transport);
     } catch (err) {
       recordException(err);
-      log.error({ err }, 'Error starting Kumbukum MCP SSE connection');
+      log.error({ err }, 'Error starting Streamient MCP SSE connection');
       if (!res.headersSent) {
         res.status(500).json({ error: 'Internal server error' });
       }
@@ -304,7 +304,7 @@ if (transportArg === '--stdio' || !transportArg) {
       await session.transport.handlePostMessage(req, res);
     } catch (err) {
       recordException(err);
-      log.error({ err }, 'Error handling Kumbukum MCP SSE message');
+      log.error({ err }, 'Error handling Streamient MCP SSE message');
       if (!res.headersSent) {
         res.status(500).json({ error: 'Internal server error' });
       }
@@ -342,7 +342,7 @@ if (transportArg === '--stdio' || !transportArg) {
       });
     } catch (err) {
       recordException(err);
-      log.error({ err }, 'Error handling Kumbukum MCP HTTP request');
+      log.error({ err }, 'Error handling Streamient MCP HTTP request');
       logMcpRequest({
         method: mcpMethod,
         transport: 'streamable-http',
@@ -370,6 +370,6 @@ if (transportArg === '--stdio' || !transportArg) {
   setupOtelExpressErrorHandler(app);
 
   app.listen(PORT, () => {
-    log.info({ port: PORT, sse: `/sse`, http: `/mcp`, app: `/mcp/app` }, `Kumbukum MCP server running on port ${PORT}`);
+    log.info({ port: PORT, sse: `/sse`, http: `/mcp`, app: `/mcp/app` }, `Streamient MCP server running on port ${PORT}`);
   });
 }

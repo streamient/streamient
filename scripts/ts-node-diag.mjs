@@ -1,6 +1,6 @@
 // Self-contained Typesense driver/cluster diagnostic.
 // Run INSIDE a live container (sees the same TYPESENSE_NODES env as the app):
-//   docker exec -w /opt/kumbukum <container> node /tmp/ts-node-diag.mjs
+//   docker exec -w /opt/streamient <container> node /tmp/ts-node-diag.mjs
 // Tests the combined multi-node client AND each node individually, per collection,
 // to find whether one node is slow/broken for a specific collection (e.g. notes).
 import Typesense from 'typesense';

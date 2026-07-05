@@ -19,7 +19,7 @@
 }
 
 # Main app domain
-app.kumbukum.com:80 {
+app.streamient.com:80 {
 	tls internal
 	import cors
 
@@ -30,7 +30,7 @@ app.kumbukum.com:80 {
 }
 
 
-mcp.kumbukum.com:80 {
+mcp.streamient.com:80 {
 	tls internal
     reverse_proxy http://mcp:3002 {
         header_up X-Forwarded-Proto {scheme}

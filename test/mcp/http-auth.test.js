@@ -58,12 +58,12 @@ describe('MCP HTTP auth helper', () => {
 			headers: {
 				host: 'mcp:3002',
 				'x-forwarded-proto': 'https',
-				'x-forwarded-host': 'mcp.kumbukum.com',
+				'x-forwarded-host': 'mcp.streamient.com',
 			},
 		});
 
 		assert.equal(result.ok, false);
-		assert.match(result.response.headers['WWW-Authenticate'], /resource_metadata="https:\/\/mcp\.kumbukum\.com\/\.well-known\/oauth-protected-resource\/mcp"/);
+		assert.match(result.response.headers['WWW-Authenticate'], /resource_metadata="https:\/\/mcp\.streamient\.com\/\.well-known\/oauth-protected-resource\/mcp"/);
 		assert.match(result.response.headers['WWW-Authenticate'], /scope="mcp:email mcp:git mcp:read mcp:write"/);
 	});
 
@@ -74,12 +74,12 @@ describe('MCP HTTP auth helper', () => {
 			headers: {
 				host: 'mcp:3002',
 				'x-forwarded-proto': 'https',
-				'x-forwarded-host': 'mcp.kumbukum.com',
+				'x-forwarded-host': 'mcp.streamient.com',
 			},
 		});
 
 		assert.equal(result.ok, false);
-		assert.match(result.response.headers['WWW-Authenticate'], /resource_metadata="https:\/\/mcp\.kumbukum\.com\/\.well-known\/oauth-protected-resource\/mcp\/app"/);
+		assert.match(result.response.headers['WWW-Authenticate'], /resource_metadata="https:\/\/mcp\.streamient\.com\/\.well-known\/oauth-protected-resource\/mcp\/app"/);
 		assert.match(result.response.headers['WWW-Authenticate'], /scope="mcp:read mcp:write"/);
 		assert.doesNotMatch(result.response.headers['WWW-Authenticate'], /mcp:email/);
 		assert.doesNotMatch(result.response.headers['WWW-Authenticate'], /mcp:git/);
@@ -114,7 +114,7 @@ describe('MCP HTTP auth helper', () => {
 			host_id: 'host-1',
 			clientId: 'client-1',
 			scopes: ['mcp:read'],
-			audience: 'https://mcp.kumbukum.com/mcp',
+			audience: 'https://mcp.streamient.com/mcp',
 		});
 		const result = authenticateHttpRequest({
 			path: '/mcp',
@@ -123,7 +123,7 @@ describe('MCP HTTP auth helper', () => {
 				authorization: `Bearer ${token}`,
 				host: 'mcp:3002',
 				'x-forwarded-proto': 'https',
-				'x-forwarded-host': 'mcp.kumbukum.com',
+				'x-forwarded-host': 'mcp.streamient.com',
 			},
 		});
 
@@ -138,7 +138,7 @@ describe('MCP HTTP auth helper', () => {
 			host_id: 'host-1',
 			clientId: 'client-1',
 			scopes: ['mcp:read'],
-			audience: 'https://mcp.kumbukum.com/mcp/app',
+			audience: 'https://mcp.streamient.com/mcp/app',
 		});
 		const result = authenticateHttpRequest({
 			path: '/mcp/app',
@@ -147,7 +147,7 @@ describe('MCP HTTP auth helper', () => {
 				authorization: `Bearer ${token}`,
 				host: 'mcp:3002',
 				'x-forwarded-proto': 'https',
-				'x-forwarded-host': 'mcp.kumbukum.com',
+				'x-forwarded-host': 'mcp.streamient.com',
 			},
 		});
 

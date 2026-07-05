@@ -2,7 +2,7 @@
 layout: home
 
 hero:
-    name: Kumbukum
+    name: Streamient
     text: Turn scattered company knowledge into AI-ready context.
     tagline: Open source memory infrastructure for teams. Stop reset loops. Give every AI tool trusted memory you can inspect, control, and reuse.
     actions:

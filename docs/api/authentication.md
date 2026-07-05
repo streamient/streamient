@@ -1,6 +1,6 @@
 # Authentication
 
-Kumbukum supports multiple authentication methods.
+Streamient supports multiple authentication methods.
 
 ## Bearer Token (JWT)
 
@@ -9,7 +9,7 @@ Obtain a JWT by logging in:
 :::tabs
 == Cloud
 ```bash
-curl -X POST https://app.kumbukum.com/auth/login \
+curl -X POST https://app.streamient.com/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email": "user@example.com", "password": "your-password"}'
 ```
@@ -26,7 +26,7 @@ Use the returned token in subsequent requests:
 :::tabs
 == Cloud
 ```bash
-curl https://app.kumbukum.com/api/v1/notes \
+curl https://app.streamient.com/api/v1/notes \
   -H "Authorization: Bearer <jwt_token>"
 ```
 == Self-Hosted
@@ -45,7 +45,7 @@ Generate a personal access token in **Settings > Access Tokens** within the app.
 :::tabs
 == Cloud
 ```bash
-curl https://app.kumbukum.com/api/v1/notes \
+curl https://app.streamient.com/api/v1/notes \
   -H "Authorization: Token <access_token>"
 ```
 == Self-Hosted

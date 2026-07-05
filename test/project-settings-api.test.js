@@ -108,7 +108,7 @@ describe('Project settings API', () => {
 	let projects;
 
 	beforeEach(() => {
-		config.appUrl = 'https://app.kumbukum.com';
+		config.appUrl = 'https://app.streamient.com';
 		config.isHosted = true;
 		config.gitEncryptionKey = '12345678901234567890123456789012';
 		config.emailForwardDomain = 'email.example.com';

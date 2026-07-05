@@ -1,14 +1,14 @@
 # Agent Configuration
 
-To get the most out of Kumbukum with AI coding agents (GitHub Copilot, Cursor, Windsurf, Claude Code, etc.), add an `AGENTS.md` file to the root of your project. This tells agents how to use Kumbukum as their persistent memory layer and shared knowledge store.
+To get the most out of Streamient with AI coding agents (GitHub Copilot, Cursor, Windsurf, Claude Code, etc.), add an `AGENTS.md` file to the root of your project. This tells agents how to use Streamient as their persistent memory layer and shared knowledge store.
 
 ## Why?
 
-Without instructions, AI agents don't know Kumbukum exists. An `AGENTS.md` file tells them to:
+Without instructions, AI agents don't know Streamient exists. An `AGENTS.md` file tells them to:
 
-- **Search before acting** — Check Kumbukum for existing context before starting work
+- **Search before acting** — Check Streamient for existing context before starting work
 - **Store learnings** — Save decisions, patterns, and outcomes after completing tasks
-- **Use notes for documentation** — Keep project knowledge in Kumbukum, not scattered in files
+- **Use notes for documentation** — Keep project knowledge in Streamient, not scattered in files
 - **Connect knowledge** — Link related items so context compounds instead of resetting
 
 ## Recommended AGENTS.md
@@ -19,7 +19,7 @@ Copy the following into an `AGENTS.md` file at the root of your project:
 # Project Instructions
 
 ## Knowledge Management
-This project uses Kumbukum as its knowledge store via MCP.
+This project uses Streamient as its knowledge store via MCP.
 
 ### Before Starting Any Task
 1. Make one specific retrieval call before work:
@@ -97,7 +97,7 @@ The markdown template above is the same across clients; only where you paste it 
 
 See **[Claude Code](./claude-code)** for:
 
-- **Hooks** that automatically remind Claude to search Kumbukum before work and store after work
+- **Hooks** that automatically remind Claude to search Streamient before work and store after work
 - Why hooks are more reliable than `CLAUDE.md` alone
 - MCP server configuration in `~/.claude/settings.json`
 
@@ -107,4 +107,4 @@ See **[Cursor (IDE)](./cursor-ide)** for:
 
 - Paste-ready **global User Rules** (every repository on your machine)
 - How **`alwaysApply`** project rules complement `AGENTS.md`
-- MCP server safety in Cursor (server name `kumbukum` on `https://mcp.kumbukum.com/mcp`, never localhost)
+- MCP server safety in Cursor (server name `streamient` on `https://mcp.streamient.com/mcp`, never localhost)

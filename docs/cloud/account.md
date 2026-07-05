@@ -2,14 +2,14 @@
 
 ## Signup, invites, and login
 
-Create your Kumbukum Cloud account at [app.kumbukum.com](https://app.kumbukum.com). You can sign up with:
+Create your Streamient Cloud account at [app.streamient.com](https://app.streamient.com). You can sign up with:
 
 - **Email & Password** — Standard registration
 - **Magic Link** — Passwordless login via email
 
 After signup, you land in your first account and can create projects, store knowledge, and connect AI tools.
 
-On Kumbukum Cloud, new accounts start with a 7-day free trial after email confirmation. No credit card is required to start the trial.
+On Streamient Cloud, new accounts start with a 7-day free trial after email confirmation. No credit card is required to start the trial.
 
 Account owners and admins can also invite teammates from **Settings > My Team**. Accepting an invite adds that user to the existing account — it does not create a separate copy of the workspace.
 
@@ -51,7 +51,7 @@ Tokens are used for:
 
 Tokens do not expire. You can revoke them at any time from the settings page.
 
-For OAuth-capable MCP clients, Kumbukum asks for approval on a themed consent screen. Confirm the requesting app, account, and requested access before approving. Previously approved apps can be reviewed or revoked from the **OAuth** tab.
+For OAuth-capable MCP clients, Streamient asks for approval on a themed consent screen. Confirm the requesting app, account, and requested access before approving. Previously approved apps can be reviewed or revoked from the **OAuth** tab.
 
 ## Usage & Limits
 

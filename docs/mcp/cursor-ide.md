@@ -1,6 +1,6 @@
-# Cursor (IDE) and Kumbukum MCP
+# Cursor (IDE) and Streamient MCP
 
-Cursor can use Kumbukum as a **persistent memory layer** for Agent (Chat) via the Model Context Protocol. Configure three layers so every session follows the same workflow: **global User Rules** (all repos on your machine), **project rules** (per repository), and optionally **`AGENTS.md`**.
+Cursor can use Streamient as a **persistent memory layer** for Agent (Chat) via the Model Context Protocol. Configure three layers so every session follows the same workflow: **global User Rules** (all repos on your machine), **project rules** (per repository), and optionally **`AGENTS.md`**.
 
 ## 1. Global User Rules (recommended)
 
@@ -13,17 +13,17 @@ User Rules apply to **every project** in Cursor Agent (Chat). They are **not** s
 ### Paste this into User Rules
 
 ```markdown
-## Kumbukum MCP (all projects)
+## Streamient MCP (all projects)
 
-When Kumbukum MCP is enabled in Cursor for this profile:
+When Streamient MCP is enabled in Cursor for this profile:
 
 **Before non-trivial work** (features, debugging, multi-file changes): call `search_knowledge` or `recall_memory` with a short task query; use `search_notes` for written specs. Use returned context to inform the approach.
 
 **After completing meaningful work**: call `store_memory` (title + content + tags) for outcomes and learnings; use `create_note` for structured specs or ADRs when appropriate. Use `suggest_memory_tags` before inventing new tags. Use `create_link` to connect related items when useful.
 
-**MCP server + endpoint safety**: invoke tools on the server whose name is `kumbukum` (its tool id may appear as `user-kumbukum` in Cursor) and ensure it targets `https://mcp.kumbukum.com/mcp`. Do not write via localhost/127.0.0.1 MCP endpoints. If the `kumbukum` server is not available, stop writes and fix **Cursor Settings → MCP** first.
+**MCP server + endpoint safety**: invoke tools on the server whose name is `streamient` (its tool id may appear as `user-streamient` in Cursor) and ensure it targets `https://mcp.streamient.com/mcp`. Do not write via localhost/127.0.0.1 MCP endpoints. If the `streamient` server is not available, stop writes and fix **Cursor Settings → MCP** first.
 
-If Kumbukum MCP is unavailable, continue work and say so in the reply so the user can fix MCP or capture notes manually.
+If Streamient MCP is unavailable, continue work and say so in the reply so the user can fix MCP or capture notes manually.
 
 Respect each repository’s own **AGENTS.md** and **`.cursor/rules/`** for stack-specific conventions; this block is only for shared memory hygiene.
 ```
@@ -39,7 +39,7 @@ For repositories you control, add versioned rules so teammates get the same beha
 - Create **`.cursor/rules/*.mdc`** with YAML frontmatter.
 - Set **`alwaysApply: true`** when the workflow should run on every Agent chat in that repo.
 
-Example for a product monorepo: duplicate the workflow above into `.cursor/rules/kumbukum-mcp-workflow.mdc` and commit it.
+Example for a product monorepo: duplicate the workflow above into `.cursor/rules/streamient-mcp-workflow.mdc` and commit it.
 
 ## 3. `AGENTS.md` in the repo root
 
@@ -47,7 +47,7 @@ Cursor loads **`AGENTS.md`** as a simple alternative to `.cursor/rules`. Use the
 
 ## 4. Connect the MCP server
 
-Follow [MCP setup](./setup) (token, URL or stdio). After adding the server in **Cursor Settings → MCP**, confirm tools appear for server name **`kumbukum`** (often shown with a `user-` prefix in tool ids) and verify the URL is **`https://mcp.kumbukum.com/mcp`**.
+Follow [MCP setup](./setup) (token, URL or stdio). After adding the server in **Cursor Settings → MCP**, confirm tools appear for server name **`streamient`** (often shown with a `user-` prefix in tool ids) and verify the URL is **`https://mcp.streamient.com/mcp`**.
 
 ## 5. Related docs
 

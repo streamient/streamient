@@ -1,14 +1,14 @@
 extends ../auth_layout
 
 block head
-	title Sign Up — Kumbukum
+	title Sign Up — Streamient
 
 block body
 	if process.env.ENABLE_SIGNUP === "true"
 		#signup-result
 		form#signup-form
 			h1.h2.mb-2 Create your account
-			p.text-muted.mb-5 Start using Kumbukum.
+			p.text-muted.mb-5 Start using Streamient.
 			.mb-3
 				label.form-label(for="name") Name
 				input.form-control.form-control-sm#name(type="text" name="name" required autofocus)

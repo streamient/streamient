@@ -2,9 +2,9 @@
 	"$schema": "https://developers.openai.com/apps-sdk/schemas/chatgpt-app-submission.v1.json",
 	"schema_version": 1,
 	"app_info": {
-		"display_name": "Kumbukum",
+		"display_name": "Streamient",
 		"subtitle": "Shared AI memory",
-		"description": "Kumbukum gives ChatGPT access to a user's authenticated private memory workspace. Users can search and retrieve notes, memories, and project metadata, then create new private notes and memories when requested.",
+		"description": "Streamient gives ChatGPT access to a user's authenticated private memory workspace. Users can search and retrieve notes, memories, and project metadata, then create new private notes and memories when requested.",
 		"category": "PRODUCTIVITY"
 	},
 	"tools": {
@@ -15,8 +15,8 @@
 				"destructiveHint": false
 			},
 			"justifications": {
-				"read_only_justification": "Creates a private note in the user's Kumbukum workspace, so it changes workspace state.",
-				"open_world_justification": "Writes only to the user's private Kumbukum workspace and does not publish content to public internet systems.",
+				"read_only_justification": "Creates a private note in the user's Streamient workspace, so it changes workspace state.",
+				"open_world_justification": "Writes only to the user's private Streamient workspace and does not publish content to public internet systems.",
 				"destructive_justification": "Creates a new note and does not delete, overwrite, revoke access, or perform irreversible actions."
 			}
 		},
@@ -28,7 +28,7 @@
 			},
 			"justifications": {
 				"read_only_justification": "Retrieves a selected note by ID without modifying workspace data.",
-				"open_world_justification": "Reads from the user's private Kumbukum workspace and does not change public internet state.",
+				"open_world_justification": "Reads from the user's private Streamient workspace and does not change public internet state.",
 				"destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
 			}
 		},
@@ -52,7 +52,7 @@
 			},
 			"justifications": {
 				"read_only_justification": "Searches stored notes and returns matching results without modifying data.",
-				"open_world_justification": "Searches private Kumbukum notes and does not change public internet state.",
+				"open_world_justification": "Searches private Streamient notes and does not change public internet state.",
 				"destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
 			}
 		},
@@ -63,8 +63,8 @@
 				"destructiveHint": false
 			},
 			"justifications": {
-				"read_only_justification": "Stores a new private memory in the user's Kumbukum workspace.",
-				"open_world_justification": "Writes only to the user's private Kumbukum workspace and does not publish content publicly.",
+				"read_only_justification": "Stores a new private memory in the user's Streamient workspace.",
+				"open_world_justification": "Writes only to the user's private Streamient workspace and does not publish content publicly.",
 				"destructive_justification": "Creates a new memory and does not delete, overwrite, revoke access, or perform irreversible actions."
 			}
 		},
@@ -76,7 +76,7 @@
 			},
 			"justifications": {
 				"read_only_justification": "Searches stored memories and returns matching results without modifying data.",
-				"open_world_justification": "Searches private Kumbukum memories and does not change public internet state.",
+				"open_world_justification": "Searches private Streamient memories and does not change public internet state.",
 				"destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
 			}
 		},
@@ -88,7 +88,7 @@
 			},
 			"justifications": {
 				"read_only_justification": "Searches stored memories and returns matching results without modifying data.",
-				"open_world_justification": "Searches private Kumbukum memories and does not change public internet state.",
+				"open_world_justification": "Searches private Streamient memories and does not change public internet state.",
 				"destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
 			}
 		},
@@ -100,7 +100,7 @@
 			},
 			"justifications": {
 				"read_only_justification": "Retrieves a selected memory by ID without modifying workspace data.",
-				"open_world_justification": "Reads private Kumbukum memory data and does not change public internet state.",
+				"open_world_justification": "Reads private Streamient memory data and does not change public internet state.",
 				"destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
 			}
 		},
@@ -112,7 +112,7 @@
 			},
 			"justifications": {
 				"read_only_justification": "Retrieves suggested tags from existing workspace metadata without modifying records.",
-				"open_world_justification": "Reads private Kumbukum tag data and does not change public internet state.",
+				"open_world_justification": "Reads private Streamient tag data and does not change public internet state.",
 				"destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
 			}
 		},
@@ -123,7 +123,7 @@
 				"destructiveHint": false
 			},
 			"justifications": {
-				"read_only_justification": "Lists available Kumbukum projects without modifying workspace data.",
+				"read_only_justification": "Lists available Streamient projects without modifying workspace data.",
 				"open_world_justification": "Reads private workspace metadata and does not change public internet state.",
 				"destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
 			}
@@ -156,7 +156,7 @@
 	"test_cases": [
 		{
 			"description": "Search and read notes in the review demo workspace.",
-			"user_prompt": "Search my Kumbukum notes for OpenAI review demo and open the product launch note.",
+			"user_prompt": "Search my Streamient notes for OpenAI review demo and open the product launch note.",
 			"file_attachment_urls": null,
 			"tools_triggered": "search_notes, read_note",
 			"expected_output": "Finds and reads the matching note, then summarizes its launch checklist and related context.",
@@ -188,7 +188,7 @@
 		},
 		{
 			"description": "Inspect project metadata.",
-			"user_prompt": "List my Kumbukum projects and show the note and memory counts.",
+			"user_prompt": "List my Streamient projects and show the note and memory counts.",
 			"file_attachment_urls": null,
 			"tools_triggered": "list_projects, get_project_counts",
 			"expected_output": "Lists available projects and returns private workspace counts without changing data.",
@@ -197,15 +197,15 @@
 	],
 	"negative_test_cases": [
 		{
-			"description": "Do not invoke Kumbukum to save or crawl external URLs.",
-			"user_prompt": "Save and crawl https://developers.openai.com/apps-sdk/app-submission-guidelines in Kumbukum.",
+			"description": "Do not invoke Streamient to save or crawl external URLs.",
+			"user_prompt": "Save and crawl https://developers.openai.com/apps-sdk/app-submission-guidelines in Streamient.",
 			"file_attachment_urls": null,
 			"tools_triggered": null,
 			"expected_output": "The app should not be invoked because URL saving, fetching, and crawling are not exposed in the public ChatGPT app profile.",
 			"expected_output_url": null
 		},
 		{
-			"description": "Do not invoke Kumbukum to search or read email.",
+			"description": "Do not invoke Streamient to search or read email.",
 			"user_prompt": "Find the demo review checklist email and summarize it.",
 			"file_attachment_urls": null,
 			"tools_triggered": null,
@@ -213,8 +213,8 @@
 			"expected_output_url": null
 		},
 		{
-			"description": "Do not invoke Kumbukum to sync git repositories.",
-			"user_prompt": "Add https://github.com/kumbukum/kumbukum as a git sync repository.",
+			"description": "Do not invoke Streamient to sync git repositories.",
+			"user_prompt": "Add https://github.com/streamient/streamient as a git sync repository.",
 			"file_attachment_urls": null,
 			"tools_triggered": null,
 			"expected_output": "The app should not be invoked because git sync tools are not exposed in the public ChatGPT app profile.",

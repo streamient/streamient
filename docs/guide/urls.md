@@ -1,12 +1,12 @@
 # URLs
 
-Save links to articles, documentation, tools, or any webpage. Kumbukum automatically extracts the page content so you can search your bookmarks by what they say — not just their address.
+Save links to articles, documentation, tools, or any webpage. Streamient automatically extracts the page content so you can search your bookmarks by what they say — not just their address.
 
 ## What You Can Do
 
 ### Save a URL
 
-Click **New URL** or paste a link. Kumbukum fetches the page and extracts:
+Click **New URL** or paste a link. Streamient fetches the page and extracts:
 
 - **Title** and **description** from meta tags
 - **Open Graph image** for a visual preview
@@ -20,7 +20,7 @@ URLs are searchable across four fields: title, description, full text content, a
 
 ### Scheduled Crawling
 
-Enable **crawl** on any URL to have Kumbukum periodically re-fetch and re-index the page content. This keeps your saved links up to date as web pages change over time. Crawling runs automatically on a daily schedule.
+Enable **crawl** on any URL to have Streamient periodically re-fetch and re-index the page content. This keeps your saved links up to date as web pages change over time. Crawling runs automatically on a daily schedule.
 
 For pages you want to index more deeply, URL path crawling follows links under the saved URL path only.
 
@@ -38,7 +38,7 @@ Select multiple URLs with checkboxes to move them between projects or trash them
 
 ### Browser Extension
 
-Use the [Browser Extension](/guide/browser-extension/) to save the current page to Kumbukum without leaving your browser, or turn on [automatic capture](/guide/browser-extension/url-capture#automatic-capture) so pages you spend time on get saved on their own.
+Use the [Browser Extension](/guide/browser-extension/) to save the current page to Streamient without leaving your browser, or turn on [automatic capture](/guide/browser-extension/url-capture#automatic-capture) so pages you spend time on get saved on their own.
 
 ## How It Works
 

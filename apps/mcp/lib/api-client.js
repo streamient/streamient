@@ -1,5 +1,5 @@
 /**
- * API client for MCP server to communicate with the main Kumbukum app.
+ * API client for MCP server to communicate with the main Streamient app.
  */
 export class ApiClient {
   constructor(baseUrl, token) {

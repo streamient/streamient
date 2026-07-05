@@ -3,8 +3,8 @@ x-environment: &environment
   MCP_BASE_URL: ${MCP_BASE_URL}
   WS_URL: ${WS_URL:-}
   API_BASE_URL: http://app:3000
-  KUMBUKUM_APP: web
-  MONGO_URI: mongodb://mongo:27017/kumbukum
+  STREAMIENT_APP: web
+  MONGO_URI: mongodb://mongo:27017/streamient
   REDIS_URL: ${REDIS_URL:-redis://redis:6379}
   REDIS_SENTINEL: ${REDIS_SENTINEL:-}
   API_RATE_LIMIT_ENABLED: "${API_RATE_LIMIT_ENABLED:-true}"
@@ -38,7 +38,7 @@ x-environment: &environment
   SMTP_PASS: ${SMTP_PASS}
   SMTP_FROM: ${SMTP_FROM}
   WHITE_LABEL_ASSETS_DIR: ${WHITE_LABEL_ASSETS_DIR:-assets/white-label}
-  WHITE_LABEL_CNAME_TARGET: ${WHITE_LABEL_CNAME_TARGET:-app.kumbukum.com}
+  WHITE_LABEL_CNAME_TARGET: ${WHITE_LABEL_CNAME_TARGET:-app.streamient.com}
   WHITE_LABEL_ENFORCE_CUSTOM_DOMAINS: ${WHITE_LABEL_ENFORCE_CUSTOM_DOMAINS:-true}
   CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
   CLOUDFLARE_ZONE_ID: ${CLOUDFLARE_ZONE_ID:-}
@@ -92,13 +92,13 @@ x-environment: &environment
 
 services:
   app:
-    image: ghcr.io/kumbukum/kumbukum:latest
+    image: ghcr.io/streamient/streamient:latest
     command: ["npm", "run", "start"]
     ports:
       - "3000:3000"
     environment: *environment
     volumes:
-      - assets_data:/opt/kumbukum/assets
+      - assets_data:/opt/streamient/assets
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:3000/health"]
       interval: 30s
@@ -112,13 +112,13 @@ services:
     restart: unless-stopped
 
   ws:
-    image: ghcr.io/kumbukum/kumbukum:latest
+    image: ghcr.io/streamient/streamient:latest
     command: ["npm", "run", "start"]
     ports:
       - "3001:3001"
     environment:
       <<: *environment
-      KUMBUKUM_APP: ws
+      STREAMIENT_APP: ws
       PORT: 3001
       SERVER_MODE: ws
     healthcheck:
@@ -134,14 +134,14 @@ services:
     restart: unless-stopped
 
   mcp:
-    image: ghcr.io/kumbukum/kumbukum:latest
-    working_dir: /opt/kumbukum/apps/mcp
+    image: ghcr.io/streamient/streamient:latest
+    working_dir: /opt/streamient/apps/mcp
     command: ["npm", "run", "start"]
     ports:
       - "3002:3002"
     environment:
       <<: *environment
-      KUMBUKUM_APP: mcp
+      STREAMIENT_APP: mcp
       PORT: 3002
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:3002/health"]
@@ -152,14 +152,14 @@ services:
     restart: unless-stopped
 
   scheduler:
-    image: ghcr.io/kumbukum/kumbukum:latest
+    image: ghcr.io/streamient/streamient:latest
     command: ["npm", "run", "start"]
     environment:
       <<: *environment
-      KUMBUKUM_APP: scheduler
+      STREAMIENT_APP: scheduler
       SERVER_MODE: scheduler
     volumes:
-      - assets_data:/opt/kumbukum/assets
+      - assets_data:/opt/streamient/assets
     depends_on:
       - mongo
       - redis
@@ -202,7 +202,7 @@ services:
     restart: unless-stopped
 
   screenshot:
-    image: ghcr.io/kumbukum/screenshot:latest
+    image: ghcr.io/streamient/screenshot:latest
     restart: unless-stopped
     init: true
     ports:

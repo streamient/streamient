@@ -1,13 +1,13 @@
 # Changelog
 
-Kumbukum uses date tags in `YYYYMMDDN` format. Use the latest dated section as the release notes source.
+Streamient uses date tags in `YYYYMMDDN` format. Use the latest dated section as the release notes source.
 
 ## Unreleased
 
 - Reworked hosted plans: Free now includes built-in managed AI (Gemini 2.5 Flash-Lite, 50 AI requests per workspace per day) and unlimited users (still 1 project); Pro runs on Gemini 3 Flash with unlimited AI at $49/mo launch pricing (regularly $99). Bringing your own OpenAI/Gemini key is optional on every plan and removes the Free daily limit.
 - Removed the BYOK onboarding gate — new hosted signups land directly on the dashboard, no API key required.
 - Added a per-plan managed model matrix (`FREE_*`/`PRO_*` env overrides) and a Redis-backed daily AI limiter returning `429 AI_DAILY_LIMIT` on the chat endpoints (covers MCP and API).
-- Removed remaining ECC (email triage) leftovers: dead ECC CSS, quick-search ECC open mode, unused email AI/triage config, and stale triage wording in MCP instructions and API docs. Email triage lives in Mailtwine; Kumbukum keeps email storage, import, and search.
+- Removed remaining ECC (email triage) leftovers: dead ECC CSS, quick-search ECC open mode, unused email AI/triage config, and stale triage wording in MCP instructions and API docs. Email triage lives in Mailtwine; Streamient keeps email storage, import, and search.
 - Fixed project settings API failing for Pro tenants due to a removed email identity service reference.
 - Reindex button text now stays stable while reindex status updates.
 
@@ -90,7 +90,7 @@ Tags: `202606011`
 
 Tags: `202605311`, `202605312`
 
-- Moved docs to `docs.kumbukum.com`.
+- Moved docs to `docs.streamient.com`.
 - Improved MCP docs.
 - Added email detail trash controls.
 - Added email trash delete-all.
@@ -141,7 +141,7 @@ Tags: `202605281`
 Tags: `202605241`
 
 - Added `project_id` filters to `recall_memory` and `search_notes`.
-- Documented blocking Stop hook for guaranteed Kumbukum memory writes.
+- Documented blocking Stop hook for guaranteed Streamient memory writes.
 - Added small UI refinements.
 
 ## 2026-05-22
@@ -209,7 +209,7 @@ Tags: `202604301`
 - Removed direct OpenTelemetry dependencies and tracing bootstrap.
 - Prevented duplicate URL saves.
 - Deleted crawled pages when URL crawling is disabled.
-- Added explicit Sentry gating to Kumbukum MCP.
+- Added explicit Sentry gating to Streamient MCP.
 - Added README intro video section.
 
 ## 2026-04-26

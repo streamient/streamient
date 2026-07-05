@@ -62,8 +62,9 @@ export async function requireAuth(req, res, next) {
 				req.oauthScopes = payload.scope || '';
 			} catch {
 				payload = jwt.verify(token, config.jwtSecret);
-				if (payload.aud && payload.aud !== 'kumbukum-api') {
-					return res.status(401).json({ error: 'This bearer token is not valid for the Kumbukum API' });
+				// 'kumbukum-api' accepted during the rebrand transition so pre-rename tokens keep working
+				if (payload.aud && payload.aud !== 'streamient-api' && payload.aud !== 'kumbukum-api') {
+					return res.status(401).json({ error: 'This bearer token is not valid for the Streamient API' });
 				}
 				req.authMethod = 'bearer';
 			}

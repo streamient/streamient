@@ -45,7 +45,7 @@ describe('BYO AI service', () => {
 
 	beforeEach(() => {
 		config.gitEncryptionKey = '12345678901234567890123456789012';
-		config.appUrl = 'https://app.kumbukum.com';
+		config.appUrl = 'https://app.streamient.com';
 		config.isHosted = true;
 		config.llm.googleApiKey = 'env-gemini';
 		config.llm.openaiApiKey = 'env-openai';

@@ -62,7 +62,7 @@
 		subtree: true,
 	});
 
-	window.KumbukumAutofillGuard = {
+	window.StreamientAutofillGuard = {
 		apply: () => guardTree(document.documentElement),
 	};
 }());

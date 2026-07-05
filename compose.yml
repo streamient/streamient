@@ -1,8 +1,8 @@
 x-env: &env
   NODE_ENV: development
-  KUMBUKUM_APP: web
+  STREAMIENT_APP: web
   PORT: 3000
-  MONGO_URI: ${DEV_KUMBUKUM_MONGODB_URI}
+  MONGO_URI: ${DEV_STREAMIENT_MONGODB_URI:-${DEV_KUMBUKUM_MONGODB_URI}}
   REDIS_URL: ${DEV_REDIS_URL:-redis://redis:6379}
   API_RATE_LIMIT_ENABLED: "${API_RATE_LIMIT_ENABLED:-true}"
   API_RATE_LIMIT_WINDOW_MS: "${API_RATE_LIMIT_WINDOW_MS:-60000}"
@@ -21,7 +21,7 @@ x-env: &env
   MCP_HEAVY_TOOL_CONCURRENCY: "${MCP_HEAVY_TOOL_CONCURRENCY:-1}"
   TYPESENSE_HOST: ${DEV_TYPESENSE_HOST:-typesense}
   TYPESENSE_PORT: 8108
-  TYPESENSE_API_KEY: ${DEV_TYPESENSE_KEY:-kumbukum-dev-key}
+  TYPESENSE_API_KEY: ${DEV_TYPESENSE_KEY:-streamient-dev-key}
   TYPESENSE_NODES: ""
   CRAWL_STEP_LIMIT: "${CRAWL_STEP_LIMIT:-100}"
   CRAWL_INDEX_BATCH_SIZE: "${CRAWL_INDEX_BATCH_SIZE:-25}"
@@ -58,13 +58,13 @@ x-env: &env
   APP_URL: http://app.k.lan
   MCP_BASE_URL: http://mcp.k.lan
   WS_URL: ""
-  EMAIL_FORWARD_DOMAIN: "email.kumbukum.com"
+  EMAIL_FORWARD_DOMAIN: "email.streamient.com"
   WHITE_LABEL_ASSETS_DIR: "${WHITE_LABEL_ASSETS_DIR:-assets/white-label}"
   WHITE_LABEL_CNAME_TARGET: "${WHITE_LABEL_CNAME_TARGET:-app.k.lan}"
   WHITE_LABEL_ENFORCE_CUSTOM_DOMAINS: "${WHITE_LABEL_ENFORCE_CUSTOM_DOMAINS:-false}"
   CLOUDFLARE_API_TOKEN: "${CLOUDFLARE_API_TOKEN:-}"
   CLOUDFLARE_ZONE_ID: "${CLOUDFLARE_ZONE_ID:-}"
-  API_BASE_URL: http://kumbukum-app-1:3000
+  API_BASE_URL: http://streamient-app-1:3000
   SCREENSHOT_URL: ${DEV_SCREENSHOT_URL:-http://screenshot:3000}
   SCREENSHOT_SECRET: "${SCREENSHOT_SECRET:-change-me-screenshot-secret}" # openssl rand -hex 32
   SYSADMIN_EMAIL: "sysadmin@localhost"
@@ -158,13 +158,13 @@ services:
     extends:
       file: ./compose.base.yml
       service: base
-    working_dir: /opt/kumbukum/apps/mcp
+    working_dir: /opt/streamient/apps/mcp
     command: ["npm", "run", "start"]
     ports:
       - 3000
     environment:
       <<: *env
-      KUMBUKUM_APP: mcp
+      STREAMIENT_APP: mcp
       PORT: 3000
     restart: unless-stopped
     healthcheck:
@@ -186,7 +186,7 @@ services:
     command: ["npm", "run", "start"]
     environment:
       <<: *env
-      KUMBUKUM_APP: scheduler
+      STREAMIENT_APP: scheduler
       SERVER_MODE: scheduler
     restart: unless-stopped
     depends_on:
@@ -202,7 +202,7 @@ services:
     command: ["npm", "run", "start"]
     environment:
       <<: *env
-      KUMBUKUM_APP: email-worker
+      STREAMIENT_APP: email-worker
       SERVER_MODE: email-worker
     restart: unless-stopped
     depends_on:

@@ -1,16 +1,16 @@
-# Kumbukum MCP Server
+# Streamient MCP Server
 
-Connect your AI tools to Kumbukum with the Model Context Protocol (MCP) — an open standard that lets AI assistants work directly with your notes, memories, saved URLs, emails, projects, and knowledge graph.
+Connect your AI tools to Streamient with the Model Context Protocol (MCP) — an open standard that lets AI assistants work directly with your notes, memories, saved URLs, emails, projects, and knowledge graph.
 
 Instead of copying context between tools, your assistant reads and writes the same shared memory layer your team already trusts — across sessions, projects, and clients.
 
 ## What is MCP?
 
-MCP is an open standard, developed by Anthropic, that creates a universal bridge between AI assistants and external tools. With the Kumbukum MCP server, your assistant can search and update your knowledge base directly — securely, and with your permission — without you leaving the chat.
+MCP is an open standard, developed by Anthropic, that creates a universal bridge between AI assistants and external tools. With the Streamient MCP server, your assistant can search and update your knowledge base directly — securely, and with your permission — without you leaving the chat.
 
 ## What you can do with it
 
-With Kumbukum MCP, your AI assistant can:
+With Streamient MCP, your AI assistant can:
 
 - **Search across everything** — find relevant notes, memories, URLs, emails, and pages with one knowledge search
 - **Remember decisions and learnings** — store memories so context persists across sessions
@@ -27,15 +27,15 @@ Public app submissions can use the curated `/mcp/app` endpoint on the same serve
 
 ## How it works
 
-1. **Connect once** — add the Kumbukum MCP server to your AI client.
+1. **Connect once** — add the Streamient MCP server to your AI client.
 2. **Authenticate** — sign in with OAuth (recommended) or a personal access token.
 3. **Ask in natural language** — tell your assistant what you need ("save this decision", "what did we decide about auth?").
-4. **Kumbukum runs the tool** — the request executes securely against your account, respecting your permissions.
+4. **Streamient runs the tool** — the request executes securely against your account, respecting your permissions.
 5. **Get results back** — your assistant returns the answer and keeps the context for next time.
 
 ## Supported AI clients
 
-Kumbukum MCP works with any MCP-compatible client, including:
+Streamient MCP works with any MCP-compatible client, including:
 
 - Claude Desktop & Claude.ai
 - Claude Code

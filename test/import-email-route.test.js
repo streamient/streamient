@@ -38,7 +38,7 @@ describe('Email forwarding import route', () => {
 	const originalAuditLogCreate = AuditLog.create;
 
 	beforeEach(() => {
-		config.emailForwardDomain = 'email.kumbukum.com';
+		config.emailForwardDomain = 'email.streamient.com';
 		Project.findOne = () => ({
 			lean: async () => ({
 				_id: projectId,
@@ -90,7 +90,7 @@ describe('Email forwarding import route', () => {
 			const response = await request(server, JSON.stringify({
 				message_id: '<route-1@example.com>',
 				from: 'Sender <sender@example.com>',
-				to: `${projectId}@email.kumbukum.com`,
+				to: `${projectId}@email.streamient.com`,
 				subject: 'Forwarded',
 				text: 'Forwarded text',
 				html: '<p>Ignored</p>',
@@ -128,9 +128,9 @@ describe('Email forwarding import route', () => {
 					value: [{ address: 'nitai@fastmail.com', name: 'Nitai' }],
 					text: 'Nitai <nitai@fastmail.com>',
 				},
-				recipients: [`${projectId}@email.kumbukum.com`],
+				recipients: [`${projectId}@email.streamient.com`],
 				session: {
-					recipient: `${projectId}@email.kumbukum.com`,
+					recipient: `${projectId}@email.streamient.com`,
 					sender: 'nitai@helpmonks.com',
 				},
 				subject: 'Forward Email production shape',
@@ -169,7 +169,7 @@ describe('Email forwarding import route', () => {
 			const response = await request(server, JSON.stringify({
 				message_id: '<filtered@example.com>',
 				from: 'blocked@example.com',
-				to: `${projectId}@email.kumbukum.com`,
+				to: `${projectId}@email.streamient.com`,
 				subject: 'Filtered',
 				text: 'Filtered body',
 			}));

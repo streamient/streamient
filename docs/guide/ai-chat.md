@@ -1,6 +1,6 @@
 # AI Chat
 
-Kumbukum includes a built-in AI chat that lets you search, analyze, and manage your team's memory layer using natural language.
+Streamient includes a built-in AI chat that lets you search, analyze, and manage your team's memory layer using natural language.
 
 ## What You Can Do
 

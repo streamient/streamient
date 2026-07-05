@@ -1,13 +1,13 @@
 # Multiple Accounts
 
-You can add more than one Kumbukum account to the extension and switch between them without signing out. Each account keeps its own default project, URL/email routing, email connector, and automatic‑capture settings.
+You can add more than one Streamient account to the extension and switch between them without signing out. Each account keeps its own default project, URL/email routing, email connector, and automatic‑capture settings.
 
 ## Add an account
 
-1. Click the **Kumbukum** icon in the toolbar.
+1. Click the **Streamient** icon in the toolbar.
 2. Open the account menu.
 3. Select **Add Account**.
-4. Sign in with a different Kumbukum account.
+4. Sign in with a different Streamient account.
 
 ## Switch accounts
 

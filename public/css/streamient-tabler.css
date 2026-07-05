@@ -1,11 +1,11 @@
-/* Kumbukum Tabler shell */
+/* Streamient Tabler shell */
 
 :root {
 	--kk-font-body: "Noto Sans Variable", "Noto Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
 	--kk-font-mono: "Noto Sans Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 	--kk-sidebar-width: 15rem;
 	--kk-topbar-height: 3.75rem;
-	/* Kumbukum brand: amber/gold accent + navy ink (kumbukum.com design system) */
+	/* Streamient brand: amber/gold accent + navy ink (streamient.com design system) */
 	--kk-amber: #a88200;
 	--kk-amber-bright: #d4a72c;
 	--kk-amber-deep: #8a6b00;
@@ -612,7 +612,7 @@ body.kk-no-chat-sidebar .kk-content-grid {
 	white-space: normal;
 }
 
-/* ---- Kumbukum brand components ---- */
+/* ---- Streamient brand components ---- */
 
 body.kk-template1 .btn-primary,
 body.kk-auth-page .btn-primary {
@@ -695,7 +695,7 @@ body.kk-auth-page .modal-content {
 	display: none;
 }
 
-/* ---- Kumbukum sidebar: project list ---- */
+/* ---- Streamient sidebar: project list ---- */
 
 .kk-app-sidebar .kk-sidebar-body {
 	display: flex;

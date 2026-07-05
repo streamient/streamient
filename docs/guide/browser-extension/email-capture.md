@@ -1,6 +1,6 @@
 # Email Capture
 
-The Kumbukum browser extension can store the email you are viewing into a project. It does not triage, summarize, suggest replies, create drafts, send mail, or manage internal notes. Use Mailtwine for those mail workflows.
+The Streamient browser extension can store the email you are viewing into a project. It does not triage, summarize, suggest replies, create drafts, send mail, or manage internal notes. Use Mailtwine for those mail workflows.
 
 ## Supported Clients
 
@@ -11,7 +11,7 @@ The Kumbukum browser extension can store the email you are viewing into a projec
 
 ## Action
 
-- **Add Email** — extracts the message headers/body from the current page and stores it in Kumbukum.
+- **Add Email** — extracts the message headers/body from the current page and stores it in Streamient.
 
 The destination is your configured email project. The extension sends the extracted email to `POST /api/v1/emails`.
 

@@ -52,7 +52,7 @@
 	function renderUrls(urls, append) {
 		if (!listEl) return;
 		if (!append && !urls.length) {
-			listEl.innerHTML = '<p class="text-muted p-3 url-empty">No URLs saved yet. Hint: Add new URLs and notes with the <a href="https://docs.kumbukum.com/guide/browser-extension" target="_blank">Kumbkum browser extension</a></p>';
+			listEl.innerHTML = '<p class="text-muted p-3 url-empty">No URLs saved yet. Hint: Add new URLs and notes with the <a href="https://docs.streamient.com/guide/browser-extension" target="_blank">Streamient browser extension</a></p>';
 			return;
 		}
 		if (!urls.length) return;

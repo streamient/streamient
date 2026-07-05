@@ -199,10 +199,10 @@ export function formatSignupNotificationDate(date = new Date()) {
 
 export async function sendTrialSignupNotificationEmail(email, signupDate = new Date()) {
 	return sendMail({
-		to: 'hi@kumbukum.com',
-		from: 'server@kumbukum.com',
+		to: 'hi@streamient.com',
+		from: 'server@streamient.com',
 		replyTo: email,
-		subject: `Kumbukum signup: ${email} - Date ${formatSignupNotificationDate(signupDate)}`,
+		subject: `Streamient signup: ${email} - Date ${formatSignupNotificationDate(signupDate)}`,
 		text: '',
 		html: '',
 	});

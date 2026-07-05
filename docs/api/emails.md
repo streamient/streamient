@@ -1,6 +1,6 @@
 # Emails API
 
-Kumbukum email APIs store and search project email records. Triage, drafts, replies, internal notes, outbound identities, and sync providers are Mailtwine features.
+Streamient email APIs store and search project email records. Triage, drafts, replies, internal notes, outbound identities, and sync providers are Mailtwine features.
 
 ## Endpoints
 

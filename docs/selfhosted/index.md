@@ -1,6 +1,6 @@
 # Self-Hosted
 
-Run Kumbukum on infrastructure you control. The self-hosted edition is fully open source and includes the same product features as [Kumbukum Cloud](/cloud/).
+Run Streamient on infrastructure you control. The self-hosted edition is fully open source and includes the same product features as [Streamient Cloud](/cloud/).
 
 ## System Requirements
 
@@ -19,10 +19,10 @@ Run Kumbukum on infrastructure you control. The self-hosted edition is fully ope
 
 ## Source Code
 
-Kumbukum is open source under the [AGPL v3 license](https://github.com/kumbukum/kumbukum/blob/main/LICENSE).
+Streamient is open source under the [AGPL v3 license](https://github.com/streamient/streamient/blob/main/LICENSE).
 
 ```bash
-git clone https://github.com/kumbukum/kumbukum.git
+git clone https://github.com/streamient/streamient.git
 ```
 
-Prefer a managed setup with the same shared memory layer? Try [Kumbukum Cloud](/cloud/) instead.
+Prefer a managed setup with the same shared memory layer? Try [Streamient Cloud](/cloud/) instead.

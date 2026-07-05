@@ -1,6 +1,6 @@
 # Configuration
 
-All configuration is managed through environment variables in `compose.prod.yml`. The recommended approach is to use the production Compose file from the [GitHub repository](https://github.com/kumbukum/kumbukum) and set your secrets via shell environment or a Docker secrets workflow.
+All configuration is managed through environment variables in `compose.prod.yml`. The recommended approach is to use the production Compose file from the [GitHub repository](https://github.com/streamient/streamient) and set your secrets via shell environment or a Docker secrets workflow.
 
 ## Compose File
 
@@ -9,7 +9,7 @@ The `compose.prod.yml` file defines all services and their environment variables
 Grab the latest version from GitHub:
 
 ```bash
-curl -O https://raw.githubusercontent.com/kumbukum/kumbukum/main/compose.prod.yml
+curl -O https://raw.githubusercontent.com/streamient/streamient/main/compose.prod.yml
 ```
 
 Then start the stack:
@@ -56,7 +56,7 @@ docker compose -f compose.prod.yml up -d
 
 | Variable | Description | Required | Default |
 | --- | --- | --- | --- |
-| `MONGO_URI` | MongoDB connection string | No | `mongodb://mongo:27017/kumbukum` |
+| `MONGO_URI` | MongoDB connection string | No | `mongodb://mongo:27017/streamient` |
 | `REDIS_URL` | Redis connection string | No | `redis://redis:6379` |
 | `REDIS_SENTINEL` | Redis Sentinel config as JSON. Example: `[{"host":"sentinel1","port":26379}]` | No | — |
 
@@ -76,7 +76,7 @@ When `TYPESENSE_NODES` is set, the individual host/port/protocol variables are i
 
 ### AI / LLM
 
-Kumbukum uses three separate model tiers for different tasks:
+Streamient uses three separate model tiers for different tasks:
 
 | Variable | Description | Required | Default |
 | --- | --- | --- | --- |
@@ -115,7 +115,7 @@ At least one API key is required for AI chat to function.
 
 | Variable | Description | Required | Default |
 | --- | --- | --- | --- |
-| `EMAIL_FORWARD_DOMAIN` | Domain accepted by `POST /import/email` for project email forwarding, for example `email.kumbukum.com` | Yes, for forwarding | — |
+| `EMAIL_FORWARD_DOMAIN` | Domain accepted by `POST /import/email` for project email forwarding, for example `email.streamient.com` | Yes, for forwarding | — |
 
 ### Admin
 

@@ -19,7 +19,7 @@ let indexesEnsured = false;
 let indexesPromise = null;
 
 function getAppInstance(options = {}) {
-	return options.appInstance || process.env.KUMBUKUM_QUEUE_APP || 'kumbukum';
+	return options.appInstance || process.env.STREAMIENT_QUEUE_APP || process.env.KUMBUKUM_QUEUE_APP || 'streamient';
 }
 
 function getCollection() {

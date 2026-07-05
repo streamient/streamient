@@ -1,22 +1,22 @@
 # MCP Server Setup
 
-Most MCP clients can be connected in about a minute. Use Cloud for the fastest path, or point a self-hosted client at your own Kumbukum instance.
+Most MCP clients can be connected in about a minute. Use Cloud for the fastest path, or point a self-hosted client at your own Streamient instance.
 
 ## Prerequisites
 
-- A running Kumbukum instance
+- A running Streamient instance
 - For stdio only: a personal access token (generate in **Settings → Access Tokens**)
 
 ## Authentication
 
-Kumbukum supports two ways to authenticate. **OAuth 2.1 is recommended** — use a personal access token only for stdio setups, scripts, or clients that don't support OAuth.
+Streamient supports two ways to authenticate. **OAuth 2.1 is recommended** — use a personal access token only for stdio setups, scripts, or clients that don't support OAuth.
 
 | Method | Best for | What you do |
 | --- | --- | --- |
 | **OAuth 2.1** _(recommended)_ | Claude, Cursor, ChatGPT, VS Code, and most modern clients | Enter the MCP endpoint URL and approve access in your browser |
 | **Access token** | stdio bridges, scripts, clients without OAuth | Generate a token in **Settings → Access Tokens** and send it as a Bearer credential |
 
-With OAuth you only ever need the **MCP endpoint URL**. The client discovers Kumbukum's OAuth endpoints automatically, opens Kumbukum in your browser, and asks you to approve access — nothing to copy or store. See [HTTP Transport](#http-transport) for the OAuth path; the per-client sections below show the token-based stdio setup.
+With OAuth you only ever need the **MCP endpoint URL**. The client discovers Streamient's OAuth endpoints automatically, opens Streamient in your browser, and asks you to approve access — nothing to copy or store. See [HTTP Transport](#http-transport) for the OAuth path; the per-client sections below show the token-based stdio setup.
 
 ## Claude Desktop
 
@@ -27,9 +27,9 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 ```json
 {
     "mcpServers": {
-        "kumbukum": {
+        "streamient": {
             "command": "npx",
-            "args": ["-y", "mcp-remote", "https://mcp.kumbukum.com/mcp"],
+            "args": ["-y", "mcp-remote", "https://mcp.streamient.com/mcp"],
             "env": {
                 "ACCESS-TOKEN": "your-access-token"
             }
@@ -41,9 +41,9 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 ```json
 {
     "mcpServers": {
-        "kumbukum": {
+        "streamient": {
             "command": "node",
-            "args": ["/path/to/kumbukum/apps/mcp/server.js"],
+            "args": ["/path/to/streamient/apps/mcp/server.js"],
             "env": {
                 "ACCESS-TOKEN": "your-access-token",
                 "API_BASE_URL": "https://your-instance.com"
@@ -56,21 +56,21 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 
 ## HTTP Transport
 
-For remote MCP access via Streamable HTTP, Kumbukum now supports standard OAuth 2.1 discovery for MCP clients. OAuth-capable clients should connect to the MCP endpoint directly and follow the `WWW-Authenticate` challenge + Protected Resource Metadata flow automatically.
+For remote MCP access via Streamable HTTP, Streamient now supports standard OAuth 2.1 discovery for MCP clients. OAuth-capable clients should connect to the MCP endpoint directly and follow the `WWW-Authenticate` challenge + Protected Resource Metadata flow automatically.
 
-When a client needs approval, Kumbukum shows a simple OAuth consent screen in the same Kumbukum theme as the rest of authentication. The screen shows the requesting app, the active Kumbukum account, the exact requested access, and a collapsed technical details section with the client ID, redirect URI, and MCP resource.
+When a client needs approval, Streamient shows a simple OAuth consent screen in the same Streamient theme as the rest of authentication. The screen shows the requesting app, the active Streamient account, the exact requested access, and a collapsed technical details section with the client ID, redirect URI, and MCP resource.
 
 :::tabs
 == Cloud
 Point your client at the Cloud MCP endpoint — that's all an OAuth-capable client needs:
 
 ```
-https://mcp.kumbukum.com/mcp
+https://mcp.streamient.com/mcp
 ```
 
-The client discovers Kumbukum's OAuth endpoints from this URL automatically, opens Kumbukum in your browser, and asks you to approve access. No issuer or token setup required.
+The client discovers Streamient's OAuth endpoints from this URL automatically, opens Streamient in your browser, and asks you to approve access. No issuer or token setup required.
 
-> If a client ever asks for the authorization server manually, it's `https://app.kumbukum.com/oauth` — but you normally never need to enter it. See [ChatGPT field mapping](#chatgpt-field-mapping) for the full list of manual values.
+> If a client ever asks for the authorization server manually, it's `https://app.streamient.com/oauth` — but you normally never need to enter it. See [ChatGPT field mapping](#chatgpt-field-mapping) for the full list of manual values.
 
 == Self-Hosted
 ```bash
@@ -103,31 +103,31 @@ For public OpenAI app submission, use the strict app-profile endpoint:
 
 :::tabs
 == Cloud
-`https://mcp.kumbukum.com/mcp/app`
+`https://mcp.streamient.com/mcp/app`
 == Self-Hosted
 `https://mcp.your-instance.com/mcp/app`
 :::
 
-For regular ChatGPT developer-mode testing or general MCP clients that need URL, email, git sync, graph, broad search, or chat orchestration tools, use the full endpoint: `https://mcp.kumbukum.com/mcp`.
+For regular ChatGPT developer-mode testing or general MCP clients that need URL, email, git sync, graph, broad search, or chat orchestration tools, use the full endpoint: `https://mcp.streamient.com/mcp`.
 
 The extra OAuth values are only needed when the client asks for them explicitly.
 
 ### What the registration methods mean
 
-- **Pre-registration** — create the OAuth client in Kumbukum first, then paste its client ID and optional secret into the external tool
-- **Dynamic Client Registration** — the client registers itself against Kumbukum using the registration endpoint
-- **Client ID Metadata Documents** — only for clients that identify themselves with a client metadata document URL as the `client_id`; Kumbukum accepts public PKCE clients and `private_key_jwt` clients that publish `jwks` or `jwks_uri`
+- **Pre-registration** — create the OAuth client in Streamient first, then paste its client ID and optional secret into the external tool
+- **Dynamic Client Registration** — the client registers itself against Streamient using the registration endpoint
+- **Client ID Metadata Documents** — only for clients that identify themselves with a client metadata document URL as the `client_id`; Streamient accepts public PKCE clients and `private_key_jwt` clients that publish `jwks` or `jwks_uri`
 
 Dynamic registration accepts HTTPS redirect URIs, localhost HTTP redirect URIs, and reverse-domain private-use schemes for native clients, such as `com.example.app:/oauth/callback`.
 
-These are capabilities, not clickable actions in Kumbukum.
+These are capabilities, not clickable actions in Streamient.
 
 ### Recommended ChatGPT flow
 
 For manual ChatGPT setup, start with **User-Defined OAuth Client**:
 
 1. Copy the **Callback URL** shown by ChatGPT
-2. In Kumbukum, open **Settings → Access Tokens → OAuth**
+2. In Streamient, open **Settings → Access Tokens → OAuth**
 3. Create a **Pre-Registered OAuth Client**
 4. Paste ChatGPT's callback URL into **Redirect URIs**
 5. Choose:
@@ -136,7 +136,7 @@ For manual ChatGPT setup, start with **User-Defined OAuth Client**:
 6. Copy the created **Client ID** back into ChatGPT
 7. Copy the **Client Secret** too only if you created a confidential client
 
-When ChatGPT redirects you to Kumbukum, review the consent screen and click **Allow access** only if the app name, account, and requested access look correct.
+When ChatGPT redirects you to Streamient, review the consent screen and click **Allow access** only if the app name, account, and requested access look correct.
 
 ### ChatGPT field mapping
 
@@ -146,12 +146,12 @@ Use these values if ChatGPT asks for manual OAuth fields:
 == Cloud
 | ChatGPT field | Value |
 | --- | --- |
-| MCP Server URL | `https://mcp.kumbukum.com/mcp/app` |
-| Auth URL | `https://app.kumbukum.com/oauth/authorize` |
-| Token URL | `https://app.kumbukum.com/oauth/token` |
-| Registration URL | `https://app.kumbukum.com/oauth/register` |
-| Authorization server base | `https://app.kumbukum.com/oauth` |
-| Resource | `https://mcp.kumbukum.com/mcp/app` |
+| MCP Server URL | `https://mcp.streamient.com/mcp/app` |
+| Auth URL | `https://app.streamient.com/oauth/authorize` |
+| Token URL | `https://app.streamient.com/oauth/token` |
+| Registration URL | `https://app.streamient.com/oauth/register` |
+| Authorization server base | `https://app.streamient.com/oauth` |
+| Resource | `https://mcp.streamient.com/mcp/app` |
 | OIDC | Leave disabled unless the client explicitly requires it |
 
 == Self-Hosted
@@ -168,18 +168,18 @@ Use these values if ChatGPT asks for manual OAuth fields:
 
 ### Notes for ChatGPT specifically
 
-- The **Callback URL** comes from ChatGPT, not from Kumbukum
-- The **OAuth Client ID** comes from the Kumbukum client you created
+- The **Callback URL** comes from ChatGPT, not from Streamient
+- The **OAuth Client ID** comes from the Streamient client you created
 - The **OAuth Client Secret** is only used when you create a confidential client
-- If ChatGPT offers Dynamic Client Registration and asks for a **Registration URL**, use the Kumbukum `/oauth/register` endpoint above
-- If ChatGPT/OpenAI uses automatic Client ID Metadata Documents with `private_key_jwt`, no manual secret is needed; Kumbukum verifies the signed token request against the client's published JWKS
+- If ChatGPT offers Dynamic Client Registration and asks for a **Registration URL**, use the Streamient `/oauth/register` endpoint above
+- If ChatGPT/OpenAI uses automatic Client ID Metadata Documents with `private_key_jwt`, no manual secret is needed; Streamient verifies the signed token request against the client's published JWKS
 
 ## Environment Variables
 
 | Variable              | Description                           | Default                  |
 | --------------------- | ------------------------------------- | ------------------------ |
 | `ACCESS-TOKEN`        | Personal access token for stdio transport | —                    |
-| `API_BASE_URL`        | Base URL of the Kumbukum instance     | `http://localhost:3000`  |
+| `API_BASE_URL`        | Base URL of the Streamient instance     | `http://localhost:3000`  |
 | `MCP_BASE_URL`        | Public base URL of the MCP server     | `http://localhost:3002`  |
 | `PROJECT-ID`          | Override default project for stdio    | Auto-detected            |
 | `PORT`                | HTTP transport port                   | `3002`                   |

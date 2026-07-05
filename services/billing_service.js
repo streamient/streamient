@@ -4,7 +4,7 @@ import { User } from '../model/user.js';
 import { Tenant } from '../modules/tenancy.js';
 import config from '../config.js';
 
-export const BILLING_SUBSCRIPTION_URL = 'https://app.kumbukum.com/settings/subscription';
+export const BILLING_SUBSCRIPTION_URL = 'https://app.streamient.com/settings/subscription';
 
 /**
  * Build the no-card 7-day Pro trial fields. Applied via the in-app
@@ -65,10 +65,10 @@ export function buildStripeCustomerParams(user, tenant = null) {
 		email: user.email,
 		name: user.name,
 		metadata: {
-			'Customer Type': 'kumbukum',
+			'Customer Type': 'streamient',
 			host_id: hostId,
 			tenant_id: stringifyId(tenant?._id || user.tenant),
-			kumbukum_user_id: stringifyId(user._id),
+			streamient_user_id: stringifyId(user._id),
 		},
 	};
 }
@@ -122,7 +122,7 @@ export function buildCheckoutSessionParams(user, customerId, priceId) {
 		line_items: [{ price: priceId, quantity: 1 }],
 		success_url: `${config.appUrl}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
 		cancel_url: BILLING_SUBSCRIPTION_URL,
-		metadata: { kumbukum_user_id: user._id.toString() },
+		metadata: { streamient_user_id: user._id.toString() },
 	};
 }
 
@@ -203,7 +203,8 @@ export async function handleWebhook(rawBody, sig) {
     switch (event.type) {
         case 'checkout.session.completed': {
             const session = event.data.object;
-            const userId = session.metadata?.kumbukum_user_id;
+            // kumbukum_user_id: checkout sessions created before the rebrand
+            const userId = session.metadata?.streamient_user_id || session.metadata?.kumbukum_user_id;
             if (userId && session.subscription) {
                 const subscription = await stripe.subscriptions.retrieve(session.subscription);
                 await applySubscriptionToUser(userId, subscription);

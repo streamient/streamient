@@ -3,7 +3,7 @@ html(lang="en")
 	head
 		meta(charset="UTF-8")
 		meta(name="viewport" content="width=device-width, initial-scale=1")
-		title #{title || 'Admin — Kumbukum'}
+		title #{title || 'Admin — Streamient'}
 		link(href='/static/images/favicon.ico' rel="shortcut icon")
 		script.
 			(function () {
@@ -19,7 +19,7 @@ html(lang="en")
 			})();
 		link(href=`/static/v-${v}/css/admin_vendor.css` rel="stylesheet")
 		link(href=`/static/v-${v}/css/app.css` rel="stylesheet")
-		link(href=`/static/v-${v}/css/kumbukum-tabler.css` rel="stylesheet")
+		link(href=`/static/v-${v}/css/streamient-tabler.css` rel="stylesheet")
 		block head
 		style.
 			html, body { height: 100%; }
@@ -29,7 +29,7 @@ html(lang="en")
 	body
 		nav.navbar.navbar-expand-lg.navbar-dark.bg-dark.sticky-top
 			.container-fluid
-				a.navbar-brand.ms-2(href="/admin") Kumbukum Admin
+				a.navbar-brand.ms-2(href="/admin") Streamient Admin
 				.d-flex.align-items-center
 					ul.navbar-nav.me-3
 						block nav
@@ -50,11 +50,11 @@ html(lang="en")
 
 		.container-fluid.bg-body.admin-footer.mb-5
 			.d-flex.align-items-center.justify-content-center.fs-9
-				a(href="https://kumbukum.com?utm_source=kumbukum_admin&utm_medium=referral" target="_blank") Kumbukum
+				a(href="https://streamient.com?utm_source=streamient_admin&utm_medium=referral" target="_blank") Streamient
 				span.ps-1 Made by the Founders who also run
-				a.ps-1(href="https://helpmonks.com?utm_source=kumbukum_admin&utm_medium=referral" target="_blank") Helpmonks - Email Management
+				a.ps-1(href="https://helpmonks.com?utm_source=streamient_admin&utm_medium=referral" target="_blank") Helpmonks - Email Management
 				span.ps-1 and
-				a.ps-1(href="https://razuna.com?utm_source=kumbukum_admin&utm_medium=referral" target="_blank") Razuna - Digital Asset Management
+				a.ps-1(href="https://razuna.com?utm_source=streamient_admin&utm_medium=referral" target="_blank") Razuna - Digital Asset Management
 
 		script(src=`/static/v-${v}/js/icons.js`)
 		script(src=`/static/v-${v}/js/autofill_guard.js`)

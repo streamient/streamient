@@ -126,11 +126,11 @@ var _static_cache_control = process.env.NODE_ENV === 'production'
         },
     };
 
-// --- Vanity docs domain (docs.kumbukum.com): serve the root-base build at / so
-// URLs are clean (docs.kumbukum.com/guide/ instead of .../docs/guide/). Caddy
+// --- Vanity docs domain (docs.streamient.com): serve the root-base build at / so
+// URLs are clean (docs.streamient.com/guide/ instead of .../docs/guide/). Caddy
 // preserves the Host header, so req.hostname reflects the public domain. ---
 var _docs_dist_root = path.join(__dirname, 'docs-dist-root');
-var _docs_vanity_hosts = (process.env.KUMBUKUM_DOCS_VANITY_HOSTS || 'docs.kumbukum.com')
+var _docs_vanity_hosts = (process.env.STREAMIENT_DOCS_VANITY_HOSTS || 'docs.streamient.com')
     .split(',').map((h) => h.trim().toLowerCase()).filter(Boolean);
 if (fs.existsSync(_docs_dist_root)) {
     var _serve_docs_root = express.static(_docs_dist_root, { ..._static_cache_control, extensions: ['html'], index: 'index.html' });
@@ -173,7 +173,7 @@ app.use(sessionMiddleware);
 
 app.use(resolveWhiteLabelRequest);
 
-// Per-request hosted (SaaS) detection from the Host header — app.k.lan / *.kumbukum.com
+// Per-request hosted (SaaS) detection from the Host header — app.k.lan / *.streamient.com
 // are hosted; bare k.lan is plain dev. Routes read req.isHosted instead of a global.
 app.use((req, res, next) => {
 	req.isHosted = Boolean(req.whiteLabelHostId) || resolveRequestHosted(req);
@@ -258,12 +258,12 @@ async function start() {
 	if (SERVER_MODE === 'scheduler') {
 		const { startScheduler } = await import('./modules/scheduler.js');
 		startScheduler();
-		log.info({ env: config.env }, 'Kumbukum scheduler running');
+		log.info({ env: config.env }, 'Streamient scheduler running');
 		return;
 	}
 
 	const server = app.listen(config.port, () => {
-		log.info({ mode: SERVER_MODE, port: config.port, env: config.env }, `Kumbukum ${SERVER_MODE} running on port ${config.port}`);
+		log.info({ mode: SERVER_MODE, port: config.port, env: config.env }, `Streamient ${SERVER_MODE} running on port ${config.port}`);
 	});
 
 	await setupSocketIO(server, sessionMiddleware);

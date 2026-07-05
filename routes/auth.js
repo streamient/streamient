@@ -409,7 +409,7 @@ router.post('/2fa/setup', async (req, res) => {
 		if (!user) return res.status(404).json({ error: 'User not found' });
 
 		const secret = generateSecret();
-		const otpauth = generateURI({ issuer: 'Kumbukum', label: user.email, secret });
+		const otpauth = generateURI({ issuer: 'Streamient', label: user.email, secret });
 
 		user.totp_secret = secret;
 		await user.save();

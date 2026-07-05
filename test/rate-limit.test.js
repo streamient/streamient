@@ -236,22 +236,22 @@ describe('MCP rate-limit helpers', () => {
 	});
 
 	it('builds hashed keys from OAuth users, credentials, and IP fallback', () => {
-		const oauthKey = McpRateLimit.getAuthContextRateLimitKey('kumbukum', request(), {
+		const oauthKey = McpRateLimit.getAuthContextRateLimitKey('streamient', request(), {
 			mode: 'oauth',
 			tokenClaims: { sub: 'user-123' },
 		});
-		const apiKey = McpRateLimit.getCredentialOrIpKey('kumbukum', request({
+		const apiKey = McpRateLimit.getCredentialOrIpKey('streamient', request({
 			query: { api_key: 'raw-api-key' },
 		}));
-		const bearerKey = McpRateLimit.getCredentialOrIpKey('kumbukum', request({
+		const bearerKey = McpRateLimit.getCredentialOrIpKey('streamient', request({
 			headers: { authorization: 'Bearer raw-bearer-token' },
 		}));
-		const ipKey = McpRateLimit.getCredentialOrIpKey('kumbukum', request({ ip: '198.51.100.44' }));
+		const ipKey = McpRateLimit.getCredentialOrIpKey('streamient', request({ ip: '198.51.100.44' }));
 
-		assert.match(oauthKey, /^kumbukum:user:[a-f0-9]{64}$/);
-		assert.match(apiKey, /^kumbukum:api-key:[a-f0-9]{64}$/);
-		assert.match(bearerKey, /^kumbukum:bearer:[a-f0-9]{64}$/);
-		assert.match(ipKey, /^kumbukum:ip:[a-f0-9]{64}$/);
+		assert.match(oauthKey, /^streamient:user:[a-f0-9]{64}$/);
+		assert.match(apiKey, /^streamient:api-key:[a-f0-9]{64}$/);
+		assert.match(bearerKey, /^streamient:bearer:[a-f0-9]{64}$/);
+		assert.match(ipKey, /^streamient:ip:[a-f0-9]{64}$/);
 		assert.equal(oauthKey.includes('user-123'), false);
 		assert.equal(apiKey.includes('raw-api-key'), false);
 	});
@@ -286,7 +286,7 @@ describe('MCP rate-limit helpers', () => {
 			MCP_HEAVY_TOOL_CONCURRENCY: '1',
 		});
 
-		const product = 'kumbukum-search-concurrency-regression';
+		const product = 'streamient-search-concurrency-regression';
 		const rateLimitKey = 'user:search-concurrency-regression';
 		const firstStarted = deferred();
 		const releaseFirst = deferred();
@@ -330,7 +330,7 @@ describe('MCP rate-limit helpers', () => {
 			MCP_HEAVY_TOOL_CONCURRENCY: '1',
 		});
 
-		const product = 'kumbukum-heavy-concurrency-regression';
+		const product = 'streamient-heavy-concurrency-regression';
 		const rateLimitKey = 'user:heavy-concurrency-regression';
 		const firstStarted = deferred();
 		const releaseFirst = deferred();
@@ -375,7 +375,7 @@ describe('MCP rate-limit helpers', () => {
 			MCP_AUTH_PER_MINUTE: '1',
 		});
 
-		const product = 'kumbukum-auth-regression';
+		const product = 'streamient-auth-regression';
 		const app = express();
 		const authenticatedRequestLimiter = McpRateLimit.createAuthenticatedRequestLimiter(product);
 

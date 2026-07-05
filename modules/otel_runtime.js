@@ -47,9 +47,9 @@ const _parseOtlpHeaders = function(env = process.env) {
 export const buildServiceName = function(options = {}) {
 	if (process.env.OTEL_SERVICE_NAME) return process.env.OTEL_SERVICE_NAME;
 
-	const serviceApp = options.serviceApp || process.env.KUMBUKUM_APP || process.env.SERVER_MODE || 'web';
-	const appInstance = process.env.APP_INSTANCE || 'kumbukum';
-	const appLocation = process.env.APP_LOCATION || process.env.KUMBUKUM_APP_LOCATION || 'us';
+	const serviceApp = options.serviceApp || process.env.STREAMIENT_APP || process.env.SERVER_MODE || 'web';
+	const appInstance = process.env.APP_INSTANCE || 'streamient';
+	const appLocation = process.env.APP_LOCATION || process.env.STREAMIENT_APP_LOCATION || 'us';
 	const appVersion = process.env.APP_VERSION || '0';
 	let serviceName = `${appInstance}-${appLocation}-${serviceApp}-${appVersion}`;
 
@@ -61,9 +61,9 @@ export const buildServiceName = function(options = {}) {
 };
 
 const _buildResourceAttributes = function(options = {}) {
-	const serviceApp = options.serviceApp || process.env.KUMBUKUM_APP || process.env.SERVER_MODE || 'web';
-	const appInstance = process.env.APP_INSTANCE || 'kumbukum';
-	const appLocation = process.env.APP_LOCATION || process.env.KUMBUKUM_APP_LOCATION || 'us';
+	const serviceApp = options.serviceApp || process.env.STREAMIENT_APP || process.env.SERVER_MODE || 'web';
+	const appInstance = process.env.APP_INSTANCE || 'streamient';
+	const appLocation = process.env.APP_LOCATION || process.env.STREAMIENT_APP_LOCATION || 'us';
 	const deploymentEnvironment = `${appInstance}-${appLocation}`;
 
 	return {
@@ -219,7 +219,7 @@ const _initializeLogExporter = function(resource) {
 			resource,
 			processors: [new BatchLogRecordProcessor(exporter)],
 		});
-		_otelLogger = _loggerProvider.getLogger(_serviceName || 'kumbukum');
+		_otelLogger = _loggerProvider.getLogger(_serviceName || 'streamient');
 		_logsInitialized = true;
 		console.log(`[OTEL] Logs initialized service=${_serviceName} endpoint=${endpoint}`);
 		return { enabled: true, endpoint };
@@ -284,7 +284,7 @@ export const initializeOpenTelemetry = function(options = {}) {
 			try {
 				const logsApi = _requirePackage('@opentelemetry/api-logs');
 				if (logsApi?.logs && typeof logsApi.logs.getLogger === 'function') {
-					_otelLogger = logsApi.logs.getLogger(_serviceName || 'kumbukum');
+					_otelLogger = logsApi.logs.getLogger(_serviceName || 'streamient');
 					_logsInitialized = true;
 					console.log(`[OTEL] Logs initialized via HyperDX logger provider service=${_serviceName}`);
 				}
@@ -366,7 +366,7 @@ export const createCustomSpan = function(name, fn, attributes = {}) {
 		return fn(noOpSpan);
 	}
 
-	const tracer = _trace.getTracer('kumbukum-custom');
+	const tracer = _trace.getTracer('streamient-custom');
 	const span = tracer.startSpan(name, { attributes });
 	const ctx = _trace.setSpan(_context.active(), span);
 

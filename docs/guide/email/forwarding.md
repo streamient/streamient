@@ -1,6 +1,6 @@
 # Forwarding Email
 
-Forwarding stores email in a Kumbukum project.
+Forwarding stores email in a Streamient project.
 
 ## Forwarding Address
 
@@ -14,7 +14,7 @@ Open the project settings page, copy the **Email forwarding** address, and point
 
 ## What Happens
 
-1. Kumbukum checks the recipient domain against `EMAIL_FORWARD_DOMAIN`.
+1. Streamient checks the recipient domain against `EMAIL_FORWARD_DOMAIN`.
 2. The local part is matched to a project ID.
 3. The email is parsed, sanitized, stored, threaded, and indexed.
 4. If the project email filter matches the sender or subject, the email is stored in trash.

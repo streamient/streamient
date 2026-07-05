@@ -9,7 +9,7 @@ export async function extractUrlContent(url) {
 		timeout: 15000,
 		maxRedirects: 5,
 		headers: {
-			'User-Agent': 'Kumbukum/1.0 (URL Content Extractor)',
+			'User-Agent': 'Streamient/1.0 (URL Content Extractor)',
 			Accept: 'text/html,application/xhtml+xml',
 		},
 		// Limit response size to 5MB

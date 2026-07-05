@@ -1,9 +1,9 @@
 ---
-description: Kumbukum MCP workflow for Cursor Agent (search before, store after)
+description: Streamient MCP workflow for Cursor Agent (search before, store after)
 alwaysApply: true
 ---
 
-# Kumbukum (this repository)
+# Streamient (this repository)
 
 Follow root **[AGENTS.md](AGENTS.md)** for full project conventions.
 
@@ -11,7 +11,7 @@ Follow root **[AGENTS.md](AGENTS.md)** for full project conventions.
 
 1. **Before non-trivial work**: make one specific retrieval call. Default to **`search_knowledge`** with a task-focused query and `per_page: 3`; use **`recall_memory`** with `per_page: 3` for prior decisions/debugging/preferences/task outcomes; use **`search_notes`** with `per_page: 3` only for specs/docs/ADRs or when the first search points to notes. Do not call `search_notes` after every `search_knowledge` call. Apply findings to the plan or implementation.
 2. **After meaningful changes**: **`store_memory`** (title, content, tags) and/or **`create_note`** for structured write-ups; **`suggest_memory_tags`** before new tags; **`create_link`** when connecting graph items helps.
-3. **Server + endpoint safety**: use the MCP server whose server name is **`kumbukum`** (tool id may appear as `user-kumbukum` in Cursor), and ensure it points to **`https://mcp.kumbukum.com/mcp`**.
-4. **Mismatch handling**: if the active server name is not `kumbukum`, or if it points to localhost/127.0.0.1, stop MCP writes and ask the user to fix **Cursor Settings → MCP** before storing notes/memories.
+3. **Server + endpoint safety**: use the MCP server whose server name is **`streamient`** (tool id may appear as `user-streamient` in Cursor), and ensure it points to **`https://mcp.streamient.com/mcp`**.
+4. **Mismatch handling**: if the active server name is not `streamient`, or if it points to localhost/127.0.0.1, stop MCP writes and ask the user to fix **Cursor Settings → MCP** before storing notes/memories.
 
 If MCP is down, proceed and state that storage was skipped.

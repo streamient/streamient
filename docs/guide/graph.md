@@ -20,7 +20,7 @@ Computed automatically from shared tags. If a note and a memory both have the ta
 
 ### Semantic Links
 
-Discovered through vector similarity. Kumbukum uses Typesense embeddings to find items that are about similar topics even if they don't share tags or explicit links. These connections surface relationships based on meaning, not just keywords.
+Discovered through vector similarity. Streamient uses Typesense embeddings to find items that are about similar topics even if they don't share tags or explicit links. These connections surface relationships based on meaning, not just keywords.
 
 Semantic links are calculated on demand and cached for performance.
 

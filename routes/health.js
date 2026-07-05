@@ -67,7 +67,7 @@ router.get('/websocket', (_req, res) => {
     res.status(ok ? 200 : 503).json({
         status: ok ? 'ok' : 'not_initialized',
         mode: process.env.SERVER_MODE || 'app',
-        app: process.env.KUMBUKUM_APP || 'web',
+        app: process.env.STREAMIENT_APP || 'web',
         otel_enabled: OtelRuntime.isEnabled(),
         clients: io?.engine?.clientsCount || 0,
     });

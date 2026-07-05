@@ -8,7 +8,7 @@ import { hydratedQuery } from '../model/mongoose.js';
 import { UserPasskey } from '../model/user_passkey.js';
 import config from '../config.js';
 
-const rpName = 'Kumbukum';
+const rpName = 'Streamient';
 const rpID = new URL(config.appUrl).hostname;
 const origin = config.appUrl;
 

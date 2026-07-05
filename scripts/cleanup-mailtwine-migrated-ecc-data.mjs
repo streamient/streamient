@@ -1,4 +1,4 @@
-// Remove Kumbukum ECC-only data after Mailtwine import has been verified.
+// Remove Streamient ECC-only data after Mailtwine import has been verified.
 //
 // Dry run:
 //   docker compose exec app node scripts/cleanup-mailtwine-migrated-ecc-data.mjs --dry-run --host-id=<host_id>
@@ -11,7 +11,7 @@ import config from '../config.js';
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
 const confirmed = args.includes('--confirm') && process.env.MAILTWINE_MIGRATION_CONFIRMED === 'copy-complete';
-const hostId = valueArg('--host-id') || process.env.KUMBUKUM_HOST_ID || '';
+const hostId = valueArg('--host-id') || process.env.STREAMIENT_HOST_ID || '';
 
 const eccCollections = [
 	'emaildrafts',

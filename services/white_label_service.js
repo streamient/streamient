@@ -141,7 +141,7 @@ export function normalizeCustomDomain(value, options = {}) {
 	}
 
 	if (!options.allowPlatformHost && isHostedHostname(ascii)) {
-		throw createHttpError(400, 'Use a domain you own, not a Kumbukum platform hostname', 'CUSTOM_DOMAIN_PLATFORM_HOST');
+		throw createHttpError(400, 'Use a domain you own, not a Streamient platform hostname', 'CUSTOM_DOMAIN_PLATFORM_HOST');
 	}
 
 	return ascii;

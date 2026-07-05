@@ -1,7 +1,7 @@
 extends ../auth_layout
 
 block head
-	title Confirm Your Account — Kumbukum
+	title Confirm Your Account — Streamient
 
 block body
 	if error
@@ -11,7 +11,7 @@ block body
 			a(href="/signup") Sign up again
 	else
 		h1.h2.mb-2 Confirm your account
-		p.text-muted.mb-5 Activate your Kumbukum account.
+		p.text-muted.mb-5 Activate your Streamient account.
 		form(method="POST" action="/verify")
 			input(type="hidden" name="token" value=token)
 			button.btn.btn-primary.btn-sm.w-100(type="submit") Yes, activate my account

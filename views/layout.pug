@@ -3,7 +3,7 @@ html(lang="en")
 	head
 		meta(charset="UTF-8")
 		meta(name="viewport" content="width=device-width, initial-scale=1")
-		title #{title || 'Kumbukum'}
+		title #{title || 'Streamient'}
 		- const __wlFavicon = typeof white_label !== 'undefined' && white_label && white_label.favicon_url ? white_label.favicon_url : '/static/images/favicon.ico'
 		link(href=__wlFavicon rel="shortcut icon")
 		if !(typeof white_label !== 'undefined' && white_label && white_label.favicon_url)
@@ -25,7 +25,7 @@ html(lang="en")
 			{ "imports": { "/static/js/vendor.js": "/static/v-#{v}/js/vendor.js" } }
 		link(href=`/static/v-${v}/css/admin_vendor.css` rel="stylesheet")
 		link(href=`/static/v-${v}/css/app.css` rel="stylesheet")
-		link(href=`/static/v-${v}/css/kumbukum-tabler.css` rel="stylesheet")
+		link(href=`/static/v-${v}/css/streamient-tabler.css` rel="stylesheet")
 		block head
 	body.kk-template1(class=((hide_chat_sidebar || page === 'graph') ? 'kk-no-chat-sidebar ' : ''))
 		block body
@@ -42,7 +42,7 @@ html(lang="en")
 					button.navbar-toggler(type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-menu" aria-controls="sidebar-menu" aria-expanded="false" aria-label="Toggle navigation")
 						span.navbar-toggler-icon
 					h1.navbar-brand.navbar-brand-autodark.mb-0
-						a.d-flex.align-items-center(href="/dashboard" aria-label="Kumbukum")
+						a.d-flex.align-items-center(href="/dashboard" aria-label="Streamient")
 							- const __wlSidebarLogo = typeof white_label !== 'undefined' && white_label && white_label.logo_url ? white_label.logo_url : ''
 							if __wlSidebarLogo
 								img.kk-white-label-navbar-logo(src=__wlSidebarLogo alt="Logo")
@@ -77,7 +77,7 @@ html(lang="en")
 								span.navbar-toggler-icon
 							//- The sidebar (and its logo) is hidden on the graph page, so carry the brand in the topbar there
 							if page === 'graph'
-								a.kk-topbar-brand.d-flex.align-items-center.me-2(href="/dashboard" aria-label="Kumbukum")
+								a.kk-topbar-brand.d-flex.align-items-center.me-2(href="/dashboard" aria-label="Streamient")
 									- const __wlTopbarLogo = typeof white_label !== 'undefined' && white_label && white_label.logo_url ? white_label.logo_url : ''
 									if __wlTopbarLogo
 										img.kk-white-label-navbar-logo(src=__wlTopbarLogo alt="Logo")

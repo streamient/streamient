@@ -1,6 +1,6 @@
 import { Cron } from 'croner';
 import { reindexDue } from './crawler.js';
-import { removeDocument, runKumbukumIndexer } from './typesense.js';
+import { removeDocument, runStreamientIndexer } from './typesense.js';
 import { User } from '../model/user.js';
 import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
@@ -188,13 +188,13 @@ export function startScheduler() {
 		}
 	});
 
-	// Kumbukum indexer: find documents with is_indexed:false and batch-import to Typesense
+	// Streamient indexer: find documents with is_indexed:false and batch-import to Typesense
 	new Cron('*/20 * * * * *', async () => {
 		try {
-			const indexed = await runKumbukumIndexer({ Note, Memory, Url, Email });
-			if (indexed > 0) log.info({ indexed }, 'Kumbukum indexer batch complete');
+			const indexed = await runStreamientIndexer({ Note, Memory, Url, Email });
+			if (indexed > 0) log.info({ indexed }, 'Streamient indexer batch complete');
 		} catch (err) {
-			log.error({ err }, 'Kumbukum indexer batch error');
+			log.error({ err }, 'Streamient indexer batch error');
 		}
 	});
 

@@ -28,7 +28,7 @@ describe('MCP Server — Streamable HTTP transport', () => {
     describe('initialize', () => {
         it('should report server name and version', () => {
             const info = client.getServerVersion();
-            assert.equal(info.name, 'kumbukum-test');
+            assert.equal(info.name, 'streamient-test');
             assert.equal(info.version, '0.0.1');
         });
 

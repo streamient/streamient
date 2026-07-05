@@ -37,9 +37,9 @@ describe('white-label service', () => {
 	let tempDir;
 
 	beforeEach(async () => {
-		tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'kumbukum-wl-'));
+		tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'streamient-wl-'));
 		config.whiteLabel.assetsDir = path.join(tempDir, 'assets');
-		config.whiteLabel.cnameTarget = 'app.kumbukum.com';
+		config.whiteLabel.cnameTarget = 'app.streamient.com';
 		config.whiteLabel.cloudflare = { apiToken: '', zoneId: '' };
 		tenant = {
 			_id: 'tenant-1',
@@ -74,14 +74,14 @@ describe('white-label service', () => {
 	it('normalizes custom domains and rejects platform hostnames', () => {
 		assert.equal(whiteLabelService.normalizeCustomDomain('https://Brand.Example.com/login'), 'brand.example.com');
 		assert.throws(
-			() => whiteLabelService.normalizeCustomDomain('app.kumbukum.com'),
+			() => whiteLabelService.normalizeCustomDomain('app.streamient.com'),
 			/Use a domain you own/,
 		);
 	});
 
 	it('does not treat Docker service hostnames as custom domains', () => {
 		assert.equal(whiteLabelService.shouldResolveWhiteLabelHost('app'), false);
-		assert.equal(whiteLabelService.shouldResolveWhiteLabelHost('kumbukum-app-1'), false);
+		assert.equal(whiteLabelService.shouldResolveWhiteLabelHost('streamient-app-1'), false);
 		assert.equal(whiteLabelService.shouldResolveWhiteLabelHost('brand.example.com'), true);
 	});
 
@@ -123,7 +123,7 @@ describe('white-label service', () => {
 	it('returns a clear error when CNAME passes but Cloudflare env is missing', async () => {
 		tenant.plan = 'pro';
 		tenant.settings.white_label.dns_name_custom = 'brand.example.com';
-		dns.resolveCname = async () => ['app.kumbukum.com.'];
+		dns.resolveCname = async () => ['app.streamient.com.'];
 
 		await assert.rejects(
 			() => whiteLabelService.verifyDomain('host-1', { billingUser: null, isHosted: true }),

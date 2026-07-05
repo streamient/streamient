@@ -100,6 +100,6 @@
 		return '<span class="' + escapeHtml(classes) + '" aria-hidden="true"></span>';
 	}
 
-	window.KumbukumIcons = { glyphs: glyphs, icon: icon };
+	window.StreamientIcons = { glyphs: glyphs, icon: icon };
 	window.kkIcon = icon;
 }());

@@ -1,14 +1,14 @@
 # Getting Started
 
-Kumbukum is a memory layer for AI-native teams. It's available as a managed cloud service or a self-hosted open-source application — both editions share the same product features.
+Streamient is a memory layer for AI-native teams. It's available as a managed cloud service or a self-hosted open-source application — both editions share the same product features.
 
 ## Choose Your Edition
 
 :::tabs
 == Cloud
-**Kumbukum Cloud** — We handle hosting, updates, backups, and MCP infrastructure.
+**Streamient Cloud** — We handle hosting, updates, backups, and MCP infrastructure.
 
-1. Sign up at [app.kumbukum.com](https://app.kumbukum.com) or accept a team invite
+1. Sign up at [app.streamient.com](https://app.streamient.com) or accept a team invite
 2. If you join an existing account, you land in that shared account instead of creating a separate workspace
 3. Use the account switcher in the top-right nav if your login belongs to more than one account
 4. Generate a personal access token in **Settings > Access Tokens** and connect your AI tools
@@ -16,10 +16,10 @@ Kumbukum is a memory layer for AI-native teams. It's available as a managed clou
 [Cloud documentation →](/cloud/)
 
 == Self-Hosted
-**Self-Hosted** — Run Kumbukum on your own infrastructure.
+**Self-Hosted** — Run Streamient on your own infrastructure.
 
 ```bash
-curl -O https://raw.githubusercontent.com/kumbukum/kumbukum/main/compose.prod.yml
+curl -O https://raw.githubusercontent.com/streamient/streamient/main/compose.prod.yml
 
 APP_URL=https://your-instance.com \
 SESSION_SECRET=your-session-secret \
@@ -33,7 +33,7 @@ GOOGLE_API_KEY=your-google-api-key \
 docker compose -f compose.prod.yml up -d
 ```
 
-To rotate outbound mail across several SMTP servers, set `SMTP_SERVERS` to a JSON array. When present, Kumbukum sends emails round-robin across those servers.
+To rotate outbound mail across several SMTP servers, set `SMTP_SERVERS` to a JSON array. When present, Streamient sends emails round-robin across those servers.
 
 [Installation guide →](/selfhosted/installation)
 :::

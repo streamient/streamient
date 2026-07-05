@@ -1,7 +1,7 @@
 extends ../auth_layout
 
 block head
-	title Team Invite — Kumbukum
+	title Team Invite — Streamient
 
 block body
 	if error
@@ -24,7 +24,7 @@ block body
 				input(type="hidden" name="token" value=token)
 				button.btn.btn-primary.btn-sm.w-100(type="submit") Accept invitation
 		else if existingUser
-			p.mb-3 This email already has a Kumbukum account.
+			p.mb-3 This email already has a Streamient account.
 			a.btn.btn-primary.btn-sm.w-100(href="/login") Sign in first
 			p.small.text-muted.mt-3.mb-0 After signing in, open this invitation link again to join the account.
 		else

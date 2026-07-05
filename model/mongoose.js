@@ -1,8 +1,8 @@
 import mongoose from 'mongoose';
 import mongooseLeanVirtuals from 'mongoose-lean-virtuals';
 
-const KUMBUKUM_MONGOOSE_DEFAULTS = Symbol.for('kumbukum.mongoose.defaults');
-const KUMBUKUM_SCHEMA_DEFAULTS = Symbol.for('kumbukum.mongoose.schema.defaults');
+const STREAMIENT_MONGOOSE_DEFAULTS = Symbol.for('streamient.mongoose.defaults');
+const STREAMIENT_SCHEMA_DEFAULTS = Symbol.for('streamient.mongoose.schema.defaults');
 
 function mergeLeanVirtuals(leanOptions) {
 	if (leanOptions === false) return false;
@@ -16,8 +16,8 @@ export function hydratedQuery(query) {
 }
 
 function applySchemaDefaults(schema) {
-	if (schema[KUMBUKUM_SCHEMA_DEFAULTS]) return;
-	schema[KUMBUKUM_SCHEMA_DEFAULTS] = true;
+	if (schema[STREAMIENT_SCHEMA_DEFAULTS]) return;
+	schema[STREAMIENT_SCHEMA_DEFAULTS] = true;
 
 	schema.set('usePushEach', true);
 	schema.set('read', 'secondaryPreferred');
@@ -31,8 +31,8 @@ function applySchemaDefaults(schema) {
 	});
 }
 
-if (!mongoose[KUMBUKUM_MONGOOSE_DEFAULTS]) {
-	mongoose[KUMBUKUM_MONGOOSE_DEFAULTS] = true;
+if (!mongoose[STREAMIENT_MONGOOSE_DEFAULTS]) {
+	mongoose[STREAMIENT_MONGOOSE_DEFAULTS] = true;
 	mongoose.plugin(applySchemaDefaults);
 }
 

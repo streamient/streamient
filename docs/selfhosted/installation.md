@@ -3,7 +3,7 @@
 ## Running with Docker Compose
 
 ```bash
-curl -O https://raw.githubusercontent.com/kumbukum/kumbukum/main/compose.prod.yml
+curl -O https://raw.githubusercontent.com/streamient/streamient/main/compose.prod.yml
 
 APP_URL=https://your-instance.com \
 SESSION_SECRET=your-session-secret \

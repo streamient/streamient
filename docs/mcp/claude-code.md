@@ -1,6 +1,6 @@
-# Claude Code and Kumbukum MCP
+# Claude Code and Streamient MCP
 
-Claude Code can use Kumbukum as a **persistent memory layer** via the Model Context Protocol. Configure two layers so every session follows the same workflow: **hooks** (enforced by the harness) and **`CLAUDE.md`** (project instructions).
+Claude Code can use Streamient as a **persistent memory layer** via the Model Context Protocol. Configure two layers so every session follows the same workflow: **hooks** (enforced by the harness) and **`CLAUDE.md`** (project instructions).
 
 ## Why hooks?
 
@@ -15,7 +15,7 @@ Use the reminder hooks below for a lightweight setup, or add the [blocking Stop 
 
 ## 1. Hooks setup (recommended)
 
-Hooks live in `~/.claude/settings.json` (user-level, all projects) or `.claude/settings.json` (per-project). User-level is recommended so Kumbukum works everywhere.
+Hooks live in `~/.claude/settings.json` (user-level, all projects) or `.claude/settings.json` (per-project). User-level is recommended so Streamient works everywhere.
 
 Add the following hooks to your `~/.claude/settings.json`:
 
@@ -26,7 +26,7 @@ Add the following hooks to your `~/.claude/settings.json`:
             {
                 "hooks": [
                     {
-                        "command": "echo 'KUMBUKUM: Before starting any task, search Kumbukum for relevant prior context using search_knowledge or recall_memory with a query describing the task. Also check search_notes for related documentation. Use the returned context to inform your approach.'",
+                        "command": "echo 'STREAMIENT: Before starting any task, search Streamient for relevant prior context using search_knowledge or recall_memory with a query describing the task. Also check search_notes for related documentation. Use the returned context to inform your approach.'",
                         "type": "command"
                     }
                 ],
@@ -37,7 +37,7 @@ Add the following hooks to your `~/.claude/settings.json`:
             {
                 "hooks": [
                     {
-                        "command": "echo 'KUMBUKUM REMINDER: Before finishing, store any learnings, decisions, or insights from this task to Kumbukum using store_memory and/or create_note. Link related items with create_link. Use suggest_memory_tags first to reuse existing tags. If you already stored to Kumbukum during this turn, or the task was trivial (no new learnings), you may skip this.'",
+                        "command": "echo 'STREAMIENT REMINDER: Before finishing, store any learnings, decisions, or insights from this task to Streamient using store_memory and/or create_note. Link related items with create_link. Use suggest_memory_tags first to reuse existing tags. If you already stored to Streamient during this turn, or the task was trivial (no new learnings), you may skip this.'",
                         "type": "command"
                     }
                 ],
@@ -49,32 +49,32 @@ Add the following hooks to your `~/.claude/settings.json`:
 ```
 
 ::: tip Merging with existing hooks
-If you already have hooks in your settings, add the Kumbukum entries alongside them. Multiple hooks can share the same event — they run in order.
+If you already have hooks in your settings, add the Streamient entries alongside them. Multiple hooks can share the same event — they run in order.
 :::
 
 ### What each hook does
 
 | Hook | Event | Purpose |
 | --- | --- | --- |
-| `SessionStart` | Fires when a new Claude Code session begins | Reminds Claude to search Kumbukum for prior context before starting work |
+| `SessionStart` | Fires when a new Claude Code session begins | Reminds Claude to search Streamient for prior context before starting work |
 | `Stop` | Fires every time Claude is about to finish a response | Reminds Claude to store learnings, decisions, and insights before stopping |
 
 The `Stop` hook includes a skip clause for trivial tasks or when Claude already stored during the current turn, so it does not create noise on simple questions.
 
 ::: warning The `Stop` reminder is best-effort
-Because the `Stop` hook above is a plain `echo`, Claude can still finish without saving (see [Why hooks?](#why-hooks)). If you keep having to remind Claude to write to Kumbukum, replace it with the blocking hook below.
+Because the `Stop` hook above is a plain `echo`, Claude can still finish without saving (see [Why hooks?](#why-hooks)). If you keep having to remind Claude to write to Streamient, replace it with the blocking hook below.
 :::
 
 ### Guaranteed writes: the blocking Stop hook
 
 This upgrade makes saving non-optional: a small script inspects the conversation transcript and **blocks Claude from finishing** until it sees a `store_memory` or `create_note` call since your last message. If none is found, Claude is told to save and forced to continue; once it saves, the next stop succeeds.
 
-**Step 1 — create the script** at `~/.claude/hooks/kumbukum-stop.js`:
+**Step 1 — create the script** at `~/.claude/hooks/streamient-stop.js`:
 
 ```js
 #!/usr/bin/env node
-// Kumbukum Stop hook: blocks Claude from stopping until it has written to
-// Kumbukum (store_memory / create_note) since the last human turn.
+// Streamient Stop hook: blocks Claude from stopping until it has written to
+// Streamient (store_memory / create_note) since the last human turn.
 
 const TOOL_RE = /(store_memory|create_note)/;
 
@@ -98,8 +98,8 @@ function isHumanTurn(entry) {
   return false;
 }
 
-// An assistant entry containing a tool_use whose name matches the Kumbukum tools.
-function hasKumbukumWrite(entry) {
+// An assistant entry containing a tool_use whose name matches the Streamient tools.
+function hasStreamientWrite(entry) {
   if (!entry || entry.type !== "assistant") return false;
   const content = entry.message && entry.message.content;
   if (!Array.isArray(content)) return false;
@@ -159,11 +159,11 @@ function block(reason) {
   }
 
   for (let i = lastHuman + 1; i < entries.length; i++) {
-    if (hasKumbukumWrite(entries[i])) allow();
+    if (hasStreamientWrite(entries[i])) allow();
   }
 
   block(
-    "KUMBUKUM: You have not stored anything to Kumbukum this turn. Before " +
+    "STREAMIENT: You have not stored anything to Streamient this turn. Before " +
       "stopping, store the learnings, decisions, or insights from this task " +
       "using store_memory and/or create_note. Run suggest_memory_tags first " +
       "to reuse existing tags, and link related items with create_link. If — " +
@@ -177,7 +177,7 @@ function block(reason) {
 **Step 2 — point the `Stop` hook at the script.** Replace the `echo` command in the `Stop` block of `~/.claude/settings.json` with:
 
 ```json
-"command": "node \"$HOME/.claude/hooks/kumbukum-stop.js\""
+"command": "node \"$HOME/.claude/hooks/streamient-stop.js\""
 ```
 
 So the `Stop` block becomes:
@@ -186,7 +186,7 @@ So the `Stop` block becomes:
 "Stop": [
     {
         "hooks": [
-            { "command": "node \"$HOME/.claude/hooks/kumbukum-stop.js\"", "type": "command" }
+            { "command": "node \"$HOME/.claude/hooks/streamient-stop.js\"", "type": "command" }
         ],
         "matcher": ""
     }
@@ -212,9 +212,9 @@ Editing `~/.claude/settings.json` affects every project. Hook config is read at 
 Instead of copying files by hand, paste this instruction to Claude Code (or any Claude with filesystem access) and it will do the whole setup:
 
 ```text
-Set up a Kumbukum "guaranteed memory write" hook for Claude Code:
+Set up a Streamient "guaranteed memory write" hook for Claude Code:
 
-1. Create ~/.claude/hooks/kumbukum-stop.js — a Node script that reads the
+1. Create ~/.claude/hooks/streamient-stop.js — a Node script that reads the
    Stop-hook JSON payload from stdin (fields: transcript_path,
    stop_hook_active), parses the JSONL transcript, finds the last genuine
    human turn (a "user" entry whose content is NOT a tool_result), and scans
@@ -230,17 +230,17 @@ Set up a Kumbukum "guaranteed memory write" hook for Claude Code:
    - On any parse/read error, exit 0 (fail open, never wedge the session).
 
 2. In ~/.claude/settings.json, set the Stop hook command to:
-   node "$HOME/.claude/hooks/kumbukum-stop.js"
+   node "$HOME/.claude/hooks/streamient-stop.js"
    Preserve any existing hooks and other settings.
 
 3. Verify the script with a couple of fake transcript fixtures: one with no
-   Kumbukum write (should print the block JSON) and one with a store_memory
+   Streamient write (should print the block JSON) and one with a store_memory
    tool_use (should output nothing and exit 0).
 ```
 
 ## 2. `CLAUDE.md` in the repo root
 
-In addition to hooks, add instructions to your project's `CLAUDE.md` so Claude knows the full Kumbukum workflow. Use the template on the [Agent configuration](./agents) page. Place it in the root of each repository where you want Kumbukum integration.
+In addition to hooks, add instructions to your project's `CLAUDE.md` so Claude knows the full Streamient workflow. Use the template on the [Agent configuration](./agents) page. Place it in the root of each repository where you want Streamient integration.
 
 ::: tip CLAUDE.md loads automatically
 Claude Code reads `CLAUDE.md` from the working directory at session start. No extra configuration is needed.
@@ -248,16 +248,16 @@ Claude Code reads `CLAUDE.md` from the working directory at session start. No ex
 
 ## 3. Connect the MCP server
 
-Follow [MCP setup](./setup) to configure the Kumbukum MCP server. Claude Code reads MCP server definitions from `~/.claude/settings.json` or `.claude/settings.json`.
+Follow [MCP setup](./setup) to configure the Streamient MCP server. Claude Code reads MCP server definitions from `~/.claude/settings.json` or `.claude/settings.json`.
 
 :::tabs
 == Cloud
 ```json
 {
     "mcpServers": {
-        "kumbukum": {
+        "streamient": {
             "command": "npx",
-            "args": ["-y", "mcp-remote", "https://mcp.kumbukum.com/mcp"],
+            "args": ["-y", "mcp-remote", "https://mcp.streamient.com/mcp"],
             "env": {
                 "ACCESS-TOKEN": "your-access-token"
             }
@@ -269,9 +269,9 @@ Follow [MCP setup](./setup) to configure the Kumbukum MCP server. Claude Code re
 ```json
 {
     "mcpServers": {
-        "kumbukum": {
+        "streamient": {
             "command": "node",
-            "args": ["/path/to/kumbukum/apps/mcp/server.js"],
+            "args": ["/path/to/streamient/apps/mcp/server.js"],
             "env": {
                 "ACCESS-TOKEN": "your-access-token",
                 "API_BASE_URL": "https://your-instance.com"

@@ -2,7 +2,7 @@
 
 ## Plans
 
-Kumbukum Cloud offers two plans:
+Streamient Cloud offers two plans:
 
 | | Free | Pro |
 |---|---|---|
@@ -32,9 +32,9 @@ We accept:
 
 ## Free Trial
 
-Kumbukum Cloud includes a one-time 7-day Pro trial. You can start it any time from **Settings > Billing**, without entering a credit card.
+Streamient Cloud includes a one-time 7-day Pro trial. You can start it any time from **Settings > Billing**, without entering a credit card.
 
-Trial reminder emails are sent 3 days before the trial ends and again about 24 hours before the trial ends. When the trial ends without a subscription, the workspace returns to the Free plan — your data stays intact and Kumbukum sends a trial-expired email.
+Trial reminder emails are sent 3 days before the trial ends and again about 24 hours before the trial ends. When the trial ends without a subscription, the workspace returns to the Free plan — your data stays intact and Streamient sends a trial-expired email.
 
 ## Invoices
 
@@ -44,4 +44,4 @@ Invoices are generated automatically for each billing cycle. Download past invoi
 
 You can cancel your subscription at any time from **Settings > Billing**. Your data remains accessible until the end of the current billing period.
 
-After cancellation, you can export your data or move to a [self-hosted installation](/selfhosted/) without changing how Kumbukum works for your team.
+After cancellation, you can export your data or move to a [self-hosted installation](/selfhosted/) without changing how Streamient works for your team.

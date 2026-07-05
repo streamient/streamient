@@ -1,6 +1,6 @@
 # Email Parsing
 
-Kumbukum parses email into a stored project record before indexing it.
+Streamient parses email into a stored project record before indexing it.
 
 ## Accepted Input
 

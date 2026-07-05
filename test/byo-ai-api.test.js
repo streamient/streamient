@@ -73,7 +73,7 @@ describe('BYO AI API', () => {
 	let memberRole;
 
 	beforeEach(() => {
-		config.appUrl = 'https://app.kumbukum.com';
+		config.appUrl = 'https://app.streamient.com';
 		config.isHosted = true;
 		config.env = 'development';
 		config.gitEncryptionKey = '12345678901234567890123456789012';

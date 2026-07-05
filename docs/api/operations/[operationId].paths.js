@@ -9,7 +9,7 @@ export default {
                 return {
                     params: {
                         operationId,
-                        pageTitle: `${summary} - Kumbukum API`,
+                        pageTitle: `${summary} - Streamient API`,
                     },
                 };
             });

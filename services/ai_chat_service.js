@@ -289,7 +289,7 @@ async function handleStats({ hostId, query, conversationId, includeEmails = true
 		messages: [
 			{
 				role: 'system',
-				content: `You are Kumbukum, a knowledge assistant. Answer the user's question using the stats below. Be concise.\n\nSTATS:\n${statsContext}`,
+				content: `You are Streamient, a knowledge assistant. Answer the user's question using the stats below. Be concise.\n\nSTATS:\n${statsContext}`,
 			},
 			{ role: 'user', content: query },
 		],
@@ -335,7 +335,7 @@ async function handleAnalysis({ hostId, userId, query, conversationId, projectId
 		messages: [
 			{
 				role: 'system',
-				content: `You are Kumbukum, a knowledge assistant. The user wants an analysis of their knowledge items. Be concise and insightful. Use the context below.\n\nCONTEXT:\n${context}`,
+				content: `You are Streamient, a knowledge assistant. The user wants an analysis of their knowledge items. Be concise and insightful. Use the context below.\n\nCONTEXT:\n${context}`,
 			},
 			{ role: 'user', content: query },
 		],
@@ -367,7 +367,7 @@ async function handleStatsStream({ hostId, query, conversationId, includeEmails 
 		messages: [
 			{
 				role: 'system',
-				content: `You are Kumbukum, a knowledge assistant. Answer the user's question using the stats below. Be concise.\n\nSTATS:\n${statsContext}`,
+				content: `You are Streamient, a knowledge assistant. Answer the user's question using the stats below. Be concise.\n\nSTATS:\n${statsContext}`,
 			},
 			{ role: 'user', content: query },
 		],
@@ -409,7 +409,7 @@ async function handleAnalysisStream({ hostId, userId, query, conversationId, pro
 		messages: [
 			{
 				role: 'system',
-				content: `You are Kumbukum, a knowledge assistant. The user wants an analysis of their knowledge items. Be concise and insightful. Use the context below.\n\nCONTEXT:\n${context}`,
+				content: `You are Streamient, a knowledge assistant. The user wants an analysis of their knowledge items. Be concise and insightful. Use the context below.\n\nCONTEXT:\n${context}`,
 			},
 			{ role: 'user', content: query },
 		],
@@ -664,7 +664,7 @@ export async function aiChatSearch(host_id, query, { stream = false } = {}) {
 	const messages = [
 		{
 			role: 'system',
-			content: `You are Kumbukum, a personal knowledge assistant. Answer the user's question using ONLY the context provided below. If the context doesn't contain relevant information, say so honestly. Be concise and helpful.\n\nCONTEXT:\n${context}`,
+			content: `You are Streamient, a personal knowledge assistant. Answer the user's question using ONLY the context provided below. If the context doesn't contain relevant information, say so honestly. Be concise and helpful.\n\nCONTEXT:\n${context}`,
 		},
 		{ role: 'user', content: query },
 	];

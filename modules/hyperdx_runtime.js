@@ -22,7 +22,7 @@ export const initializeHyperDX = function(options = {}) {
 
 		const initOptions = {
 			apiKey: env.HYPERDX_API_KEY,
-			service: options.serviceName || env.OTEL_SERVICE_NAME || 'kumbukum',
+			service: options.serviceName || env.OTEL_SERVICE_NAME || 'streamient',
 		};
 
 		const url = env.HYPERDX_API_URL || env.OTEL_EXPORTER_OTLP_ENDPOINT;

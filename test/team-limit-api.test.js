@@ -53,7 +53,7 @@ describe('Free plan team user limit', () => {
 	let memberCount;
 
 	beforeEach(() => {
-		config.appUrl = 'https://app.kumbukum.com';
+		config.appUrl = 'https://app.streamient.com';
 		config.isHosted = true;
 		memberCount = 5;
 		tenant = {

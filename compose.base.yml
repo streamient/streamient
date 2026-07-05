@@ -2,8 +2,8 @@ services:
   base:
     user: root
     restart: unless-stopped
-    image: kumbukum-dev:local
+    image: streamient-dev:local
     volumes:
-      - ./:/opt/kumbukum
-      - node_modules:/opt/kumbukum/node_modules
+      - ./:/opt/streamient
+      - node_modules:/opt/streamient/node_modules
       - pnpm_store:/pnpm/store

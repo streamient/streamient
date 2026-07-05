@@ -249,7 +249,7 @@ export function signMcpBridgeToken({ userId, tenantId, host_id, clientId, scopes
 	return signToken({
 		iss: getMcpBaseUrl(),
 		sub: String(userId),
-		aud: 'kumbukum-api',
+		aud: 'streamient-api',
 		host_id,
 		tenantId,
 		client_id: clientId,
@@ -271,7 +271,7 @@ export function verifyMcpBridgeToken(token) {
 	return jwt.verify(token, config.jwtSecret, {
 		algorithms: ['HS256'],
 		issuer: getMcpBaseUrl(),
-		audience: 'kumbukum-api',
+		audience: ['streamient-api', 'kumbukum-api'],
 	});
 }
 

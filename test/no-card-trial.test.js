@@ -31,7 +31,7 @@ describe('no-card trial signup and billing helpers', () => {
 		assert.equal(params.mode, 'subscription');
 		assert.equal(params.payment_method_collection, 'always');
 		assert.deepEqual(params.line_items, [{ price: 'price_123', quantity: 1 }]);
-		assert.equal(params.metadata.kumbukum_user_id, 'user-1');
+		assert.equal(params.metadata.streamient_user_id, 'user-1');
 		assert.equal(params.cancel_url, BILLING_SUBSCRIPTION_URL);
 		assert.equal(Object.hasOwn(params, 'subscription_data'), false);
 	});
@@ -92,8 +92,8 @@ describe('no-card trial signup and billing helpers', () => {
 		assert.equal(params.name, 'Owner User');
 		assert.equal(params.metadata.host_id, 'host-1');
 		assert.equal(params.metadata.tenant_id, 'tenant-1');
-		assert.equal(params.metadata.kumbukum_user_id, 'user-1');
-		assert.equal(params.metadata['Customer Type'], 'kumbukum');
+		assert.equal(params.metadata.streamient_user_id, 'user-1');
+		assert.equal(params.metadata['Customer Type'], 'streamient');
 	});
 
 	it('creates a Stripe customer with host_id and stores it on the account holder', async () => {
@@ -482,7 +482,7 @@ describe('no-card trial tenant cleanup', () => {
 		};
 		models.Export.find = () => ({
 			select: () => ({
-				lean: async () => [{ file_path: '/tmp/kumbukum-export.zip' }],
+				lean: async () => [{ file_path: '/tmp/streamient-export.zip' }],
 			}),
 		});
 
@@ -517,7 +517,7 @@ describe('no-card trial tenant cleanup', () => {
 		assert.deepEqual(calls.MagicLink.user.$in, ['user-1']);
 		assert.deepEqual(calls.User._id.$in, ['user-1']);
 		assert.equal(calls.Tenant, 'tenant-1');
-		assert.deepEqual(unlinkedFiles, ['/tmp/kumbukum-export.zip']);
+		assert.deepEqual(unlinkedFiles, ['/tmp/streamient-export.zip']);
 		assert.equal(deletedGitHost, 'host-1');
 		assert.equal(conversationCleanupHost, 'host-1');
 		assert.deepEqual(deletedCollections, getTenantTypesenseCollectionNames('host-1'));

@@ -1,8 +1,8 @@
 # Import
 
-Import existing documents into Kumbukum by dragging and dropping files onto the Notes page. Each file is converted into a new note with the extracted text content.
+Import existing documents into Streamient by dragging and dropping files onto the Notes page. Each file is converted into a new note with the extracted text content.
 
-You can also import emails by forwarding JSON email payloads to Kumbukum. This is an alternative to using the email API directly.
+You can also import emails by forwarding JSON email payloads to Streamient. This is an alternative to using the email API directly.
 
 ## Supported File Types
 
@@ -50,17 +50,17 @@ Forward emails to a project-specific address:
 PROJECT_ID@EMAIL_FORWARD_DOMAIN
 ```
 
-For example, if `EMAIL_FORWARD_DOMAIN=email.kumbukum.com`, forward to:
+For example, if `EMAIL_FORWARD_DOMAIN=email.streamient.com`, forward to:
 
 ```text
-507f1f77bcf86cd799439011@email.kumbukum.com
+507f1f77bcf86cd799439011@email.streamient.com
 ```
 
 The route accepts parsed email JSON with normal email fields:
 
 ```json
 {
-	"to": "507f1f77bcf86cd799439011@email.kumbukum.com",
+	"to": "507f1f77bcf86cd799439011@email.streamient.com",
 	"from": "sender@example.com",
 	"subject": "Project update",
 	"text": "Email body text",
@@ -71,4 +71,4 @@ The route accepts parsed email JSON with normal email fields:
 }
 ```
 
-Kumbukum stores plain text for search and AI, and stores sanitized HTML separately for display. If a forwarded email has no plain text body, Kumbukum strips the HTML body and stores the resulting text fallback. Remote image URLs in stored HTML are blocked by default and can be loaded explicitly in the email viewer. Existing stored emails cannot be backfilled unless they are re-ingested because raw HTML was not stored before this feature. Attachments are ignored. Kumbukum rejects forwarded email unless the recipient domain exactly matches `EMAIL_FORWARD_DOMAIN`.
+Streamient stores plain text for search and AI, and stores sanitized HTML separately for display. If a forwarded email has no plain text body, Streamient strips the HTML body and stores the resulting text fallback. Remote image URLs in stored HTML are blocked by default and can be loaded explicitly in the email viewer. Existing stored emails cannot be backfilled unless they are re-ingested because raw HTML was not stored before this feature. Attachments are ignored. Streamient rejects forwarded email unless the recipient domain exactly matches `EMAIL_FORWARD_DOMAIN`.

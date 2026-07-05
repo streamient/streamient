@@ -1,10 +1,10 @@
 # URL Capture
 
-The extension can save URLs to Kumbukum two ways: explicitly from the toolbar popup, or automatically as you browse.
+The extension can save URLs to Streamient two ways: explicitly from the toolbar popup, or automatically as you browse.
 
 ## From the popup
 
-Click the **Kumbukum** icon in the toolbar to open the popup. You have three actions:
+Click the **Streamient** icon in the toolbar to open the popup. You have three actions:
 
 - **Save URL** — Bookmark the current page. The title, description, and full content are extracted automatically.
 - **Create Note** — Write a quick note attached to the current page.
@@ -31,7 +31,7 @@ Captured URLs go to the account's **URL Project**. The Options page shows a live
 
 When the timer fires (or the scroll trigger crosses 50%) the extension:
 
-- Posts the URL, title, and extracted page content to Kumbukum.
+- Posts the URL, title, and extracted page content to Streamient.
 - Attaches a screenshot of the page at capture time.
 - Skips the page entirely if it matches an exclude rule or is on the default skip list.
 
@@ -39,10 +39,10 @@ Captures are de‑duplicated by URL, so revisiting the same page later doesn't c
 
 ### Multiple accounts
 
-If you have several Kumbukum accounts in the extension and enable automatic capture on more than one of them, each URL is saved into every account that doesn't exclude it. See [Multiple Accounts](/guide/browser-extension/multiple-accounts).
+If you have several Streamient accounts in the extension and enable automatic capture on more than one of them, each URL is saved into every account that doesn't exclude it. See [Multiple Accounts](/guide/browser-extension/multiple-accounts).
 
 ## Related
 
 - [Setup › Routing](/guide/browser-extension/setup#optional-route-urls-and-email-to-separate-projects) — pick a destination project.
-- [URLs](/guide/urls) — what saved URLs look like inside Kumbukum.
-- [Notes](/guide/notes) — what notes from the popup look like inside Kumbukum.
+- [URLs](/guide/urls) — what saved URLs look like inside Streamient.
+- [Notes](/guide/notes) — what notes from the popup look like inside Streamient.

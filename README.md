@@ -1,4 +1,4 @@
-# Kumbukum
+# Streamient
 
 > Open source memory infrastructure for teams.  
 > Turn scattered company knowledge into AI-ready context.
@@ -9,17 +9,17 @@
 
 Stop reset loops. Give every AI tool trusted memory your team can inspect, control, and reuse.
 
-Kumbukum is an open-source memory layer for AI-native teams and MCP-compatible tools. Store notes, memories, URLs, and relationships in one place, then let assistants retrieve the right context across sessions, projects, and clients.
+Streamient is an open-source memory layer for AI-native teams and MCP-compatible tools. Store notes, memories, URLs, and relationships in one place, then let assistants retrieve the right context across sessions, projects, and clients.
 
-[Website](https://kumbukum.com) · [Cloud](https://app.kumbukum.com) · [Docs](https://docs.kumbukum.com) · [Self-Hosted Guide](https://docs.kumbukum.com/selfhosted/) · [MCP Docs](https://docs.kumbukum.com/mcp/) · [API Reference](https://docs.kumbukum.com/api/)
+[Website](https://streamient.com) · [Cloud](https://app.streamient.com) · [Docs](https://docs.streamient.com) · [Self-Hosted Guide](https://docs.streamient.com/selfhosted/) · [MCP Docs](https://docs.streamient.com/mcp/) · [API Reference](https://docs.streamient.com/api/)
 
-![Kumbukum homepage preview](docs/assets/readme-hero.jpg)
+![Streamient homepage preview](docs/assets/readme-hero.jpg)
 
-## Why Kumbukum?
+## Why Streamient?
 
 AI tools are great at reasoning and terrible at remembering.
 
-Kumbukum gives you a shared, searchable, editable memory layer that sits between your team and your AI tools:
+Streamient gives you a shared, searchable, editable memory layer that sits between your team and your AI tools:
 
 - **Persistent context** — keep preferences, decisions, docs, and bookmarks across sessions
 - **Works across tools** — use the same memory store with Claude Desktop, Cursor, and other MCP clients
@@ -40,12 +40,12 @@ Kumbukum gives you a shared, searchable, editable memory layer that sits between
 ## How it works
 
 1. **Capture knowledge** — add notes, store memories, save URLs, or import documents
-2. **Connect your tools** — plug Kumbukum into Claude Desktop, Cursor, or another MCP client
+2. **Connect your tools** — plug Streamient into Claude Desktop, Cursor, or another MCP client
 3. **Retrieve the right context** — your assistant searches and reuses what matters, instead of starting from zero every time
 
 ## Cloud or self-hosted
 
-Kumbukum Cloud and the self-hosted edition share the same product features. The difference is who runs the infrastructure.
+Streamient Cloud and the self-hosted edition share the same product features. The difference is who runs the infrastructure.
 
 | | Cloud | Self-Hosted |
 | --- | --- | --- |
@@ -57,21 +57,21 @@ Kumbukum Cloud and the self-hosted edition share the same product features. The 
 
 ## Quick start
 
-### Kumbukum Cloud
+### Streamient Cloud
 
-1. Sign up at [app.kumbukum.com](https://app.kumbukum.com)
+1. Sign up at [app.streamient.com](https://app.streamient.com)
 2. Create your first project
 3. Generate a personal access token in **Settings → Tokens**
-4. Add Kumbukum to your AI tool
+4. Add Streamient to your AI tool
 
 Example Claude Desktop config on macOS:
 
 ```json
 {
     "mcpServers": {
-        "kumbukum": {
+        "streamient": {
             "command": "npx",
-            "args": ["-y", "mcp-remote", "https://mcp.kumbukum.com/mcp"],
+            "args": ["-y", "mcp-remote", "https://mcp.streamient.com/mcp"],
             "env": {
                 "ACCESS-TOKEN": "your-access-token"
             }
@@ -96,7 +96,7 @@ Requirements:
 Grab the production Compose file and pass configuration as shell environment variables:
 
 ```bash
-curl -O https://raw.githubusercontent.com/kumbukum/kumbukum/main/compose.prod.yml
+curl -O https://raw.githubusercontent.com/streamient/streamient/main/compose.prod.yml
 
 APP_URL=https://your-instance.com \
 SESSION_SECRET=your-session-secret \
@@ -110,7 +110,7 @@ GOOGLE_API_KEY=your-google-api-key \
 docker compose -f compose.prod.yml up -d
 ```
 
-For multiple outbound SMTP servers, set `SMTP_SERVERS` to a JSON array of server objects. Kumbukum sends through them round-robin.
+For multiple outbound SMTP servers, set `SMTP_SERVERS` to a JSON array of server objects. Streamient sends through them round-robin.
 
 Example:
 
@@ -123,7 +123,7 @@ SMTP_SERVERS='[
 		"secure": false,
 		"user": "smtp-user-1",
 		"pass": "smtp-pass-1",
-		"from": "server@kumbukum.com"
+		"from": "server@streamient.com"
 	},
 	{
 		"name": "smtp-2",
@@ -132,7 +132,7 @@ SMTP_SERVERS='[
 		"secure": true,
 		"user": "smtp-user-2",
 		"pass": "smtp-pass-2",
-		"from": "server@kumbukum.com"
+		"from": "server@streamient.com"
 	}
 ]'
 ```
@@ -141,9 +141,9 @@ In Docker Compose YAML, quote it as a single JSON string:
 
 ```yaml
 environment:
-    SMTP_FROM: server@kumbukum.com
+    SMTP_FROM: server@streamient.com
     SMTP_SERVERS: >-
-        [{"name":"smtp-1","host":"smtp1.example.com","port":587,"secure":false,"user":"smtp-user-1","pass":"smtp-pass-1","from":"server@kumbukum.com"},{"name":"smtp-2","host":"smtp2.example.com","port":465,"secure":true,"user":"smtp-user-2","pass":"smtp-pass-2","from":"server@kumbukum.com"}]
+        [{"name":"smtp-1","host":"smtp1.example.com","port":587,"secure":false,"user":"smtp-user-1","pass":"smtp-pass-1","from":"server@streamient.com"},{"name":"smtp-2","host":"smtp2.example.com","port":465,"secure":true,"user":"smtp-user-2","pass":"smtp-pass-2","from":"server@streamient.com"}]
 ```
 
 Only `host` is required per server. `port` defaults to `587`, `secure` defaults to `true` only for port `465`, and `from` falls back to `SMTP_FROM`.
@@ -166,8 +166,8 @@ Default service ports:
 For repository development, make sure MongoDB, Redis, and Typesense are available, then run:
 
 ```bash
-git clone https://github.com/kumbukum/kumbukum.git
-cd kumbukum
+git clone https://github.com/streamient/streamient.git
+cd streamient
 pnpm install
 pnpm dev
 ```
@@ -182,7 +182,7 @@ Useful scripts:
 
 ## MCP server
 
-Kumbukum includes a built-in [Model Context Protocol](https://modelcontextprotocol.io/) server with:
+Streamient includes a built-in [Model Context Protocol](https://modelcontextprotocol.io/) server with:
 
 - **44 tools** across notes, memories, URLs, projects, graph, search, and AI chat
 - **Shared memory across tools** so Claude Desktop, Cursor, and others pull from the same context
@@ -207,11 +207,11 @@ env 'ACCESS-TOKEN'=your-access-token API_BASE_URL=https://your-instance.com node
 
 ## Documentation
 
-- [Guide](https://docs.kumbukum.com/guide/)
-- [Self-Hosted](https://docs.kumbukum.com/selfhosted/)
-- [MCP Server](https://docs.kumbukum.com/mcp/)
-- [API Reference](https://docs.kumbukum.com/api/)
-- [Cloud](https://docs.kumbukum.com/cloud/)
+- [Guide](https://docs.streamient.com/guide/)
+- [Self-Hosted](https://docs.streamient.com/selfhosted/)
+- [MCP Server](https://docs.streamient.com/mcp/)
+- [API Reference](https://docs.streamient.com/api/)
+- [Cloud](https://docs.streamient.com/cloud/)
 
 ## License
 

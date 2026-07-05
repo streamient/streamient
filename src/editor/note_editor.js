@@ -24,7 +24,7 @@ const SLASH_COMMANDS = [
 	{ label: 'Horizontal Rule', icon: 'remove', command: (editor) => editor.chain().focus().setHorizontalRule().run() },
 ];
 
-const editorIcon = (name, extraClasses = '') => window.KumbukumIcons?.icon(name, extraClasses) || `<span class="kk-icon material-symbols-outlined ${extraClasses}" aria-hidden="true">${name}</span>`;
+const editorIcon = (name, extraClasses = '') => window.StreamientIcons?.icon(name, extraClasses) || `<span class="kk-icon material-symbols-outlined ${extraClasses}" aria-hidden="true">${name}</span>`;
 
 function createSlashMenu() {
 	const menu = document.createElement('div');
@@ -363,4 +363,4 @@ export function createEmailEditor(element, { content = '', onUpdate = null, plac
 }
 
 // Export for global use
-window.KumbukumEditor = { createEditor, createEmailEditor };
+window.StreamientEditor = { createEditor, createEmailEditor };

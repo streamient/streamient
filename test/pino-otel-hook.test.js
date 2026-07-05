@@ -15,12 +15,12 @@ function callHook(inputArgs, level = 30) {
 describe('Pino OTEL hook', () => {
 	it('adds body to structured stdout records without removing the pino message', () => {
 		const original = { failedCount: 2, type: 'emails' };
-		const received = callHook([original, 'Kumbukum indexer: failures'], 50);
+		const received = callHook([original, 'Streamient indexer: failures'], 50);
 
-		assert.equal(received[0].body, 'Kumbukum indexer: failures');
+		assert.equal(received[0].body, 'Streamient indexer: failures');
 		assert.equal(received[0].failedCount, 2);
 		assert.equal(received[0].type, 'emails');
-		assert.equal(received[1], 'Kumbukum indexer: failures');
+		assert.equal(received[1], 'Streamient indexer: failures');
 		assert.equal(original.body, undefined);
 	});
 

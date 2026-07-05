@@ -1,7 +1,7 @@
 extends ../auth_layout
 
 block head
-	title Authorize App — Kumbukum
+	title Authorize App — Streamient
 
 block body
 	if error
@@ -15,14 +15,14 @@ block body
 				p.text-muted.mb-0
 					span Allow access to
 					strong.ms-1= (active_tenant && active_tenant.name) || 'this account'
-					span.ms-1 through Kumbukum MCP.
+					span.ms-1 through Streamient MCP.
 
 			section.oauth-section.mb-4
 				h2.h6.mb-2 Signed in as
 				.oauth-account-card
 					.oauth-account-avatar= ((active_tenant && active_tenant.name) || 'K').trim().slice(0, 1).toUpperCase()
 					div
-						div.text-muted.small Kumbukum account
+						div.text-muted.small Streamient account
 						div.fw-semibold= (active_tenant && active_tenant.name) || 'This account'
 
 			if scope_details && scope_details.length

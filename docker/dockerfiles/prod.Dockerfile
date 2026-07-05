@@ -8,7 +8,7 @@ FROM node:lts-trixie-slim AS builder
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 ENV PLAYWRIGHT_BROWSERS_PATH="/ms-playwright"
-WORKDIR /opt/kumbukum
+WORKDIR /opt/streamient
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -35,18 +35,18 @@ FROM deps AS build
 
 ARG APP_VERSION=latest
 ENV VITEPRESS_VERSION=$APP_VERSION
-# Base for the vanity-domain docs build (docs.kumbukum.com) — root so URLs are clean.
-ARG KUMBUKUM_DOCS_VANITY_BASE=/
+# Base for the vanity-domain docs build (docs.streamient.com) — root so URLs are clean.
+ARG STREAMIENT_DOCS_VANITY_BASE=/
 
 COPY --link . .
 RUN NODE_ENV=production node build.js
 # Build the docs twice from one source: the prefixed build (/docs/) served at
-# app.kumbukum.com/docs/, and a root build (/) served at docs.kumbukum.com.
+# app.streamient.com/docs/, and a root build (/) served at docs.streamient.com.
 # VitePress always writes to .vitepress/dist, so move the first aside.
 RUN node docs/scripts/export-openapi.js \
-    && pnpm --filter @kumbukum/docs exec vitepress build \
+    && pnpm --filter @streamient/docs exec vitepress build \
     && mv docs/.vitepress/dist docs/.vitepress/dist-prefixed \
-    && KUMBUKUM_DOCS_BASE="${KUMBUKUM_DOCS_VANITY_BASE}" pnpm --filter @kumbukum/docs exec vitepress build \
+    && STREAMIENT_DOCS_BASE="${STREAMIENT_DOCS_VANITY_BASE}" pnpm --filter @streamient/docs exec vitepress build \
     && mv docs/.vitepress/dist docs/.vitepress/dist-root \
     && mv docs/.vitepress/dist-prefixed docs/.vitepress/dist
 
@@ -66,14 +66,14 @@ RUN chown -R node:node /ms-playwright
 COPY --link . .
 
 # Overwrite with built assets from stage 3
-COPY --link --from=build /opt/kumbukum/public/js/vendor.js ./public/js/vendor.js
-COPY --link --from=build /opt/kumbukum/public/js/editor.js ./public/js/editor.js
-COPY --link --from=build /opt/kumbukum/public/js/graph_bundle.js ./public/js/graph_bundle.js
-COPY --link --from=build /opt/kumbukum/public/css/vendor.css ./public/css/vendor.css
-COPY --link --from=build /opt/kumbukum/public/css/*.woff2 ./public/css/
-COPY --link --from=build /opt/kumbukum/public/build-id ./public/build-id
-COPY --link --from=build /opt/kumbukum/docs/.vitepress/dist ./docs-dist
-COPY --link --from=build /opt/kumbukum/docs/.vitepress/dist-root ./docs-dist-root
+COPY --link --from=build /opt/streamient/public/js/vendor.js ./public/js/vendor.js
+COPY --link --from=build /opt/streamient/public/js/editor.js ./public/js/editor.js
+COPY --link --from=build /opt/streamient/public/js/graph_bundle.js ./public/js/graph_bundle.js
+COPY --link --from=build /opt/streamient/public/css/vendor.css ./public/css/vendor.css
+COPY --link --from=build /opt/streamient/public/css/*.woff2 ./public/css/
+COPY --link --from=build /opt/streamient/public/build-id ./public/build-id
+COPY --link --from=build /opt/streamient/docs/.vitepress/dist ./docs-dist
+COPY --link --from=build /opt/streamient/docs/.vitepress/dist-root ./docs-dist-root
 
 USER node
 EXPOSE 3000

@@ -4,12 +4,12 @@ The extension is Chrome‑only. It runs on any Chromium‑based browser (Chrome,
 
 ## Install
 
-Install from the Chrome Web Store: [Kumbukum on the Chrome Web Store](https://chrome.google.com/webstore/detail/gnpfejkkamggccmpdpbddjhinkehnchf).
+Install from the Chrome Web Store: [Streamient on the Chrome Web Store](https://chrome.google.com/webstore/detail/gnpfejkkamggccmpdpbddjhinkehnchf).
 
 ## Sign in
 
-1. Click the **Kumbukum** icon in the toolbar.
-2. Sign in with your Kumbukum account.
+1. Click the **Streamient** icon in the toolbar.
+2. Sign in with your Streamient account.
 3. Pick a **Default Project** — anything captured that isn't routed elsewhere lands here.
 
 That's enough to start capturing URLs and notes from the popup, and to use the email side panel on Gmail, Outlook, and Fastmail.
@@ -21,11 +21,11 @@ Open the extension's **Options** page (right‑click the toolbar icon → **Opti
 - **URL Project** — destination for saved URLs (manual and automatic capture). Defaults to the Default Project.
 - **Email Project** — destination for saved emails. Defaults to the Default Project.
 
-Both are per‑Kumbukum‑account, so different accounts can route differently.
+Both are per‑Streamient‑account, so different accounts can route differently.
 
 ## Next steps
 
 - [URL Capture](/guide/browser-extension/url-capture) — popup actions and automatic capture rules.
 - [Email Capture](/guide/browser-extension/email-capture) — the email side panel.
 - [Email Accounts](/guide/browser-extension/email-accounts) — connect a mailbox for reliable email sync.
-- [Multiple Accounts](/guide/browser-extension/multiple-accounts) — add a second Kumbukum account.
+- [Multiple Accounts](/guide/browser-extension/multiple-accounts) — add a second Streamient account.

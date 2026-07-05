@@ -1,4 +1,4 @@
-/* Kumbukum — App Styles */
+/* Streamient — App Styles */
 
 :root {
 	--kk-font-body: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -1481,7 +1481,7 @@ body:not(.swal2-shown) > .swal2-container {
 	font-size: 0.875rem;
 }
 
-/* Kumbukum — global search result type badges */
+/* Streamient — global search result type badges */
 .kk-search-result-badge {
 	flex: 0 0 auto;
 	min-width: 58px;

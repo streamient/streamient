@@ -26,9 +26,9 @@ const isProduction = process.env.NODE_ENV === 'production';
 const forceJson = process.env.USE_PINO_LOGGER === 'true';
 const usePretty = process.env.PINO_DEV_LOGS === 'true' || (!isProduction && !forceJson);
 
-const serviceApp = process.env.KUMBUKUM_APP || process.env.SERVER_MODE || 'web';
-const appInstance = process.env.APP_INSTANCE || 'kumbukum';
-const appLocation = process.env.APP_LOCATION || process.env.KUMBUKUM_APP_LOCATION || 'us';
+const serviceApp = process.env.STREAMIENT_APP || process.env.KUMBUKUM_APP || process.env.SERVER_MODE || 'web';
+const appInstance = process.env.APP_INSTANCE || 'streamient';
+const appLocation = process.env.APP_LOCATION || process.env.STREAMIENT_APP_LOCATION || process.env.KUMBUKUM_APP_LOCATION || 'us';
 
 const baseConfig = {
 	level: process.env.LOG_LEVEL || (isProduction ? 'info' : 'debug'),

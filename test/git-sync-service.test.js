@@ -220,7 +220,7 @@ test('imports markdown notes, memories, and recent commit memories', async (t) =
 	const recentUpdatedDate = now(-2 * 24 * 60 * 60 * 1000);
 	await commitAll(remote.work, 'update recent note', recentUpdatedDate);
 	fs.writeFileSync(path.join(remote.work, 'notes', 'recent.md'), '---\ntitle: Recent Note\ntags:\n  - alpha\n---\n\nRecent updated by sync\n');
-	await commitAll(remote.work, 'Kumbukum sync 2026-05-08T03:49:21.097Z', now(-1 * 24 * 60 * 60 * 1000));
+	await commitAll(remote.work, 'Streamient sync 2026-05-08T03:49:21.097Z', now(-1 * 24 * 60 * 60 * 1000));
 	await git(remote.work, ['push']);
 
 	const repo = makeRepo(remote);

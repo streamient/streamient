@@ -1,13 +1,13 @@
 # API Reference
 
-Kumbukum exposes a REST API at `/api/v1/` for managing notes, memories, URLs, projects, and search.
+Streamient exposes a REST API at `/api/v1/` for managing notes, memories, URLs, projects, and search.
 
 ## Base URL
 
 :::tabs
 == Cloud
 ```
-https://app.kumbukum.com/api/v1
+https://app.streamient.com/api/v1
 ```
 == Self-Hosted
 ```
@@ -45,7 +45,7 @@ You can also access the raw spec at `/api-docs` on your running instance:
 :::tabs
 == Cloud
 ```
-https://app.kumbukum.com/api-docs
+https://app.streamient.com/api-docs
 ```
 == Self-Hosted
 ```

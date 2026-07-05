@@ -1,5 +1,5 @@
 // ── Change streams removed ──────────────────────────────────────────
-// Typesense indexing is now handled by the Kumbukum indexer scheduler task,
+// Typesense indexing is now handled by the Streamient indexer scheduler task,
 // which runs every 20 seconds and
 // batch-imports unindexed documents. This avoids overwhelming
 // Typesense with concurrent requests from change stream events.

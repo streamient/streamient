@@ -724,7 +724,7 @@ async function navigateTo(path, opts) {
 		executeScripts(pageContent);
 		mountCurrent(path);
 
-		document.title = route.title + ' — Kumbukum';
+		document.title = route.title + ' — Streamient';
 
 		if (!opts.popstate) {
 			var qs = '';

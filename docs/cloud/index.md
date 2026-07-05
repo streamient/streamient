@@ -1,10 +1,10 @@
-# Kumbukum Cloud
+# Streamient Cloud
 
-Kumbukum Cloud is the fully managed edition of Kumbukum. You get the same shared memory layer for your team without running the infrastructure yourself.
+Streamient Cloud is the fully managed edition of Streamient. You get the same shared memory layer for your team without running the infrastructure yourself.
 
 ## Get Started
 
-1. Sign up at [app.kumbukum.com](https://app.kumbukum.com)
+1. Sign up at [app.streamient.com](https://app.streamient.com)
 2. Create your first project
 3. Generate a personal access token and connect your AI tools
 4. Start capturing notes, memories, and URLs that your assistants can reuse
@@ -20,7 +20,7 @@ Kumbukum Cloud is the fully managed edition of Kumbukum. You get the same shared
 
 ## Cloud vs Self-Hosted
 
-Kumbukum Cloud and the self-hosted edition share the same product features. The difference is who runs the infrastructure.
+Streamient Cloud and the self-hosted edition share the same product features. The difference is who runs the infrastructure.
 
 | | Cloud | Self-Hosted |
 | --- | --- | --- |

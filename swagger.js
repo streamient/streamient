@@ -1,7 +1,7 @@
 const swaggerSpec = {
     openapi: '3.0.3',
     info: {
-        title: 'Kumbukum API',
+        title: 'Streamient API',
         version: '1.0.0',
         description: 'Everything your AI needs to remember — Notes, Memory, URLs, AI Chat',
     },
@@ -667,7 +667,7 @@ const swaggerSpec = {
             post: {
                 tags: ['Team'],
                 summary: 'Create a team member',
-                description: 'Adds a user to the current account with the member role. Existing Kumbukum users are linked to the current account; new users are created with email/password login access.',
+                description: 'Adds a user to the current account with the member role. Existing Streamient users are linked to the current account; new users are created with email/password login access.',
                 requestBody: {
                     required: true,
                     content: {

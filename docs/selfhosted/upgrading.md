@@ -6,7 +6,7 @@
 2. Pull the latest changes:
 
 ```bash
-cd kumbukum
+cd streamient
 git pull origin main
 ```
 
@@ -46,4 +46,4 @@ curl https://your-instance.com/api/v1/urls \
 
 ## Migration Notes
 
-Breaking changes, if any, are documented in the [GitHub releases](https://github.com/kumbukum/kumbukum/releases). Check the release notes before upgrading to a new major version.
+Breaking changes, if any, are documented in the [GitHub releases](https://github.com/streamient/streamient/releases). Check the release notes before upgrading to a new major version.

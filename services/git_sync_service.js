@@ -270,7 +270,7 @@ async function getFileGitDates(git, syncBase, relPath) {
 			};
 		})
 		.filter((entry) => entry.date);
-	const userEntries = entries.filter((entry) => !entry.subject.startsWith('Kumbukum sync '));
+	const userEntries = entries.filter((entry) => !entry.subject.startsWith('Streamient sync ') && !entry.subject.startsWith('Kumbukum sync '));
 	const dates = (userEntries.length ? userEntries : entries).map((entry) => entry.date);
 	const fallback = new Date();
 	return {
@@ -588,7 +588,7 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, sum
 
 		if (existing) {
 			if (isLocalChangeNewer(existing)) {
-				recordConflict(summary, existingNote ? 'note' : 'memory', relPath, 'Both Git and Kumbukum changed since the last sync');
+				recordConflict(summary, existingNote ? 'note' : 'memory', relPath, 'Both Git and Streamient changed since the last sync');
 				continue;
 			}
 		}
@@ -684,7 +684,7 @@ async function trashDeletedGitItems(gitRepo, hostId, activeFilePaths, summary) {
 		const filePath = note.git_source?.file_path;
 		if (!filePath || activeFilePaths.has(filePath)) continue;
 		if (isLocalChangeNewer(note)) {
-			recordConflict(summary, 'note', filePath, 'Git deleted the file but Kumbukum has newer local edits');
+			recordConflict(summary, 'note', filePath, 'Git deleted the file but Streamient has newer local edits');
 			continue;
 		}
 		if (!gitRepo.trash_on_delete) {
@@ -701,7 +701,7 @@ async function trashDeletedGitItems(gitRepo, hostId, activeFilePaths, summary) {
 		const filePath = memory.git_source?.file_path;
 		if (!filePath || activeFilePaths.has(filePath)) continue;
 		if (isLocalChangeNewer(memory)) {
-			recordConflict(summary, 'memory', filePath, 'Git deleted the file but Kumbukum has newer local edits');
+			recordConflict(summary, 'memory', filePath, 'Git deleted the file but Streamient has newer local edits');
 			continue;
 		}
 		if (!gitRepo.trash_on_delete) {
@@ -829,12 +829,12 @@ async function pushToGit(git, dir, syncBase, gitRepo, userId, hostId, token, sum
 
 	if (hasChanges) {
 		const localGit = simpleGit(dir);
-		await localGit.addConfig('user.email', 'sync@kumbukum.com');
-		await localGit.addConfig('user.name', 'Kumbukum Sync');
+		await localGit.addConfig('user.email', 'sync@streamient.com');
+		await localGit.addConfig('user.name', 'Streamient Sync');
 		await localGit.add('.');
 		const status = await localGit.status();
 		if (status.files.length > 0) {
-			await localGit.commit(`Kumbukum sync ${new Date().toISOString()}`);
+			await localGit.commit(`Streamient sync ${new Date().toISOString()}`);
 			await localGit.push(repoAuthUrl(gitRepo, token), gitRepo.branch || 'main');
 		}
 

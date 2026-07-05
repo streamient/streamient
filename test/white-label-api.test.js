@@ -62,9 +62,9 @@ describe('White-label API', () => {
 	let projects;
 
 	beforeEach(() => {
-		config.appUrl = 'https://app.kumbukum.com';
+		config.appUrl = 'https://app.streamient.com';
 		config.isHosted = true;
-		config.whiteLabel.cnameTarget = 'app.kumbukum.com';
+		config.whiteLabel.cnameTarget = 'app.streamient.com';
 		config.whiteLabel.cloudflare = { apiToken: '', zoneId: '' };
 		memberRole = 'owner';
 		tenant = {
@@ -168,7 +168,7 @@ describe('White-label API', () => {
 			assert.equal(response.status, 200);
 			assert.equal(json.settings.can_use_custom_domain, false);
 			assert.equal(json.settings.can_use_login_logo, false);
-			assert.equal(json.settings.cname_target, 'app.kumbukum.com');
+			assert.equal(json.settings.cname_target, 'app.streamient.com');
 		} finally {
 			await new Promise((resolve) => server.close(resolve));
 		}

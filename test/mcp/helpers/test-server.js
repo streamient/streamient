@@ -34,7 +34,7 @@ function buildToolMeta(name, tool) {
 export function buildMcpServer(api, { toolProfile = MCP_TOOL_PROFILES.FULL } = {}) {
     const defaultProjectId = FIXTURES.project._id;
     const server = new McpServer({
-        name: 'kumbukum-test',
+        name: 'streamient-test',
         version: '0.0.1',
     });
 

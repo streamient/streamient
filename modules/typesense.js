@@ -679,12 +679,12 @@ export async function importDocuments(host_id, type, docs, action = 'upsert') {
 	} catch (err) {
 		if (Array.isArray(err.importResults) && err.importResults.length) {
 			const failedCount = err.importResults.filter((result) => !result?.success).length;
-			log.error({ errorInfo: summarizeImportError(err), docCount: docs.length, importResultCount: err.importResults.length, failedCount, errorSummary: summarizeImportResultErrors(err.importResults), collection: collectionName }, 'Kumbukum indexer: import returned partial failures');
+			log.error({ errorInfo: summarizeImportError(err), docCount: docs.length, importResultCount: err.importResults.length, failedCount, errorSummary: summarizeImportResultErrors(err.importResults), collection: collectionName }, 'Streamient indexer: import returned partial failures');
 			return err.importResults;
 		}
 
 		const error = err?.message || 'Typesense import failed';
-		log.error({ errorInfo: summarizeImportError(err), docCount: docs.length, collection: collectionName }, 'Kumbukum indexer: import failed');
+		log.error({ errorInfo: summarizeImportError(err), docCount: docs.length, collection: collectionName }, 'Streamient indexer: import failed');
 		return docs.map(() => ({ success: false, error }));
 	}
 }
@@ -1063,7 +1063,7 @@ export async function getFilteredCount(host_id, type, projectId) {
 /**
  * Queue all documents for scheduler-based reindexing for a host.
  * Drops and recreates collections, then marks MongoDB records as unindexed
- * so runKumbukumIndexer() can repopulate Typesense in batches.
+ * so runStreamientIndexer() can repopulate Typesense in batches.
  */
 export async function reindexHost(host_id, models) {
 	const ts = getTypesenseClient();
@@ -1283,7 +1283,7 @@ export async function getReindexStatus(host_id, models) {
 	return buildReindexStatus(reindexState, counts.not_indexed_records, counts);
 }
 
-export async function runKumbukumIndexer(models) {
+export async function runStreamientIndexer(models) {
 	const typeModelMap = getIndexedTypeModelMap(models);
 
 	let totalIndexed = 0;
@@ -1367,11 +1367,11 @@ export async function runKumbukumIndexer(models) {
 			if (failed.length) {
 				const failedIdsSample = failed.slice(0, 10).map((item) => item.id).join(',');
 				const errorSummary = [...new Set(failed.map((item) => item.error))].slice(0, 5).join(' | ');
-				log.error({ failedCount: failed.length, failedSampleCount: Math.min(failed.length, 10), errorSummary, type, host_id, failedIdsSample }, 'Kumbukum indexer: failures');
+				log.error({ failedCount: failed.length, failedSampleCount: Math.min(failed.length, 10), errorSummary, type, host_id, failedIdsSample }, 'Streamient indexer: failures');
 			}
 
 			if (docs.length > 0) {
-				log.info({ imported: successIds.length, total: docs.length, type, host_id }, 'Kumbukum indexer: imported docs');
+				log.info({ imported: successIds.length, total: docs.length, type, host_id }, 'Streamient indexer: imported docs');
 			}
 		}
 	}
@@ -1394,7 +1394,7 @@ export async function runKumbukumIndexer(models) {
 	}
 
 	if (totalIndexed > 0) {
-		log.info({ totalIndexed }, 'Kumbukum indexer: indexed documents total');
+		log.info({ totalIndexed }, 'Streamient indexer: indexed documents total');
 	}
 
 	return totalIndexed;
@@ -1410,7 +1410,7 @@ export async function runKumbukumIndexer(models) {
  */
 function buildConversationSystemPrompt() {
 	const now = new Date();
-	return `You are Kumbukum, a personal knowledge assistant. You help users find, organize, and manage their notes, memories, saved URLs, and emails.
+	return `You are Streamient, a personal knowledge assistant. You help users find, organize, and manage their notes, memories, saved URLs, and emails.
 
 ## CURRENT TIMESTAMP
 ${now.toISOString()}

@@ -5,13 +5,13 @@ import spec from './data/openapi.json' with { type: 'json' };
 
 const sidebar = useSidebar({ spec, linkPrefix: '/api/operations/' });
 
-// Base is build-time configurable: '/docs/' for app.kumbukum.com/docs/, and '/'
-// for the vanity domain build served at docs.kumbukum.com (KUMBUKUM_DOCS_BASE=/).
-const docsBase = process.env.KUMBUKUM_DOCS_BASE || '/docs/';
+// Base is build-time configurable: '/docs/' for app.streamient.com/docs/, and '/'
+// for the vanity domain build served at docs.streamient.com (STREAMIENT_DOCS_BASE=/).
+const docsBase = process.env.STREAMIENT_DOCS_BASE || '/docs/';
 
 export default defineConfig({
-    title: 'Kumbukum Docs',
-    description: 'Documentation for Kumbukum — Notes, Memory, URLs, AI Chat',
+    title: 'Streamient Docs',
+    description: 'Documentation for Streamient — Notes, Memory, URLs, AI Chat',
     base: docsBase,
     cleanUrls: true,
 
@@ -77,7 +77,7 @@ export default defineConfig({
             ],
             '/cloud/': [
                 {
-                    text: 'Kumbukum Cloud',
+                    text: 'Streamient Cloud',
                     items: [
                         { text: 'Overview', link: '/cloud/' },
                         { text: 'Account', link: '/cloud/account' },
@@ -139,11 +139,11 @@ export default defineConfig({
         },
 
         socialLinks: [
-            { icon: 'github', link: 'https://github.com/kumbukum/kumbukum' },
+            { icon: 'github', link: 'https://github.com/streamient/streamient' },
         ],
 
         editLink: {
-            pattern: 'https://github.com/kumbukum/kumbukum/edit/main/docs/:path',
+            pattern: 'https://github.com/streamient/streamient/edit/main/docs/:path',
             text: 'Edit this page on GitHub',
         },
     },

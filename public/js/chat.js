@@ -48,7 +48,7 @@ function initChat() {
 
 		const avatarHtml = role === 'user'
 			? makeAvatar(__user_name, 'xs')
-			: '<span class="avatar avatar-xs" style="background:#253055;color:#7C6AF7;font-weight:700;font-size:0.625rem" title="Kumbukum">K</span>';
+			: '<span class="avatar avatar-xs" style="background:#253055;color:#7C6AF7;font-weight:700;font-size:0.625rem" title="Streamient">K</span>';
 
 		const bubble = document.createElement('div');
 		bubble.className = `chat-message ${role}`;
@@ -73,7 +73,7 @@ function initChat() {
 	function createAssistantRow() {
 		const row = document.createElement('div');
 		row.className = 'chat-msg-row assistant';
-		row.innerHTML = '<span class="avatar avatar-xs" style="background:#253055;color:#7C6AF7;font-weight:700;font-size:0.625rem" title="Kumbukum">K</span>';
+		row.innerHTML = '<span class="avatar avatar-xs" style="background:#253055;color:#7C6AF7;font-weight:700;font-size:0.625rem" title="Streamient">K</span>';
 		const bubble = document.createElement('div');
 		bubble.className = 'chat-message assistant';
 		row.appendChild(bubble);
@@ -93,7 +93,7 @@ function initChat() {
 		// Show thinking indicator
 		const thinkingRow = document.createElement('div');
 		thinkingRow.className = 'chat-msg-row assistant';
-		thinkingRow.innerHTML = '<span class="avatar avatar-xs" style="background:#253055;color:#7C6AF7;font-weight:700;font-size:0.625rem" title="Kumbukum">K</span>';
+		thinkingRow.innerHTML = '<span class="avatar avatar-xs" style="background:#253055;color:#7C6AF7;font-weight:700;font-size:0.625rem" title="Streamient">K</span>';
 		const thinkingBubble = document.createElement('div');
 		thinkingBubble.className = 'chat-message assistant';
 		thinkingBubble.innerHTML = '<span class="chat-thinking"><span>.</span><span>.</span><span>.</span></span>';
@@ -1068,8 +1068,8 @@ function rmInitEditor(containerId, content) {
 	const container = document.getElementById(containerId);
 	container.innerHTML = '';
 	if (rmEditor) { rmEditor.destroy(); rmEditor = null; }
-	if (window.KumbukumEditor) {
-		rmEditor = window.KumbukumEditor.createEditor(container, { content });
+	if (window.StreamientEditor) {
+		rmEditor = window.StreamientEditor.createEditor(container, { content });
 	} else {
 		container.innerHTML = content || '';
 		container.setAttribute('contenteditable', 'true');

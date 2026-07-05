@@ -31,7 +31,7 @@ function parseTypesenseConfig() {
 				protocol: 'http',
 			},
 		],
-		apiKey: process.env.TYPESENSE_API_KEY || 'kumbukum-dev-key',
+		apiKey: process.env.TYPESENSE_API_KEY || 'streamient-dev-key',
 		connectionTimeoutSeconds,
 	};
 }
@@ -62,10 +62,10 @@ export function isHostedHostname(hostname) {
 	if (!hostname) return false;
 	const normalized = hostname.toLowerCase();
 	// Hosted (SaaS) hostnames. Local dev: app.k.lan = hosted edition, while bare
-	// k.lan is the plain (self-hosted) dev. app.kumbukum.local is a legacy alias.
-	return normalized === 'app.kumbukum.local'
+	// k.lan is the plain (self-hosted) dev. app.streamient.local is a legacy alias.
+	return normalized === 'app.streamient.local'
 		|| normalized === 'app.k.lan'
-		|| normalized.endsWith('kumbukum.com');
+		|| normalized.endsWith('streamient.com');
 }
 
 export function isHostedAppUrl(appUrl) {
@@ -156,7 +156,7 @@ function getAppUrlHostname(value) {
 const config = {
 	env: process.env.NODE_ENV || 'development',
 	port: parseInt(process.env.PORT, 10) || 3000,
-	mongoUri: process.env.MONGO_URI || 'mongodb://localhost:27017/kumbukum?replicaSet=rs0',
+	mongoUri: process.env.MONGO_URI || 'mongodb://localhost:27017/streamient?replicaSet=rs0',
 	redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
 	redisOptions: parseRedisConfig(),
 	socketRedis: process.env.SOCKET_REDIS !== 'false' && !!(process.env.REDIS_URL || process.env.REDIS_SENTINEL),
@@ -269,7 +269,7 @@ const config = {
 		enabled: !!process.env.HYPERDX_API_KEY,
 		apiKey: process.env.HYPERDX_API_KEY || '',
 		browserUrl: process.env.HYPERDX_BROWSER_URL || '',
-		service: 'kumbukum',
+		service: 'streamient',
 	},
 
 	gitEncryptionKey: process.env.GIT_ENCRYPTION_KEY || '',

@@ -1,6 +1,6 @@
 # Git Sync
 
-Kumbukum can synchronize markdown files and read commit messages from Git repositories, keeping your notes, memories, and project history in sync with a version-controlled repo. By default a repo is **read-only** — content flows from the repo into Kumbukum and nothing is ever written back. Switch a repo to **read/write** to also push notes and memories back to the repo as commits.
+Streamient can synchronize markdown files and read commit messages from Git repositories, keeping your notes, memories, and project history in sync with a version-controlled repo. By default a repo is **read-only** — content flows from the repo into Streamient and nothing is ever written back. Switch a repo to **read/write** to also push notes and memories back to the repo as commits.
 
 ::: info Availability
 Git Sync requires the **Pro** plan or a **self-hosted** (open-source) installation.
@@ -9,28 +9,28 @@ Git Sync requires the **Pro** plan or a **self-hosted** (open-source) installati
 ## How It Works
 
 1. Add one or more Git repos to a project
-2. Kumbukum clones the repo and scans for `.md` files
+2. Streamient clones the repo and scans for `.md` files
 3. Files in the **notes directory** become Notes; files in the **memories directory** become Memories
 4. A scheduler re-syncs every 10 minutes (configurable per repo)
-5. In **read/write** mode, items edited in Kumbukum are converted back to Markdown and pushed as commits (read-only repos skip this entirely)
+5. In **read/write** mode, items edited in Streamient are converted back to Markdown and pushed as commits (read-only repos skip this entirely)
 6. Git commits are imported as searchable Memories by default
 
 ### Sync Modes
 
 Each repo has a **sync mode**:
 
-- **Read-only** (default) — Kumbukum only *imports* from the repo. It never commits or pushes, so adding a repo can never modify it. This is the safe default.
-- **Read/write** — Kumbukum also *exports* notes and memories back to the repo as commits. The export is non-destructive: the repo's existing content is always imported first, and a new item never overwrites an existing file — if a generated filename is already taken, Kumbukum writes to a free `name-2.md` instead.
+- **Read-only** (default) — Streamient only *imports* from the repo. It never commits or pushes, so adding a repo can never modify it. This is the safe default.
+- **Read/write** — Streamient also *exports* notes and memories back to the repo as commits. The export is non-destructive: the repo's existing content is always imported first, and a new item never overwrites an existing file — if a generated filename is already taken, Streamient writes to a free `name-2.md` instead.
 
 You can change the mode any time from the repo's settings or via the API/MCP `sync_mode` field. Existing repos created before sync modes were introduced keep read/write behavior.
 
 ### Conflict Resolution
 
-Git Sync uses guarded conflict handling. If the same item changed in both Kumbukum and Git since the last sync, Kumbukum skips the overwrite and records a conflict in the sync summary.
+Git Sync uses guarded conflict handling. If the same item changed in both Streamient and Git since the last sync, Streamient skips the overwrite and records a conflict in the sync summary.
 
 ### Deleted Files
 
-When a previously synced Markdown file is deleted from Git, Kumbukum moves the linked Note or Memory to trash by default. If the Kumbukum item has newer local edits, the item is kept and a conflict is recorded.
+When a previously synced Markdown file is deleted from Git, Streamient moves the linked Note or Memory to trash by default. If the Streamient item has newer local edits, the item is kept and a conflict is recorded.
 
 ### Commit Memories
 
@@ -97,7 +97,7 @@ The actual content starts here…
 ### Via the API
 
 ```bash
-curl -X POST https://app.kumbukum.com/api/v1/projects/{project_id}/git-repos \
+curl -X POST https://app.streamient.com/api/v1/projects/{project_id}/git-repos \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{

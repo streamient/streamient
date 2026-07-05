@@ -1,5 +1,5 @@
 {
-  "name": "kumbukum",
+  "name": "streamient",
   "version": "0.1.0",
   "private": true,
   "description": "Everything your AI needs to remember — Notes, Memory, URLs, AI Chat",
@@ -14,9 +14,9 @@
     "dev": "nodemon --max-old-space-size=4096 --trace-warnings --import ./tracing.js app.js",
     "test": "node --test --test-force-exit test/*.test.js test/**/*.test.js",
     "test:mcp": "node --test --test-force-exit test/mcp/**/*.test.js",
-    "docs:dev": "pnpm --filter @kumbukum/docs dev",
-    "docs:build": "pnpm --filter @kumbukum/docs build",
-    "docs:preview": "pnpm --filter @kumbukum/docs preview"
+    "docs:dev": "pnpm --filter @streamient/docs dev",
+    "docs:build": "pnpm --filter @streamient/docs build",
+    "docs:preview": "pnpm --filter @streamient/docs preview"
   },
   "nodemonConfig": {
     "watch": [
