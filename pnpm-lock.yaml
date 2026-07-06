@@ -89,7 +89,7 @@ importers:
         specifier: ^3.44.0
         version: 3.44.0(chokidar@3.6.0)
       '@tiptap/core':
-        specifier: ^3.22.3
+        specifier: ^3.27.1
         version: 3.27.1(@tiptap/pm@3.27.1)
       '@tiptap/extension-blockquote':
         specifier: ^3.27.1
@@ -98,7 +98,7 @@ importers:
         specifier: ^3.27.1
         version: 3.27.1(@tiptap/extension-list@3.27.1(@tiptap/core@3.27.1(@tiptap/pm@3.27.1))(@tiptap/pm@3.27.1))
       '@tiptap/extension-code-block':
-        specifier: ^3.22.3
+        specifier: ^3.27.1
         version: 3.27.1(@tiptap/core@3.27.1(@tiptap/pm@3.27.1))(@tiptap/pm@3.27.1)
       '@tiptap/extension-heading':
         specifier: ^3.27.1
@@ -122,7 +122,7 @@ importers:
         specifier: ^3.27.1
         version: 3.27.1(@tiptap/extension-list@3.27.1(@tiptap/core@3.27.1(@tiptap/pm@3.27.1))(@tiptap/pm@3.27.1))
       '@tiptap/pm':
-        specifier: ^3.22.3
+        specifier: ^3.27.1
         version: 3.27.1
       '@tiptap/starter-kit':
         specifier: ^3.27.1
@@ -135,7 +135,7 @@ importers:
         version: 8.0.0
       axios:
         specifier: ^1.18.1
-        version: 1.18.1(supports-color@5.5.0)
+        version: 1.18.1
       bcryptjs:
         specifier: ^3.0.3
         version: 3.0.3
@@ -150,7 +150,7 @@ importers:
         version: 6.5.0(encoding@0.1.13)
       connect-mongo:
         specifier: ^6.0.0
-        version: 6.0.0(express-session@1.19.0)(mongodb@7.4.0(socks@2.8.9))(supports-color@5.5.0)
+        version: 6.0.0(express-session@1.19.0)(mongodb@7.4.0(socks@2.8.9))
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7
@@ -168,7 +168,7 @@ importers:
         version: 2.2.0(cytoscape@3.34.0)
       express:
         specifier: ^5.2.1
-        version: 5.2.1(supports-color@5.5.0)
+        version: 5.2.1
       express-rate-limit:
         specifier: ^8.5.2
         version: 8.5.2(express@5.2.1)
@@ -192,7 +192,7 @@ importers:
         version: 2.1.1
       ioredis:
         specifier: ^5.11.1
-        version: 5.11.1(supports-color@5.5.0)
+        version: 5.11.1
       iovalkey:
         specifier: ^0.3.3
         version: 0.3.3
@@ -209,8 +209,8 @@ importers:
         specifier: ^5.6.0
         version: 5.6.0
       mailparser:
-        specifier: ^3.9.12
-        version: 3.9.12
+        specifier: ^3.9.14
+        version: 3.9.14
       mammoth:
         specifier: ^1.12.0
         version: 1.12.0
@@ -255,7 +255,7 @@ importers:
         version: 3.0.4
       rate-limit-redis:
         specifier: ^5.0.0
-        version: 5.0.0(express-rate-limit@8.5.2(express@5.2.1(supports-color@5.5.0)))
+        version: 5.0.0(express-rate-limit@8.5.2(express@5.2.1))
       sanitize-html:
         specifier: ^2.17.5
         version: 2.17.5
@@ -264,10 +264,10 @@ importers:
         version: 0.35.3(@types/node@26.1.0)
       simple-git:
         specifier: ^3.36.0
-        version: 3.36.0(supports-color@5.5.0)
+        version: 3.36.0
       socket.io:
         specifier: ^4.8.3
-        version: 4.8.3(supports-color@5.5.0)
+        version: 4.8.3
       stripe:
         specifier: ^22.3.0
         version: 22.3.0(@types/node@26.1.0)
@@ -276,7 +276,7 @@ importers:
         version: 3.2.0
       swagger-ui-express:
         specifier: ^5.0.1
-        version: 5.0.1(express@5.2.1(supports-color@5.5.0))
+        version: 5.0.1(express@5.2.1)
       sweetalert2:
         specifier: ^11.26.25
         version: 11.26.25
@@ -316,7 +316,7 @@ importers:
         version: 1.29.0(zod@4.4.3)
       express:
         specifier: ^5.2.1
-        version: 5.2.1(supports-color@5.5.0)
+        version: 5.2.1
       express-rate-limit:
         specifier: ^8.5.2
         version: 8.5.2(express@5.2.1)
@@ -978,8 +978,8 @@ packages:
     engines: {node: '>=22.0.0'}
     hasBin: true
 
-  '@iconify-json/simple-icons@1.2.88':
-    resolution: {integrity: sha512-+cvi1qCuvReL29ehi6t62L4fb7GDXe+UlGHFcsJcV7I2l9wtqn9XE2IBKcDr3CI5iGUGS5ISnXv699pSGpyx1Q==}
+  '@iconify-json/simple-icons@1.2.89':
+    resolution: {integrity: sha512-hRaCY5s2G5oWAIhc4LCGYn6g6RrwLL4zhoLOT+KUO3joVCxVlZKA+839bv/47Nbe9/ZD4UA6dznZ4XPYcI53wA==}
 
   '@iconify/types@2.0.0':
     resolution: {integrity: sha512-+wluvCrRhXrhyOmRDJ3q8mux9JkKy5SJ/v8ol2tu4FVjyYvtEzkc/3pK15ET6RKg4b4w4BmTk1+gsCUhf21Ykg==}
@@ -2289,8 +2289,8 @@ packages:
   '@protobufjs/pool@1.1.0':
     resolution: {integrity: sha512-0kELaGSIDBKvcgS4zkjz1PeddatrjYcmMWOlAuAPwAeccUrPHdUqo/J6LiymHHEiJT5NrF1UVwxY14f+fy4WQw==}
 
-  '@protobufjs/utf8@1.1.1':
-    resolution: {integrity: sha512-oOAWABowe8EAbMyWKM0tYDKi8Yaox52D+HWZhAIJqQXbqe0xI/GV7FhLWqlEKreMkfDjshR5FKgi3mnle0h6Eg==}
+  '@protobufjs/utf8@1.1.2':
+    resolution: {integrity: sha512-b1UQwcEZ4yCnMCD8DAL1VlbvBJE9/IX4FTIp7BG1xYpf29SLazLSrqUkj4w7Y5y7cCVP6E5tcqqcI0xemPkHug==}
 
   '@rollup/rollup-android-arm-eabi@4.62.2':
     resolution: {integrity: sha512-6o7ZLZK+BeenkZCFNDXqpbjw9bD6nuWonvS/lwQJp7NoVVxm6p3qE7qQ5jGuBjiFsgvqjD8mZAU5oWxTmbOeOg==}
@@ -2921,8 +2921,8 @@ packages:
       react: 18.3.1
       react-dom: 18.3.1
 
-  '@zone-eu/mailsplit@5.4.13':
-    resolution: {integrity: sha512-j40NeNlSAivqnKEjzZYsGP/bKWr2zwuyb8XOYsC3i0ZlfM5UnTYTa7aCRkE8rYQvVzE1dRjVYdvZ1Epi6x+h6w==}
+  '@zone-eu/mailsplit@5.4.14':
+    resolution: {integrity: sha512-rz0FQOhN3Vq1XrSeSSa9+dPcaFbBxmQPjiZm6zS9oxdVHV7rOWIAYX3yP2YAUf0qBncY8CI+NogzPCmMVrMXcw==}
 
   a-sync-waterfall@1.0.1:
     resolution: {integrity: sha512-RYTOHHdWipFUliRFMCS4X2Yn2X8M87V/OpSqWzKKOGhzqyUxzyVmhHDH9sAvG+ZuQf/TAOFsLCpMw09I1ufUnA==}
@@ -4179,10 +4179,6 @@ packages:
     resolution: {integrity: sha512-4fCk79wshMdzMp2rH06qWrJE4iolqLhCUH+OiuIgU++RB0+94NlDL81atO7GX55uUKueo0txHNtvEyI6D7WdMw==}
     engines: {node: '>=0.10.0'}
 
-  iconv-lite@0.7.2:
-    resolution: {integrity: sha512-im9DjEDQ55s9fL4EYzOAv0yMqmMBSZp6G0VvFyTMPKWxiSBHUj9NW/qqLmXUwXrrM7AvqSlTCfvqRb0cM8yYqw==}
-    engines: {node: '>=0.10.0'}
-
   iconv-lite@0.7.3:
     resolution: {integrity: sha512-IKXpvIzjnC9XTAUbVBcMfGS0EPaIXtW6v+zr+RRp+hqULEpo0owZax6wyRwPOJbWbzjYspQwusTsfVr0ifh4uQ==}
     engines: {node: '>=0.10.0'}
@@ -4447,8 +4443,8 @@ packages:
   libbase64@1.3.0:
     resolution: {integrity: sha512-GgOXd0Eo6phYgh0DJtjQ2tO8dc0IVINtZJeARPeiIJqge+HdsWSuaDTe8ztQ7j/cONByDZ3zeB325AHiv5O0dg==}
 
-  libmime@5.4.0:
-    resolution: {integrity: sha512-MAWyU2qYtCsrZ6GClgukz2jx73NQrzA6ASo9qzThuTG+A7+H3lWQuBsjoy9lls+v6q/epAeBdEMJ3T0f4b+uRw==}
+  libmime@5.4.1:
+    resolution: {integrity: sha512-0wHGhsofo9IdQPenr3BBHXuxcwMq4atFUTsZ9Ogc1OvI5h4rUdDIrBQEN9JHjCXfDMrE59LUMJWsTD82wTYk8A==}
 
   libqp@2.1.1:
     resolution: {integrity: sha512-0Wd+GPz1O134cP62YU2GTOPNA7Qgl09XwCqM5zpBv87ERCXdfDtyKXvV7c9U22yWJh44QZqBocFnXN11K96qow==}
@@ -4468,8 +4464,8 @@ packages:
       canvas:
         optional: true
 
-  linkify-it@5.0.1:
-    resolution: {integrity: sha512-wVoTjP4Q6R0NW5hiZkVJaFZPWgtXfoGF+6LucL3/FtiNjmcHhYjEr5f1Kqjirc1nBW07J/ZuRFumqr2oqccEWg==}
+  linkify-it@5.0.2:
+    resolution: {integrity: sha512-ONTm2jCMAVZjgQa/Fy1kScXsuOoF5NPTsoFBdE1KVIZ2vAh/r9+Bqo+0jINCBYnavTPQZz38QzFTme79ENoN3Q==}
 
   linkifyjs@4.3.3:
     resolution: {integrity: sha512-P8aEP5U/D1/IlTY2OeYsErdwh9bGuLE30NcXtKEjgdHcahveQoQwM2yZNsioQHsWFz0P7KKudisbrzCgR0sDHg==}
@@ -4563,8 +4559,8 @@ packages:
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
 
-  mailparser@3.9.12:
-    resolution: {integrity: sha512-kbT4xtkKEddonhDTjjWWVFJlI5axm0S9QuIAHs1ue3IEw+fNd9o4ytPKaG7p1LOE2aKifrWLjx/omOGLHz/9RQ==}
+  mailparser@3.9.14:
+    resolution: {integrity: sha512-3QD6TRXcyXtq2NCuyA2AEjqmallQkyxYmZI9GMCIvQDCaB9Uc034WUI1x8RUBYFnk5+p7h14JEz4O/lrxQmttw==}
 
   make-fetch-happen@14.0.3:
     resolution: {integrity: sha512-QMjGbFTP0blj97EeidG5hk/QhKQ3T4ICckQGLgz38QF7Vgbk6e6FTARN8KhKxyBbWn8R0HU+bnw8aSoFPD4qtQ==}
@@ -4870,10 +4866,6 @@ packages:
   node-releases@2.0.50:
     resolution: {integrity: sha512-J6l92tKHX6w8Jy5nO1Vuc01NoIiRGi/d6qBKVxh+IQ8Cr3b6HbVNfKiF8ZpFKufTwpwxMmce2W3iQZ861ZRyTg==}
     engines: {node: '>=18'}
-
-  nodemailer@9.0.1:
-    resolution: {integrity: sha512-Gwv8SQewT616ZM/URn0H54b8PWo/Wum7md3EW2aWy1lO27+WZCX+Xyak3J+NlmHUjDh5ME+uesJUDRbR3Ye8Bw==}
-    engines: {node: '>=6.0.0'}
 
   nodemailer@9.0.3:
     resolution: {integrity: sha512-n+YP+NKwR5zRWa60k3GiQ6Q3B4KXCoAw40dAKeCtYn020iNN74aWK2liXIC3ZEATeGql7we3tE3t8QwhY0eskw==}
@@ -5785,8 +5777,8 @@ packages:
   symbol-tree@3.2.4:
     resolution: {integrity: sha512-9QNk5KwDF+Bvz+PyObkmSYjI5ksVUYtjW7AU22r2NKcfLJcXp96hkDWU3+XndOsUb+AQ9QhfzfCT2O+CNWT5Tw==}
 
-  systeminformation@5.31.12:
-    resolution: {integrity: sha512-qnTtO5wHrKeKE/MvQ6iIt6XAV+5fgt/kPIQf27DYgjVQQuHUfWkV4Gu6k04ZpEzAMuyQ3ZsovY7Ivhp+E9JyWw==}
+  systeminformation@5.31.13:
+    resolution: {integrity: sha512-iUJXJoKzm4vtLSeT3nwe2s9QjoJAxHg7wYJ0KaQ54Xy2u9jsTq0ULWQQ0+T72FXjX2XnGqubazNx9lUfng7ELw==}
     engines: {node: '>=8.0.0'}
     os: [darwin, linux, win32, freebsd, openbsd, netbsd, sunos, android]
     hasBin: true
@@ -6993,7 +6985,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@iconify-json/simple-icons@1.2.88':
+  '@iconify-json/simple-icons@1.2.89':
     dependencies:
       '@iconify/types': 2.0.0
 
@@ -7178,7 +7170,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@kwsites/file-exists@1.1.1(supports-color@5.5.0)':
+  '@kwsites/file-exists@1.1.1':
     dependencies:
       debug: 4.4.3(supports-color@5.5.0)
     transitivePeerDependencies:
@@ -7200,7 +7192,7 @@ snapshots:
       cross-spawn: 7.0.6
       eventsource: 3.0.7
       eventsource-parser: 3.1.0
-      express: 5.2.1(supports-color@5.5.0)
+      express: 5.2.1
       express-rate-limit: 8.5.2(express@5.2.1)
       hono: 4.12.27
       jose: 6.2.3
@@ -7857,7 +7849,7 @@ snapshots:
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/instrumentation': 0.219.0(@opentelemetry/api@1.9.1)
-      systeminformation: 5.31.12
+      systeminformation: 5.31.13
     transitivePeerDependencies:
       - supports-color
 
@@ -8778,7 +8770,7 @@ snapshots:
 
   '@protobufjs/pool@1.1.0': {}
 
-  '@protobufjs/utf8@1.1.1': {}
+  '@protobufjs/utf8@1.1.2': {}
 
   '@rollup/rollup-android-arm-eabi@4.62.2':
     optional: true
@@ -9362,7 +9354,7 @@ snapshots:
       '@vueuse/shared': 12.8.2
       vue: 3.5.39
     optionalDependencies:
-      axios: 1.18.1(supports-color@5.5.0)
+      axios: 1.18.1
       focus-trap: 7.8.0
     transitivePeerDependencies:
       - typescript
@@ -9391,10 +9383,10 @@ snapshots:
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
-  '@zone-eu/mailsplit@5.4.13':
+  '@zone-eu/mailsplit@5.4.14':
     dependencies:
       libbase64: 1.3.0
-      libmime: 5.4.0
+      libmime: 5.4.1
       libqp: 2.1.1
 
   a-sync-waterfall@1.0.1: {}
@@ -9425,7 +9417,7 @@ snapshots:
 
   adm-zip@0.5.18: {}
 
-  agent-base@6.0.2(supports-color@5.5.0):
+  agent-base@6.0.2:
     dependencies:
       debug: 4.4.3(supports-color@5.5.0)
     transitivePeerDependencies:
@@ -9553,11 +9545,11 @@ snapshots:
 
   auto-console-group@1.3.0: {}
 
-  axios@1.18.1(supports-color@5.5.0):
+  axios@1.18.1:
     dependencies:
       follow-redirects: 1.16.0
       form-data: 4.0.6
-      https-proxy-agent: 5.0.1(supports-color@5.5.0)
+      https-proxy-agent: 5.0.1
       proxy-from-env: 2.1.0
     transitivePeerDependencies:
       - debug
@@ -9634,7 +9626,7 @@ snapshots:
 
   bn.js@4.12.4: {}
 
-  body-parser@2.3.0(supports-color@5.5.0):
+  body-parser@2.3.0:
     dependencies:
       bytes: 3.1.2
       content-type: 2.0.0
@@ -9908,7 +9900,7 @@ snapshots:
       normalize-path: 3.0.0
       readable-stream: 4.7.0
 
-  connect-mongo@6.0.0(express-session@1.19.0)(mongodb@7.4.0(socks@2.8.9))(supports-color@5.5.0):
+  connect-mongo@6.0.0(express-session@1.19.0)(mongodb@7.4.0(socks@2.8.9)):
     dependencies:
       debug: 4.4.3(supports-color@5.5.0)
       express-session: 1.19.0
@@ -10186,7 +10178,7 @@ snapshots:
 
   engine.io-parser@5.2.3: {}
 
-  engine.io@6.6.9(supports-color@5.5.0):
+  engine.io@6.6.9:
     dependencies:
       '@types/cors': 2.8.19
       '@types/node': 26.1.0
@@ -10339,7 +10331,7 @@ snapshots:
 
   express-rate-limit@8.5.2(express@5.2.1):
     dependencies:
-      express: 5.2.1(supports-color@5.5.0)
+      express: 5.2.1
       ip-address: 10.2.0
 
   express-session@1.19.0:
@@ -10355,10 +10347,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  express@5.2.1(supports-color@5.5.0):
+  express@5.2.1:
     dependencies:
       accepts: 2.0.0
-      body-parser: 2.3.0(supports-color@5.5.0)
+      body-parser: 2.3.0
       content-disposition: 1.1.0
       content-type: 1.0.5
       cookie: 0.7.2
@@ -10368,7 +10360,7 @@ snapshots:
       encodeurl: 2.0.0
       escape-html: 1.0.3
       etag: 1.8.1
-      finalhandler: 2.1.1(supports-color@5.5.0)
+      finalhandler: 2.1.1
       fresh: 2.0.0
       http-errors: 2.0.1
       merge-descriptors: 2.0.0
@@ -10379,8 +10371,8 @@ snapshots:
       proxy-addr: 2.0.7
       qs: 6.15.3
       range-parser: 1.3.0
-      router: 2.2.0(supports-color@5.5.0)
-      send: 1.2.1(supports-color@5.5.0)
+      router: 2.2.0
+      send: 1.2.1
       serve-static: 2.2.1
       statuses: 2.0.2
       type-is: 2.1.0
@@ -10449,7 +10441,7 @@ snapshots:
     dependencies:
       to-regex-range: 5.0.1
 
-  finalhandler@2.1.1(supports-color@5.5.0):
+  finalhandler@2.1.1:
     dependencies:
       debug: 4.4.3(supports-color@5.5.0)
       encodeurl: 2.0.0
@@ -10765,9 +10757,9 @@ snapshots:
       quick-lru: 5.1.1
       resolve-alpn: 1.2.1
 
-  https-proxy-agent@5.0.1(supports-color@5.5.0):
+  https-proxy-agent@5.0.1:
     dependencies:
-      agent-base: 6.0.2(supports-color@5.5.0)
+      agent-base: 6.0.2
       debug: 4.4.3(supports-color@5.5.0)
     transitivePeerDependencies:
       - supports-color
@@ -10789,10 +10781,6 @@ snapshots:
       ms: 2.1.3
 
   iconv-lite@0.6.3:
-    dependencies:
-      safer-buffer: 2.1.2
-
-  iconv-lite@0.7.2:
     dependencies:
       safer-buffer: 2.1.2
 
@@ -10864,7 +10852,7 @@ snapshots:
     transitivePeerDependencies:
       - '@types/node'
 
-  ioredis@5.11.1(supports-color@5.5.0):
+  ioredis@5.11.1:
     dependencies:
       '@ioredis/commands': 1.10.0
       cluster-key-slot: 1.1.1
@@ -11101,10 +11089,10 @@ snapshots:
 
   libbase64@1.3.0: {}
 
-  libmime@5.4.0:
+  libmime@5.4.1:
     dependencies:
       encoding-japanese: 2.2.0
-      iconv-lite: 0.7.2
+      iconv-lite: 0.7.3
       libbase64: 1.3.0
       libqp: 2.1.1
 
@@ -11124,7 +11112,7 @@ snapshots:
       htmlparser2: 10.1.0
       uhyphen: 0.2.0
 
-  linkify-it@5.0.1:
+  linkify-it@5.0.2:
     dependencies:
       uc.micro: 2.1.0
 
@@ -11204,16 +11192,16 @@ snapshots:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  mailparser@3.9.12:
+  mailparser@3.9.14:
     dependencies:
-      '@zone-eu/mailsplit': 5.4.13
+      '@zone-eu/mailsplit': 5.4.14
       encoding-japanese: 2.2.0
       he: 1.2.0
       html-to-text: 10.0.0
-      iconv-lite: 0.7.2
-      libmime: 5.4.0
-      linkify-it: 5.0.1
-      nodemailer: 9.0.1
+      iconv-lite: 0.7.3
+      libmime: 5.4.1
+      linkify-it: 5.0.2
+      nodemailer: 9.0.3
       punycode.js: 2.3.1
       tlds: 1.261.0
 
@@ -11494,8 +11482,6 @@ snapshots:
       - supports-color
 
   node-releases@2.0.50: {}
-
-  nodemailer@9.0.1: {}
 
   nodemailer@9.0.3: {}
 
@@ -11905,7 +11891,7 @@ snapshots:
       '@protobufjs/float': 1.0.2
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
-      '@protobufjs/utf8': 1.1.1
+      '@protobufjs/utf8': 1.1.2
       '@types/node': 26.1.0
       long: 5.3.2
 
@@ -12023,7 +12009,7 @@ snapshots:
 
   range-parser@1.3.0: {}
 
-  rate-limit-redis@5.0.0(express-rate-limit@8.5.2(express@5.2.1(supports-color@5.5.0))):
+  rate-limit-redis@5.0.0(express-rate-limit@8.5.2(express@5.2.1)):
     dependencies:
       express-rate-limit: 8.5.2(express@5.2.1)
 
@@ -12194,7 +12180,7 @@ snapshots:
 
   rope-sequence@1.3.4: {}
 
-  router@2.2.0(supports-color@5.5.0):
+  router@2.2.0:
     dependencies:
       debug: 4.4.3(supports-color@5.5.0)
       depd: 2.0.0
@@ -12257,7 +12243,7 @@ snapshots:
 
   semver@7.8.5: {}
 
-  send@1.2.1(supports-color@5.5.0):
+  send@1.2.1:
     dependencies:
       debug: 4.4.3(supports-color@5.5.0)
       encodeurl: 2.0.0
@@ -12278,7 +12264,7 @@ snapshots:
       encodeurl: 2.0.0
       escape-html: 1.0.3
       parseurl: 1.3.3
-      send: 1.2.1(supports-color@5.5.0)
+      send: 1.2.1
     transitivePeerDependencies:
       - supports-color
 
@@ -12372,9 +12358,9 @@ snapshots:
 
   signal-exit@4.1.0: {}
 
-  simple-git@3.36.0(supports-color@5.5.0):
+  simple-git@3.36.0:
     dependencies:
-      '@kwsites/file-exists': 1.1.1(supports-color@5.5.0)
+      '@kwsites/file-exists': 1.1.1
       '@kwsites/promise-deferred': 1.1.1
       '@simple-git/args-pathspec': 1.0.3
       '@simple-git/argv-parser': 1.1.1
@@ -12397,22 +12383,22 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  socket.io-parser@4.2.6(supports-color@5.5.0):
+  socket.io-parser@4.2.6:
     dependencies:
       '@socket.io/component-emitter': 3.1.2
       debug: 4.4.3(supports-color@5.5.0)
     transitivePeerDependencies:
       - supports-color
 
-  socket.io@4.8.3(supports-color@5.5.0):
+  socket.io@4.8.3:
     dependencies:
       accepts: 1.3.8
       base64id: 2.0.0
       cors: 2.8.6
       debug: 4.4.3(supports-color@5.5.0)
-      engine.io: 6.6.9(supports-color@5.5.0)
+      engine.io: 6.6.9
       socket.io-adapter: 2.5.8
-      socket.io-parser: 4.2.6(supports-color@5.5.0)
+      socket.io-parser: 4.2.6
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -12622,16 +12608,16 @@ snapshots:
     dependencies:
       '@scarf/scarf': 1.4.0
 
-  swagger-ui-express@5.0.1(express@5.2.1(supports-color@5.5.0)):
+  swagger-ui-express@5.0.1(express@5.2.1):
     dependencies:
-      express: 5.2.1(supports-color@5.5.0)
+      express: 5.2.1
       swagger-ui-dist: 5.32.8
 
   sweetalert2@11.26.25: {}
 
   symbol-tree@3.2.4: {}
 
-  systeminformation@5.31.12: {}
+  systeminformation@5.31.13: {}
 
   tabbable@6.5.0: {}
 
@@ -12796,7 +12782,7 @@ snapshots:
   typesense@3.0.6(@babel/runtime@7.29.2):
     dependencies:
       '@babel/runtime': 7.29.2
-      axios: 1.18.1(supports-color@5.5.0)
+      axios: 1.18.1
       loglevel: 1.9.2
       tslib: 2.8.1
     transitivePeerDependencies:
@@ -12917,7 +12903,7 @@ snapshots:
     dependencies:
       '@docsearch/css': 3.8.2
       '@docsearch/js': 3.8.2(@algolia/client-search@5.55.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3)
-      '@iconify-json/simple-icons': 1.2.88
+      '@iconify-json/simple-icons': 1.2.89
       '@shikijs/core': 2.5.0
       '@shikijs/transformers': 2.5.0
       '@shikijs/types': 2.5.0
