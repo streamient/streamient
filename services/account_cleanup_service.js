@@ -54,10 +54,41 @@ async function deleteExportFiles(hostId, exportModel = Export, unlink = fs.unlin
 	return exports.length;
 }
 
-export async function deleteAccountDataForUser(userOrId) {
-	const user = typeof userOrId === 'object' ? userOrId : await User.findById(userOrId);
+export async function deleteAccountDataForUser(userOrId, deps = {}) {
+	const models = { User, Tenant, TenantMember, UserPasskey, MagicLink, ...(deps.models || {}) };
+	const user = typeof userOrId === 'object' ? userOrId : await models.User.findById(userOrId);
 	if (!user) return { deleted: false, reason: 'user_not_found' };
-	return deleteTenantData(user.host_id, user.tenant);
+
+	// A user can lack host_id/tenant when signup failed between User.create and
+	// user.save (host_id is only assigned after tenant creation). Fall back to
+	// the tenant they own so those accounts are still fully deletable.
+	const tenant = user.tenant
+		? await models.Tenant.findById(user.tenant)
+		: await models.Tenant.findOne({ owner: user._id });
+	const hostId = user.host_id || tenant?.host_id || null;
+	if (hostId) return deleteTenantData(hostId, tenant?._id || user.tenant || null, deps);
+
+	// No host was ever provisioned, so there is no host-scoped data. Never pass
+	// an undefined host_id into the host-scoped deletes: Mongoose drops
+	// undefined filter values and the query would match every tenant's rows.
+	await Promise.all([
+		models.UserPasskey.deleteMany({ user: user._id }),
+		models.MagicLink.deleteMany({ user: user._id }),
+		models.TenantMember.deleteMany({ user: user._id }),
+	]);
+	if (tenant?._id) {
+		await models.Tenant.findByIdAndDelete(tenant._id);
+	}
+	await models.User.deleteMany({ _id: user._id });
+
+	return {
+		deleted: true,
+		host_id: null,
+		tenant_id: tenant?._id?.toString() || null,
+		users: 1,
+		export_files: 0,
+		typesense_collections_deleted: 0,
+	};
 }
 
 export async function deleteTenantData(hostId, tenantId = null, deps = {}) {
