@@ -69,8 +69,15 @@ COPY --link . .
 COPY --link --from=build /opt/streamient/public/js/vendor.js ./public/js/vendor.js
 COPY --link --from=build /opt/streamient/public/js/editor.js ./public/js/editor.js
 COPY --link --from=build /opt/streamient/public/js/graph_bundle.js ./public/js/graph_bundle.js
-COPY --link --from=build /opt/streamient/public/css/vendor.css ./public/css/vendor.css
+COPY --link --from=build /opt/streamient/public/js/iframe_resizer_parent.js ./public/js/iframe_resizer_parent.js
+COPY --link --from=build /opt/streamient/public/js/iframe_resizer_child.js ./public/js/iframe_resizer_child.js
+COPY --link --from=build /opt/streamient/public/js/email_dark_mode_child.js ./public/js/email_dark_mode_child.js
+COPY --link --from=build /opt/streamient/public/js/email_quote_collapse_child.js ./public/js/email_quote_collapse_child.js
+COPY --link --from=build /opt/streamient/public/js/email_iframe_renderer.js ./public/js/email_iframe_renderer.js
+COPY --link --from=build /opt/streamient/public/css/admin_vendor.css ./public/css/admin_vendor.css
 COPY --link --from=build /opt/streamient/public/css/*.woff2 ./public/css/
+COPY --link --from=build /opt/streamient/public/css/*.woff ./public/css/
+COPY --link --from=build /opt/streamient/public/css/*.ttf ./public/css/
 COPY --link --from=build /opt/streamient/public/build-id ./public/build-id
 COPY --link --from=build /opt/streamient/docs/.vitepress/dist ./docs-dist
 COPY --link --from=build /opt/streamient/docs/.vitepress/dist-root ./docs-dist-root
