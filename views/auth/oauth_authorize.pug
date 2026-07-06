@@ -10,7 +10,7 @@ block body
 	else if client && oauth_request
 		.oauth-authorize-page
 			.oauth-authorize-hero.mb-5
-				.text-uppercase.text-muted.fw-bold.small.mb-2 OAuth consent
+				.oauth-eyebrow.mb-2 OAuth consent
 				h1.h2.mb-2= client.client_name + ' wants to access your account'
 				p.text-muted.mb-0
 					span Allow access to
@@ -20,7 +20,7 @@ block body
 			section.oauth-section.mb-4
 				h2.h6.mb-2 Signed in as
 				.oauth-account-card
-					.oauth-account-avatar= ((active_tenant && active_tenant.name) || 'K').trim().slice(0, 1).toUpperCase()
+					.oauth-account-avatar= ((active_tenant && active_tenant.name) || 'S').trim().slice(0, 1).toUpperCase()
 					div
 						div.text-muted.small Streamient account
 						div.fw-semibold= (active_tenant && active_tenant.name) || 'This account'
@@ -37,7 +37,7 @@ block body
 			section.oauth-section.mb-4
 				details.oauth-details
 					summary App details
-					ul.oauth-meta-list.mt-3
+					ul.oauth-meta-list
 						li
 							div.text-muted.small App
 							div

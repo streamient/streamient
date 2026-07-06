@@ -581,6 +581,27 @@ body.st-no-chat-sidebar .st-content-grid {
 	vertical-align: -0.125rem;
 }
 
+/* OAuth consent — denser than the login form, so relax the column cap */
+.st-auth-page .container-tight:has(.oauth-authorize-page) {
+	max-width: 28rem;
+}
+
+.oauth-eyebrow {
+	color: var(--st-primary);
+	font-size: 0.6875rem;
+	font-weight: 800;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+}
+
+.oauth-section > h2 {
+	color: var(--st-muted);
+	font-size: 0.6875rem;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
 .oauth-account-card {
 	display: flex;
 	align-items: center;
@@ -589,6 +610,7 @@ body.st-no-chat-sidebar .st-content-grid {
 	border: 1px solid var(--st-line);
 	border-radius: 8px;
 	background: var(--st-panel-subtle);
+	box-shadow: var(--st-shadow-hard);
 }
 
 .oauth-account-avatar {
@@ -603,11 +625,62 @@ body.st-no-chat-sidebar .st-content-grid {
 	font-weight: 800;
 }
 
+.oauth-scope-list {
+	border: 1px solid var(--st-line);
+	border-radius: 8px;
+	box-shadow: var(--st-shadow-hard);
+	overflow: hidden;
+}
+
+.oauth-scope-list .list-group-item {
+	background: var(--st-panel-subtle);
+	border: 0;
+	border-bottom: 1px solid var(--st-line);
+	padding: 0.65rem 0.75rem 0.65rem 2.1rem;
+	position: relative;
+}
+
+.oauth-scope-list .list-group-item:last-child {
+	border-bottom: 0;
+}
+
+.oauth-scope-list .list-group-item::before {
+	color: var(--st-primary);
+	content: "✓";
+	font-weight: 800;
+	left: 0.8rem;
+	position: absolute;
+	top: 0.6rem;
+}
+
+.oauth-details {
+	background: var(--st-panel-subtle);
+	border: 1px solid var(--st-line);
+	border-radius: 8px;
+}
+
+.oauth-details summary {
+	color: var(--st-muted);
+	cursor: pointer;
+	font-weight: 600;
+	padding: 0.65rem 0.75rem;
+}
+
+.oauth-details summary:hover {
+	color: var(--st-primary);
+}
+
+.oauth-details[open] summary {
+	border-bottom: 1px solid var(--st-line);
+	color: var(--st-text);
+}
+
 .oauth-meta-list {
 	display: grid;
 	gap: 0.75rem;
-	padding: 0;
 	list-style: none;
+	margin: 0;
+	padding: 0.75rem;
 }
 
 .oauth-meta-list code {

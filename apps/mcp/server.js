@@ -367,6 +367,11 @@ if (transportArg === '--stdio' || !transportArg) {
   app.get('/mcp/app', handleAppMcp);
   app.delete('/mcp/app', handleAppMcp);
 
+  // Root alias — MCP clients are usually configured with the bare domain
+  app.post('/', handleFullMcp);
+  app.get('/', handleFullMcp);
+  app.delete('/', handleFullMcp);
+
   setupOtelExpressErrorHandler(app);
 
   app.listen(PORT, () => {
