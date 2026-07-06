@@ -857,11 +857,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 	if (typeof initChat === 'function') initChat();
 
 	// ── Socket.IO: live count updates ──
-	if (typeof io === 'function' && typeof __host_id === 'string' && __host_id) {
-		const socket = io(__ws_url || undefined, { 'transports': ['websocket'], 'reconnection': true, 'autoConnect': true, 'timeout': 40000, 'withCredentials': true, 'reconnectionAttempts': 50, 'reconnectionDelay': 1000, 'reconnectionDelayMax': 10000, 'forceNew': false });
+	if (typeof io === 'function' && typeof __host_id === 'string' && __host_id && typeof __socket_token === 'string' && __socket_token) {
+		const socket = io(__ws_url || undefined, { 'transports': ['websocket'], 'reconnection': true, 'autoConnect': true, 'timeout': 40000, 'withCredentials': true, 'auth': { 'token': __socket_token }, 'reconnectionAttempts': 50, 'reconnectionDelay': 1000, 'reconnectionDelayMax': 10000, 'forceNew': false });
 		window.__kkSocket = socket;
 		socket.on('connect', () => {
-			socket.emit('subscribe', `tenant:${__host_id}`);
+			socket.emit('subscribe', `tenant:${__host_id}`, __user_id, __host_id, 'web');
 			window.dispatchEvent(new CustomEvent('email-counts:socket-ready'));
 		});
 		socket.on('reindex:status', (data) => {

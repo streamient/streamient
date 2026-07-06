@@ -111,3 +111,7 @@ export async function requireAuth(req, res, next) {
 export function generateToken(userId, host_id, tenantId = null) {
 	return jwt.sign({ userId, host_id, tenantId }, config.jwtSecret, { expiresIn: '7d' });
 }
+
+export function generateSocketToken(userId, host_id, tenantId = null) {
+	return jwt.sign({ userId, host_id, tenantId }, config.jwtSecret, { expiresIn: '15m', audience: 'streamient-socket' });
+}

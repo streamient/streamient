@@ -1,8 +1,10 @@
 import { Server } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-streams-adapter';
 import Redis from 'ioredis';
+import jwt from 'jsonwebtoken';
 import config from '../config.js';
 import { buildRedisConnectionOptions, isTransientRedisError } from './redis_options.js';
+import { resolveActiveTenantContext } from './tenancy.js';
 import * as OtelRuntime from './otel_runtime.js';
 import { createLogger } from './logger.js';
 
@@ -14,6 +16,7 @@ let bridgeSubscriber;
 let emailCountsHandler;
 
 const TENANT_EVENT_BRIDGE_CHANNEL = 'tenant-events';
+const SOCKET_ALLOWED_AUDIENCES = new Set(['streamient-api', 'kumbukum-api', 'streamient-socket']);
 
 function createRedisClient() {
 	const connection = buildRedisConnectionOptions(config.redisOptions, { lazyConnect: true });
@@ -43,14 +46,6 @@ function emitToTenantRoom(host_id, event, data) {
 	}
 }
 
-function subscribedTenantId(socket) {
-	for (const room of socket.rooms || []) {
-		const match = String(room || '').match(/^tenant:(.+)$/);
-		if (match) return match[1];
-	}
-	return '';
-}
-
 function emitEmailCounts(host_id, options = {}) {
 	if (!host_id || !emailCountsHandler) return;
 	emailCountsHandler(host_id, options)
@@ -61,6 +56,53 @@ function emitEmailCounts(host_id, options = {}) {
 		.catch((err) => {
 			log.warn({ err, host_id }, 'Socket.IO email counts refresh failed');
 		});
+}
+
+function socketBearerToken(socket) {
+	const authToken = socket.handshake?.auth?.token;
+	if (authToken) return String(authToken).replace(/^Bearer\s+/i, '').trim();
+	const header = socket.handshake?.headers?.authorization || socket.request?.headers?.authorization || '';
+	return String(header).startsWith('Bearer ') ? String(header).slice(7).trim() : '';
+}
+
+async function authenticateSocketBearer(socket) {
+	const token = socketBearerToken(socket);
+	if (!token) throw new Error('Socket authentication required');
+	const payload = jwt.verify(token, config.jwtSecret);
+	if (payload.aud && !SOCKET_ALLOWED_AUDIENCES.has(payload.aud)) throw new Error('Invalid socket token audience');
+	const userId = payload.userId || payload.sub;
+	if (!userId) throw new Error('Invalid socket token subject');
+	const context = await resolveActiveTenantContext(userId, payload.tenantId, payload.host_id);
+	if (!context?.activeTenant) throw new Error('Socket token is not valid for any active account');
+	socket.data.auth = {
+		userId: String(userId),
+		host_id: context.activeTenant.host_id,
+		tenantId: context.activeTenant.tenantId,
+		memberRole: context.activeTenant.role,
+		method: 'bearer',
+	};
+	return socket.data.auth;
+}
+
+function getSocketIdentity(socket) {
+	return {
+		hostId: String(socket.request?.session?.host_id || socket.data.auth?.host_id || ''),
+		userId: String(socket.request?.session?.userId || socket.data.auth?.userId || ''),
+	};
+}
+
+export function resolveAuthorizedSubscribeRoom(identity, room, requestedUserId = '', requestedHostId = '') {
+	const sessionHostId = String(identity?.hostId || '');
+	const sessionUserId = String(identity?.userId || '');
+	const targetRoom = String(room || '');
+	const payloadUserId = String(requestedUserId || '');
+	const payloadHostId = String(requestedHostId || '');
+
+	if (!sessionHostId || !sessionUserId || !targetRoom || !payloadHostId || !payloadUserId) return '';
+	if (payloadHostId !== sessionHostId) return '';
+	if (payloadUserId !== sessionUserId) return '';
+	if (targetRoom === `tenant:${sessionHostId}`) return targetRoom;
+	return '';
 }
 
 async function ensureBridgePublisher() {
@@ -133,6 +175,21 @@ export async function setupSocketIO(httpServer, sessionMiddleware, handlers = {}
 			perMessageDeflate: { threshold: 32768 },
 		});
 
+		if (sessionMiddleware) {
+			io.engine.use(sessionMiddleware);
+		}
+
+		io.use(async (socket, next) => {
+			try {
+				if (!socket.request?.session?.userId || !socket.request?.session?.host_id) {
+					await authenticateSocketBearer(socket);
+				}
+				next();
+			} catch (err) {
+				next(new Error(err.message || 'Socket authentication failed'));
+			}
+		});
+
 		// Redis streams adapter for horizontal scaling (multi-server only)
 		if (config.socketRedis) {
 			let redisClient;
@@ -159,25 +216,26 @@ export async function setupSocketIO(httpServer, sessionMiddleware, handlers = {}
 			});
 			log.info({ socketId: socket.id, app: process.env.STREAMIENT_APP || 'web' }, 'Socket.IO client connected');
 
-			// Client subscribes to a tenant room
-			socket.on('subscribe', (room) => {
-				if (!room) return;
+			socket.on('subscribe', (room, userId, hostId, app = '') => {
+				const authorizedRoom = resolveAuthorizedSubscribeRoom(getSocketIdentity(socket), room, userId, hostId);
+				if (!authorizedRoom) return;
 				OtelRuntime.createCustomSpan('socketio.subscribe', (subscribeSpan) => {
 					subscribeSpan.setAttribute('socket.id', socket.id);
-					subscribeSpan.setAttribute('socket.room', room);
-					socket.join(room);
+					subscribeSpan.setAttribute('socket.room', authorizedRoom);
+					subscribeSpan.setAttribute('socket.client_app', app);
+					socket.join(authorizedRoom);
 				});
 			});
 
 			socket.on('email-counts:request', (payload = {}) => {
-				const host_id = subscribedTenantId(socket);
-				if (!host_id || !emailCountsHandler) return;
-				emailCountsHandler(host_id, { project: payload?.project || '' })
+				const { hostId } = getSocketIdentity(socket);
+				if (!hostId || !emailCountsHandler) return;
+				emailCountsHandler(hostId, { project: payload?.project || '' })
 					.then((counts) => {
 						if (counts) socket.emit('email-counts:updated', counts);
 					})
 					.catch((err) => {
-						log.warn({ err, host_id }, 'Socket.IO email counts request failed');
+						log.warn({ err, host_id: hostId }, 'Socket.IO email counts request failed');
 					});
 			});
 

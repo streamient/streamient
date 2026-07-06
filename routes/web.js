@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, generateSocketToken } from '../middleware/auth.js';
 import { requireTenant, Tenant } from '../modules/tenancy.js';
 import { User } from '../model/user.js';
 import { listProjects, getProject, getProjectCounts } from '../services/project_service.js';
@@ -95,6 +95,8 @@ router.use(async (req, res, next) => {
 	res.locals.byo_ai_enabled = isByoAiSettingsAccessEnabled(req);
 	res.locals.host_id = req.host_id;
 	res.locals.ws_url = config.wsUrl;
+	res.locals.user_id = req.userId;
+	res.locals.socket_token = generateSocketToken(req.userId, req.host_id, req.tenantId);
 	res.locals.impersonating = req.session.impersonating || false;
 	res.locals.impersonatingName = req.session.impersonatingName || '';
 	res.locals.is_hosted = is_hosted;
