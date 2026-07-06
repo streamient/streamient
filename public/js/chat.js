@@ -17,6 +17,14 @@ function initChat() {
 
 	if (!input || !sendBtn) return;
 
+	function resizeChatInput() {
+		input.style.height = 'auto';
+		const maxHeight = 140;
+		const nextHeight = Math.min(input.scrollHeight, maxHeight);
+		input.style.height = nextHeight + 'px';
+		input.style.overflowY = input.scrollHeight > maxHeight ? 'auto' : 'hidden';
+	}
+
 	// Populate project filter
 	loadProjectFilter();
 
@@ -31,6 +39,7 @@ function initChat() {
 	chatWelcome?.querySelectorAll('.chat-example-btn').forEach((btn) => {
 		btn.addEventListener('click', () => {
 			input.value = btn.textContent;
+			resizeChatInput();
 			hideWelcome();
 			sendMessage();
 		});
@@ -88,6 +97,7 @@ function initChat() {
 
 		addMessage('user', query);
 		input.value = '';
+		resizeChatInput();
 		sendBtn.disabled = true;
 
 		// Show thinking indicator
@@ -133,7 +143,20 @@ function initChat() {
 			}
 
 			if (!res.ok || !res.body) {
-				throw new Error('Stream request failed');
+				let message = 'Stream request failed';
+				try {
+					const contentType = res.headers.get('Content-Type') || '';
+					if (contentType.includes('application/json')) {
+						const data = await res.json();
+						message = data?.error || message;
+					} else {
+						const text = await res.text();
+						if (text) message = text;
+					}
+				} catch {
+					// Keep generic fallback.
+				}
+				throw new Error(message);
 			}
 
 			const reader = res.body.getReader();
@@ -208,12 +231,14 @@ function initChat() {
 	}
 
 	sendBtn.addEventListener('click', sendMessage);
+	input.addEventListener('input', resizeChatInput);
 	input.addEventListener('keydown', (e) => {
 		if (e.key === 'Enter' && !e.shiftKey) {
 			e.preventDefault();
 			sendMessage();
 		}
 	});
+	resizeChatInput();
 
 	// New conversation
 	clearBtn?.addEventListener('click', () => {

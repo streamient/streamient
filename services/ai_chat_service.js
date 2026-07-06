@@ -36,6 +36,12 @@ export function friendlyChatError(err) {
 	if (/rate[\s_-]?limit|\b429\b/i.test(msg)) {
 		return 'The AI provider is rate-limiting requests right now. Please try again in a moment.';
 	}
+	if (/model[_\s-]?(not[_\s-]?found|invalid|unsupported)|invalid\s+model|model\s+.*not\s+(found|supported)|not\s+found\s+for\s+api\s+version/i.test(msg)) {
+		return 'The configured AI model is not available for this provider. Update the model in server settings.';
+	}
+	if (/fetch failed|ECONNRESET|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|network/i.test(msg)) {
+		return 'Could not reach the AI provider right now. Please try again in a moment.';
+	}
 	return 'AI Chat failed';
 }
 
@@ -94,8 +100,46 @@ async function classifyIntent(hostId, query) {
 		log.error({ err }, 'Intent classification failed');
 	}
 
+	const fallbackIntent = inferActionIntent(query);
+	if (fallbackIntent) return fallbackIntent;
+
 	// Fallback: treat as search
 	return { intent: 'search', query, action_type: null, params: {} };
+}
+
+export function inferActionIntent(query = '') {
+	const text = String(query || '').trim();
+	if (!text) return null;
+
+	if (/\bmove\b/i.test(text) && /\b(to|into)\b/i.test(text) && /\bproject\b/i.test(text)) {
+		return {
+			intent: 'action',
+			query: text,
+			action_type: 'move_to_project',
+			params: {
+				item_type: 'records',
+				project_name: extractMoveProjectName(text),
+			},
+		};
+	}
+
+	return null;
+}
+
+function extractMoveProjectName(query = '') {
+	const patterns = [
+		/\b(?:to|into)\s+(?:the\s+)?((?:(?!\b(?:to|into)\b).)+?)\s+project\b/i,
+		/\b(?:to|into)\s+(?:the\s+)?project\s+(.+?)(?:[.!?]|$)/i,
+	];
+
+	for (const pattern of patterns) {
+		const match = String(query || '').match(pattern);
+		if (match?.[1]) {
+			return match[1].trim().replace(/^(?:a|an|the)\s+/i, '');
+		}
+	}
+
+	return '';
 }
 
 export function isEmailOnlyIntent(intent = {}) {
@@ -430,23 +474,81 @@ async function handleAnalysisStream({ hostId, userId, query, conversationId, pro
 // Action Handler
 // ────────────────────────────────────────────────────────────────────
 
+const MOVABLE_ITEM_TYPES = new Set(['notes', 'memory', 'urls', 'emails']);
+const ITEM_TYPE_ALIASES = {
+	note: 'notes',
+	notes: 'notes',
+	memory: 'memory',
+	memories: 'memory',
+	url: 'urls',
+	urls: 'urls',
+	email: 'emails',
+	emails: 'emails',
+};
+
+export function normalizeActionItemType(type) {
+	const value = String(type || '').trim().toLowerCase();
+	return ITEM_TYPE_ALIASES[value] || null;
+}
+
+function normalizeProjectName(name = '') {
+	return String(name || '').trim().replace(/\s+project$/i, '').toLowerCase();
+}
+
+function findProjectByName(projects, name) {
+	const normalized = normalizeProjectName(name);
+	if (!normalized) return null;
+	return projects.find((project) => normalizeProjectName(project.name) === normalized) || null;
+}
+
+async function resolveActionProject(hostId, params = {}, selectedProjectId = null) {
+	const candidate = params.project_id || '';
+	if (!candidate && !params.project_name && !selectedProjectId) return { projectId: null, project: null };
+
+	const projects = await listProjects(hostId);
+	if (candidate) {
+		const project = projects.find((p) => p._id.toString() === String(candidate))
+			|| findProjectByName(projects, candidate);
+		if (project) return { projectId: project._id.toString(), project };
+	}
+	if (params.project_name) {
+		const project = findProjectByName(projects, params.project_name);
+		if (project) return { projectId: project._id.toString(), project };
+	}
+	if (selectedProjectId) {
+		const project = projects.find((p) => p._id.toString() === String(selectedProjectId));
+		if (project) return { projectId: project._id.toString(), project };
+	}
+
+	return { projectId: null, project: null };
+}
+
+function getMoveUpdateFn(type, includeEmails) {
+	return {
+		notes: noteService.updateNote,
+		memory: memoryService.updateMemory,
+		urls: urlService.updateUrl,
+		emails: includeEmails ? emailIngestService.updateEmail : null,
+	}[type] || null;
+}
+
+async function findMoveCandidates({ hostId, query, searchProjectId, excludeProjectId, includeEmails, itemType }) {
+	const results = await searchKnowledge(hostId, query, { projectId: searchProjectId, perPage: 10, includeEmails });
+	const types = itemType ? [itemType] : null;
+	return flattenResults(results, types)
+		.filter((item) => MOVABLE_ITEM_TYPES.has(item._type))
+		.filter((item) => !excludeProjectId || String(item.project_id || item.project || '') !== String(excludeProjectId));
+}
+
 async function handleAction({ hostId, userId, query, conversationId, projectId, intent, includeEmails = true, ctx = {} }) {
 	const actionType = intent.action_type;
 	const params = intent.params || {};
 
 	// Resolve project — use explicit param, or chat projectId, or ask user
-	const resolvedProjectId = params.project_id || projectId;
+	const resolvedProject = await resolveActionProject(hostId, params, projectId);
+	if (resolvedProject.projectId) params.project_id = resolvedProject.projectId;
 
-	// If action needs a project and none specified, resolve from project name or ask
-	if (!resolvedProjectId && params.project_name) {
-		const projects = await listProjects(hostId);
-		const match = projects.find((p) => p.name.toLowerCase() === params.project_name.toLowerCase());
-		if (match) {
-			params.project_id = match._id.toString();
-		}
-	}
-
-	const effectiveProjectId = params.project_id || resolvedProjectId;
+	const effectiveProjectId = params.project_id || null;
 
 	if (!effectiveProjectId && ['create_note', 'create_memory', 'save_url'].includes(actionType)) {
 		// Try to get default project
@@ -524,24 +626,60 @@ async function handleAction({ hostId, userId, query, conversationId, projectId, 
 			}
 
 			case 'move_to_project': {
-				if (!params.item_ids?.length) {
+				if (!finalProjectId) {
 					return {
-						answer: 'Which items should I move? Search for them first, then ask me to move the results.',
+						answer: 'Which project should I move the items to?',
 						results: [],
 						action: null,
 						conversationId,
 						displayIn: 'chat',
 					};
 				}
-				const itemType = params.item_type || 'notes';
-				const updateFn = { notes: noteService.updateNote, memories: memoryService.updateMemory, urls: urlService.updateUrl, emails: includeEmails ? emailIngestService.updateEmail : null }[itemType];
+				const itemType = normalizeActionItemType(params.item_type);
+				if (!params.item_ids?.length) {
+					const searchProjectId = projectId && String(projectId) !== String(finalProjectId) ? projectId : null;
+					const candidates = await findMoveCandidates({
+						hostId,
+						query: intent.query || query,
+						searchProjectId,
+						excludeProjectId: finalProjectId,
+						includeEmails,
+						itemType,
+					});
+					if (!candidates.length) {
+						return {
+							answer: 'No matching movable records found.',
+							results: [],
+							action: null,
+							conversationId,
+							displayIn: 'chat',
+						};
+					}
+					return {
+						answer: `Found ${candidates.length} matching item${candidates.length === 1 ? '' : 's'}. Review the results, then ask me to move these results to ${resolvedProject.project?.name || 'that project'}.`,
+						results: candidates,
+						action: null,
+						conversationId,
+						displayIn: 'panel',
+					};
+				}
+				if (!itemType) {
+					return {
+						answer: 'Which item type should I move: notes, memories, URLs, or emails?',
+						results: [],
+						action: null,
+						conversationId,
+						displayIn: 'chat',
+					};
+				}
+				const updateFn = getMoveUpdateFn(itemType, includeEmails);
 				if (!updateFn) {
 					return { answer: `Unknown item type: ${itemType}`, results: [], action: null, conversationId, displayIn: 'chat' };
 				}
 				const results = await Promise.all(params.item_ids.map((id) => updateFn(hostId, id, { project: finalProjectId }, ctx).catch(() => null)));
 				const moved = results.filter(Boolean).length;
 				return {
-					answer: `Moved ${moved} ${itemType} to project.`,
+					answer: `Moved ${moved} ${itemType} to ${resolvedProject.project?.name || 'project'}.`,
 					results: [],
 					action: { type: 'move_to_project', completed: true, moved },
 					conversationId,

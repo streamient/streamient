@@ -26,7 +26,7 @@
         button.chat-example-btn.mb-1(type="button") Show me usage statistics
 
   .mt-auto.pt-2
-    .input-group
-      input.form-control#chat-input(type="text" placeholder="Ask, search, or give a command...")
-      button.btn.btn-primary#chat-send
+    .input-group.chat-input-group
+      textarea.form-control.form-control-sm#chat-input(rows="1" aria-label="Ask, search, or give a command")
+      button.btn.btn-sm.btn-primary#chat-send(type="button" aria-label="Send")
         != icon('send')

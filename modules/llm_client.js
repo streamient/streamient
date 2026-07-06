@@ -262,9 +262,9 @@ export async function* parseStreamChunks(body, providerName) {
 				const json = JSON.parse(payload);
 				let text;
 				if (isGoogle) {
-					text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+					text = json.candidates?.[0]?.content?.parts?.[0]?.text || json.choices?.[0]?.delta?.content;
 				} else {
-					text = json.choices?.[0]?.delta?.content;
+					text = json.choices?.[0]?.delta?.content || json.candidates?.[0]?.content?.parts?.[0]?.text;
 				}
 				if (text) yield text;
 			} catch {

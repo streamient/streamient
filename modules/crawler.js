@@ -11,6 +11,7 @@ const DOWNLOAD_URL_EXT_RE = /\.(?:7z|avi|bz2|dmg|doc|docx|exe|gz|iso|m4a|mov|mp3
 const DEFAULT_STEP_LIMIT = 100;
 const DEFAULT_INDEX_BATCH_SIZE = 25;
 const BULK_WRITE_BATCH_SIZE = 500;
+const CRAWL_STATE_CURSOR_BATCH_SIZE = 1000;
 
 function parsePositiveInteger(value, fallback) {
 	const parsed = parseInt(value, 10);
@@ -309,22 +310,28 @@ async function getQueuedCrawlStates(urlDoc, crawlStateModel, limit) {
 		.lean();
 }
 
+async function getCrawlStateUrlSet(urlDoc, crawlStateModel, status) {
+	const cursor = crawlStateModel
+		.find({
+			host_id: urlDoc.host_id,
+			parent_url_id: urlDoc._id,
+			status,
+		}, { normalized_url: 1, _id: 0 })
+		.lean()
+		.cursor({ batchSize: CRAWL_STATE_CURSOR_BATCH_SIZE });
+	const urls = new Set();
+	for await (const state of cursor) {
+		if (state?.normalized_url) urls.add(state.normalized_url);
+	}
+	return urls;
+}
+
 async function getVisitedUrlSet(urlDoc, crawlStateModel) {
-	const urls = await crawlStateModel.distinct('normalized_url', {
-		host_id: urlDoc.host_id,
-		parent_url_id: urlDoc._id,
-		status: 'visited',
-	});
-	return new Set(urls);
+	return getCrawlStateUrlSet(urlDoc, crawlStateModel, 'visited');
 }
 
 async function getFailedUrlSet(urlDoc, crawlStateModel) {
-	const urls = await crawlStateModel.distinct('normalized_url', {
-		host_id: urlDoc.host_id,
-		parent_url_id: urlDoc._id,
-		status: 'failed',
-	});
-	return new Set(urls);
+	return getCrawlStateUrlSet(urlDoc, crawlStateModel, 'failed');
 }
 
 function buildUniquePageSourceDocs({ urlId, projectId, pages, crawledAt }) {

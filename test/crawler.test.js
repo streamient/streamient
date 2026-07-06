@@ -61,19 +61,39 @@ function makeCrawlStateModel(initialStates = []) {
 			return store.filter((state) => matchesFilter(state, filter)).length;
 		},
 		async distinct(field, filter) {
-			return [...new Set(store.filter((state) => matchesFilter(state, filter)).map((state) => state[field]))];
+			throw new Error(`Unexpected distinct(${field}) call`);
 		},
 		find(filter) {
-			return {
+			const query = {
+				_limit: null,
 				sort() {
 					return this;
 				},
 				limit(limit) {
-					return {
-						lean: async () => store.filter((state) => matchesFilter(state, filter)).slice(0, limit),
-					};
+					this._limit = limit;
+					return this;
+				},
+				select() {
+					return this;
+				},
+				lean() {
+					return this;
+				},
+				_results() {
+					const results = store.filter((state) => matchesFilter(state, filter));
+					return this._limit ? results.slice(0, this._limit) : results;
+				},
+				then(resolve, reject) {
+					return Promise.resolve(this._results()).then(resolve, reject);
+				},
+				cursor() {
+					const results = this._results();
+					return (async function* iterateResults() {
+						for (const state of results) yield state;
+					})();
 				},
 			};
+			return query;
 		},
 		async bulkWrite(ops) {
 			for (const op of ops) {
