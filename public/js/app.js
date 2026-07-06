@@ -199,6 +199,14 @@ async function loadProjectOverview(projectId) {
 			});
 		});
 
+		container.querySelector('[data-project-delete]')?.addEventListener('click', (e) => {
+			deleteProject(e.currentTarget.dataset.projectDelete);
+		});
+
+		container.querySelector('[data-project-delete-blocked]')?.addEventListener('click', (e) => {
+			showError(e.currentTarget.dataset.deleteDisabledReason || 'Project cannot be deleted yet.');
+		});
+
 		const copyForwardingEmailBtn = container.querySelector('#copy-forwarding-email-btn');
 		copyForwardingEmailBtn?.addEventListener('click', async () => {
 			const value = copyForwardingEmailBtn.dataset.copyValue || container.querySelector('#project-forwarding-email')?.value || '';
@@ -232,6 +240,7 @@ async function deleteProject(projectId) {
 		await api('DELETE', `/projects/${projectId}`);
 		currentProjectId = null;
 		await loadProjects();
+		await navigateTo('/dashboard');
 		showSuccess('Project deleted');
 	} catch (err) {
 		showError(err.message);
@@ -896,12 +905,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 	}
 
 	// ── Same-tab CRUD: refresh counts immediately when items change via modals / batch ──
-	for (const evt of ['item-modal-saved', 'item-modal-deleted', 'batch-done']) {
+	for (const evt of ['item-modal-saved', 'item-modal-deleted']) {
 		window.addEventListener(evt, () => {
 			refreshCounts();
 			loadTrashCount();
 		});
 	}
+	window.addEventListener('batch-done', () => {
+		refreshCounts();
+		loadTrashCount();
+		if (__currentRoute === '/dashboard' && currentProjectId) loadProjectOverview(currentProjectId);
+	});
 
 	// ── Refresh counts when tab regains focus (catches events missed while backgrounded) ──
 	document.addEventListener('visibilitychange', () => {

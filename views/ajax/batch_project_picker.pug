@@ -1,0 +1,14 @@
+- const actionLabel = action === 'copy' ? 'Copy' : 'Move'
+- const progressLabel = action === 'copy' ? 'Copying items...' : 'Moving items...'
+
+.batch-project-picker
+	label.form-label.form-label-sm(for="batch-project-select") Project
+	select.form-select.form-select-sm#batch-project-select
+		each project in projects
+			option(value=project._id)= project.name
+	#batch-operation-progress.batch-operation-progress.d-none.mt-3(data-action-label=actionLabel)
+		.d-flex.justify-content-between.align-items-center.mb-2
+			span.small.text-muted#batch-operation-progress-label= progressLabel
+			span.small.text-muted#batch-operation-progress-count
+		.progress(role="progressbar" aria-label=`${actionLabel} progress`)
+			.progress-bar.progress-bar-striped.progress-bar-animated(style="width: 100%;")

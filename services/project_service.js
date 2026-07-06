@@ -41,6 +41,28 @@ export async function getProject(host_id, projectId) {
 	return Project.findOne({ _id: projectId, host_id });
 }
 
+export async function getProjectDeleteState(host_id, projectId) {
+	const filter = { project: projectId, host_id, in_trash: { $ne: true } };
+	const [notes, memory, urls, emails, gitRepos] = await Promise.all([
+		Note.countDocuments(filter),
+		Memory.countDocuments(filter),
+		Url.countDocuments(filter),
+		Email.countDocuments(filter),
+		GitRepo.countDocuments({ project: projectId, host_id }),
+	]);
+	const blockers = [];
+	if (notes) blockers.push(`${notes} note${notes > 1 ? 's' : ''}`);
+	if (memory) blockers.push(`${memory} ${memory > 1 ? 'memories' : 'memory'}`);
+	if (urls) blockers.push(`${urls} URL${urls > 1 ? 's' : ''}`);
+	if (emails) blockers.push(`${emails} email${emails > 1 ? 's' : ''}`);
+	if (gitRepos) blockers.push(`${gitRepos} git repo${gitRepos > 1 ? 's' : ''}`);
+	return {
+		canDelete: blockers.length === 0,
+		blockers,
+		counts: { notes, memory, urls, emails, gitRepos },
+	};
+}
+
 export async function updateProject(host_id, projectId, data, ctx = {}) {
 	const before = ctx.user_id ? await Project.findOne({ _id: projectId, host_id }).lean() : null;
 
@@ -69,22 +91,8 @@ export async function deleteProject(host_id, projectId, ctx = {}) {
 	if (!project) return null;
 	if (project.is_default) throw new Error('Cannot delete the default project');
 
-	const filter = { project: projectId, host_id, in_trash: { $ne: true } };
-	const [notes, memory, urls, emails, gitRepos] = await Promise.all([
-		Note.countDocuments(filter),
-		Memory.countDocuments(filter),
-		Url.countDocuments(filter),
-		Email.countDocuments(filter),
-		GitRepo.countDocuments({ project: projectId, host_id }),
-	]);
-
-	const parts = [];
-	if (notes) parts.push(`${notes} note${notes > 1 ? 's' : ''}`);
-	if (memory) parts.push(`${memory} ${memory > 1 ? 'memories' : 'memory'}`);
-	if (urls) parts.push(`${urls} URL${urls > 1 ? 's' : ''}`);
-	if (emails) parts.push(`${emails} email${emails > 1 ? 's' : ''}`);
-	if (gitRepos) parts.push(`${gitRepos} git repo${gitRepos > 1 ? 's' : ''}`);
-	if (parts.length) throw new Error(`Cannot delete project: has ${parts.join(', ')}`);
+	const deleteState = await getProjectDeleteState(host_id, projectId);
+	if (deleteState.blockers.length) throw new Error(`Cannot delete project: has ${deleteState.blockers.join(', ')}`);
 
 	project.is_active = false;
 	await project.save();

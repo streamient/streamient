@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { requireAuth, generateSocketToken } from '../middleware/auth.js';
 import { requireTenant, Tenant } from '../modules/tenancy.js';
 import { User } from '../model/user.js';
-import { listProjects, getProject, getProjectCounts } from '../services/project_service.js';
+import { listProjects, getProject, getProjectCounts, getProjectDeleteState } from '../services/project_service.js';
 import { listGitRepos } from '../services/git_sync_service.js';
 import { formatTrialEndsIn, getBillingUserForHost, hasProductAccess, hasProFeatureAccess } from '../services/subscription_access_service.js';
 import { serializeWhiteLabelSettings } from '../services/white_label_service.js';
@@ -173,6 +173,16 @@ router.get('/ajax/project-list', async (req, res) => {
 	res.render('ajax/project_list', { projects, counts, activeProjectId: req.query.active || '', emailFeatureEnabled, emailViewEnabled: true, is_hosted: req.isHosted });
 });
 
+router.get('/ajax/batch-project-picker', async (req, res) => {
+	const projects = await listProjects(req.host_id);
+	const currentProjectId = String(req.query.current || '');
+	const action = req.query.action === 'copy' ? 'copy' : 'move';
+	res.render('ajax/batch_project_picker', {
+		projects: projects.filter((project) => project._id.toString() !== currentProjectId),
+		action,
+	});
+});
+
 router.get('/ajax/project-overview/:id', async (req, res) => {
 	try {
 		const [project, counts, tenant] = await Promise.all([
@@ -186,11 +196,11 @@ router.get('/ajax/project-overview/:id', async (req, res) => {
 		const gitSyncEnabled = proOnlyFeatureEnabled;
 		const emailFeatureEnabled = proOnlyFeatureEnabled;
 		const emailForwardDomain = String(config.emailForwardDomain || '').trim().replace(/^@+/, '');
-		const gitRepos = await listGitRepos(req.host_id, req.params.id).catch(() => []);
 		const pc = counts[project._id.toString()] || { notes: 0, memory: 0, urls: 0, emails: 0 };
-		const canDelete = !project.is_default && pc.notes === 0 && pc.memory === 0 && pc.urls === 0 && pc.emails === 0 && gitRepos.length === 0;
+		const deleteState = project.is_default ? { canDelete: false, blockers: [] } : await getProjectDeleteState(req.host_id, req.params.id).catch(() => ({ canDelete: false, blockers: [] }));
+		const canDelete = !project.is_default && deleteState.canDelete;
 		const canManageProjectSettings = req.memberRole === 'owner' || req.memberRole === 'admin';
-		res.render('ajax/project_overview', { project, counts, gitSyncEnabled, emailFeatureEnabled, emailViewEnabled: true, emailForwardDomain, gitRepos, canDelete, canManageProjectSettings, is_hosted: req.isHosted });
+		res.render('ajax/project_overview', { project, counts, gitSyncEnabled, emailFeatureEnabled, emailViewEnabled: true, emailForwardDomain, canDelete, deleteBlockers: deleteState.blockers, canManageProjectSettings, is_hosted: req.isHosted });
 	} catch (err) {
 		res.status(500).send('<div class="text-danger">Failed to load project</div>');
 	}

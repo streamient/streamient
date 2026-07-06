@@ -71,6 +71,35 @@
 		return selectAllRecords ? totalRecordCount : getSelected().length;
 	}
 
+	function formatItemCount(count) {
+		return count + ' item' + (count === 1 ? '' : 's');
+	}
+
+	async function getProjectPickerHtml(action) {
+		var params = new URLSearchParams({ action: action });
+		if (currentProjectId) params.set('current', currentProjectId);
+		var res = await fetch('/ajax/batch-project-picker?' + params);
+		if (isLoginRedirect(res)) return redirectToLogin();
+		if (!res.ok) throw new Error('Failed to load projects');
+		return res.text();
+	}
+
+	function setBatchProgressVisible(action, count) {
+		var progress = document.getElementById('batch-operation-progress');
+		var progressLabel = document.getElementById('batch-operation-progress-label');
+		var progressCount = document.getElementById('batch-operation-progress-count');
+		if (progress) progress.classList.remove('d-none');
+		if (progressLabel) progressLabel.textContent = (action === 'move' ? 'Moving ' : 'Copying ') + formatItemCount(count) + '...';
+		if (progressCount) progressCount.textContent = 'Please wait';
+	}
+
+	function setBatchProgressHidden() {
+		var progress = document.getElementById('batch-operation-progress');
+		var progressCount = document.getElementById('batch-operation-progress-count');
+		if (progress) progress.classList.add('d-none');
+		if (progressCount) progressCount.textContent = '';
+	}
+
 	async function onSelectAllChange() {
 		var checked = selectAllCb.checked;
 		getAllCheckboxes().forEach(function (cb) { cb.checked = checked; });
@@ -154,23 +183,47 @@
 	async function pickProject(action) {
 		var count = getActionCount();
 		if (!count) return;
-		var data = await api('GET', '/projects');
-		var others = data.projects.filter(function (p) { return p._id !== currentProjectId; });
-		if (!others.length) { showError('No other projects available'); return; }
 
 		var Swal = (await import('/static/js/vendor.js')).Swal;
-		var options = others.map(function (p) { return '<option value="' + p._id + '">' + p.name + '</option>'; }).join('');
+		var actionLabel = action === 'move' ? 'Move' : 'Copy';
+		var html = await getProjectPickerHtml(action);
 		var result = await Swal.fire({
-			title: (action === 'move' ? 'Move' : 'Copy') + ' to project',
-			html: '<select id="batch-project-select" class="form-select">' + options + '</select>',
+			title: actionLabel + ' to project',
+			html: html,
 			showCancelButton: true,
-			confirmButtonText: action === 'move' ? 'Move' : 'Copy',
-			preConfirm: function () { return document.getElementById('batch-project-select').value; },
+			confirmButtonText: actionLabel,
+			showLoaderOnConfirm: true,
+			allowOutsideClick: function () { return !Swal.isLoading(); },
+			allowEscapeKey: function () { return !Swal.isLoading(); },
+			didOpen: function () {
+				var select = document.getElementById('batch-project-select');
+				if (!select || select.options.length === 0) {
+					Swal.showValidationMessage('No other projects available');
+					var confirmButton = Swal.getConfirmButton();
+					if (confirmButton) confirmButton.disabled = true;
+				}
+			},
+			preConfirm: async function () {
+				var select = document.getElementById('batch-project-select');
+				var project = select?.value;
+				if (!project) {
+					Swal.showValidationMessage('Project required');
+					return false;
+				}
+				setBatchProgressVisible(action, count);
+				try {
+					return await api('POST', '/batch/' + action, buildBatchBody({ project: project }));
+				} catch (err) {
+					setBatchProgressHidden();
+					Swal.showValidationMessage(err.message || 'Batch action failed');
+					return false;
+				}
+			},
 		});
-		if (!result.value) return;
+		if (!result.isConfirmed || !result.value) return;
 
-		await api('POST', '/batch/' + action, buildBatchBody({ project: result.value }));
-		showSuccess(count + ' ' + (action === 'move' ? 'moved' : 'copied'));
+		var processed = action === 'move' ? result.value.moved : result.value.copied;
+		showSuccess((processed || count) + ' ' + (action === 'move' ? 'moved' : 'copied'));
 		resetBatch();
 		window.dispatchEvent(new CustomEvent('batch-done'));
 	}

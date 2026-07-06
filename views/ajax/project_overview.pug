@@ -1,6 +1,8 @@
 - const createdAt = new Date(project.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 - const pc = counts[project._id.toString()] || { notes: 0, memory: 0, urls: 0, emails: 0 }
 - const forwardingEmail = emailForwardDomain ? `${project._id}@${emailForwardDomain}` : ''
+- const blockers = deleteBlockers || []
+- const deleteBlockedReason = blockers.length ? `Cannot delete project: has ${blockers.join(', ')}` : 'Project cannot be deleted yet.'
 
 .d-flex.justify-content-between.align-items-center.mb-2
 	.d-flex.align-items-center.gap-2
@@ -8,14 +10,21 @@
 		h4.mb-0.project-overview-name= project.name
 	.ms-auto
 		if canManageProjectSettings
-			if !project.is_default && canDelete
-				button.btn.btn-sm.btn-link.me-3.fs-7(onclick=`deleteProject('${project._id}')`) Delete
+			if !project.is_default
+				if canDelete
+					button.btn.btn-sm.btn-link.me-3.fs-7(type="button" data-project-delete=project._id) Delete
+				else
+					button.btn.btn-sm.btn-link.me-3.fs-7.text-danger(type="button" data-project-delete-blocked data-delete-disabled-reason=deleteBlockedReason title=deleteBlockedReason) Delete
 			button.btn.btn-sm.btn-outline-secondary(onclick=`editProject('${project._id}')`) Edit Project
 
 .d-flex.w-100.align-items-center.mb-4
 	.text-muted.small.fs-7.user-select-all #{project._id}
 	.ms-auto
 		span.text-muted.small.fs-7 Created #{createdAt}
+
+if !project.is_default && !canDelete
+	.alert.alert-light.border.fs-7.py-2.mb-4(role="status")
+		span= deleteBlockedReason
 
 .row.g-3.mb-5
 	.col-md-3
@@ -51,8 +60,3 @@
 					.text-muted.mb-2 Emails (Pro)
 					if is_hosted
 						a.btn.btn-sm.btn-outline-warning(href="/settings/subscription") Upgrade
-
-
-//- Delete hint (always at bottom, outside gitSyncEnabled block)
-if !project.is_default && !canDelete
-	p.text-muted.fs-7.mt-auto.pt-4 Projects can only be deleted when all notes, memories, URLs, emails, git repos, and outbound email addresses have been removed.
