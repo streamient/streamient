@@ -1,7 +1,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { getLlmScopeForIntent, inferActionIntent, normalizeActionItemType, normalizeIntentForConversationFollowup } from '../services/ai_chat_service.js';
+import {
+	getLlmScopeForIntent,
+	inferActionIntent,
+	normalizeActionItemType,
+	normalizeContextMoveResults,
+	normalizeIntentForConversationFollowup,
+	resultReferenceMoveRequest,
+} from '../services/ai_chat_service.js';
 
 describe('AI Chat follow-up intent normalization', () => {
 	it('downgrades non-explicit action intents to conversation for existing threads', () => {
@@ -86,10 +93,39 @@ describe('AI Chat follow-up intent normalization', () => {
 		assert.equal(intent.params.item_type, 'records');
 	});
 
+	it('infers current-result move commands without LLM classification', () => {
+		const intent = inferActionIntent('Move the results to streamient project');
+
+		assert.equal(intent.intent, 'action');
+		assert.equal(intent.action_type, 'move_to_project');
+		assert.equal(intent.params.project_name, 'streamient');
+	});
+
 	it('normalizes move action item type aliases', () => {
 		assert.equal(normalizeActionItemType('memories'), 'memory');
 		assert.equal(normalizeActionItemType('memory'), 'memory');
 		assert.equal(normalizeActionItemType('URL'), 'urls');
 		assert.equal(normalizeActionItemType('records'), null);
+	});
+
+	it('only treats move commands as current-results actions when they reference visible results', () => {
+		assert.equal(resultReferenceMoveRequest('Move the results to Streamient project'), true);
+		assert.equal(resultReferenceMoveRequest('Move these records to Streamient project'), true);
+		assert.equal(resultReferenceMoveRequest('Move all records related to Kumbukum to Streamient project'), false);
+	});
+
+	it('normalizes current result refs for mixed-type move actions', () => {
+		const results = normalizeContextMoveResults([
+			{ id: 'n1', _type: 'notes', project_id: 'old' },
+			{ source_id: 'm1', type: 'memory', project_id: 'old' },
+			{ id: 'p1', _type: 'pages', project_id: 'old' },
+			{ id: 'n1', _type: 'notes', project_id: 'old' },
+			{ id: 'u1', _type: 'urls', project_id: 'target' },
+		], 'target');
+
+		assert.deepEqual(results, [
+			{ id: 'n1', type: 'notes' },
+			{ id: 'm1', type: 'memory' },
+		]);
 	});
 });

@@ -2,6 +2,24 @@
 * AI Chat sidebar logic
 */
 let currentConversationId = null;
+let currentChatResults = [];
+
+function chatResultRef(item) {
+	if (!item) return null;
+	const id = String(item.id || item._id || item.source_id || '').trim();
+	const type = String(item._type || item.type || '').trim();
+	if (!id || !type) return null;
+	return {
+		id,
+		type,
+		project_id: String(item.project_id || item.project || '').trim(),
+	};
+}
+
+function compactChatResults(results) {
+	if (!Array.isArray(results)) return [];
+	return results.map(chatResultRef).filter(Boolean).slice(0, 100);
+}
 
 function initChat() {
 	const input = document.getElementById('chat-input');
@@ -47,6 +65,7 @@ function initChat() {
 
 	// Close results panel — restore page content
 	closeResultsBtn?.addEventListener('click', () => {
+		currentChatResults = [];
 		resultsPanel.classList.add('d-none');
 		pageContent?.classList.remove('d-none');
 	});
@@ -117,6 +136,7 @@ function initChat() {
 				query,
 				conversation_id: currentConversationId,
 				project_id: projectId,
+				context_results: currentChatResults,
 			};
 
 			const res = await fetch('/api/v1/chat/stream', {
@@ -204,6 +224,11 @@ function initChat() {
 									renderResults(data.results, resultsList, resultsPanel);
 								}
 								if (data.action?.completed) {
+									if (data.action.type === 'move_to_project') {
+										currentChatResults = [];
+										resultsPanel?.classList.add('d-none');
+										pageContent?.classList.remove('d-none');
+									}
 									addMessage('assistant', `✓ Action completed: ${data.action.type}`);
 								}
 							} else if (currentEvent === 'error') {
@@ -243,6 +268,7 @@ function initChat() {
 	// New conversation
 	clearBtn?.addEventListener('click', () => {
 		currentConversationId = null;
+		currentChatResults = [];
 		messagesEl.innerHTML = '';
 		resultsPanel?.classList.add('d-none');
 		pageContent?.classList.remove('d-none');
@@ -253,6 +279,9 @@ function initChat() {
 	// Conversation history
 	historyBtn?.addEventListener('click', async () => {
 		try {
+			currentChatResults = [];
+			resultsPanel?.classList.add('d-none');
+			pageContent?.classList.remove('d-none');
 			const res = await api('GET', '/chat/conversations?limit=10');
 			if (!res.conversations?.length) {
 				addMessage('assistant', 'No previous conversations.');
@@ -321,6 +350,7 @@ async function loadProjectFilter() {
 
 function renderResults(results, listEl, panelEl) {
 	const pageContent = document.getElementById('page-content');
+	currentChatResults = compactChatResults(results);
 	listEl.innerHTML = '';
 	panelEl.classList.remove('d-none');
 	pageContent?.classList.add('d-none');

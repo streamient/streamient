@@ -776,10 +776,10 @@ small,
 
 /* Chat results panel */
 #chat-results-panel {
-	border: 1px solid #dee2e6;
+	border: 1px solid var(--st-line);
 	border-radius: 0.5rem;
 	padding: 1rem;
-	background: #fafbfc;
+	background: var(--st-panel);
 }
 
 #chat-results-list .card {

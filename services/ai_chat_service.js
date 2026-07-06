@@ -76,6 +76,8 @@ For action intents, extract params from the user message:
  * Classify user intent using the lightweight NL search model.
  */
 async function classifyIntent(hostId, query) {
+	const fallbackIntent = inferActionIntent(query);
+
 	try {
 		const raw = await nlSearchCompletion({
 			messages: [
@@ -95,12 +97,25 @@ async function classifyIntent(hostId, query) {
 			if (match) parsed = JSON.parse(match[0]);
 		}
 
-		if (parsed?.intent) return parsed;
+		if (parsed?.intent) {
+			if (fallbackIntent && parsed.intent !== 'action') return fallbackIntent;
+			if (fallbackIntent && parsed.intent === 'action' && parsed.action_type === 'move_to_project') {
+				return {
+					...parsed,
+					query: parsed.query || fallbackIntent.query,
+					params: {
+						...fallbackIntent.params,
+						...(parsed.params || {}),
+						project_name: parsed.params?.project_name || fallbackIntent.params.project_name,
+					},
+				};
+			}
+			return parsed;
+		}
 	} catch (err) {
 		log.error({ err }, 'Intent classification failed');
 	}
 
-	const fallbackIntent = inferActionIntent(query);
 	if (fallbackIntent) return fallbackIntent;
 
 	// Fallback: treat as search
@@ -213,7 +228,7 @@ export function normalizeIntentForConversationFollowup(intent, query, conversati
  * @param {string} opts.projectId - Scope to project (optional)
  * @returns {{ answer: string, results: object, action: object|null, conversationId: string, displayIn: 'panel'|'chat' }}
  */
-export async function processChat({ hostId, userId, query, conversationId, projectId, includeEmails = true, ctx = {} }) {
+export async function processChat({ hostId, userId, query, conversationId, projectId, contextResults = [], includeEmails = true, ctx = {} }) {
 	// Free (BYOK) tenants with no key configured: short-circuit with guidance.
 	if (!(await hasLlmApiKey({ hostId }))) {
 		return noAiKeyResult(conversationId);
@@ -226,7 +241,7 @@ export async function processChat({ hostId, userId, query, conversationId, proje
 
 	switch (intent.intent) {
 		case 'action':
-			return handleAction({ hostId, userId, query, conversationId, projectId, intent, includeEmails, ctx });
+			return handleAction({ hostId, userId, query, conversationId, projectId, contextResults, intent, includeEmails, ctx });
 
 		case 'stats':
 			return handleStats({ hostId, userId, query, conversationId, projectId, intent, includeEmails, llmScope });
@@ -249,7 +264,7 @@ export async function processChat({ hostId, userId, query, conversationId, proje
  * If stream is set, the caller should iterate it for text tokens; answer will be null.
  * If answer is set, the response is already complete (no streaming needed).
  */
-export async function processChatStream({ hostId, userId, query, conversationId, projectId, includeEmails = true, ctx = {} }) {
+export async function processChatStream({ hostId, userId, query, conversationId, projectId, contextResults = [], includeEmails = true, ctx = {} }) {
 	// Free (BYOK) tenants with no key configured: short-circuit with guidance
 	// (the non-stream answer path renders it as a normal assistant message).
 	if (!(await hasLlmApiKey({ hostId }))) {
@@ -262,7 +277,7 @@ export async function processChatStream({ hostId, userId, query, conversationId,
 
 	switch (intent.intent) {
 		case 'action': {
-			const result = await handleAction({ hostId, userId, query, conversationId, projectId, intent, includeEmails, ctx });
+			const result = await handleAction({ hostId, userId, query, conversationId, projectId, contextResults, intent, includeEmails, ctx });
 			return { stream: null, answer: result.answer, metadata: { results: result.results, action: result.action, conversationId: result.conversationId, displayIn: result.displayIn } };
 		}
 
@@ -532,6 +547,69 @@ function getMoveUpdateFn(type, includeEmails) {
 	}[type] || null;
 }
 
+export function resultReferenceMoveRequest(query = '') {
+	const text = String(query || '');
+	return /\bmove\b/i.test(text)
+		&& /\b(results?|items?|these|those|them)\b/i.test(text);
+}
+
+function getContextResultId(item = {}) {
+	return String(item.id || item._id || item.source_id || '').trim();
+}
+
+export function normalizeContextMoveResults(results = [], finalProjectId = null, itemType = null) {
+	if (!Array.isArray(results)) return [];
+	const normalized = [];
+	const seen = new Set();
+
+	for (const item of results) {
+		const id = getContextResultId(item);
+		const type = normalizeActionItemType(item.type || item._type);
+		if (!id || !type || !MOVABLE_ITEM_TYPES.has(type)) continue;
+		if (itemType && type !== itemType) continue;
+		if (finalProjectId && String(item.project_id || item.project || '') === String(finalProjectId)) continue;
+
+		const key = `${type}:${id}`;
+		if (seen.has(key)) continue;
+		seen.add(key);
+		normalized.push({ id, type });
+	}
+
+	return normalized.slice(0, 100);
+}
+
+async function moveContextResultsToProject({ hostId, finalProjectId, resolvedProject, contextResults, itemType, includeEmails, ctx }) {
+	const items = normalizeContextMoveResults(contextResults, finalProjectId, itemType);
+	if (!items.length) {
+		return {
+			answer: 'No movable records in the current results.',
+			results: [],
+			action: null,
+			displayIn: 'chat',
+		};
+	}
+
+	const movedByType = {};
+	let moved = 0;
+
+	for (const item of items) {
+		const updateFn = getMoveUpdateFn(item.type, includeEmails);
+		if (!updateFn) continue;
+		const result = await updateFn(hostId, item.id, { project: finalProjectId }, ctx).catch(() => null);
+		if (!result) continue;
+		moved += 1;
+		movedByType[item.type] = (movedByType[item.type] || 0) + 1;
+	}
+
+	const target = resolvedProject.project?.name || 'project';
+	return {
+		answer: `Moved ${moved} record${moved === 1 ? '' : 's'} to ${target}.`,
+		results: [],
+		action: { type: 'move_to_project', completed: true, moved, moved_by_type: movedByType },
+		displayIn: 'chat',
+	};
+}
+
 async function findMoveCandidates({ hostId, query, searchProjectId, excludeProjectId, includeEmails, itemType }) {
 	const results = await searchKnowledge(hostId, query, { projectId: searchProjectId, perPage: 10, includeEmails });
 	const types = itemType ? [itemType] : null;
@@ -540,7 +618,7 @@ async function findMoveCandidates({ hostId, query, searchProjectId, excludeProje
 		.filter((item) => !excludeProjectId || String(item.project_id || item.project || '') !== String(excludeProjectId));
 }
 
-async function handleAction({ hostId, userId, query, conversationId, projectId, intent, includeEmails = true, ctx = {} }) {
+async function handleAction({ hostId, userId, query, conversationId, projectId, contextResults = [], intent, includeEmails = true, ctx = {} }) {
 	const actionType = intent.action_type;
 	const params = intent.params || {};
 
@@ -637,6 +715,18 @@ async function handleAction({ hostId, userId, query, conversationId, projectId, 
 				}
 				const itemType = normalizeActionItemType(params.item_type);
 				if (!params.item_ids?.length) {
+					if (resultReferenceMoveRequest(query) && contextResults?.length) {
+						const result = await moveContextResultsToProject({
+							hostId,
+							finalProjectId,
+							resolvedProject,
+							contextResults,
+							itemType,
+							includeEmails,
+							ctx,
+						});
+						return { ...result, conversationId };
+					}
 					const searchProjectId = projectId && String(projectId) !== String(finalProjectId) ? projectId : null;
 					const candidates = await findMoveCandidates({
 						hostId,

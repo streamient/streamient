@@ -327,9 +327,19 @@ body.st-no-chat-sidebar .st-content-grid {
 }
 
 .st-content-main > #chat-results-panel {
-	flex: 0 0 auto;
-	max-height: 45%;
-	overflow: auto;
+	flex: 1 1 auto;
+	min-height: 0;
+	max-height: none;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+}
+
+#chat-results-list {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	padding-right: 0.25rem;
 }
 
 #page-content {

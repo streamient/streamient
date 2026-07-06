@@ -1042,7 +1042,7 @@ const aiDailyLimiter = createAiDailyLimiter();
 
 router.post('/chat', aiDailyLimiter, async (req, res) => {
 	try {
-		const { query, conversation_id, project_id } = req.body;
+		const { query, conversation_id, project_id, context_results } = req.body;
 		if (!query) return res.status(400).json({ error: 'query required' });
 		const emailEnabled = await getEmailFeatureAccess(req.host_id, req.billingUser);
 
@@ -1052,6 +1052,7 @@ router.post('/chat', aiDailyLimiter, async (req, res) => {
 			query,
 			conversationId: conversation_id,
 			projectId: project_id,
+			contextResults: context_results,
 			includeEmails: emailEnabled,
 			ctx: auditCtx(req),
 		});
@@ -1091,7 +1092,7 @@ router.post('/chat/stream', aiDailyLimiter, async (req, res) => {
 	}
 
 	try {
-		const { query, conversation_id, project_id } = req.body;
+		const { query, conversation_id, project_id, context_results } = req.body;
 		if (!query) {
 			sendSSE('error', { error: 'query required' });
 			return res.end();
@@ -1104,6 +1105,7 @@ router.post('/chat/stream', aiDailyLimiter, async (req, res) => {
 			query,
 			conversationId: conversation_id,
 			projectId: project_id,
+			contextResults: context_results,
 			includeEmails: emailEnabled,
 			ctx: auditCtx(req),
 		});
