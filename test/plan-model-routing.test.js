@@ -81,7 +81,7 @@ describe('per-plan managed model routing', () => {
 			messages: [{ role: 'user', content: 'hi' }],
 		});
 
-		assert.match(requests[0].url, /models\/gemini-3-flash:/);
+		assert.match(requests[0].url, /models\/gemini-2\.5-flash:/);
 	});
 
 	it('uses the nlSearch plan slot for intent classification', async () => {

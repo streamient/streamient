@@ -215,7 +215,7 @@ const config = {
 		// Per-provider default model — the fallback when a purpose-specific model
 		// (chat/nlSearch/tsConversation) is unset, and the model used for BYO key
 		// verification and provider fallback. Override per deployment via env.
-		openaiModel: process.env.OPENAI_MODEL || 'gpt-4o',
+		openaiModel: process.env.OPENAI_MODEL || 'gpt-5.4-mini',
 		googleModel: process.env.GOOGLE_MODEL || 'gemini-2.5-flash',
 		// Managed (platform-key) model matrix per plan — applies to hosted
 		// tenants without a BYO key. BYOK tenants and self-hosted installs keep
@@ -228,10 +228,10 @@ const config = {
 				conversation: process.env.FREE_TS_CONVERSATION_MODEL || 'gemini-2.5-flash-lite',
 			},
 			pro: {
-				provider: process.env.PRO_AI_MODEL_PROVIDER || 'google',
-				chat: process.env.PRO_CHAT_AI_MODEL || 'gemini-3-flash',
-				nlSearch: process.env.PRO_NL_SEARCH_MODEL || 'gemini-3-flash',
-				conversation: process.env.PRO_TS_CONVERSATION_MODEL || 'gemini-3-flash',
+				provider: process.env.PRO_AI_MODEL_PROVIDER || 'openai',
+				chat: process.env.PRO_CHAT_AI_MODEL || 'gpt-5.4-mini',
+				nlSearch: process.env.PRO_NL_SEARCH_MODEL || 'gpt-5.4-mini',
+				conversation: process.env.PRO_TS_CONVERSATION_MODEL || 'gpt-5.4-mini',
 			},
 		},
 	},

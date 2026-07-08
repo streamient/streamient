@@ -40,13 +40,13 @@ describe('LLM client model routing', () => {
 
 		const content = await chatCompletion({
 			provider: 'google',
-			model: 'gemini-2.5-pro',
+			model: 'gemini-2.5-flash',
 			messages: [{ role: 'user', content: 'hi' }],
 		});
 
 		assert.equal(content, 'ok');
 		assert.match(requests[0].url, /api\.openai\.com/);
-		assert.equal(requests[0].body.model, 'gpt-4o');
+		assert.equal(requests[0].body.model, 'gpt-5.4-mini');
 		assert.equal(requests[0].options.headers.Authorization, 'Bearer env-openai');
 	});
 
