@@ -19683,7 +19683,7 @@ N.prototype = { _dropdown: D2, placeCaretAfterNode: w2, getSetTagData: T, helper
   })(this.DOM.input), t2;
 } }, N.prototype.removeTag = N.prototype.removeTags;
 
-// node_modules/.pnpm/tom-select@2.6.1/node_modules/tom-select/dist/esm/contrib/microevent.js
+// node_modules/.pnpm/tom-select@2.6.2/node_modules/tom-select/dist/esm/contrib/microevent.js
 function forEvents(events, callback) {
   events.split(/\s+/).forEach((event) => {
     callback(event);
@@ -19731,7 +19731,7 @@ var MicroEvent = class {
   }
 };
 
-// node_modules/.pnpm/tom-select@2.6.1/node_modules/tom-select/dist/esm/contrib/microplugin.js
+// node_modules/.pnpm/tom-select@2.6.2/node_modules/tom-select/dist/esm/contrib/microplugin.js
 function MicroPlugin(Interface) {
   Interface.plugins = {};
   return class extends Interface {
@@ -20504,7 +20504,7 @@ var Sifter = class {
   }
 };
 
-// node_modules/.pnpm/tom-select@2.6.1/node_modules/tom-select/dist/esm/utils.js
+// node_modules/.pnpm/tom-select@2.6.2/node_modules/tom-select/dist/esm/utils.js
 var hash_key = (value) => {
   if (typeof value === "undefined" || value === null)
     return null;
@@ -20617,7 +20617,7 @@ var iterate2 = (object, callback) => {
   }
 };
 
-// node_modules/.pnpm/tom-select@2.6.1/node_modules/tom-select/dist/esm/vanilla.js
+// node_modules/.pnpm/tom-select@2.6.2/node_modules/tom-select/dist/esm/vanilla.js
 var getDom = (query) => {
   if (query.jquery) {
     return query[0];
@@ -20731,7 +20731,7 @@ var replaceNode = (existing, replacement) => {
     existing.parentNode.replaceChild(replacement, existing);
 };
 
-// node_modules/.pnpm/tom-select@2.6.1/node_modules/tom-select/dist/esm/contrib/highlight.js
+// node_modules/.pnpm/tom-select@2.6.2/node_modules/tom-select/dist/esm/contrib/highlight.js
 var highlight = (element, regex) => {
   if (regex === null)
     return;
@@ -20779,7 +20779,7 @@ var removeHighlight = (el) => {
   });
 };
 
-// node_modules/.pnpm/tom-select@2.6.1/node_modules/tom-select/dist/esm/constants.js
+// node_modules/.pnpm/tom-select@2.6.2/node_modules/tom-select/dist/esm/constants.js
 var KEY_A = 65;
 var KEY_RETURN = 13;
 var KEY_ESC = 27;
@@ -20793,7 +20793,7 @@ var KEY_TAB = 9;
 var IS_MAC = typeof navigator === "undefined" ? false : /Mac/.test(navigator.userAgent);
 var KEY_SHORTCUT = IS_MAC ? "metaKey" : "ctrlKey";
 
-// node_modules/.pnpm/tom-select@2.6.1/node_modules/tom-select/dist/esm/defaults.js
+// node_modules/.pnpm/tom-select@2.6.2/node_modules/tom-select/dist/esm/defaults.js
 var defaults_default = {
   options: [],
   optgroups: [],
@@ -20879,7 +20879,7 @@ var defaults_default = {
   }
 };
 
-// node_modules/.pnpm/tom-select@2.6.1/node_modules/tom-select/dist/esm/getSettings.js
+// node_modules/.pnpm/tom-select@2.6.2/node_modules/tom-select/dist/esm/getSettings.js
 function getSettings(input, settings_user) {
   var settings = Object.assign({}, defaults_default, settings_user);
   var attr_data = settings.dataAttr;
@@ -21003,7 +21003,7 @@ function getSettings(input, settings_user) {
   return Object.assign({}, defaults_default, settings_element, settings_user);
 }
 
-// node_modules/.pnpm/tom-select@2.6.1/node_modules/tom-select/dist/esm/tom-select.js
+// node_modules/.pnpm/tom-select@2.6.2/node_modules/tom-select/dist/esm/tom-select.js
 var instance_i = 0;
 var TomSelect = class extends MicroPlugin(MicroEvent) {
   constructor(input_arg, user_settings) {
@@ -22737,7 +22737,7 @@ var TomSelect = class extends MicroPlugin(MicroEvent) {
           self2.input.append(option_el);
         }
         selected.push(option_el);
-        if (option_el != empty_option || has_selected > 0) {
+        if (option_el != empty_option || has_selected > 0 || self2.settings.mode == "multi") {
           option_el.selected = true;
         }
         return option_el;
@@ -23164,7 +23164,7 @@ var TomSelect = class extends MicroPlugin(MicroEvent) {
   }
 };
 
-// node_modules/.pnpm/tom-select@2.6.1/node_modules/tom-select/dist/esm/plugins/change_listener/plugin.js
+// node_modules/.pnpm/tom-select@2.6.2/node_modules/tom-select/dist/esm/plugins/change_listener/plugin.js
 var addEvent2 = (target, type, callback, options) => {
   target.addEventListener(type, callback, options);
 };
@@ -23174,7 +23174,7 @@ function plugin() {
   });
 }
 
-// node_modules/.pnpm/tom-select@2.6.1/node_modules/tom-select/dist/esm/plugins/checkbox_options/plugin.js
+// node_modules/.pnpm/tom-select@2.6.2/node_modules/tom-select/dist/esm/plugins/checkbox_options/plugin.js
 var hash_key2 = (value) => {
   if (typeof value === "undefined" || value === null) return null;
   return get_hash2(value);
@@ -23251,8 +23251,8 @@ function plugin2(userOptions) {
   };
   self2.hook("after", "setupTemplates", () => {
     var orig_render_option = self2.settings.render.option;
-    self2.settings.render.option = (data, escape_html3) => {
-      var rendered = getDom2(orig_render_option.call(self2, data, escape_html3));
+    self2.settings.render.option = (data, escape_html2) => {
+      var rendered = getDom2(orig_render_option.call(self2, data, escape_html2));
       var checkbox = document.createElement("input");
       if (cbOptions.className) {
         checkbox.classList.add(cbOptions.className);
@@ -23293,7 +23293,7 @@ function plugin2(userOptions) {
   });
 }
 
-// node_modules/.pnpm/tom-select@2.6.1/node_modules/tom-select/dist/esm/plugins/clear_button/plugin.js
+// node_modules/.pnpm/tom-select@2.6.2/node_modules/tom-select/dist/esm/plugins/clear_button/plugin.js
 var getDom3 = (query) => {
   if (query.jquery) {
     return query[0];
@@ -23341,7 +23341,7 @@ function plugin3(userOptions) {
   });
 }
 
-// node_modules/.pnpm/tom-select@2.6.1/node_modules/tom-select/dist/esm/plugins/drag_drop/plugin.js
+// node_modules/.pnpm/tom-select@2.6.2/node_modules/tom-select/dist/esm/plugins/drag_drop/plugin.js
 var preventDefault3 = (evt, stop = false) => {
   if (evt) {
     evt.preventDefault();
@@ -23486,7 +23486,7 @@ function plugin4() {
   });
 }
 
-// node_modules/.pnpm/tom-select@2.6.1/node_modules/tom-select/dist/esm/plugins/dropdown_header/plugin.js
+// node_modules/.pnpm/tom-select@2.6.2/node_modules/tom-select/dist/esm/plugins/dropdown_header/plugin.js
 var preventDefault4 = (evt, stop = false) => {
   if (evt) {
     evt.preventDefault();
@@ -23540,7 +23540,7 @@ function plugin5(userOptions) {
   });
 }
 
-// node_modules/.pnpm/tom-select@2.6.1/node_modules/tom-select/dist/esm/plugins/caret_position/plugin.js
+// node_modules/.pnpm/tom-select@2.6.2/node_modules/tom-select/dist/esm/plugins/caret_position/plugin.js
 var iterate4 = (object, callback) => {
   if (Array.isArray(object)) {
     object.forEach(callback);
@@ -23623,7 +23623,7 @@ function plugin6() {
   });
 }
 
-// node_modules/.pnpm/tom-select@2.6.1/node_modules/tom-select/dist/esm/plugins/dropdown_input/plugin.js
+// node_modules/.pnpm/tom-select@2.6.2/node_modules/tom-select/dist/esm/plugins/dropdown_input/plugin.js
 var KEY_ESC2 = 27;
 var KEY_TAB2 = 9;
 var preventDefault5 = (evt, stop = false) => {
@@ -23749,7 +23749,7 @@ function plugin7() {
   });
 }
 
-// node_modules/.pnpm/tom-select@2.6.1/node_modules/tom-select/dist/esm/plugins/input_autogrow/plugin.js
+// node_modules/.pnpm/tom-select@2.6.2/node_modules/tom-select/dist/esm/plugins/input_autogrow/plugin.js
 var addEvent5 = (target, type, callback, options) => {
   target.addEventListener(type, callback, options);
 };
@@ -23777,7 +23777,7 @@ function plugin8() {
   });
 }
 
-// node_modules/.pnpm/tom-select@2.6.1/node_modules/tom-select/dist/esm/plugins/no_backspace_delete/plugin.js
+// node_modules/.pnpm/tom-select@2.6.2/node_modules/tom-select/dist/esm/plugins/no_backspace_delete/plugin.js
 function plugin9() {
   var self2 = this;
   var orig_deleteSelection = self2.deleteSelection;
@@ -23789,7 +23789,7 @@ function plugin9() {
   });
 }
 
-// node_modules/.pnpm/tom-select@2.6.1/node_modules/tom-select/dist/esm/plugins/no_active_items/plugin.js
+// node_modules/.pnpm/tom-select@2.6.2/node_modules/tom-select/dist/esm/plugins/no_active_items/plugin.js
 function plugin10() {
   this.hook("instead", "setActiveItem", () => {
   });
@@ -23797,7 +23797,7 @@ function plugin10() {
   });
 }
 
-// node_modules/.pnpm/tom-select@2.6.1/node_modules/tom-select/dist/esm/plugins/optgroup_columns/plugin.js
+// node_modules/.pnpm/tom-select@2.6.2/node_modules/tom-select/dist/esm/plugins/optgroup_columns/plugin.js
 var KEY_LEFT2 = 37;
 var KEY_RIGHT2 = 39;
 var parentMatch2 = (target, selector, wrapper) => {
@@ -23849,10 +23849,7 @@ function plugin11() {
   });
 }
 
-// node_modules/.pnpm/tom-select@2.6.1/node_modules/tom-select/dist/esm/plugins/remove_button/plugin.js
-var escape_html2 = (str) => {
-  return (str + "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-};
+// node_modules/.pnpm/tom-select@2.6.2/node_modules/tom-select/dist/esm/plugins/remove_button/plugin.js
 var preventDefault6 = (evt, stop = false) => {
   if (evt) {
     evt.preventDefault();
@@ -23885,22 +23882,29 @@ var isHtmlString7 = (arg) => {
   return false;
 };
 function plugin12(userOptions) {
+  const self2 = this;
   const options = Object.assign({
-    label: "&times;",
+    label: "\xD7",
     title: "Remove",
     className: "remove",
-    append: true
+    tabindex: -1,
+    role: "button",
+    html: (data) => {
+      var _data$tabindex;
+      const el = document.createElement("div");
+      el.className = data.className || "";
+      el.title = data.title || "";
+      el.setAttribute("role", data.role || "button");
+      el.tabIndex = (_data$tabindex = data.tabindex) != null ? _data$tabindex : -1;
+      el.textContent = data.label || "";
+      return el;
+    }
   }, userOptions);
-  var self2 = this;
-  if (!options.append) {
-    return;
-  }
-  var html = '<a href="javascript:void(0)" class="' + options.className + '" tabindex="-1" title="' + escape_html2(options.title) + '">' + options.label + "</a>";
   self2.hook("after", "setupTemplates", () => {
     var orig_render_item = self2.settings.render.item;
     self2.settings.render.item = (data, escape) => {
       var item = getDom7(orig_render_item.call(self2, data, escape));
-      var close_button = getDom7(html);
+      var close_button = getDom7(options.html(options));
       item.appendChild(close_button);
       addEvent6(close_button, "mousedown", (evt) => {
         preventDefault6(evt, true);
@@ -23919,7 +23923,7 @@ function plugin12(userOptions) {
   });
 }
 
-// node_modules/.pnpm/tom-select@2.6.1/node_modules/tom-select/dist/esm/plugins/restore_on_backspace/plugin.js
+// node_modules/.pnpm/tom-select@2.6.2/node_modules/tom-select/dist/esm/plugins/restore_on_backspace/plugin.js
 function plugin13(userOptions) {
   const self2 = this;
   const options = Object.assign({
@@ -23940,7 +23944,7 @@ function plugin13(userOptions) {
   });
 }
 
-// node_modules/.pnpm/tom-select@2.6.1/node_modules/tom-select/dist/esm/plugins/virtual_scroll/plugin.js
+// node_modules/.pnpm/tom-select@2.6.2/node_modules/tom-select/dist/esm/plugins/virtual_scroll/plugin.js
 var iterate6 = (object, callback) => {
   if (Array.isArray(object)) {
     object.forEach(callback);
@@ -23991,6 +23995,8 @@ function plugin14() {
   var default_values = [];
   var default_values_loaded = false;
   var default_pagination;
+  var default_options = [];
+  var html_values = [];
   if (!self2.settings.shouldLoadMore) {
     self2.settings.shouldLoadMore = () => {
       const scroll_percent = dropdown_content.clientHeight / (dropdown_content.scrollHeight - dropdown_content.scrollTop);
@@ -24016,7 +24022,7 @@ function plugin14() {
     field: "$score"
   }];
   const canLoadMore = (query) => {
-    if (typeof self2.settings.maxOptions === "number" && dropdown_content.children.length >= self2.settings.maxOptions) {
+    if (self2.settings.maxOptions !== null && typeof self2.settings.maxOptions === "number" && dropdown_content.children.length >= self2.settings.maxOptions) {
       return false;
     }
     if (query in pagination && pagination[query]) {
@@ -24059,7 +24065,8 @@ function plugin14() {
   });
   self2.hook("instead", "loadCallback", (options, optgroups) => {
     if (!loading_more) {
-      self2.clearOptions(clearFilter);
+      const activeFilter = self2.lastValue !== "" ? (_option, value) => self2.items.indexOf(value) >= 0 || html_values.indexOf(value) >= 0 : clearFilter;
+      self2.clearOptions(activeFilter);
     } else if (load_more_opt) {
       const first_option = options[0];
       if (first_option !== void 0) {
@@ -24072,6 +24079,7 @@ function plugin14() {
       if (self2.lastValue === "") {
         default_values = Object.keys(self2.options);
         default_pagination = pagination[""];
+        default_options = Object.values(self2.options);
       }
     }
     loading_more = false;
@@ -24106,6 +24114,7 @@ function plugin14() {
     if (!default_values_loaded) {
       return;
     }
+    self2.addOptions(default_options);
     self2.clearOptions(clearFilter);
     if (default_pagination) {
       pagination[""] = default_pagination;
@@ -24119,6 +24128,7 @@ function plugin14() {
   });
   self2.on("dropdown_close", restoreDefaults);
   self2.on("initialize", () => {
+    html_values = Object.keys(self2.options);
     default_values = Object.keys(self2.options);
     dropdown_content = self2.dropdown_content;
     self2.settings.render = Object.assign({}, {
@@ -24143,7 +24153,7 @@ function plugin14() {
   });
 }
 
-// node_modules/.pnpm/tom-select@2.6.1/node_modules/tom-select/dist/esm/tom-select.complete.js
+// node_modules/.pnpm/tom-select@2.6.2/node_modules/tom-select/dist/esm/tom-select.complete.js
 TomSelect.define("change_listener", plugin);
 TomSelect.define("checkbox_options", plugin2);
 TomSelect.define("clear_button", plugin3);

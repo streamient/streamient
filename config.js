@@ -229,9 +229,9 @@ const config = {
 			},
 			pro: {
 				provider: process.env.PRO_AI_MODEL_PROVIDER || 'openai',
-				chat: process.env.PRO_CHAT_AI_MODEL || 'gpt-5.4-mini',
+				chat: process.env.PRO_CHAT_AI_MODEL || 'gpt-5.5',
 				nlSearch: process.env.PRO_NL_SEARCH_MODEL || 'gpt-5.4-mini',
-				conversation: process.env.PRO_TS_CONVERSATION_MODEL || 'gpt-5.4-mini',
+				conversation: process.env.PRO_TS_CONVERSATION_MODEL || 'gpt-5.5',
 			},
 		},
 	},
