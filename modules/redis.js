@@ -9,6 +9,32 @@ const log = createLogger('redis');
 
 let _sharedClient = null;
 let _keyv = null;
+let lastReconnectLogAt = 0;
+
+const REDIS_RECONNECT_LOG_INTERVAL_MS = 10000;
+
+function attachRedisClientHandlers(redisClient, label) {
+	redisClient.on('error', (err) => {
+		if (err && !err.handled) {
+			err.handled = true;
+		}
+		const errMsg = err?.message || '';
+		if (!isTransientRedisError(errMsg)) {
+			log.error({ err, label }, 'Redis client error');
+		}
+	});
+
+	redisClient.on('ready', () => {
+		log.info({ label }, 'Redis client connected and ready');
+	});
+
+	redisClient.on('reconnecting', (delayMs) => {
+		const now = Date.now();
+		if (now - lastReconnectLogAt < REDIS_RECONNECT_LOG_INTERVAL_MS) return;
+		lastReconnectLogAt = now;
+		log.warn({ label, delay_ms: delayMs }, 'Redis client reconnecting');
+	});
+}
 
 function createSharedClient() {
 	if (_sharedClient) return _sharedClient;
@@ -21,16 +47,7 @@ function createSharedClient() {
 		log.info({ master: opts.name, sentinels: opts.sentinels.map(s => `${s.host}:${s.port}`).join(', ') }, 'Initializing SHARED Keyv Valkey SENTINEL client');
 
 		_sharedClient = new Valkey(connection.options);
-
-		_sharedClient.on('error', (err) => {
-			if (err && !err.handled) {
-				err.handled = true;
-			}
-			const errMsg = err?.message || '';
-			if (!isTransientRedisError(errMsg)) {
-				log.error({ err }, 'Keyv Valkey Sentinel client error');
-			}
-		});
+		attachRedisClientHandlers(_sharedClient, 'shared-sentinel');
 	} else {
 		const url = connection.url || `redis://${connection.options.host || 'localhost'}:${connection.options.port || 6379}`;
 		log.info({ url }, 'Initializing SHARED Keyv Valkey client');
@@ -38,20 +55,7 @@ function createSharedClient() {
 		_sharedClient = connection.url
 			? new Valkey(connection.url, connection.options)
 			: new Valkey(connection.options);
-
-		_sharedClient.on('error', (err) => {
-			if (err && !err.handled) {
-				err.handled = true;
-			}
-			const errMsg = err?.message || '';
-			if (!isTransientRedisError(errMsg)) {
-				log.error({ err }, 'Keyv Valkey client error');
-			}
-		});
-
-		_sharedClient.on('ready', () => {
-			log.info('Keyv Valkey client connected and ready');
-		});
+		attachRedisClientHandlers(_sharedClient, 'shared');
 	}
 
 	log.info('Keyv Valkey shared client initializing...');

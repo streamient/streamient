@@ -6,6 +6,10 @@ peerDependencyRules:
   ignoreMissing:
     - bufferutil
     - utf-8-validate
+packageExtensions:
+  "@hyperdx/instrumentation-sentry-node@0.2.0":
+    dependencies:
+      "@opentelemetry/sdk-trace-base": 2.7.1
 overrides:
   bufferutil: ^4.1.0
   utf-8-validate: ^5.0.10

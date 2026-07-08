@@ -88,3 +88,11 @@ After saving a URL, use `create_link` to connect it to related notes or memories
 - Always use cursor:pointer for clickable elements, if class doesn't have it already
 - Use sweetalert2 for notifications or questions.
 - Use Bootstrap modal for popups
+
+## Testing
+- Before running full/integration tests, source:
+  - DEV_STREAMIENT_MONGODB_URI
+  - DEV_REDIS_URL
+  - DEV_TYPESENSE_HOST
+  - TYPESENSE_PORT=8108
+  - DEV_TYPESENSE_KEY

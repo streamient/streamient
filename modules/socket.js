@@ -14,8 +14,10 @@ let io;
 let bridgePublisher;
 let bridgeSubscriber;
 let emailCountsHandler;
+let lastRedisReconnectLogAt = 0;
 
 const TENANT_EVENT_BRIDGE_CHANNEL = 'tenant-events';
+const REDIS_RECONNECT_LOG_INTERVAL_MS = 10000;
 const SOCKET_ALLOWED_AUDIENCES = new Set(['streamient-api', 'kumbukum-api', 'streamient-socket']);
 
 function createRedisClient() {
@@ -32,7 +34,18 @@ function attachRedisErrorHandler(redisClient, label) {
 		}
 		const msg = err?.message || '';
 		if (isTransientRedisError(msg)) return;
-		log.warn({ msg }, label);
+		log.warn({ msg, label }, 'Socket.IO Redis client error');
+	});
+
+	redisClient.on('ready', () => {
+		log.info({ label }, 'Socket.IO Redis client connected and ready');
+	});
+
+	redisClient.on('reconnecting', (delayMs) => {
+		const now = Date.now();
+		if (now - lastRedisReconnectLogAt < REDIS_RECONNECT_LOG_INTERVAL_MS) return;
+		lastRedisReconnectLogAt = now;
+		log.warn({ label, delay_ms: delayMs }, 'Socket.IO Redis client reconnecting');
 	});
 }
 
@@ -110,7 +123,7 @@ async function ensureBridgePublisher() {
 	if (bridgePublisher) return bridgePublisher;
 
 	bridgePublisher = createRedisClient();
-	attachRedisErrorHandler(bridgePublisher, 'Socket.IO bridge publisher error');
+	attachRedisErrorHandler(bridgePublisher, 'Socket.IO bridge publisher');
 	await bridgePublisher.connect();
 	return bridgePublisher;
 }
@@ -119,7 +132,7 @@ async function setupTenantEventBridge() {
 	if (!config.socketRedis || bridgeSubscriber) return;
 
 	bridgeSubscriber = createRedisClient();
-	attachRedisErrorHandler(bridgeSubscriber, 'Socket.IO bridge subscriber error');
+	attachRedisErrorHandler(bridgeSubscriber, 'Socket.IO bridge subscriber');
 	bridgeSubscriber.on('message', (channel, message) => {
 		if (channel !== TENANT_EVENT_BRIDGE_CHANNEL) return;
 		try {
@@ -195,7 +208,7 @@ export async function setupSocketIO(httpServer, sessionMiddleware, handlers = {}
 			let redisClient;
 			try {
 				redisClient = createRedisClient();
-				attachRedisErrorHandler(redisClient, 'Socket.IO Redis client error');
+				attachRedisErrorHandler(redisClient, 'Socket.IO Redis client');
 				await redisClient.connect();
 				io.adapter(createAdapter(redisClient, { streamCount: 4, blockTimeInMs: 10_000, heartbeatInterval: 30000, heartbeatTimeout: 90000 }));
 				log.info('Socket.IO Redis streams adapter connected');

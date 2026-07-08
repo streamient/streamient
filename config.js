@@ -1,7 +1,19 @@
+function parseNonNegativeNumberEnv(name, fallback) {
+	const value = Number(process.env[name]);
+	return Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
+function buildTypesenseRetryConfig() {
+	return {
+		numRetries: parseNonNegativeNumberEnv('TYPESENSE_NUM_RETRIES', 3),
+		retryIntervalSeconds: parseNonNegativeNumberEnv('TYPESENSE_RETRY_INTERVAL_SECONDS', 1),
+		healthcheckIntervalSeconds: parseNonNegativeNumberEnv('TYPESENSE_HEALTHCHECK_INTERVAL_SECONDS', 2),
+	};
+}
+
 function parseTypesenseConfig() {
-	// Only override the connection timeout; let the client use its own sensible
-	// defaults for numRetries / retryIntervalSeconds / healthcheckIntervalSeconds.
 	const connectionTimeoutSeconds = Number(process.env.TYPESENSE_CONNECTION_TIMEOUT_SECONDS) || 30;
+	const retryConfig = buildTypesenseRetryConfig();
 	// Per-product collection prefix (st_/mt_/mg_) so multiple products can share
 	// one Typesense cluster. Set TYPESENSE_COLLECTION_PREFIX="" to disable.
 	const collectionPrefix = (process.env.TYPESENSE_COLLECTION_PREFIX ?? 'st').trim();
@@ -17,6 +29,7 @@ function parseTypesenseConfig() {
 				throw new Error('TYPESENSE_NODES must include a "nodes" array');
 			}
 			return {
+				...retryConfig,
 				connectionTimeoutSeconds,
 				...parsed,
 				collectionPrefix,
@@ -28,6 +41,7 @@ function parseTypesenseConfig() {
 		}
 	}
 	return {
+		...retryConfig,
 		nodes: [
 			{
 				host: process.env.TYPESENSE_HOST || 'localhost',
