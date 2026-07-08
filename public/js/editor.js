@@ -117,7 +117,7 @@ OrderedMap.from = function(value) {
 };
 var dist_default = OrderedMap;
 
-// node_modules/.pnpm/prosemirror-model@1.25.9/node_modules/prosemirror-model/dist/index.js
+// node_modules/.pnpm/prosemirror-model@1.25.10/node_modules/prosemirror-model/dist/index.js
 function findDiffStart(a, b, pos) {
   for (let i2 = 0; ; i2++) {
     if (i2 == a.childCount || i2 == b.childCount)
@@ -12240,7 +12240,7 @@ function keydownHandler(bindings) {
   };
 }
 
-// node_modules/.pnpm/@tiptap+core@3.27.1_@tiptap+pm@3.27.1/node_modules/@tiptap/core/dist/index.js
+// node_modules/.pnpm/@tiptap+core@3.27.3_@tiptap+pm@3.27.3/node_modules/@tiptap/core/dist/index.js
 var __defProp = Object.defineProperty;
 var __export = (target, all) => {
   for (var name in all)
@@ -12582,14 +12582,22 @@ var expandSelectionForInlineText = ($from, $to, schema) => {
   return { from: from2, to };
 };
 var deleteSelection2 = () => ({ state, dispatch }) => {
-  const { $from, $to } = state.selection;
   if (state.selection.empty) {
     return false;
   }
-  const { from: from2, to } = expandSelectionForInlineText($from, $to, state.schema);
   if (dispatch) {
-    state.tr.deleteRange(from2, to).scrollIntoView();
-    dispatch(state.tr);
+    const tr2 = state.tr;
+    const { ranges } = state.selection;
+    const mapFrom = tr2.steps.length;
+    ranges.forEach((range) => {
+      const mapping = tr2.mapping.slice(mapFrom);
+      const $from = tr2.doc.resolve(mapping.map(range.$from.pos));
+      const $to = tr2.doc.resolve(mapping.map(range.$to.pos));
+      const { from: from2, to } = expandSelectionForInlineText($from, $to, state.schema);
+      tr2.deleteRange(from2, to);
+    });
+    tr2.scrollIntoView();
+    dispatch(tr2);
   }
   return true;
 };
@@ -18404,7 +18412,7 @@ function markPasteRule(config) {
   });
 }
 
-// node_modules/.pnpm/@tiptap+core@3.27.1_@tiptap+pm@3.27.1/node_modules/@tiptap/core/dist/jsx-runtime/jsx-runtime.js
+// node_modules/.pnpm/@tiptap+core@3.27.3_@tiptap+pm@3.27.3/node_modules/@tiptap/core/dist/jsx-runtime/jsx-runtime.js
 var h = (tag, attributes) => {
   if (tag === "slot") {
     return 0;
@@ -18421,7 +18429,7 @@ var h = (tag, attributes) => {
   return [tag, rest, children];
 };
 
-// node_modules/.pnpm/@tiptap+extension-blockquote@3.27.1_@tiptap+core@3.27.1_@tiptap+pm@3.27.1_/node_modules/@tiptap/extension-blockquote/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-blockquote@3.27.3_@tiptap+core@3.27.3_@tiptap+pm@3.27.3_/node_modules/@tiptap/extension-blockquote/dist/index.js
 function findDiffStart2(a, b, pos) {
   for (let i2 = 0; ; i2++) {
     if (i2 == a.childCount || i2 == b.childCount)
@@ -18434,8 +18442,11 @@ function findDiffStart2(a, b, pos) {
     if (!childA.sameMarkup(childB))
       return pos;
     if (childA.isText && childA.text != childB.text) {
-      for (let j = 0; childA.text[j] == childB.text[j]; j++)
+      let tA = childA.text, tB = childB.text, j = 0;
+      for (; tA[j] == tB[j]; j++)
         pos++;
+      if (j && j < tA.length && j < tB.length && surrogateHigh2(tA.charCodeAt(j - 1)) && surrogateLow2(tA.charCodeAt(j)))
+        pos--;
       return pos;
     }
     if (childA.content.size || childB.content.size) {
@@ -18459,11 +18470,16 @@ function findDiffEnd2(a, b, posA, posB) {
     if (!childA.sameMarkup(childB))
       return { a: posA, b: posB };
     if (childA.isText && childA.text != childB.text) {
-      let same = 0, minSize = Math.min(childA.text.length, childB.text.length);
-      while (same < minSize && childA.text[childA.text.length - same - 1] == childB.text[childB.text.length - same - 1]) {
-        same++;
+      let tA = childA.text, tB = childB.text, iA2 = tA.length, iB2 = tB.length;
+      while (iA2 > 0 && iB2 > 0 && tA[iA2 - 1] == tB[iB2 - 1]) {
+        iA2--;
+        iB2--;
         posA--;
         posB--;
+      }
+      if (iA2 && iB2 && iA2 < tA.length && surrogateHigh2(tA.charCodeAt(iA2 - 1)) && surrogateLow2(tA.charCodeAt(iA2))) {
+        posA++;
+        posB++;
       }
       return { a: posA, b: posB };
     }
@@ -18475,6 +18491,12 @@ function findDiffEnd2(a, b, posA, posB) {
     posA -= size;
     posB -= size;
   }
+}
+function surrogateLow2(ch) {
+  return ch >= 56320 && ch < 57344;
+}
+function surrogateHigh2(ch) {
+  return ch >= 55296 && ch < 56320;
 }
 var Fragment2 = class _Fragment {
   /**
@@ -19087,7 +19109,8 @@ function addRange2($start, $end, depth, target) {
     addNode2($end.nodeBefore, target);
 }
 function close2(node, content) {
-  node.type.checkContent(content);
+  if (!node.type.validContent(content))
+    throw new ReplaceError2("Invalid content for node " + node.type.name);
   return node.copy(content);
 }
 function replaceThreeWay2($from, $start, $end, $to, depth) {
@@ -21528,7 +21551,7 @@ ${prefix}
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-bold@3.27.1_@tiptap+core@3.27.1_@tiptap+pm@3.27.1_/node_modules/@tiptap/extension-bold/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-bold@3.27.3_@tiptap+core@3.27.3_@tiptap+pm@3.27.3_/node_modules/@tiptap/extension-bold/dist/index.js
 var starInputRegex = /(?:^|\s)(\*\*(?!\s+\*\*)((?:[^*]+))\*\*(?!\s+\*\*))$/;
 var starPasteRegex = /(?:^|\s)(\*\*(?!\s+\*\*)((?:[^*]+))\*\*(?!\s+\*\*))/g;
 var underscoreInputRegex = /(?:^|\s)(__(?!\s+__)((?:[^_]+))__(?!\s+__))$/;
@@ -21620,7 +21643,7 @@ var Bold = Mark2.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-code@3.27.1_@tiptap+core@3.27.1_@tiptap+pm@3.27.1_/node_modules/@tiptap/extension-code/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-code@3.27.3_@tiptap+core@3.27.3_@tiptap+pm@3.27.3_/node_modules/@tiptap/extension-code/dist/index.js
 var inputRegexMatch = (text) => {
   const match = /`([^`]+)`(?!`)$/.exec(text);
   if (!match) {
@@ -21713,7 +21736,7 @@ var Code = Mark2.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-code-block@3.27.1_@tiptap+core@3.27.1_@tiptap+pm@3.27.1__@tiptap+pm@3.27.1/node_modules/@tiptap/extension-code-block/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-code-block@3.27.3_@tiptap+core@3.27.3_@tiptap+pm@3.27.3__@tiptap+pm@3.27.3/node_modules/@tiptap/extension-code-block/dist/index.js
 var DEFAULT_TAB_SIZE = 4;
 var backtickInputRegex = /^```([a-z]+)?[\s\n]$/;
 var tildeInputRegex = /^~~~([a-z]+)?[\s\n]$/;
@@ -22027,7 +22050,7 @@ var CodeBlock = Node3.create({
 });
 var index_default = CodeBlock;
 
-// node_modules/.pnpm/@tiptap+extension-document@3.27.1_@tiptap+core@3.27.1_@tiptap+pm@3.27.1_/node_modules/@tiptap/extension-document/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-document@3.27.3_@tiptap+core@3.27.3_@tiptap+pm@3.27.3_/node_modules/@tiptap/extension-document/dist/index.js
 var Document = Node3.create({
   name: "doc",
   topNode: true,
@@ -22040,7 +22063,7 @@ var Document = Node3.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-hard-break@3.27.1_@tiptap+core@3.27.1_@tiptap+pm@3.27.1_/node_modules/@tiptap/extension-hard-break/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-hard-break@3.27.3_@tiptap+core@3.27.3_@tiptap+pm@3.27.3_/node_modules/@tiptap/extension-hard-break/dist/index.js
 var HardBreak = Node3.create({
   name: "hardBreak",
   markdownTokenName: "br",
@@ -22105,7 +22128,7 @@ var HardBreak = Node3.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-heading@3.27.1_@tiptap+core@3.27.1_@tiptap+pm@3.27.1_/node_modules/@tiptap/extension-heading/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-heading@3.27.3_@tiptap+core@3.27.3_@tiptap+pm@3.27.3_/node_modules/@tiptap/extension-heading/dist/index.js
 var Heading = Node3.create({
   name: "heading",
   addOptions() {
@@ -22190,7 +22213,7 @@ var Heading = Node3.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-horizontal-rule@3.27.1_@tiptap+core@3.27.1_@tiptap+pm@3.27.1__@tiptap+pm@3.27.1/node_modules/@tiptap/extension-horizontal-rule/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-horizontal-rule@3.27.3_@tiptap+core@3.27.3_@tiptap+pm@3.27.3__@tiptap+pm@3.27.3/node_modules/@tiptap/extension-horizontal-rule/dist/index.js
 var HorizontalRule = Node3.create({
   name: "horizontalRule",
   addOptions() {
@@ -22267,7 +22290,7 @@ var HorizontalRule = Node3.create({
 });
 var index_default2 = HorizontalRule;
 
-// node_modules/.pnpm/@tiptap+extension-italic@3.27.1_@tiptap+core@3.27.1_@tiptap+pm@3.27.1_/node_modules/@tiptap/extension-italic/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-italic@3.27.3_@tiptap+core@3.27.3_@tiptap+pm@3.27.3_/node_modules/@tiptap/extension-italic/dist/index.js
 var starInputRegex2 = /(?:^|\s)(\*(?!\s+\*)((?:[^*]+))\*(?!\s+\*))$/;
 var starPasteRegex2 = /(?:^|\s)(\*(?!\s+\*)((?:[^*]+))\*(?!\s+\*))/g;
 var underscoreInputRegex2 = /(?:^|\s)(_(?!\s+_)((?:[^_]+))_(?!\s+_))$/;
@@ -23505,7 +23528,7 @@ function find(str, type = null, opts = null) {
   return filtered;
 }
 
-// node_modules/.pnpm/@tiptap+extension-link@3.27.1_@tiptap+core@3.27.1_@tiptap+pm@3.27.1__@tiptap+pm@3.27.1/node_modules/@tiptap/extension-link/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-link@3.27.3_@tiptap+core@3.27.3_@tiptap+pm@3.27.3__@tiptap+pm@3.27.3/node_modules/@tiptap/extension-link/dist/index.js
 var UNICODE_WHITESPACE_PATTERN = "[\0- \xA0\u1680\u180E\u2000-\u2029\u205F\u3000]";
 var UNICODE_WHITESPACE_REGEX = new RegExp(UNICODE_WHITESPACE_PATTERN);
 var UNICODE_WHITESPACE_REGEX_END = new RegExp(`${UNICODE_WHITESPACE_PATTERN}$`);
@@ -23775,6 +23798,7 @@ var Link = Mark2.create({
     };
   },
   addAttributes() {
+    var _a, _b, _c;
     return {
       href: {
         default: null,
@@ -23783,13 +23807,16 @@ var Link = Mark2.create({
         }
       },
       target: {
-        default: this.options.HTMLAttributes.target
+        // Coerce `undefined` to `null` because `undefined` is an invalid attribute value
+        default: (_a = this.options.HTMLAttributes.target) != null ? _a : null
       },
       rel: {
-        default: this.options.HTMLAttributes.rel
+        // Coerce `undefined` to `null` because `undefined` is an invalid attribute value
+        default: (_b = this.options.HTMLAttributes.rel) != null ? _b : null
       },
       class: {
-        default: this.options.HTMLAttributes.class
+        // Coerce `undefined` to `null` because `undefined` is an invalid attribute value
+        default: (_c = this.options.HTMLAttributes.class) != null ? _c : null
       },
       title: {
         default: null
@@ -23947,7 +23974,7 @@ var Link = Mark2.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-list@3.27.1_@tiptap+core@3.27.1_@tiptap+pm@3.27.1__@tiptap+pm@3.27.1/node_modules/@tiptap/extension-list/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-list@3.27.3_@tiptap+core@3.27.3_@tiptap+pm@3.27.3__@tiptap+pm@3.27.3/node_modules/@tiptap/extension-list/dist/index.js
 var __defProp2 = Object.defineProperty;
 var __export2 = (target, all) => {
   for (var name in all)
@@ -24678,18 +24705,24 @@ var ORDERED_LIST_LINE_START_REGEX = new RegExp(
   `^(\\s*)(${ORDERED_LIST_MARKER_PATTERN})([.)])\\s+`
 );
 var INDENTED_LINE_REGEX = /^\s/;
+var PARAGRAPH_INTERRUPTERS = {
+  heading: /^#{1,6}(?:\s|$)/,
+  bulletItem: /^[-+*]\s+/,
+  codeFence: /^(?:```|~~~)/,
+  thematicBreak: /^(?:(?:-[ \t]*){3,}|(?:_[ \t]*){3,}|(?:\*[ \t]*){3,})$/
+};
 function isOrderedListMarkerLine(line) {
   return ORDERED_LIST_ITEM_REGEX.test(line.trimStart());
 }
 function isBlockContentLine(line) {
   const trimmedLine = line.trimStart();
-  return (
-    // oxlint-disable-next-line prefer-string-starts-ends-with
-    /^[-+*]\s+/.test(trimmedLine) || isOrderedListMarkerLine(trimmedLine) || // oxlint-disable-next-line prefer-string-starts-ends-with
-    /^>\s?/.test(trimmedLine) || // oxlint-disable-next-line prefer-string-starts-ends-with
-    /^```/.test(trimmedLine) || // oxlint-disable-next-line prefer-string-starts-ends-with
-    /^~~~/.test(trimmedLine)
-  );
+  return PARAGRAPH_INTERRUPTERS.bulletItem.test(trimmedLine) || isOrderedListMarkerLine(trimmedLine) || PARAGRAPH_INTERRUPTERS.heading.test(trimmedLine) || // dash breaks are excluded: "---" directly below paragraph text is a
+  // setext heading underline, not a thematic break
+  PARAGRAPH_INTERRUPTERS.thematicBreak.test(trimmedLine) && !trimmedLine.startsWith("-") || // oxlint-disable-next-line prefer-string-starts-ends-with
+  /^>\s?/.test(trimmedLine) || PARAGRAPH_INTERRUPTERS.codeFence.test(trimmedLine);
+}
+function interruptsLazyContinuation(line) {
+  return Object.values(PARAGRAPH_INTERRUPTERS).some((pattern) => pattern.test(line));
 }
 function splitItemContent(contentLines) {
   const paragraphLines = [];
@@ -24754,7 +24787,7 @@ function collectOrderedListItems(lines) {
         itemContentLines.push(nextLine.slice(Math.min(leadingWhitespace, contentIndent)));
         nextLineIndex += 1;
       } else {
-        if (sawBlankLine) {
+        if (sawBlankLine || interruptsLazyContinuation(nextLine)) {
           break;
         }
         itemLines.push(nextLine);
@@ -25035,7 +25068,7 @@ var OrderedList = Node3.create({
       if (listItems.length === 0) {
         return void 0;
       }
-      const items = buildNestedStructure(listItems, 0, lexer);
+      const items = buildNestedStructure(listItems, listItems[0].indent, lexer);
       if (items.length === 0) {
         return void 0;
       }
@@ -25484,7 +25517,7 @@ var ListKit = Extension.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-paragraph@3.27.1_@tiptap+core@3.27.1_@tiptap+pm@3.27.1_/node_modules/@tiptap/extension-paragraph/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-paragraph@3.27.3_@tiptap+core@3.27.3_@tiptap+pm@3.27.3_/node_modules/@tiptap/extension-paragraph/dist/index.js
 var EMPTY_PARAGRAPH_MARKDOWN = "&nbsp;";
 var NBSP_CHAR = "\xA0";
 var Paragraph = Node3.create({
@@ -25542,7 +25575,7 @@ var Paragraph = Node3.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-strike@3.27.1_@tiptap+core@3.27.1_@tiptap+pm@3.27.1_/node_modules/@tiptap/extension-strike/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-strike@3.27.3_@tiptap+core@3.27.3_@tiptap+pm@3.27.3_/node_modules/@tiptap/extension-strike/dist/index.js
 var inputRegex3 = /(?:^|\s)(~~(?!\s+~~)((?:[^~]+))~~(?!\s+~~))$/;
 var pasteRegex = /(?:^|\s)(~~(?!\s+~~)((?:[^~]+))~~(?!\s+~~))/g;
 var Strike = Mark2.create({
@@ -25616,7 +25649,7 @@ var Strike = Mark2.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+extension-text@3.27.1_@tiptap+core@3.27.1_@tiptap+pm@3.27.1_/node_modules/@tiptap/extension-text/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-text@3.27.3_@tiptap+core@3.27.3_@tiptap+pm@3.27.3_/node_modules/@tiptap/extension-text/dist/index.js
 var Text2 = Node3.create({
   name: "text",
   group: "inline",
@@ -25629,7 +25662,7 @@ var Text2 = Node3.create({
   renderMarkdown: (node) => node.text || ""
 });
 
-// node_modules/.pnpm/@tiptap+extension-underline@3.27.1_@tiptap+core@3.27.1_@tiptap+pm@3.27.1_/node_modules/@tiptap/extension-underline/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-underline@3.27.3_@tiptap+core@3.27.3_@tiptap+pm@3.27.3_/node_modules/@tiptap/extension-underline/dist/index.js
 var Underline = Mark2.create({
   name: "underline",
   addOptions() {
@@ -25700,7 +25733,7 @@ var Underline = Mark2.create({
   }
 });
 
-// node_modules/.pnpm/prosemirror-dropcursor@1.8.2/node_modules/prosemirror-dropcursor/dist/index.js
+// node_modules/.pnpm/prosemirror-dropcursor@1.8.3/node_modules/prosemirror-dropcursor/dist/index.js
 function dropCursor(options = {}) {
   return new Plugin({
     view(editorView) {
@@ -25715,6 +25748,7 @@ var DropCursorView = class {
     this.cursorPos = null;
     this.element = null;
     this.timeout = -1;
+    this.lastDragEvent = null;
     this.width = (_a = options.width) !== null && _a !== void 0 ? _a : 1;
     this.color = options.color === false ? void 0 : options.color || "black";
     this.class = options.class;
@@ -25731,10 +25765,15 @@ var DropCursorView = class {
   }
   update(editorView, prevState) {
     if (this.cursorPos != null && prevState.doc != editorView.state.doc) {
-      if (this.cursorPos > editorView.state.doc.content.size)
-        this.setCursor(null);
-      else
+      if (this.lastDragEvent) {
+        let target = this.computeTarget(this.lastDragEvent);
+        if (target == this.cursorPos)
+          this.updateOverlay();
+        else
+          this.setCursor(target);
+      } else {
         this.updateOverlay();
+      }
     }
   }
   setCursor(pos) {
@@ -25803,20 +25842,27 @@ var DropCursorView = class {
     clearTimeout(this.timeout);
     this.timeout = setTimeout(() => this.setCursor(null), timeout);
   }
-  dragover(event) {
-    if (!this.editorView.editable)
-      return;
+  computeTarget(event) {
     let pos = this.editorView.posAtCoords({ left: event.clientX, top: event.clientY });
     let node = pos && pos.inside >= 0 && this.editorView.state.doc.nodeAt(pos.inside);
     let disableDropCursor = node && node.type.spec.disableDropCursor;
     let disabled = typeof disableDropCursor == "function" ? disableDropCursor(this.editorView, pos, event) : disableDropCursor;
-    if (pos && !disabled) {
-      let target = pos.pos;
-      if (this.editorView.dragging && this.editorView.dragging.slice) {
-        let point = dropPoint(this.editorView.state.doc, target, this.editorView.dragging.slice);
-        if (point != null)
-          target = point;
-      }
+    if (!pos || disabled)
+      return null;
+    let target = pos.pos;
+    if (this.editorView.dragging && this.editorView.dragging.slice) {
+      let point = dropPoint(this.editorView.state.doc, target, this.editorView.dragging.slice);
+      if (point != null)
+        target = point;
+    }
+    return target;
+  }
+  dragover(event) {
+    if (!this.editorView.editable)
+      return;
+    this.lastDragEvent = event;
+    let target = this.computeTarget(event);
+    if (target != null) {
       this.setCursor(target);
       this.scheduleRemoval(5e3);
     }
@@ -26583,7 +26629,7 @@ var redo = buildCommand(true, true);
 var undoNoScroll = buildCommand(false, false);
 var redoNoScroll = buildCommand(true, false);
 
-// node_modules/.pnpm/@tiptap+extensions@3.27.1_@tiptap+core@3.27.1_@tiptap+pm@3.27.1__@tiptap+pm@3.27.1/node_modules/@tiptap/extensions/dist/index.js
+// node_modules/.pnpm/@tiptap+extensions@3.27.3_@tiptap+core@3.27.3_@tiptap+pm@3.27.3__@tiptap+pm@3.27.3/node_modules/@tiptap/extensions/dist/index.js
 var CharacterCount = Extension.create({
   name: "characterCount",
   addOptions() {
@@ -26773,7 +26819,6 @@ var Gapcursor = Extension.create({
 });
 var DEFAULT_DATA_ATTRIBUTE = "placeholder";
 var PLUGIN_KEY = new PluginKey("tiptap__placeholder");
-var VIEWPORT_OVERSCAN_PX = 200;
 function createPlaceholderDecoration(options) {
   const {
     editor,
@@ -26802,6 +26847,50 @@ function createPlaceholderDecoration(options) {
 function resolveEmptyNodeClass(emptyNodeClass, props) {
   return typeof emptyNodeClass === "function" ? emptyNodeClass(props) : emptyNodeClass;
 }
+function scanRangeForDecorations({
+  editor,
+  options,
+  dataAttribute,
+  doc: doc3,
+  selection,
+  from: from2,
+  to
+}) {
+  const { anchor } = selection;
+  const decorations = [];
+  const isEmptyDoc = editor.isEmpty;
+  doc3.nodesBetween(from2, to, (node, pos) => {
+    const hasAnchor = anchor >= pos && anchor <= pos + node.nodeSize;
+    const isEmpty = !node.isLeaf && isNodeEmpty(node);
+    if (!node.type.isTextblock) {
+      return options.includeChildren;
+    }
+    if ((hasAnchor || !options.showOnlyCurrent) && isEmpty) {
+      decorations.push(
+        createPlaceholderDecoration({
+          editor,
+          isEmptyDoc,
+          dataAttribute,
+          hasAnchor,
+          placeholder: options.placeholder,
+          classes: {
+            emptyEditor: options.emptyEditorClass,
+            emptyNode: resolveEmptyNodeClass(options.emptyNodeClass, {
+              editor,
+              node,
+              pos,
+              hasAnchor
+            })
+          },
+          node,
+          pos
+        })
+      );
+    }
+    return options.includeChildren;
+  });
+  return decorations;
+}
 function buildPlaceholderDecorations({
   editor,
   options,
@@ -26809,7 +26898,6 @@ function buildPlaceholderDecorations({
   doc: doc3,
   selection
 }) {
-  var _a, _b;
   const active = editor.isEditable || !options.showOnlyWhenEditable;
   if (!active) {
     return null;
@@ -26846,202 +26934,204 @@ function buildPlaceholderDecorations({
       );
     }
   } else {
-    const pluginState = PLUGIN_KEY.getState(editor.state);
-    const from2 = (_a = pluginState == null ? void 0 : pluginState.topPos) != null ? _a : 0;
-    const to = (_b = pluginState == null ? void 0 : pluginState.bottomPos) != null ? _b : doc3.content.size;
-    doc3.nodesBetween(from2, to, (node, pos) => {
-      const hasAnchor = anchor >= pos && anchor <= pos + node.nodeSize;
-      const isEmpty = !node.isLeaf && isNodeEmpty(node);
-      if (!node.type.isTextblock) {
-        return options.includeChildren;
-      }
-      if ((hasAnchor || !options.showOnlyCurrent) && isEmpty) {
-        decorations.push(
-          createPlaceholderDecoration({
-            editor,
-            isEmptyDoc,
-            dataAttribute,
-            hasAnchor,
-            placeholder: options.placeholder,
-            classes: {
-              emptyEditor: options.emptyEditorClass,
-              emptyNode: resolveEmptyNodeClass(options.emptyNodeClass, {
-                editor,
-                node,
-                pos,
-                hasAnchor
-              })
-            },
-            node,
-            pos
-          })
-        );
-      }
-      return options.includeChildren;
-    });
+    decorations.push(
+      ...scanRangeForDecorations({
+        editor,
+        options,
+        dataAttribute,
+        doc: doc3,
+        selection,
+        from: 0,
+        to: doc3.content.size
+      })
+    );
   }
   return DecorationSet.create(doc3, decorations);
+}
+function resolveTopLevelRange(doc3, pos) {
+  var _a;
+  const resolved = doc3.resolve(pos);
+  if (resolved.depth === 0) {
+    const node2 = (_a = resolved.nodeAfter) != null ? _a : resolved.nodeBefore;
+    if (!node2) {
+      return { from: pos, to: pos };
+    }
+    const nodePos = resolved.nodeAfter ? pos : pos - node2.nodeSize;
+    return { from: nodePos, to: nodePos + node2.nodeSize };
+  }
+  const topLevelPos = resolved.before(1);
+  const node = resolved.node(1);
+  return { from: topLevelPos, to: topLevelPos + node.nodeSize };
+}
+function toContentRelativeRange(doc3, range) {
+  return {
+    from: Math.max(0, range.from - 1),
+    to: Math.min(doc3.content.size, range.to - 1)
+  };
+}
+function getTopLevelBlocksInRange(doc3, from2, to) {
+  const ranges = [];
+  doc3.forEach((node, offset) => {
+    const nodeStart = offset;
+    const nodeEnd = nodeStart + node.nodeSize;
+    const absNodeStart = nodeStart + 1;
+    const absNodeEnd = nodeEnd + 1;
+    if (absNodeStart < to && absNodeEnd > from2) {
+      ranges.push({ from: nodeStart, to: nodeEnd });
+    }
+  });
+  return ranges;
+}
+function mergeRanges(ranges) {
+  if (ranges.length === 0) {
+    return [];
+  }
+  const sorted = [...ranges].sort((a, b) => a.from - b.from);
+  const merged = [{ ...sorted[0] }];
+  for (let i2 = 1; i2 < sorted.length; i2 += 1) {
+    const last = merged[merged.length - 1];
+    const current = sorted[i2];
+    if (current.from <= last.to) {
+      last.to = Math.max(last.to, current.to);
+    } else {
+      merged.push({ ...current });
+    }
+  }
+  return merged;
+}
+function collectBlocksForChange(doc3, change) {
+  const ranges = getTopLevelBlocksInRange(doc3, change.from, change.to);
+  ranges.push(toContentRelativeRange(doc3, resolveTopLevelRange(doc3, change.from)));
+  if (change.to > change.from) {
+    ranges.push(
+      toContentRelativeRange(
+        doc3,
+        resolveTopLevelRange(doc3, Math.min(change.to, doc3.content.size + 1) - 1)
+      )
+    );
+  } else if (change.from < doc3.content.size + 1) {
+    ranges.push(
+      toContentRelativeRange(
+        doc3,
+        resolveTopLevelRange(doc3, Math.min(change.from + 1, doc3.content.size))
+      )
+    );
+  }
+  return ranges;
+}
+function collectRescanRanges(tr2, oldState, newState) {
+  const ranges = [];
+  if (tr2.docChanged) {
+    const changes = getChangedRanges(tr2);
+    for (const change of changes) {
+      ranges.push(...collectBlocksForChange(newState.doc, change.newRange));
+    }
+  }
+  if (tr2.selectionSet) {
+    ranges.push(
+      toContentRelativeRange(
+        newState.doc,
+        resolveTopLevelRange(newState.doc, tr2.mapping.map(oldState.selection.anchor))
+      )
+    );
+    ranges.push(
+      toContentRelativeRange(
+        newState.doc,
+        resolveTopLevelRange(newState.doc, newState.selection.anchor)
+      )
+    );
+  }
+  return mergeRanges(ranges);
+}
+function clampRange(from2, to, doc3) {
+  const clampedFrom = Math.max(0, Math.min(from2, doc3.content.size));
+  const clampedTo = Math.max(clampedFrom, Math.min(to, doc3.content.size));
+  return { from: clampedFrom, to: clampedTo };
+}
+function updateDecorationsInRanges({
+  decorations,
+  ranges,
+  editor,
+  options,
+  dataAttribute,
+  doc: doc3,
+  selection
+}) {
+  let next = decorations;
+  for (const range of ranges) {
+    const { from: from2, to } = clampRange(range.from, range.to, doc3);
+    const existing = next.find(from2, to).filter((decoration) => decoration.from >= from2 && decoration.to <= to);
+    if (existing.length) {
+      next = next.remove(existing);
+    }
+    const newDecos = scanRangeForDecorations({
+      editor,
+      options,
+      dataAttribute,
+      doc: doc3,
+      selection,
+      from: from2,
+      to
+    });
+    if (newDecos.length) {
+      next = next.add(doc3, newDecos);
+    }
+  }
+  return next;
+}
+function createPlaceholderStateField({
+  editor,
+  options,
+  dataAttribute
+}) {
+  return {
+    init(_config, state) {
+      const decorations = buildPlaceholderDecorations({
+        editor,
+        options,
+        dataAttribute,
+        doc: state.doc,
+        selection: state.selection
+      });
+      return decorations != null ? decorations : DecorationSet.empty;
+    },
+    apply(tr2, prev, oldState, newState) {
+      if (!tr2.docChanged && !tr2.selectionSet) {
+        return prev;
+      }
+      const mapped = prev.map(tr2.mapping, tr2.doc);
+      const ranges = collectRescanRanges(tr2, oldState, newState);
+      return updateDecorationsInRanges({
+        decorations: mapped,
+        ranges,
+        editor,
+        options,
+        dataAttribute,
+        doc: newState.doc,
+        selection: newState.selection
+      });
+    }
+  };
 }
 function preparePlaceholderAttribute(attr) {
   return attr.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9-]/g, "").replace(/^[0-9-]+/, "").replace(/^-+/, "").toLowerCase();
 }
-function isScrollable(el) {
-  const style2 = getComputedStyle(el);
-  const overflow = `${style2.overflow} ${style2.overflowY} ${style2.overflowX}`;
-  return /auto|scroll|overlay/.test(overflow);
-}
-function findScrollParent(element) {
-  let el = element;
-  while (el) {
-    if (isScrollable(el)) {
-      return el;
-    }
-    const parent = el.parentElement;
-    if (!parent) {
-      const root = el.getRootNode();
-      if (root instanceof ShadowRoot) {
-        el = root.host;
-        continue;
-      }
-      return window;
-    }
-    el = parent;
-  }
-  return window;
-}
-function getContainerRect(container) {
-  if (container === window) {
-    return { top: 0, bottom: window.innerHeight };
-  }
-  return container.getBoundingClientRect();
-}
-function getViewportBoundaryPositions({
-  view,
-  scrollContainer
-}) {
-  const editorRect = view.dom.getBoundingClientRect();
-  if (editorRect.width <= 0 || editorRect.height <= 0) {
-    return null;
-  }
-  const containerRect = scrollContainer ? getContainerRect(scrollContainer) : { top: 0, bottom: window.innerHeight };
-  const visibleTop = Math.max(editorRect.top, containerRect.top) - VIEWPORT_OVERSCAN_PX;
-  const visibleBottom = Math.min(editorRect.bottom, containerRect.bottom) + VIEWPORT_OVERSCAN_PX;
-  if (visibleTop >= visibleBottom) {
-    return null;
-  }
-  const minX = editorRect.left + 1;
-  const maxX = editorRect.right - 1;
-  if (minX > maxX) {
-    return null;
-  }
-  const isRTL = getComputedStyle(view.dom).direction === "rtl";
-  const targetX = isRTL ? editorRect.right - 2 : editorRect.left + 2;
-  const x = Math.min(Math.max(targetX, minX), maxX);
-  const probeTop = Math.max(visibleTop + 2, editorRect.top + 1);
-  const probeBottom = Math.min(visibleBottom - 2, editorRect.bottom - 1);
-  if (probeTop > probeBottom) {
-    return null;
-  }
-  const topPos = view.posAtCoords({ left: x, top: probeTop });
-  const bottomPos = view.posAtCoords({ left: x, top: probeBottom });
-  if (!topPos || !bottomPos) {
-    return null;
-  }
-  return { top: topPos.pos, bottom: bottomPos.pos };
-}
-var viewportPluginState = {
-  /**
-   * Initialises the viewport state with no known positions.
-   * @returns The initial viewport state.
-   */
-  init() {
-    return { topPos: null, bottomPos: null };
-  },
-  /**
-   * Updates the viewport state from incoming transactions.
-   * @param tr - The transaction being applied.
-   * @param prev - The previous viewport state.
-   * @returns The next viewport state.
-   */
-  apply(tr2, prev) {
-    const meta = tr2.getMeta(PLUGIN_KEY);
-    if (meta == null ? void 0 : meta.positions) {
-      return { topPos: meta.positions.top, bottomPos: meta.positions.bottom };
-    }
-    if (!tr2.docChanged) {
-      return prev;
-    }
-    return {
-      topPos: prev.topPos !== null ? tr2.mapping.map(prev.topPos) : null,
-      bottomPos: prev.bottomPos !== null ? tr2.mapping.map(prev.bottomPos) : null
-    };
-  }
-};
-function createViewportPluginView(view) {
-  const scrollContainer = findScrollParent(view.dom);
-  const computeAndDispatch = () => {
-    const positions = getViewportBoundaryPositions({
-      view,
-      scrollContainer
-    });
-    if (positions === null) {
-      return;
-    }
-    const prev = PLUGIN_KEY.getState(view.state);
-    if ((prev == null ? void 0 : prev.topPos) === positions.top && (prev == null ? void 0 : prev.bottomPos) === positions.bottom) {
-      return;
-    }
-    const tr2 = view.state.tr.setMeta(PLUGIN_KEY, { positions });
-    view.dispatch(tr2);
-  };
-  let frame = null;
-  let lastCompute = 0;
-  const MIN_SCROLL_INTERVAL = 150;
-  const scheduleFrame = () => {
-    if (frame !== null) return;
-    frame = requestAnimationFrame(() => {
-      frame = null;
-      const now = performance.now();
-      if (now - lastCompute >= MIN_SCROLL_INTERVAL) {
-        lastCompute = now;
-        computeAndDispatch();
-      } else {
-        scheduleFrame();
-      }
-    });
-  };
-  scrollContainer.addEventListener("scroll", scheduleFrame, { passive: true });
-  const resizeObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(scheduleFrame) : null;
-  resizeObserver == null ? void 0 : resizeObserver.observe(view.dom);
-  const intersectionObserver = typeof IntersectionObserver !== "undefined" ? new IntersectionObserver(scheduleFrame) : null;
-  intersectionObserver == null ? void 0 : intersectionObserver.observe(view.dom);
-  view.dom.addEventListener("focus", scheduleFrame);
-  computeAndDispatch();
-  return {
-    update(_view, prevState) {
-      if (view.state.doc.content.size !== prevState.doc.content.size) {
-        scheduleFrame();
-      }
-    },
-    destroy: () => {
-      if (frame !== null) {
-        cancelAnimationFrame(frame);
-      }
-      scrollContainer.removeEventListener("scroll", scheduleFrame);
-      resizeObserver == null ? void 0 : resizeObserver.disconnect();
-      intersectionObserver == null ? void 0 : intersectionObserver.disconnect();
-      view.dom.removeEventListener("focus", scheduleFrame);
-    }
-  };
-}
 function createPlaceholderPlugin({ editor, options }) {
   const dataAttribute = options.dataAttribute ? `data-${preparePlaceholderAttribute(options.dataAttribute)}` : `data-${DEFAULT_DATA_ATTRIBUTE}`;
+  const useResolvedPath = options.showOnlyCurrent && !options.includeChildren;
   return new Plugin({
     key: PLUGIN_KEY,
-    state: viewportPluginState,
-    view: createViewportPluginView,
+    ...useResolvedPath ? {} : {
+      state: createPlaceholderStateField({ editor, options, dataAttribute })
+    },
     props: {
-      decorations: ({ doc: doc3, selection }) => buildPlaceholderDecorations({ editor, options, dataAttribute, doc: doc3, selection })
+      decorations: useResolvedPath ? ({ doc: doc3, selection }) => buildPlaceholderDecorations({ editor, options, dataAttribute, doc: doc3, selection }) : (state) => {
+        var _a;
+        if (options.showOnlyWhenEditable && !editor.isEditable) {
+          return DecorationSet.empty;
+        }
+        return (_a = PLUGIN_KEY.getState(state)) != null ? _a : DecorationSet.empty;
+      }
     }
   });
 }
@@ -27189,7 +27279,7 @@ var UndoRedo = Extension.create({
   }
 });
 
-// node_modules/.pnpm/@tiptap+starter-kit@3.27.1/node_modules/@tiptap/starter-kit/dist/index.js
+// node_modules/.pnpm/@tiptap+starter-kit@3.27.3/node_modules/@tiptap/starter-kit/dist/index.js
 var StarterKit = Extension.create({
   name: "starterKit",
   addExtensions() {
@@ -27266,16 +27356,16 @@ var StarterKit = Extension.create({
 });
 var index_default3 = StarterKit;
 
-// node_modules/.pnpm/@tiptap+extension-placeholder@3.27.1_@tiptap+extensions@3.27.1_@tiptap+core@3.27.1_@tiptap+pm@3.27.1__@tiptap+pm@3.27.1_/node_modules/@tiptap/extension-placeholder/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-placeholder@3.27.3_@tiptap+extensions@3.27.3_@tiptap+core@3.27.3_@tiptap+pm@3.27.3__@tiptap+pm@3.27.3_/node_modules/@tiptap/extension-placeholder/dist/index.js
 var index_default4 = Placeholder;
 
-// node_modules/.pnpm/@tiptap+extension-task-list@3.27.1_@tiptap+extension-list@3.27.1_@tiptap+core@3.27.1_@t_4f7bde92718bc86efe94a5b45c31dca2/node_modules/@tiptap/extension-task-list/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-task-list@3.27.3_@tiptap+extension-list@3.27.3_@tiptap+core@3.27.3_@t_3930a1c8a334d948c41d80baae0bc6e5/node_modules/@tiptap/extension-task-list/dist/index.js
 var index_default5 = TaskList;
 
-// node_modules/.pnpm/@tiptap+extension-task-item@3.27.1_@tiptap+extension-list@3.27.1_@tiptap+core@3.27.1_@t_dc3cbb692c609e2ee87b89a29eb021e5/node_modules/@tiptap/extension-task-item/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-task-item@3.27.3_@tiptap+extension-list@3.27.3_@tiptap+core@3.27.3_@t_d3f0e1fe48d5ce862138bb7738519853/node_modules/@tiptap/extension-task-item/dist/index.js
 var index_default6 = TaskItem;
 
-// node_modules/.pnpm/@tiptap+extension-image@3.27.1_@tiptap+core@3.27.1_@tiptap+pm@3.27.1_/node_modules/@tiptap/extension-image/dist/index.js
+// node_modules/.pnpm/@tiptap+extension-image@3.27.3_@tiptap+core@3.27.3_@tiptap+pm@3.27.3_/node_modules/@tiptap/extension-image/dist/index.js
 var inputRegex4 = /(?:^|\s)(!\[(.+|:?)]\((\S+)(?:(?:\s+)["'](\S+)["'])?\))$/;
 var Image = Node3.create({
   name: "image",

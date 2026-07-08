@@ -24,8 +24,8 @@ describe('per-plan managed model routing', () => {
 		config.gitEncryptionKey = '12345678901234567890123456789012';
 		config.llm.googleApiKey = 'env-gemini';
 		config.llm.openaiApiKey = 'env-openai';
-		// Production-style global config points at OpenAI — managed tenants must
-		// still land on their plan's (Gemini) models.
+		// Production-style global config points at OpenAI. Managed tenants must
+		// land on their plan's model matrix, not the global model.
 		config.llm.chatProvider = 'openai';
 		config.llm.chatModel = 'gpt-5.4-mini';
 		tenant = {
@@ -71,7 +71,7 @@ describe('per-plan managed model routing', () => {
 		assert.match(requests[0].url, /key=env-gemini/);
 	});
 
-	it('routes managed Pro tenants to the Pro plan model', async () => {
+	it('routes managed Pro tenants to the Pro chat model on OpenAI', async () => {
 		tenant.plan = 'pro';
 
 		await chatCompletion({
@@ -81,13 +81,28 @@ describe('per-plan managed model routing', () => {
 			messages: [{ role: 'user', content: 'hi' }],
 		});
 
-		assert.match(requests[0].url, /models\/gemini-3-flash:/);
+		assert.match(requests[0].url, /api\.openai\.com/);
+		assert.equal(requests[0].body.model, 'gpt-5.5');
+		assert.equal(requests[0].options.headers.Authorization, 'Bearer env-openai');
 	});
 
 	it('uses the nlSearch plan slot for intent classification', async () => {
 		await nlSearchCompletion({ hostId: 'host-1', messages: [{ role: 'user', content: 'hi' }] });
 
 		assert.match(requests[0].url, /models\/gemini-2\.5-flash-lite:/);
+	});
+
+	it('uses the Pro nlSearch model for Pro intent classification', async () => {
+		tenant.plan = 'pro';
+
+		await nlSearchCompletion({ hostId: 'host-1', messages: [{ role: 'user', content: 'hi' }] });
+
+		assert.match(requests[0].url, /api\.openai\.com/);
+		assert.equal(requests[0].body.model, 'gpt-5.4-mini');
+	});
+
+	it('keeps the Pro conversation model on the high-quality chat tier', () => {
+		assert.equal(config.llm.planModels.pro.conversation, 'gpt-5.5');
 	});
 
 	it('keeps BYOK tenants on their own key and the global model config', async () => {

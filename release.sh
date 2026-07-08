@@ -6,6 +6,7 @@ develop_branch="develop"
 main_branch="main"
 dry_run=0
 assume_yes=0
+release_worktree=""
 
 usage() {
 	printf '%s\n' "Usage: ./release.sh [options]"
@@ -46,21 +47,19 @@ current_branch() {
 	git symbolic-ref --quiet --short HEAD 2>/dev/null || true
 }
 
-return_to_develop() {
+cleanup_release_worktree() {
 	if [ "$dry_run" -eq 1 ]; then
 		return 0
 	fi
 
-	local branch
-	branch="$(current_branch)"
-
-	if [ "$branch" = "$develop_branch" ]; then
+	if [ -z "$release_worktree" ]; then
 		return 0
 	fi
 
-	if git show-ref --verify --quiet "refs/heads/${develop_branch}"; then
-		log "Returning to ${develop_branch}"
-		git switch "$develop_branch" >/dev/null 2>&1 || true
+	if [ -e "$release_worktree/.git" ]; then
+		git worktree remove --force "$release_worktree" >/dev/null 2>&1 || true
+	elif [ -d "$release_worktree" ]; then
+		rmdir "$release_worktree" >/dev/null 2>&1 || true
 	fi
 }
 
@@ -112,21 +111,19 @@ remote_tag_names_for_date() {
 		grep -E "^${date_prefix}[0-9]+$" || true
 }
 
-local_tag_points_at_ref() {
+local_tag_points_at_commit() {
 	local tag="$1"
-	local ref="$2"
+	local commit="$2"
 
 	if ! git rev-parse --verify --quiet "refs/tags/${tag}" >/dev/null; then
 		return 1
 	fi
 
 	local target
-	local expected
 
 	target="$(git rev-list -n 1 "$tag")"
-	expected="$(git rev-parse "$ref")"
 
-	[ "$target" = "$expected" ]
+	[ "$target" = "$commit" ]
 }
 
 remote_tag_exists() {
@@ -157,7 +154,7 @@ EOF
 
 local_tag_is_reusable() {
 	local tag="$1"
-	local release_ref="$2"
+	local release_commit="$2"
 
 	if ! git rev-parse --verify --quiet "refs/tags/${tag}" >/dev/null; then
 		return 1
@@ -167,11 +164,48 @@ local_tag_is_reusable() {
 		return 1
 	fi
 
-	if local_tag_points_at_ref "$tag" "$release_ref"; then
+	if local_tag_points_at_commit "$tag" "$release_commit"; then
 		return 0
 	fi
 
 	fail "local tag ${tag} exists but does not point at release head"
+}
+
+create_release_worktree() {
+	if [ "$dry_run" -eq 1 ]; then
+		release_worktree="<release-worktree>"
+		run git worktree add --detach "$release_worktree" "${remote}/${main_branch}"
+		return 0
+	fi
+
+	release_worktree="$(mktemp -d "${TMPDIR:-/tmp}/managani-release.XXXXXX")"
+	git worktree add --detach "$release_worktree" "${remote}/${main_branch}" >/dev/null
+}
+
+fast_forward_local_main() {
+	local release_commit="$1"
+	local main_commit
+
+	main_commit="$(git rev-parse "$main_branch")"
+
+	if [ "$dry_run" -eq 1 ]; then
+		log "Fast-forwarding local ${main_branch}"
+		run git update-ref "refs/heads/${main_branch}" "$release_commit" "$main_commit"
+		return 0
+	fi
+
+	if ! git merge-base --is-ancestor "$main_branch" "$release_commit"; then
+		fail "local ${main_branch} cannot fast-forward to release head"
+	fi
+
+	if [ "$(current_branch)" = "$main_branch" ]; then
+		log "Fast-forwarding checked-out ${main_branch}"
+		run git merge --ff-only "$release_commit"
+		return 0
+	fi
+
+	log "Fast-forwarding local ${main_branch}"
+	run git update-ref "refs/heads/${main_branch}" "$release_commit" "$main_commit"
 }
 
 confirm_release() {
@@ -247,40 +281,51 @@ main() {
 	require_remote_branch "$develop_branch"
 	require_remote_branch "$main_branch"
 
+	trap cleanup_release_worktree EXIT
+
+	log "Fetching ${remote}"
+	run git fetch "$remote" --prune --tags
+
+	log "Pushing ${develop_branch}"
+	run git push "$remote" "$develop_branch"
+
+	log "Refreshing ${remote}"
+	run git fetch "$remote" --prune --tags
+
 	local date_prefix
 	date_prefix="$(release_date)"
 
 	local tag
 	tag="$(next_tag_for_date "$date_prefix")"
 
-	trap return_to_develop EXIT
+	confirm_release "$tag"
 
-	log "Fetching ${remote}"
-	run git fetch "$remote" --prune --tags
+	log "Creating release worktree"
+	create_release_worktree
 
-	log "Switching to ${develop_branch}"
-	run git switch "$develop_branch"
-	run git merge --ff-only "${remote}/${develop_branch}"
+	run git -C "$release_worktree" merge --no-ff --no-edit "${remote}/${develop_branch}"
 
-	log "Pushing ${develop_branch}"
-	run git push "$remote" "$develop_branch"
+	local release_commit
+	if [ "$dry_run" -eq 1 ]; then
+		release_commit="<release-head>"
+	else
+		release_commit="$(git -C "$release_worktree" rev-parse HEAD)"
+	fi
 
-	log "Switching to ${main_branch}"
-	run git switch "$main_branch"
-	run git merge --ff-only "${remote}/${main_branch}"
-	run git merge --ff-only "$develop_branch"
-
-	if local_tag_is_reusable "$tag" "$develop_branch"; then
+	if [ "$dry_run" -eq 1 ]; then
+		log "Creating tag ${tag}"
+		run git -C "$release_worktree" tag -a "$tag" -m "$tag"
+	elif local_tag_is_reusable "$tag" "$release_commit"; then
 		log "Reusing local tag ${tag}"
 	else
 		log "Creating tag ${tag}"
-		run git tag -a "$tag" -m "$tag"
+		run git -C "$release_worktree" tag -a "$tag" -m "$tag"
 	fi
 
-	confirm_release "$tag"
-
 	log "Pushing ${main_branch} and ${tag}"
-	run git push --atomic "$remote" "$main_branch" "refs/tags/${tag}"
+	run git -C "$release_worktree" push --atomic "$remote" "HEAD:refs/heads/${main_branch}" "refs/tags/${tag}"
+
+	fast_forward_local_main "$release_commit"
 
 	log "Release ${tag} complete"
 }
