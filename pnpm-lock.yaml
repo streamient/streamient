@@ -21,6 +21,8 @@ overrides:
   '@vue/server-renderer@3.5.36>@vue/compiler-ssr': 3.5.36
   '@vue/server-renderer@3.5.36>vue': 3.5.36
 
+packageExtensionsChecksum: sha256-Cpbat+j5lhKCCxAHJbIsAlpzJVUX4JmSM4/pUqI6Ty4=
+
 importers:
 
   .:
@@ -89,7 +91,7 @@ importers:
         specifier: ^3.44.0
         version: 3.44.0(chokidar@3.6.0)
       '@tiptap/core':
-        specifier: ^3.27.3
+        specifier: ^3.22.3
         version: 3.27.3(@tiptap/pm@3.27.3)
       '@tiptap/extension-blockquote':
         specifier: ^3.27.3
@@ -98,7 +100,7 @@ importers:
         specifier: ^3.27.3
         version: 3.27.3(@tiptap/extension-list@3.27.3(@tiptap/core@3.27.3(@tiptap/pm@3.27.3))(@tiptap/pm@3.27.3))
       '@tiptap/extension-code-block':
-        specifier: ^3.27.3
+        specifier: ^3.22.3
         version: 3.27.3(@tiptap/core@3.27.3(@tiptap/pm@3.27.3))(@tiptap/pm@3.27.3)
       '@tiptap/extension-heading':
         specifier: ^3.27.3
@@ -122,7 +124,7 @@ importers:
         specifier: ^3.27.3
         version: 3.27.3(@tiptap/extension-list@3.27.3(@tiptap/core@3.27.3(@tiptap/pm@3.27.3))(@tiptap/pm@3.27.3))
       '@tiptap/pm':
-        specifier: ^3.27.3
+        specifier: ^3.22.3
         version: 3.27.3
       '@tiptap/starter-kit':
         specifier: ^3.27.3
@@ -6940,6 +6942,7 @@ snapshots:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/core': 2.9.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/instrumentation': 0.218.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-base': 2.7.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/semantic-conventions': 1.42.0
       '@sentry/core': 8.55.2
       '@sentry/types': 8.55.2
