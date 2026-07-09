@@ -75,6 +75,9 @@ importers:
       '@opentelemetry/sdk-node':
         specifier: 0.220.0
         version: 0.220.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-base':
+        specifier: 2.7.1
+        version: 2.7.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/semantic-conventions':
         specifier: 1.42.0
         version: 1.42.0
@@ -6942,7 +6945,6 @@ snapshots:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/core': 2.9.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/instrumentation': 0.218.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/sdk-trace-base': 2.7.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/semantic-conventions': 1.42.0
       '@sentry/core': 8.55.2
       '@sentry/types': 8.55.2
@@ -6958,6 +6960,7 @@ snapshots:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/core': 2.9.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/instrumentation': 0.218.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-base': 2.7.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/semantic-conventions': 1.42.0
       json-stringify-safe: 5.0.1
       shimmer: 1.2.1
