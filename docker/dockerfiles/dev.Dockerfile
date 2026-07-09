@@ -11,7 +11,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     curl iputils-ping dnsutils git tini vim procps \
     ca-certificates && \
-    npm i -g pnpm@11.10.0 && \
+    npm i -g pnpm@11 && \
     npm remove -g yarn && \
     rm -rf /var/lib/apt/lists/*
 
