@@ -5,7 +5,7 @@
 		"display_name": "Streamient",
 		"subtitle": "Shared AI memory",
 		"description": "Streamient gives ChatGPT access to a user's authenticated private memory workspace. Users can search and retrieve notes, memories, and project metadata, then create new private notes and memories when requested.",
-		"category": "PRODUCTIVITY"
+		"category": "productivity"
 	},
 	"tools": {
 		"create_note": {
