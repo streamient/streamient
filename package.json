@@ -141,5 +141,5 @@
     "nodemon": "^3.1.14",
     "vue-demi": "^0.14.10"
   },
-  "packageManager": "pnpm@11.11.0"
+  "packageManager": "pnpm@11.12.0"
 }
