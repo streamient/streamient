@@ -197,15 +197,19 @@ export function formatSignupNotificationDate(date = new Date()) {
 	return `${months[date.getMonth()]} ${day}${suffix} ${date.getFullYear()}`;
 }
 
-export async function sendTrialSignupNotificationEmail(email, signupDate = new Date()) {
-	return sendMail({
+export function buildSignupNotificationEmail({ email, name = '', hostId = '', signupDate = new Date() }) {
+	const formattedDate = formatSignupNotificationDate(signupDate);
+	return {
 		to: 'hi@streamient.com',
 		from: 'server@streamient.com',
 		replyTo: email,
-		subject: `Streamient signup: ${email} - Date ${formatSignupNotificationDate(signupDate)}`,
-		text: '',
-		html: '',
-	});
+		subject: `Streamient signup: ${email} - Date ${formattedDate}`,
+		text: [`New Streamient signup`, `Name: ${name || 'Not provided'}`, `Email: ${email}`, `Host ID: ${hostId || 'Not available'}`, `Date: ${formattedDate}`].join('\n'),
+	};
+}
+
+export async function sendSignupNotificationEmail(details) {
+	return sendMail(buildSignupNotificationEmail(details));
 }
 
 export async function sendExportReadyEmail(email, name, token) {
