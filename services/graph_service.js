@@ -115,15 +115,22 @@ export async function getConnectionsForItem(hostId, itemId) {
 	return { links: manualLinks, tag_connections: tagConnections };
 }
 
-export async function removeLinksForItem(hostId, itemId) {
+export async function removeLinksForItems(hostId, itemIds) {
+	const ids = [...new Set((itemIds || []).map((itemId) => itemId?.toString ? itemId.toString() : String(itemId || '')).filter(Boolean))];
+	if (!ids.length) return { acknowledged: true, deletedCount: 0 };
+
 	const result = await GraphLink.deleteMany({
 		host_id: hostId,
-		$or: [{ source_id: itemId }, { target_id: itemId }],
+		$or: [{ source_id: { $in: ids } }, { target_id: { $in: ids } }],
 	});
 	if (result.deletedCount > 0) {
 		invalidateGraphCache(hostId).catch(() => {});
 	}
 	return result;
+}
+
+export async function removeLinksForItem(hostId, itemId) {
+	return removeLinksForItems(hostId, [itemId]);
 }
 
 // ---- Graph Data Assembly ----

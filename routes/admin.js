@@ -110,7 +110,7 @@ export async function initializeAdminProvisionedAccount(user, tenant, options = 
 		await ensureFreeSubscriptionForAccountHolder(user, tenant);
 	});
 	const initializeTypesense = options.initializeTypesense || (() => ensureCollections(tenant.host_id));
-	const sendOwnerMagicLink = options.sendOwnerMagicLink || (() => sendMagicLink(user.email, config.appUrl));
+	const sendOwnerMagicLink = options.sendOwnerMagicLink || (() => sendMagicLink(user.email, config.appUrl, { userId: user._id }));
 	const logger = options.logger || log;
 	const [billingResult, typesenseResult, magicLinkResult] = await Promise.allSettled([
 		Promise.resolve().then(initializeBilling),
@@ -126,11 +126,13 @@ export async function initializeAdminProvisionedAccount(user, tenant, options = 
 		warnings.push('Typesense setup failed');
 		logger.warn({ err: typesenseResult.reason, host_id: tenant.host_id }, 'Admin account Typesense setup failed');
 	}
-	if (magicLinkResult.status === 'rejected') {
+	const magicLinkSent = magicLinkResult.status === 'fulfilled' && magicLinkResult.value === true;
+	if (!magicLinkSent) {
 		warnings.push('Magic-link email failed; the owner can request another from login');
-		logger.warn({ err: magicLinkResult.reason, host_id: tenant.host_id, email: user.email }, 'Admin account magic-link email failed');
+		const err = magicLinkResult.status === 'rejected' ? magicLinkResult.reason : new Error('Magic-link email was not sent');
+		logger.warn({ err, host_id: tenant.host_id, email: user.email }, 'Admin account magic-link email failed');
 	}
-	return { magic_link_sent: magicLinkResult.status === 'fulfilled', warnings };
+	return { magic_link_sent: magicLinkSent, warnings };
 }
 
 router.post('/api/accounts', async (req, res) => {

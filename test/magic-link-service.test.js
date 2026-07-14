@@ -3,9 +3,66 @@ import assert from 'node:assert/strict';
 
 import { MagicLink } from '../model/magic_link.js';
 import { User } from '../model/user.js';
-import { isMagicLinkValid, verifyMagicLink } from '../services/magic_link_service.js';
+import { isMagicLinkValid, sendMagicLink, verifyMagicLink } from '../services/magic_link_service.js';
 
 describe('magic link flow hardening', () => {
+	it('uses a supplied user ID without a post-commit user lookup', async () => {
+		let generatedFor = null;
+		let sent = null;
+		const result = await sendMagicLink('owner@example.com', 'https://app.example.com', {
+			userId: 'new-user-id',
+			generateLink: async (userId) => {
+				generatedFor = userId;
+				return { token: 'new-token' };
+			},
+			sendEmail: async (email, token, baseUrl) => {
+				sent = { email, token, baseUrl };
+				return { messageId: 'message-1' };
+			},
+		});
+
+		assert.equal(result, true);
+		assert.equal(generatedFor, 'new-user-id');
+		assert.deepEqual(sent, {
+			email: 'owner@example.com',
+			token: 'new-token',
+			baseUrl: 'https://app.example.com',
+		});
+	});
+
+	it('reads from primary and returns false when no user exists', async () => {
+		const originalFindOne = User.findOne;
+		let readPreference = null;
+
+		try {
+			User.findOne = () => ({
+				select() {
+					return this;
+				},
+				read(preference) {
+					readPreference = preference;
+					return Promise.resolve(null);
+				},
+			});
+
+			const result = await sendMagicLink('missing@example.com');
+			assert.equal(result, false);
+			assert.equal(readPreference, 'primary');
+		} finally {
+			User.findOne = originalFindOne;
+		}
+	});
+
+	it('returns false when no SMTP delivery occurs', async () => {
+		const result = await sendMagicLink('owner@example.com', null, {
+			userId: 'user-1',
+			generateLink: async () => ({ token: 'token-1' }),
+			sendEmail: async () => undefined,
+		});
+
+		assert.equal(result, false);
+	});
+
 	it('checks link validity without consuming token', async () => {
 		const originalFindOne = MagicLink.findOne;
 		const originalVerify = MagicLink.verify;

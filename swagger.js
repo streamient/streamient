@@ -537,7 +537,7 @@ const swaggerSpec = {
 									properties: {
 										ok: { type: 'boolean' },
 										account: { $ref: '#/components/schemas/AdminAccount' },
-										magic_link_sent: { type: 'boolean' },
+										magic_link_sent: { type: 'boolean', description: 'True only when the magic-link email was submitted to configured SMTP.' },
 										warnings: { type: 'array', items: { type: 'string' } },
 									},
 								},

@@ -1,6 +1,6 @@
 import { Cron } from 'croner';
 import { reindexDue } from './crawler.js';
-import { removeDocument, runStreamientIndexer } from './typesense.js';
+import { removeDocumentsBySourceIds, runStreamientIndexer } from './typesense.js';
 import { User } from '../model/user.js';
 import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
@@ -9,7 +9,7 @@ import { Email } from '../model/email.js';
 import { sendTrialEnding3DayEmail, sendTrialEnding24HourEmail, sendTrialExpiredEmail } from '../services/email_service.js';
 import { cleanupExpiredExports } from '../services/export_service.js';
 import { runScheduledSync } from '../services/git_sync_service.js';
-import { removeLinksForItem } from '../services/graph_service.js';
+import { removeLinksForItems } from '../services/graph_service.js';
 import { createLogger } from './logger.js';
 
 const log = createLogger('scheduler');
@@ -106,25 +106,34 @@ function buildExpiredEmailRetentionQuery(cutoff) {
 	};
 }
 
-async function cleanupDeletedEmailReferences(email, removeSearchDocument, removeGraphLinks) {
-	const emailId = email._id?.toString ? email._id.toString() : String(email._id || '');
-	if (!emailId || !email.host_id) return;
+async function cleanupDeletedEmailReferences(emails, removeSearchDocuments, removeGraphLinks) {
+	const emailIdsByHost = new Map();
 
-	await Promise.all([
-		Promise.resolve(removeSearchDocument(email.host_id, 'emails', emailId)).catch((err) => {
-			log.error({ err }, 'Typesense remove error');
-		}),
-		Promise.resolve(removeGraphLinks(email.host_id, emailId)).catch((err) => {
-			log.error({ err }, 'Graph link cleanup error');
-		}),
-	]);
+	for (const email of emails) {
+		const emailId = email._id?.toString ? email._id.toString() : String(email._id || '');
+		const hostId = email.host_id?.toString ? email.host_id.toString() : String(email.host_id || '');
+		if (!emailId || !hostId) continue;
+		if (!emailIdsByHost.has(hostId)) emailIdsByHost.set(hostId, []);
+		emailIdsByHost.get(hostId).push(emailId);
+	}
+
+	for (const [hostId, emailIds] of emailIdsByHost) {
+		await Promise.all([
+			Promise.resolve(removeSearchDocuments(hostId, 'emails', emailIds)).catch((err) => {
+				log.error({ err }, 'Typesense bulk remove error');
+			}),
+			Promise.resolve(removeGraphLinks(hostId, emailIds)).catch((err) => {
+				log.error({ err }, 'Graph link bulk cleanup error');
+			}),
+		]);
+	}
 }
 
 export async function runEmailRetentionCleanup({
 	now = new Date(),
 	emailModel = Email,
-	removeSearchDocument = removeDocument,
-	removeGraphLinks = removeLinksForItem,
+	removeSearchDocuments = removeDocumentsBySourceIds,
+	removeGraphLinks = removeLinksForItems,
 	batchSize = EMAIL_RETENTION_BATCH_SIZE,
 } = {}) {
 	const cutoff = new Date(now.getTime() - EMAIL_RETENTION_DAYS * DAY_MS);
@@ -145,7 +154,7 @@ export async function runEmailRetentionCleanup({
 		const deletedInBatch = result?.deletedCount ?? emails.length;
 		deleted += deletedInBatch;
 
-		await Promise.all(emails.map((email) => cleanupDeletedEmailReferences(email, removeSearchDocument, removeGraphLinks)));
+		await cleanupDeletedEmailReferences(emails, removeSearchDocuments, removeGraphLinks);
 
 		if (deletedInBatch === 0 || emails.length < batchSize) break;
 	}
@@ -189,12 +198,17 @@ export function startScheduler() {
 	});
 
 	// Streamient indexer: find documents with is_indexed:false and batch-import to Typesense
-	new Cron('*/20 * * * * *', async () => {
+	let indexRunning = false;
+	new Cron('8,28,48 * * * * *', async () => {
+		if (indexRunning) return;
+		indexRunning = true;
 		try {
 			const indexed = await runStreamientIndexer({ Note, Memory, Url, Email });
 			if (indexed > 0) log.info({ indexed }, 'Streamient indexer batch complete');
 		} catch (err) {
 			log.error({ err }, 'Streamient indexer batch error');
+		} finally {
+			indexRunning = false;
 		}
 	});
 
