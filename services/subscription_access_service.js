@@ -1,6 +1,6 @@
 import { User } from '../model/user.js';
 import { Tenant } from '../modules/tenancy.js';
-import config from '../config.js';
+import { resolveStoredTenantLimits } from '../modules/tenant_limits.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const BILLING_USER_FIELDS = '+stripe_customer_id subscription_status trial_source trial_ends_at host_id tenant email name';
@@ -52,14 +52,14 @@ export function hasProFeatureAccess(user, plan, isHosted, now = new Date()) {
 
 const UNLIMITED = { projects: 0, users: 0 };
 
-/**
- * Effective hard resource limits for a tenant. Pro / active trial / self-hosted
- * are unlimited; Free is capped per config.planLimits.free. A limit of 0 means
- * unlimited.
- */
-export function effectiveResourceLimits(user, plan, isHosted, now = new Date()) {
-	if (hasProFeatureAccess(user, plan, isHosted, now)) return UNLIMITED;
-	return config.planLimits?.free || UNLIMITED;
+/** Stored tenant limits are authoritative for hosted accounts. Self-hosted is unlimited. */
+export function effectiveResourceLimits(tenant, isHosted) {
+	if (!isHosted) return UNLIMITED;
+	const stored = resolveStoredTenantLimits(tenant || {});
+	return {
+		projects: stored.limit_projects,
+		users: stored.limit_users,
+	};
 }
 
 /** True when `count` is at/over a non-zero limit (0 = unlimited). */

@@ -1,6 +1,7 @@
 import mongoose from '../model/mongoose.js';
 import { User } from '../model/user.js';
 import { TenantMember } from '../model/tenant_member.js';
+import { TENANT_PLANS, normalizeTenantLimits, resolvePlanTenantLimits } from './tenant_limits.js';
 
 const whiteLabelAssetSchema = new mongoose.Schema(
 	{
@@ -21,7 +22,31 @@ const tenantSchema = new mongoose.Schema(
 		name: { type: String, required: true },
 		owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 		is_active: { type: Boolean, default: true },
-		plan: { type: String, enum: ['free', 'pro'], default: 'free' },
+		plan: { type: String, enum: TENANT_PLANS, default: 'free' },
+		limit_projects: {
+			type: Number,
+			default: function () {
+				return resolvePlanTenantLimits(this.plan || 'free').limit_projects;
+			},
+			min: 0,
+			validate: Number.isSafeInteger,
+		},
+		limit_users: {
+			type: Number,
+			default: function () {
+				return resolvePlanTenantLimits(this.plan || 'free').limit_users;
+			},
+			min: 0,
+			validate: Number.isSafeInteger,
+		},
+		limit_ai_workflows_per_day: {
+			type: Number,
+			default: function () {
+				return resolvePlanTenantLimits(this.plan || 'free').limit_ai_workflows_per_day;
+			},
+			min: 0,
+			validate: Number.isSafeInteger,
+		},
 		settings: {
 			timezone: { type: String, default: 'UTC' },
 			byo_ai: {
@@ -80,6 +105,25 @@ export async function backfillStarterPlan() {
 		{ timestamps: false },
 	);
 	return { migrated: result?.modifiedCount || 0 };
+}
+
+/** Populate only missing legacy fields. Existing values, including 0, remain unchanged. */
+export async function backfillTenantLimits() {
+	let migrated = 0;
+	for (const plan of TENANT_PLANS) {
+		const planFilter = plan === 'free'
+			? { $or: [{ plan: 'free' }, { plan: { $exists: false } }] }
+			: { plan };
+		for (const [field, value] of Object.entries(resolvePlanTenantLimits(plan))) {
+			const result = await Tenant.updateMany(
+				{ ...planFilter, [field]: { $exists: false } },
+				{ $set: { [field]: value } },
+				{ timestamps: false },
+			);
+			migrated += result?.modifiedCount || 0;
+		}
+	}
+	return { migrated };
 }
 
 function mapAccessibleTenant(user, membership) {
@@ -206,13 +250,19 @@ export function resolveTenant(req, res, next) {
 	next();
 }
 
-export async function createTenant(userId, name) {
+export async function createTenant(userId, name, data = {}, options = {}) {
+	const plan = TENANT_PLANS.includes(data.plan) ? data.plan : 'free';
+	const limits = normalizeTenantLimits(data, resolvePlanTenantLimits(plan));
 	const host_id = new mongoose.Types.ObjectId().toString();
-	const tenant = await Tenant.create({
+	const payload = {
 		host_id,
 		name,
 		owner: userId,
-	});
+		plan,
+		...limits,
+	};
+	if (!options.session) return Tenant.create(payload);
+	const [tenant] = await Tenant.create([payload], { session: options.session });
 	return tenant;
 }
 

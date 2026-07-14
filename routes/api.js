@@ -116,17 +116,17 @@ async function requireByoAiAccess(req, res, next) {
 	return res.status(403).json({ error: 'BYO AI keys are configured through environment variables in self-hosted installs' });
 }
 
-// ---- Plan resource limits (Free: 1 project / 5 users; Pro & trial: unlimited) ----
+// ---- Stored tenant resource limits (hosted only; 0 = unlimited) ----
 
 async function requireProjectQuota(req, res, next) {
-	const tenant = await Tenant.findOne({ host_id: req.host_id }).select('plan').lean();
-	const limits = effectiveResourceLimits(req.billingUser, tenant?.plan || 'free', req.isHosted);
+	const tenant = await Tenant.findOne({ host_id: req.host_id }).select('plan limit_projects limit_users').lean();
+	const limits = effectiveResourceLimits(tenant, req.isHosted);
 	if (limits.projects) {
 		const count = await projectService.countActiveProjects(req.host_id);
 		if (isAtLimit(limits.projects, count)) {
 			return res.status(403).json({
-				error: `Free plan is limited to ${limits.projects} project${limits.projects === 1 ? '' : 's'}. Upgrade to Pro for unlimited projects.`,
-				code: 'PLAN_LIMIT',
+				error: `Project limit reached. This account allows ${limits.projects} project${limits.projects === 1 ? '' : 's'}.`,
+				code: 'ACCOUNT_LIMIT',
 				limit: 'projects',
 			});
 		}
@@ -135,14 +135,14 @@ async function requireProjectQuota(req, res, next) {
 }
 
 async function requireUserQuota(req, res, next) {
-	const tenant = await Tenant.findOne({ host_id: req.host_id }).select('plan').lean();
-	const limits = effectiveResourceLimits(req.billingUser, tenant?.plan || 'free', req.isHosted);
+	const tenant = await Tenant.findOne({ host_id: req.host_id }).select('plan limit_projects limit_users').lean();
+	const limits = effectiveResourceLimits(tenant, req.isHosted);
 	if (limits.users) {
 		const count = await teamService.countMembers(req.host_id);
 		if (isAtLimit(limits.users, count)) {
 			return res.status(403).json({
-				error: `Free plan is limited to ${limits.users} users. Upgrade to Pro for unlimited users.`,
-				code: 'PLAN_LIMIT',
+				error: `User limit reached. This account allows ${limits.users} user${limits.users === 1 ? '' : 's'}.`,
+				code: 'ACCOUNT_LIMIT',
 				limit: 'users',
 			});
 		}
@@ -866,8 +866,8 @@ router.get('/settings/byo-ai', requireRestrictedSettingsAccess, requireByoAiAcce
 	try {
 		const tenant = await Tenant.findOne({ host_id: req.host_id }).select('plan').lean();
 		const settings = await byoAiService.getByoAiSettings(req.host_id);
-		// managed_ai = whether our turnkey keys back this tenant when no personal
-		// key is set (Pro / active trial / self-hosted). Free has no fallback.
+		// managed_ai controls turnkey provider access only. Stored tenant limits
+		// remain authoritative regardless of provider or plan.
 		settings.managed_ai = hasProFeatureAccess(req.billingUser, tenant?.plan || 'free', req.isHosted);
 		res.json({ settings });
 	} catch (err) {
@@ -1035,9 +1035,8 @@ router.post('/search/knowledge', async (req, res) => {
 
 // ---- AI Chat ----
 
-// Daily managed-AI cap for hosted Free workspaces on the platform key (BYOK,
-// Pro, trials, and self-hosted skip). Per-route so it runs after auth/tenant
-// middleware; MCP's chat tool proxies to these endpoints, so it's covered too.
+// Stored daily tenant cap. It applies to every hosted plan/provider; self-hosted
+// and zero-limit tenants are unlimited. MCP chat proxies here and is covered.
 const aiDailyLimiter = createAiDailyLimiter();
 
 router.post('/chat', aiDailyLimiter, async (req, res) => {

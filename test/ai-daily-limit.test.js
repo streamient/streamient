@@ -1,4 +1,4 @@
-import { describe, it, beforeEach, afterEach } from 'node:test';
+import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 
@@ -9,11 +9,11 @@ import { createAiDailyLimiter } from '../middleware/rate_limit.js';
 function createServer(decorate) {
 	const app = express();
 	app.use(express.json());
-	app.use((req, res, next) => {
+	app.use((req, _res, next) => {
 		decorate(req);
 		next();
 	});
-	app.post('/chat', createAiDailyLimiter(), (req, res) => res.json({ ok: true }));
+	app.post('/chat', createAiDailyLimiter(), (_req, res) => res.json({ ok: true }));
 	return app.listen(0);
 }
 
@@ -30,24 +30,22 @@ function closeServer(server) {
 	return new Promise((resolve) => server.close(resolve));
 }
 
-describe('daily AI limit', () => {
+describe('stored daily AI limit', () => {
 	const originalTenantFindOne = Tenant.findOne;
-	const originalAiDaily = config.plans.free.aiDaily;
 	const originalSocketRedis = config.socketRedis;
 	let tenant;
 
-	const hostedFree = (req) => {
+	const hostedAccount = (req) => {
 		req.isHosted = true;
 		req.host_id = 'host-1';
-		req.billingUser = null;
 	};
 
 	beforeEach(() => {
-		config.plans.free.aiDaily = 3;
-		config.socketRedis = false; // in-memory rate-limit store
+		config.socketRedis = false;
 		tenant = {
 			host_id: 'host-1',
 			plan: 'free',
+			limit_ai_workflows_per_day: 3,
 			settings: { byo_ai: { global: { openai_api_key: '', gemini_api_key: '' } } },
 		};
 		Tenant.findOne = () => ({ select: () => ({ lean: async () => tenant }) });
@@ -55,91 +53,64 @@ describe('daily AI limit', () => {
 
 	afterEach(() => {
 		Tenant.findOne = originalTenantFindOne;
-		config.plans.free.aiDaily = originalAiDaily;
 		config.socketRedis = originalSocketRedis;
 	});
 
-	it('returns 429 AI_DAILY_LIMIT once a managed Free workspace hits the cap', async () => {
-		const server = createServer(hostedFree);
+	async function assertCapped(decorate = hostedAccount) {
+		const server = createServer(decorate);
 		try {
 			for (let i = 0; i < 3; i++) {
 				assert.equal((await post(server)).status, 200);
 			}
-			const res = await post(server);
-			assert.equal(res.status, 429);
-			const json = await res.json();
+			const response = await post(server);
+			const json = await response.json();
+			assert.equal(response.status, 429);
 			assert.equal(json.code, 'AI_DAILY_LIMIT');
 			assert.equal(json.limit, 3);
-			assert.equal(json.upgrade_url, '/settings/subscription');
-			assert.match(json.error, /Daily AI limit/);
+			assert.match(json.error, /account allows 3 AI workflows/);
 		} finally {
 			await closeServer(server);
 		}
+	}
+
+	it('enforces the stored limit for hosted Free accounts', async () => {
+		await assertCapped();
 	});
 
-	it('skips Free tenants with their own BYO key', async () => {
+	it('still enforces it with BYO keys, Pro, or an active trial', async () => {
 		tenant.settings.byo_ai.global.gemini_api_key = 'encrypted-value';
-		const server = createServer(hostedFree);
-		try {
-			for (let i = 0; i < 5; i++) {
-				assert.equal((await post(server)).status, 200);
-			}
-		} finally {
-			await closeServer(server);
-		}
-	});
+		await assertCapped();
 
-	it('skips Pro tenants', async () => {
 		tenant.plan = 'pro';
-		const server = createServer(hostedFree);
-		try {
-			for (let i = 0; i < 5; i++) {
-				assert.equal((await post(server)).status, 200);
-			}
-		} finally {
-			await closeServer(server);
-		}
-	});
+		await assertCapped();
 
-	it('skips active no-card trials', async () => {
-		const server = createServer((req) => {
-			hostedFree(req);
+		await assertCapped((req) => {
+			hostedAccount(req);
 			req.billingUser = {
 				subscription_status: 'trialing',
 				trial_source: 'no_card',
-				trial_ends_at: new Date(Date.now() + 24 * 60 * 60 * 1000),
+				trial_ends_at: new Date(Date.now() + 86_400_000),
 			};
 		});
-		try {
-			for (let i = 0; i < 5; i++) {
-				assert.equal((await post(server)).status, 200);
-			}
-		} finally {
-			await closeServer(server);
-		}
 	});
 
-	it('skips self-hosted requests', async () => {
+	it('is unlimited for self-hosted requests', async () => {
 		const server = createServer((req) => {
 			req.isHosted = false;
 			req.host_id = 'host-1';
 		});
 		try {
-			for (let i = 0; i < 5; i++) {
-				assert.equal((await post(server)).status, 200);
-			}
+			for (let i = 0; i < 5; i++) assert.equal((await post(server)).status, 200);
 		} finally {
 			await closeServer(server);
 		}
 	});
 
-	it('is a no-op when the cap is disabled (0)', async () => {
-		config.plans.free.aiDaily = 0;
-		const server = createServer(hostedFree);
+	it('treats a stored zero as unlimited', async () => {
+		tenant.limit_ai_workflows_per_day = 0;
+		const server = createServer(hostedAccount);
 		try {
-			for (let i = 0; i < 5; i++) {
-				assert.equal((await post(server)).status, 200);
-			}
+			for (let i = 0; i < 5; i++) assert.equal((await post(server)).status, 200);
 		} finally {
 			await closeServer(server);
 		}

@@ -250,17 +250,16 @@ const config = {
 		},
 	},
 
-	// Daily managed-AI request cap per workspace. 0 = unlimited. Applies only
-	// to hosted Free tenants on the platform key — BYOK, Pro, active trials,
-	// and self-hosted installs are uncapped. See middleware/rate_limit.js.
+	// Defaults for stored tenant limits. Runtime enforcement reads the tenant;
+	// changing plans never rewrites existing limits. 0 = unlimited.
 	plans: {
-		free: { aiDaily: parseLimitEnv(process.env.FREE_AI_DAILY_LIMIT, 50) },
+		free: { aiDaily: parseLimitEnv(process.env.FREE_AI_DAILY_LIMIT, 25) },
 		pro: { aiDaily: 0 },
 	},
 
-	// Hard resource limits per plan. 0 = unlimited.
+	// Defaults for new tenants and missing-field backfills. 0 = unlimited.
 	planLimits: {
-		free: { projects: 1, users: 0 },
+		free: { projects: 1, users: 5 },
 		pro: { projects: 0, users: 0 },
 	},
 

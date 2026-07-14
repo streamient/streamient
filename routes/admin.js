@@ -1,17 +1,17 @@
 import { Router } from 'express';
-import { hydratedQuery } from '../model/mongoose.js';
-import { User } from '../model/user.js';
-import { Tenant } from '../modules/tenancy.js';
-import { Note } from '../model/note.js';
-import { Memory } from '../model/memory.js';
-import { Url } from '../model/url.js';
-import { Project } from '../model/project.js';
+import config from '../config.js';
+import { resolvePlanTenantLimits } from '../modules/tenant_limits.js';
+import { ensureCollections } from '../modules/typesense.js';
 import { isSysadminCredentials, requireAdmin } from '../middleware/sysadmin.js';
 import emailTemplates from '../config/email_templates.js';
 import { getByCategory, setSetting, deleteSetting } from '../services/system_settings_service.js';
 import { sendTestEmail } from '../services/email_service.js';
 import * as auditService from '../services/audit_service.js';
-import { deleteAccountDataForUser } from '../services/account_cleanup_service.js';
+import { deleteTenantData } from '../services/account_cleanup_service.js';
+import { ensureFreeSubscriptionForAccountHolder, ensureStripeCustomerForAccountHolder } from '../services/billing_service.js';
+import { sendMagicLink } from '../services/magic_link_service.js';
+import { AccountProvisioningError, provisionAccount } from '../services/account_provisioning_service.js';
+import { AdminAccountError, getAdminAccount, listAdminAccounts, updateAdminAccount } from '../services/admin_account_service.js';
 import { createLogger } from '../modules/logger.js';
 
 const log = createLogger('admin');
@@ -48,126 +48,141 @@ router.post('/logout', (req, res) => {
 
 router.use(requireAdmin);
 
-router.get('/', (req, res) => {
-    res.render('admin/accounts', { title: 'Accounts', activeNav: 'accounts' });
+router.get('/', async (req, res) => {
+	try {
+		const result = await listAdminAccounts({ status: req.query.status, page: req.query.page });
+		res.render('admin/accounts', { title: 'Accounts', activeNav: 'accounts', ...result });
+	} catch (err) {
+		log.error({ err }, 'Admin accounts page error');
+		res.status(500).render('admin/accounts', {
+			title: 'Accounts',
+			activeNav: 'accounts',
+			accounts: [],
+			total: 0,
+			page: 1,
+			pages: 0,
+			status: 'active',
+			error: 'Failed to load accounts',
+		});
+	}
+});
+
+router.get('/accounts/new', (req, res) => {
+	res.render('admin/account_new', {
+		title: 'New Account',
+		activeNav: 'accounts',
+		plan_limits: {
+			free: resolvePlanTenantLimits('free'),
+			pro: resolvePlanTenantLimits('pro'),
+		},
+	});
 });
 
 router.get('/accounts/:id/edit', async (req, res) => {
-    try {
-        const user = await User.findById(req.params.id).populate('tenant');
-        if (!user) return res.redirect('/admin');
-        res.render('admin/account_edit', {
-            title: 'Edit Account',
-            activeNav: 'accounts',
-            account: user,
-        });
-    } catch (err) {
-        log.error({ err, account_id: req.params.id }, 'Admin account edit page error');
-        res.redirect('/admin');
-    }
+	try {
+		const account = await getAdminAccount(req.params.id);
+		if (!account) return res.redirect('/admin');
+		res.render('admin/account_edit', {
+			title: 'Edit Account',
+			activeNav: 'accounts',
+			account,
+		});
+	} catch (err) {
+		log.error({ err, account_id: req.params.id }, 'Admin account edit page error');
+		res.redirect('/admin');
+	}
 });
 
 // ---- Admin API ----
 
 router.get('/api/accounts', async (req, res) => {
-    try {
-        const status = req.query.status || 'active';
-        const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-        const limit = 50;
+	try {
+		res.json(await listAdminAccounts({ status: req.query.status, page: req.query.page }));
+	} catch (err) {
+		log.error({ err }, 'Admin list accounts error');
+		res.status(500).json({ error: 'Failed to list accounts' });
+	}
+});
 
-        const filter = status === 'inactive' ? { is_active: false } : { is_active: true };
+export async function initializeAdminProvisionedAccount(user, tenant, options = {}) {
+	const initializeBilling = options.initializeBilling || (async () => {
+		await ensureStripeCustomerForAccountHolder(user, tenant);
+		await ensureFreeSubscriptionForAccountHolder(user, tenant);
+	});
+	const initializeTypesense = options.initializeTypesense || (() => ensureCollections(tenant.host_id));
+	const sendOwnerMagicLink = options.sendOwnerMagicLink || (() => sendMagicLink(user.email, config.appUrl));
+	const logger = options.logger || log;
+	const [billingResult, typesenseResult, magicLinkResult] = await Promise.allSettled([
+		Promise.resolve().then(initializeBilling),
+		Promise.resolve().then(initializeTypesense),
+		Promise.resolve().then(sendOwnerMagicLink),
+	]);
+	const warnings = [];
+	if (billingResult.status === 'rejected') {
+		warnings.push('Stripe setup failed');
+		logger.warn({ err: billingResult.reason, host_id: tenant.host_id }, 'Admin account Stripe setup failed');
+	}
+	if (typesenseResult.status === 'rejected') {
+		warnings.push('Typesense setup failed');
+		logger.warn({ err: typesenseResult.reason, host_id: tenant.host_id }, 'Admin account Typesense setup failed');
+	}
+	if (magicLinkResult.status === 'rejected') {
+		warnings.push('Magic-link email failed; the owner can request another from login');
+		logger.warn({ err: magicLinkResult.reason, host_id: tenant.host_id, email: user.email }, 'Admin account magic-link email failed');
+	}
+	return { magic_link_sent: magicLinkResult.status === 'fulfilled', warnings };
+}
 
-        const [users, total] = await Promise.all([
-            User.find(filter)
-                .select('name email is_active host_id createdAt last_login')
-                .sort({ createdAt: -1 })
-                .skip((page - 1) * limit)
-                .limit(limit)
-                .lean(),
-            User.countDocuments(filter),
-        ]);
-
-        // Gather counts for each user in parallel
-        const enriched = await Promise.all(
-            users.map(async (u) => {
-                if (!u.host_id) {
-                    return { ...u, projectCount: 0, itemCount: 0 };
-                }
-                const [projectCount, noteCount, memoryCount, urlCount] = await Promise.all([
-                    Project.countDocuments({ host_id: u.host_id }),
-                    Note.countDocuments({ host_id: u.host_id, in_trash: { $ne: true } }),
-                    Memory.countDocuments({ host_id: u.host_id, in_trash: { $ne: true } }),
-                    Url.countDocuments({ host_id: u.host_id, in_trash: { $ne: true } }),
-                ]);
-                return {
-                    ...u,
-                    projectCount,
-                    itemCount: noteCount + memoryCount + urlCount,
-                };
-            }),
-        );
-
-        res.json({ accounts: enriched, total, page, pages: Math.ceil(total / limit) });
-    } catch (err) {
-        log.error({ err }, 'Admin list accounts error');
-        res.status(500).json({ error: 'Failed to list accounts' });
-    }
+router.post('/api/accounts', async (req, res) => {
+	try {
+		const { user, tenant } = await provisionAccount(req.body);
+		const setup = await initializeAdminProvisionedAccount(user, tenant);
+		const account = await getAdminAccount(tenant._id.toString());
+		res.status(201).json({ ok: true, account, ...setup });
+	} catch (err) {
+		if (err instanceof AccountProvisioningError) {
+			return res.status(err.status).json({ error: err.message, code: err.code });
+		}
+		log.error({ err, owner_email: req.body?.owner_email }, 'Admin create account error');
+		res.status(500).json({ error: 'Failed to create account' });
+	}
 });
 
 router.get('/api/accounts/:id', async (req, res) => {
-    try {
-        const user = await User.findById(req.params.id).lean();
-        if (!user) return res.status(404).json({ error: 'Not found' });
-        res.json(user);
-    } catch (err) {
-        log.error({ err, account_id: req.params.id }, 'Admin get account error');
-        res.status(500).json({ error: 'Failed to get account' });
-    }
+	try {
+		const account = await getAdminAccount(req.params.id);
+		if (!account) return res.status(404).json({ error: 'Not found' });
+		res.json({ account });
+	} catch (err) {
+		log.error({ err, account_id: req.params.id }, 'Admin get account error');
+		res.status(500).json({ error: 'Failed to get account' });
+	}
 });
 
 router.put('/api/accounts/:id', async (req, res) => {
-    try {
-        const { name, email, is_active, plan } = req.body;
-
-        if (plan !== undefined && !['free', 'pro'].includes(plan)) {
-            return res.status(400).json({ error: 'Invalid plan' });
-        }
-
-        const update = {};
-        if (name !== undefined) update.name = name.trim();
-        if (email !== undefined) update.email = email.trim().toLowerCase();
-        if (is_active !== undefined) update.is_active = Boolean(is_active);
-
-        const user = await hydratedQuery(User.findByIdAndUpdate(req.params.id, update, { returnDocument: 'after' }));
-        if (!user) return res.status(404).json({ error: 'Not found' });
-
-        // Sync is_active / plan to the tenant
-        if ((is_active !== undefined || plan !== undefined) && user.tenant) {
-            const tenantUpdate = {};
-            if (is_active !== undefined) tenantUpdate.is_active = Boolean(is_active);
-            if (plan !== undefined) tenantUpdate.plan = plan;
-            await Tenant.findByIdAndUpdate(user.tenant, tenantUpdate);
-        }
-
-        res.json({ ok: true, account: user.toSafe(), plan });
-    } catch (err) {
-        log.error({ err, account_id: req.params.id }, 'Admin update account error');
-        res.status(500).json({ error: 'Failed to update account' });
-    }
+	try {
+		const account = await updateAdminAccount(req.params.id, req.body);
+		if (!account) return res.status(404).json({ error: 'Not found' });
+		res.json({ ok: true, account });
+	} catch (err) {
+		if (err instanceof AdminAccountError) {
+			return res.status(err.status).json({ error: err.message, code: err.code });
+		}
+		log.error({ err, account_id: req.params.id }, 'Admin update account error');
+		res.status(500).json({ error: 'Failed to update account' });
+	}
 });
 
 router.delete('/api/accounts/:id', async (req, res) => {
-    try {
-        const user = await hydratedQuery(User.findById(req.params.id));
-        if (!user) return res.status(404).json({ error: 'Not found' });
-
-        await deleteAccountDataForUser(user);
-
-        res.json({ ok: true });
-    } catch (err) {
-        log.error({ err, account_id: req.params.id }, 'Admin delete account error');
-        res.status(500).json({ error: 'Failed to delete account' });
-    }
+	try {
+		const account = await getAdminAccount(req.params.id);
+		if (!account) return res.status(404).json({ error: 'Not found' });
+		await deleteTenantData(account.host_id, account._id);
+		res.json({ ok: true });
+	} catch (err) {
+		log.error({ err, account_id: req.params.id }, 'Admin delete account error');
+		res.status(500).json({ error: 'Failed to delete account' });
+	}
 });
 
 // ---- Email Templates ----

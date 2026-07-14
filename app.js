@@ -12,7 +12,7 @@ import { connectDB } from './db.js';
 import { setupSocketIO } from './modules/socket.js';
 import { initTypesense } from './modules/typesense.js';
 import { initRedis } from './modules/redis.js';
-import { resolveTenant, backfillStarterPlan } from './modules/tenancy.js';
+import { resolveTenant, backfillStarterPlan, backfillTenantLimits } from './modules/tenancy.js';
 import { resolveRequestHosted } from './config.js';
 import { installIconLocals } from './modules/icons.js';
 
@@ -240,6 +240,7 @@ async function start() {
 	await backfillGitSyncMode();
 	await backfillTypesenseTrashFields();
 	await backfillStarterPlan();
+	await backfillTenantLimits();
 	await initRedis();
 	if (SERVER_MODE === 'app') {
 		try {

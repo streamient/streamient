@@ -3,8 +3,7 @@ import rateLimit from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import { getRedisClient } from '../modules/redis.js';
 import { Tenant } from '../modules/tenancy.js';
-import { tenantHasByoKey } from '../services/byo_ai_service.js';
-import { hasProFeatureAccess } from '../services/subscription_access_service.js';
+import { resolveStoredTenantLimits } from '../modules/tenant_limits.js';
 import config from '../config.js';
 import { createLogger } from '../modules/logger.js';
 
@@ -267,21 +266,24 @@ export function createGeneralApiLimiter() {
 	});
 }
 
-/**
- * Daily managed-AI request cap, keyed per workspace (host). Applies only to
- * hosted Free tenants on the platform key: self-hosted installs, tenants with
- * their own BYO key, and Pro / active-trial accounts are skipped. Mount
- * per-route on the AI (chat) endpoints AFTER auth/tenant middleware so
- * req.host_id / req.isHosted / req.billingUser are set — not in the app-level
- * limiter stack, which runs before auth.
- */
-export function createAiDailyLimiter() {
-	const limit = config.plans?.free?.aiDaily || 0;
-	if (!limit) return createNoopLimiter();
+async function resolveRequestAiDailyLimit(request) {
+	if (request.aiDailyLimitPromise) return request.aiDailyLimitPromise;
+	request.aiDailyLimitPromise = Tenant.findOne({ host_id: request.host_id })
+		.select('plan limit_ai_workflows_per_day')
+		.lean()
+		.then((tenant) => {
+			const limit = tenant ? resolveStoredTenantLimits(tenant).limit_ai_workflows_per_day : 0;
+			request.aiDailyLimit = limit;
+			return limit;
+		});
+	return request.aiDailyLimitPromise;
+}
 
+/** Daily hosted-account AI cap, keyed per tenant. Zero means unlimited. */
+export function createAiDailyLimiter() {
 	return rateLimit({
 		windowMs: 24 * 60 * 60 * 1000,
-		limit,
+		limit: async (request) => Math.max(1, await resolveRequestAiDailyLimit(request)),
 		keyGenerator: (request) => `host:${request.host_id}`,
 		store: getRedisStore('ai-daily'),
 		standardHeaders: 'draft-7',
@@ -289,20 +291,18 @@ export function createAiDailyLimiter() {
 		skip: async (request) => {
 			if (!request.isHosted || !request.host_id) return true;
 			try {
-				const tenant = await Tenant.findOne({ host_id: request.host_id }).select('plan settings.byo_ai').lean();
-				if (!tenant) return true;
-				if (tenantHasByoKey(tenant)) return true;
-				return hasProFeatureAccess(request.billingUser, tenant.plan || 'free', true);
+				return (await resolveRequestAiDailyLimit(request)) === 0;
 			} catch (err) {
-				// Fail open: a broken plan lookup must not take AI down.
+				// Fail open: a broken tenant lookup must not take AI down.
 				log.warn({ err, host_id: request.host_id }, 'AI daily limit skip check failed; failing open');
 				return true;
 			}
 		},
 		handler: (request, response) => {
+			const limit = request.aiDailyLimit || 0;
 			log.warn({ host_id: request.host_id, path: getRequestPath(request) }, 'Daily AI limit reached');
 			return response.status(429).json({
-				error: `Daily AI limit reached — the Free plan includes ${limit} AI requests per day. Add your own OpenAI or Gemini key in Settings → AI for unlimited use of your own quota, or upgrade to Pro.`,
+				error: `Daily AI limit reached. This account allows ${limit} AI workflow${limit === 1 ? '' : 's'} per day.`,
 				code: 'AI_DAILY_LIMIT',
 				limit,
 				upgrade_url: '/settings/subscription',
