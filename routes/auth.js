@@ -3,18 +3,18 @@ import crypto from 'node:crypto';
 import { generateSecret, verifySync, generateURI } from 'otplib';
 import { hydratedQuery } from '../model/mongoose.js';
 import { User } from '../model/user.js';
-import { applyTenantContextToSession, createTenant, initializeSessionTenant } from '../modules/tenancy.js';
+import { applyTenantContextToSession, initializeSessionTenant } from '../modules/tenancy.js';
 import { ensureCollections } from '../modules/typesense.js';
 import { generateToken } from '../middleware/auth.js';
 import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail, sendSignupNotificationEmail } from '../services/email_service.js';
-import { buildHostedTrialFields, ensureFreeSubscriptionForAccountHolder, ensureStripeCustomerForAccountHolder } from '../services/billing_service.js';
+import { buildHostedTrialFields } from '../services/billing_service.js';
 import { sendMagicLink, isMagicLinkValid, verifyMagicLink } from '../services/magic_link_service.js';
 import * as passkeyService from '../services/passkey_service.js';
+import { provisionSignupAccount } from '../services/account_provisioning_service.js';
 import { createLogger } from '../modules/logger.js';
 
 const log = createLogger('auth');
 
-import { createDefaultProject } from '../services/project_service.js';
 import { PendingSignup } from '../model/pending_signup.js';
 import { isSysadminCredentials, requireSysadmin } from '../middleware/sysadmin.js';
 
@@ -160,35 +160,13 @@ router.post('/verify', async (req, res) => {
 			return res.redirect('/login?already_verified=true');
 		}
 
-		// Create the actual account
-		const user = await User.create({
-			email: pending.email,
-			password: pending.password,
-			name: pending.name,
-			is_verified: true,
-		});
-
-		const tenant = await createTenant(user._id, pending.name);
-		user.tenant = tenant._id;
-		user.host_id = tenant.host_id;
-		user.is_active = true;
-		// New accounts start on the permanent Free plan. The 7-day Pro trial is now
-		// an in-app opt-in (POST /billing/trial), not an automatic signup trial.
-		await user.save();
-
-		try {
-			await ensureStripeCustomerForAccountHolder(user, tenant);
-			// Track Free accounts in Stripe with a $0 subscription.
-			await ensureFreeSubscriptionForAccountHolder(user, tenant);
-		} catch (e) {
-			log.error({ err: e, host_id: tenant.host_id, user_id: user._id.toString() }, 'Stripe customer/free subscription setup failed during signup');
-		}
+		// New accounts start on Free with stored tenant defaults. Core records are
+		// committed atomically before external services are initialized.
+		const { user, tenant } = await provisionSignupAccount(pending);
 
 		ensureCollections(tenant.host_id).catch((e) =>
 			log.warn({ err: e, host_id: tenant.host_id }, 'Typesense collection setup deferred'),
 		);
-
-		await createDefaultProject(user._id, tenant.host_id);
 
 		// Clean up pending signup
 		await PendingSignup.deleteOne({ _id: pending._id });

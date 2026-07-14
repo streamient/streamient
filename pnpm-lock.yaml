@@ -92,9 +92,9 @@ importers:
         version: 1.4.0
       '@tabler/icons-webfont':
         specifier: ^3.44.0
-        version: 3.44.0(chokidar@3.6.0)
+        version: 3.44.0(chokidar@3.6.0)(supports-color@5.5.0)
       '@tiptap/core':
-        specifier: ^3.27.4
+        specifier: ^3.22.3
         version: 3.27.4(@tiptap/pm@3.27.4)
       '@tiptap/extension-blockquote':
         specifier: ^3.27.4
@@ -103,7 +103,7 @@ importers:
         specifier: ^3.27.4
         version: 3.27.4(@tiptap/extension-list@3.27.4(@tiptap/core@3.27.4(@tiptap/pm@3.27.4))(@tiptap/pm@3.27.4))
       '@tiptap/extension-code-block':
-        specifier: ^3.27.4
+        specifier: ^3.22.3
         version: 3.27.4(@tiptap/core@3.27.4(@tiptap/pm@3.27.4))(@tiptap/pm@3.27.4)
       '@tiptap/extension-heading':
         specifier: ^3.27.4
@@ -127,7 +127,7 @@ importers:
         specifier: ^3.27.4
         version: 3.27.4(@tiptap/extension-list@3.27.4(@tiptap/core@3.27.4(@tiptap/pm@3.27.4))(@tiptap/pm@3.27.4))
       '@tiptap/pm':
-        specifier: ^3.27.4
+        specifier: ^3.22.3
         version: 3.27.4
       '@tiptap/starter-kit':
         specifier: ^3.27.4
@@ -140,7 +140,7 @@ importers:
         version: 8.0.0
       axios:
         specifier: ^1.18.1
-        version: 1.18.1
+        version: 1.18.1(supports-color@5.5.0)
       bcryptjs:
         specifier: ^3.0.3
         version: 3.0.3
@@ -155,7 +155,7 @@ importers:
         version: 6.5.0(encoding@0.1.13)
       connect-mongo:
         specifier: ^6.0.0
-        version: 6.0.0(express-session@1.19.0)(mongodb@7.5.0(socks@2.8.9))
+        version: 6.0.0(express-session@1.19.0)(mongodb@7.5.0(socks@2.8.9))(supports-color@5.5.0)
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7
@@ -173,7 +173,7 @@ importers:
         version: 2.2.0(cytoscape@3.34.0)
       express:
         specifier: ^5.2.1
-        version: 5.2.1
+        version: 5.2.1(supports-color@5.5.0)
       express-rate-limit:
         specifier: ^8.5.2
         version: 8.5.2(express@5.2.1)
@@ -197,7 +197,7 @@ importers:
         version: 2.1.1
       ioredis:
         specifier: ^5.11.1
-        version: 5.11.1
+        version: 5.11.1(supports-color@5.5.0)
       iovalkey:
         specifier: ^0.3.3
         version: 0.3.3
@@ -260,7 +260,7 @@ importers:
         version: 3.0.4
       rate-limit-redis:
         specifier: ^5.0.0
-        version: 5.0.0(express-rate-limit@8.5.2(express@5.2.1))
+        version: 5.0.0(express-rate-limit@8.5.2(express@5.2.1(supports-color@5.5.0)))
       sanitize-html:
         specifier: ^2.17.6
         version: 2.17.6
@@ -269,10 +269,10 @@ importers:
         version: 0.35.3(@types/node@26.1.1)
       simple-git:
         specifier: ^3.36.0
-        version: 3.36.0
+        version: 3.36.0(supports-color@5.5.0)
       socket.io:
         specifier: ^4.8.3
-        version: 4.8.3
+        version: 4.8.3(supports-color@5.5.0)
       stripe:
         specifier: ^22.3.1
         version: 22.3.1(@types/node@26.1.1)
@@ -281,7 +281,7 @@ importers:
         version: 3.2.0
       swagger-ui-express:
         specifier: ^5.0.1
-        version: 5.0.1(express@5.2.1)
+        version: 5.0.1(express@5.2.1(supports-color@5.5.0))
       sweetalert2:
         specifier: ^11.26.25
         version: 11.26.25
@@ -321,7 +321,7 @@ importers:
         version: 1.29.0(zod@4.4.3)
       express:
         specifier: ^5.2.1
-        version: 5.2.1
+        version: 5.2.1(supports-color@5.5.0)
       express-rate-limit:
         specifier: ^8.5.2
         version: 8.5.2(express@5.2.1)
@@ -7198,7 +7198,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@kwsites/file-exists@1.1.1':
+  '@kwsites/file-exists@1.1.1(supports-color@5.5.0)':
     dependencies:
       debug: 4.4.3(supports-color@5.5.0)
     transitivePeerDependencies:
@@ -7220,7 +7220,7 @@ snapshots:
       cross-spawn: 7.0.6
       eventsource: 3.0.7
       eventsource-parser: 3.1.0
-      express: 5.2.1
+      express: 5.2.1(supports-color@5.5.0)
       express-rate-limit: 8.5.2(express@5.2.1)
       hono: 4.12.30
       jose: 6.2.3
@@ -8961,11 +8961,11 @@ snapshots:
       '@popperjs/core': 2.11.8
       bootstrap: 5.3.7(@popperjs/core@2.11.8)
 
-  '@tabler/icons-webfont@3.44.0(chokidar@3.6.0)':
+  '@tabler/icons-webfont@3.44.0(chokidar@3.6.0)(supports-color@5.5.0)':
     dependencies:
       '@tabler/icons': 3.44.0
       svg-path-commander: 2.2.1
-      svgtofont: 6.5.3(chokidar@3.6.0)
+      svgtofont: 6.5.3(chokidar@3.6.0)(supports-color@5.5.0)
     transitivePeerDependencies:
       - '@types/svg2ttf'
       - chokidar
@@ -9362,7 +9362,7 @@ snapshots:
       '@vueuse/shared': 12.8.2
       vue: 3.5.39
     optionalDependencies:
-      axios: 1.18.1
+      axios: 1.18.1(supports-color@5.5.0)
       focus-trap: 7.8.0
     transitivePeerDependencies:
       - typescript
@@ -9425,7 +9425,7 @@ snapshots:
 
   adm-zip@0.5.18: {}
 
-  agent-base@6.0.2:
+  agent-base@6.0.2(supports-color@5.5.0):
     dependencies:
       debug: 4.4.3(supports-color@5.5.0)
     transitivePeerDependencies:
@@ -9553,11 +9553,11 @@ snapshots:
 
   auto-console-group@1.3.0: {}
 
-  axios@1.18.1:
+  axios@1.18.1(supports-color@5.5.0):
     dependencies:
       follow-redirects: 1.16.0
       form-data: 4.0.6
-      https-proxy-agent: 5.0.1
+      https-proxy-agent: 5.0.1(supports-color@5.5.0)
       proxy-from-env: 2.1.0
     transitivePeerDependencies:
       - debug
@@ -9630,7 +9630,7 @@ snapshots:
 
   bn.js@4.12.5: {}
 
-  body-parser@2.3.0:
+  body-parser@2.3.0(supports-color@5.5.0):
     dependencies:
       bytes: 3.1.2
       content-type: 2.0.0
@@ -9906,7 +9906,7 @@ snapshots:
       normalize-path: 3.0.0
       readable-stream: 4.7.0
 
-  connect-mongo@6.0.0(express-session@1.19.0)(mongodb@7.5.0(socks@2.8.9)):
+  connect-mongo@6.0.0(express-session@1.19.0)(mongodb@7.5.0(socks@2.8.9))(supports-color@5.5.0):
     dependencies:
       debug: 4.4.3(supports-color@5.5.0)
       express-session: 1.19.0
@@ -10212,7 +10212,7 @@ snapshots:
 
   engine.io-parser@5.2.3: {}
 
-  engine.io@6.6.9:
+  engine.io@6.6.9(supports-color@5.5.0):
     dependencies:
       '@types/cors': 2.8.19
       '@types/node': 26.1.1
@@ -10367,7 +10367,7 @@ snapshots:
 
   express-rate-limit@8.5.2(express@5.2.1):
     dependencies:
-      express: 5.2.1
+      express: 5.2.1(supports-color@5.5.0)
       ip-address: 10.2.0
 
   express-session@1.19.0:
@@ -10383,10 +10383,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  express@5.2.1:
+  express@5.2.1(supports-color@5.5.0):
     dependencies:
       accepts: 2.0.0
-      body-parser: 2.3.0
+      body-parser: 2.3.0(supports-color@5.5.0)
       content-disposition: 1.1.0
       content-type: 1.0.5
       cookie: 0.7.2
@@ -10396,7 +10396,7 @@ snapshots:
       encodeurl: 2.0.0
       escape-html: 1.0.3
       etag: 1.8.1
-      finalhandler: 2.1.1
+      finalhandler: 2.1.1(supports-color@5.5.0)
       fresh: 2.0.0
       http-errors: 2.0.1
       merge-descriptors: 2.0.0
@@ -10407,8 +10407,8 @@ snapshots:
       proxy-addr: 2.0.7
       qs: 6.15.3
       range-parser: 1.3.0
-      router: 2.2.0
-      send: 1.2.1
+      router: 2.2.0(supports-color@5.5.0)
+      send: 1.2.1(supports-color@5.5.0)
       serve-static: 2.2.1
       statuses: 2.0.2
       type-is: 2.1.0
@@ -10477,7 +10477,7 @@ snapshots:
     dependencies:
       to-regex-range: 5.0.1
 
-  finalhandler@2.1.1:
+  finalhandler@2.1.1(supports-color@5.5.0):
     dependencies:
       debug: 4.4.3(supports-color@5.5.0)
       encodeurl: 2.0.0
@@ -10800,9 +10800,9 @@ snapshots:
       quick-lru: 5.1.1
       resolve-alpn: 1.2.1
 
-  https-proxy-agent@5.0.1:
+  https-proxy-agent@5.0.1(supports-color@5.5.0):
     dependencies:
-      agent-base: 6.0.2
+      agent-base: 6.0.2(supports-color@5.5.0)
       debug: 4.4.3(supports-color@5.5.0)
     transitivePeerDependencies:
       - supports-color
@@ -10895,7 +10895,7 @@ snapshots:
     transitivePeerDependencies:
       - '@types/node'
 
-  ioredis@5.11.1:
+  ioredis@5.11.1(supports-color@5.5.0):
     dependencies:
       '@ioredis/commands': 1.10.0
       cluster-key-slot: 1.1.1
@@ -12056,7 +12056,7 @@ snapshots:
 
   range-parser@1.3.0: {}
 
-  rate-limit-redis@5.0.0(express-rate-limit@8.5.2(express@5.2.1)):
+  rate-limit-redis@5.0.0(express-rate-limit@8.5.2(express@5.2.1(supports-color@5.5.0))):
     dependencies:
       express-rate-limit: 8.5.2(express@5.2.1)
 
@@ -12227,7 +12227,7 @@ snapshots:
 
   rope-sequence@1.3.4: {}
 
-  router@2.2.0:
+  router@2.2.0(supports-color@5.5.0):
     dependencies:
       debug: 4.4.3(supports-color@5.5.0)
       depd: 2.0.0
@@ -12290,7 +12290,7 @@ snapshots:
 
   semver@7.8.5: {}
 
-  send@1.2.1:
+  send@1.2.1(supports-color@5.5.0):
     dependencies:
       debug: 4.4.3(supports-color@5.5.0)
       encodeurl: 2.0.0
@@ -12311,7 +12311,7 @@ snapshots:
       encodeurl: 2.0.0
       escape-html: 1.0.3
       parseurl: 1.3.3
-      send: 1.2.1
+      send: 1.2.1(supports-color@5.5.0)
     transitivePeerDependencies:
       - supports-color
 
@@ -12405,9 +12405,9 @@ snapshots:
 
   signal-exit@4.1.0: {}
 
-  simple-git@3.36.0:
+  simple-git@3.36.0(supports-color@5.5.0):
     dependencies:
-      '@kwsites/file-exists': 1.1.1
+      '@kwsites/file-exists': 1.1.1(supports-color@5.5.0)
       '@kwsites/promise-deferred': 1.1.1
       '@simple-git/args-pathspec': 1.0.3
       '@simple-git/argv-parser': 1.1.1
@@ -12430,22 +12430,22 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  socket.io-parser@4.2.6:
+  socket.io-parser@4.2.6(supports-color@5.5.0):
     dependencies:
       '@socket.io/component-emitter': 3.1.2
       debug: 4.4.3(supports-color@5.5.0)
     transitivePeerDependencies:
       - supports-color
 
-  socket.io@4.8.3:
+  socket.io@4.8.3(supports-color@5.5.0):
     dependencies:
       accepts: 1.3.8
       base64id: 2.0.0
       cors: 2.8.6
       debug: 4.4.3(supports-color@5.5.0)
-      engine.io: 6.6.9
+      engine.io: 6.6.9(supports-color@5.5.0)
       socket.io-adapter: 2.5.8
-      socket.io-parser: 4.2.6
+      socket.io-parser: 4.2.6(supports-color@5.5.0)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -12607,7 +12607,7 @@ snapshots:
       microbuffer: 1.0.0
       svgpath: 2.6.0
 
-  svgicons2svgfont@15.0.1:
+  svgicons2svgfont@15.0.1(supports-color@5.5.0):
     dependencies:
       '@types/sax': 1.2.7
       commander: 12.1.0
@@ -12632,7 +12632,7 @@ snapshots:
 
   svgpath@2.6.0: {}
 
-  svgtofont@6.5.3(chokidar@3.6.0):
+  svgtofont@6.5.3(chokidar@3.6.0)(supports-color@5.5.0):
     dependencies:
       auto-config-loader: 2.0.2
       cheerio: 1.0.0
@@ -12641,11 +12641,11 @@ snapshots:
       image2uri: 2.1.2
       nunjucks: 3.2.4(chokidar@3.6.0)
       svg2ttf: 6.1.0
-      svgicons2svgfont: 15.0.1
+      svgicons2svgfont: 15.0.1(supports-color@5.5.0)
       svgo: 3.3.4
       ttf2eot: 3.1.0
       ttf2woff: 3.0.0
-      ttf2woff2: 8.0.1
+      ttf2woff2: 8.0.1(supports-color@5.5.0)
       yargs: 17.7.3
     transitivePeerDependencies:
       - chokidar
@@ -12655,9 +12655,9 @@ snapshots:
     dependencies:
       '@scarf/scarf': 1.4.0
 
-  swagger-ui-express@5.0.1(express@5.2.1):
+  swagger-ui-express@5.0.1(express@5.2.1(supports-color@5.5.0)):
     dependencies:
-      express: 5.2.1
+      express: 5.2.1(supports-color@5.5.0)
       swagger-ui-dist: 5.32.8
 
   sweetalert2@11.26.25: {}
@@ -12794,7 +12794,7 @@ snapshots:
     dependencies:
       argparse: 2.0.1
 
-  ttf2woff2@8.0.1:
+  ttf2woff2@8.0.1(supports-color@5.5.0):
     dependencies:
       bindings: 1.5.0
       bufferstreams: 4.0.0
@@ -12829,7 +12829,7 @@ snapshots:
   typesense@3.0.6(@babel/runtime@7.29.2):
     dependencies:
       '@babel/runtime': 7.29.2
-      axios: 1.18.1
+      axios: 1.18.1(supports-color@5.5.0)
       loglevel: 1.9.2
       tslib: 2.8.1
     transitivePeerDependencies:

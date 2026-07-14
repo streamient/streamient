@@ -8,13 +8,16 @@ import { GitRepo } from '../model/git_repo.js';
 import { emitToTenant } from '../modules/socket.js';
 import * as audit from './audit_service.js';
 
-export async function createDefaultProject(userId, host_id) {
-	return Project.create({
+export async function createDefaultProject(userId, host_id, options = {}) {
+	const payload = {
 		name: 'Default',
 		owner: userId,
 		host_id,
 		is_default: true,
-	});
+	};
+	if (!options.session) return Project.create(payload);
+	const [project] = await Project.create([payload], { session: options.session });
+	return project;
 }
 
 export async function createProject(userId, host_id, data, ctx = {}) {

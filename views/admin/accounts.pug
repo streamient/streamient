@@ -3,30 +3,61 @@ extends layout
 block content
 	.row
 		.col-md-2
-			.list-group.mb-3
-				a.list-group-item.list-group-item-action.active#filter-active(href="#") Active
-				a.list-group-item.list-group-item-action#filter-inactive(href="#") Inactive
+			.list-group.mb-5
+				a.list-group-item.list-group-item-action(href="/admin?status=active" class=(status === 'active' ? 'active' : '')) Active
+				a.list-group-item.list-group-item-action(href="/admin?status=inactive" class=(status === 'inactive' ? 'active' : '')) Inactive
 
 		.col-md-10
-			.d-flex.justify-content-between.align-items-center.mb-3
-				h4.mb-0 Accounts
-				.text-muted#accounts-total
+			.d-flex.justify-content-between.align-items-center.mb-5
+				div
+					h1.mb-1 Accounts
+					.text-muted #{total} account#{total === 1 ? '' : 's'}
+				a.btn.btn-primary.btn-sm(href="/admin/accounts/new") Add Account
 
-			.table-responsive
-				table.table.table-hover
+			if error
+				.alert.alert-danger.mb-5= error
+
+			.table-responsive.mb-5
+				table.table.table-vcenter.table-hover
 					thead
 						tr
-							th Name
-							th Email
-							th Member Since
+							th Account
+							th Owner
+							th Created
+							th Members
 							th Projects
 							th Items
 							th.text-end Actions
-					tbody#accounts-body
-						tr
-							td.text-center.text-muted(colspan="6") Loading…
+					tbody
+						if !accounts || !accounts.length
+							tr
+								td.text-center.text-muted(colspan="7") No accounts found
+						else
+							each account in accounts
+								tr
+									td
+										.fw-semibold= account.name
+										code.small= account.host_id
+									td
+										if account.owner
+											.fw-semibold= account.owner.name
+											.text-muted.small= account.owner.email
+										else
+											span.text-danger Missing owner
+									td= account.createdAt ? new Date(account.createdAt).toLocaleDateString() : '—'
+									td= account.memberCount
+									td= account.projectCount
+									td= account.itemCount
+									td.text-end
+										a.btn.btn-sm.btn-outline-primary.me-3(href=`/admin/accounts/${account._id}/edit`) Edit
+										button.btn.btn-sm.btn-outline-danger.btn-delete(type="button" data-id=account._id data-name=account.name) Delete
 
-			nav#accounts-pagination
+			if pages > 1
+				nav(aria-label="Accounts pagination")
+					ul.pagination.pagination-sm.mb-0
+						- for (let p = 1; p <= pages; p += 1)
+							li.page-item(class=(p === page ? 'active' : ''))
+								a.page-link(href=`/admin?status=${status}&page=${p}`)= p
 
 block scripts
-	script(src=`/static/v-${v}/js/admin.js`)
+	script(src=`/static/v-${v}/js/admin_accounts.js`)

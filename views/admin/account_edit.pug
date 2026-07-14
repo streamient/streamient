@@ -2,51 +2,101 @@ extends layout
 
 block content
 	.row.justify-content-center
-		.col-md-8
-			.card
-				.card-header.d-flex.justify-content-between.align-items-center
-					h5.mb-0 Edit Account
-					a.btn.btn-sm.btn-outline-secondary(href="/admin") &larr; Back to Accounts
+		.col-xl-10
+			h1.mb-5 Edit Account
+			.card.mb-5
 				.card-body
 					form#edit-account-form
-						input(type="hidden" id="account-id" value=account._id)
+						input#account-id(type="hidden" value=account._id)
 
+						h2.mb-3 Account
 						.mb-3
-							label.form-label(for="name") Name
-							input.form-control#name(type="text" value=account.name required)
-
-						.mb-3
-							label.form-label(for="email") Email
-							input.form-control#email(type="email" value=account.email required)
-
+							label.form-label(for="name") Account Name
+							input.form-control.form-control-sm.bg-body-tertiary.border-secondary-subtle#name(type="text" value=account.name required)
+						.row.mb-3
+							.col-md-6
+								label.form-label(for="owner-name") Owner Name
+								input.form-control.form-control-sm.bg-body-tertiary.border-secondary-subtle#owner-name(type="text" value=(account.owner ? account.owner.name : '') required)
+							.col-md-6
+								label.form-label(for="owner-email") Owner Email
+								input.form-control.form-control-sm.bg-body-tertiary.border-secondary-subtle#owner-email(type="email" value=(account.owner ? account.owner.email : '') required)
 						.mb-3
 							.form-check.form-switch
 								input.form-check-input#is-active(type="checkbox" checked=account.is_active)
 								label.form-check-label(for="is-active") Account Active
-
-						- const currentPlan = (account.tenant && account.tenant.plan) || 'free'
-						.mb-3
+						.mb-5
 							label.form-label(for="plan") Plan
-							select.form-select#plan
-								option(value="free" selected=currentPlan === 'free') Free
-								option(value="pro" selected=currentPlan === 'pro') Pro
-							.form-text Manually overrides the account's plan. Pro unlocks unlimited projects/users and managed AI.
+							select.form-select.form-select-sm.bg-body-tertiary.border-secondary-subtle#plan
+								option(value="free" selected=account.plan === 'free') Free
+								option(value="pro" selected=account.plan === 'pro') Pro
+							.form-text Plan controls feature access. Changing it does not rewrite account limits.
 
+						h2.mb-3 Limits
 						.row.mb-3
-							.col-md-6
-								label.form-label Last Login
-								p.form-control-plaintext
-									if account.last_login
-										= new Date(account.last_login).toLocaleString()
-									else
-										span.text-muted Never
-							.col-md-6
-								label.form-label Member Since
-								p.form-control-plaintext= new Date(account.createdAt).toLocaleString()
+							.col-md-4
+								label.form-label(for="limit-projects") Projects
+								input.form-control.form-control-sm.bg-body-tertiary.border-secondary-subtle#limit-projects(type="number" min="0" step="1" value=account.limit_projects required)
+							.col-md-4
+								label.form-label(for="limit-users") Users
+								input.form-control.form-control-sm.bg-body-tertiary.border-secondary-subtle#limit-users(type="number" min="0" step="1" value=account.limit_users required)
+							.col-md-4
+								label.form-label(for="limit-ai-workflows") AI Workflows / Day
+								input.form-control.form-control-sm.bg-body-tertiary.border-secondary-subtle#limit-ai-workflows(type="number" min="0" step="1" value=account.limit_ai_workflows_per_day required)
+						.form-text.mb-5 Zero means unlimited. Limits apply to this entire hosted account, regardless of plan or trial.
 
-						.d-flex.justify-content-between
-							button.btn.btn-primary(type="submit") Save Changes
-							button.btn.btn-danger#delete-account(type="button") Delete Account
+						h2.mb-3 Usage
+						.row.mb-5
+							.col-md-4
+								label.form-label Members
+								p.form-control-plaintext= account.memberCount
+							.col-md-4
+								label.form-label Projects
+								p.form-control-plaintext= account.projectCount
+							.col-md-4
+								label.form-label Items
+								p.form-control-plaintext= account.itemCount
+
+						.d-flex.justify-content-between.align-items-center
+							div
+								a.btn.btn-outline-secondary.btn-sm(href="/admin") Cancel
+								button.btn.btn-outline-danger.btn-sm.ms-3#delete-account(type="button") Delete Account
+							button.btn.btn-primary.btn-sm(type="submit") Save Changes
+
+			.card.mb-5
+				.card-header
+					h2.card-title.mb-0 Team Members
+				.table-responsive
+					table.table.table-vcenter.card-table
+						thead
+							tr
+								th Name
+								th Email
+								th Role
+								th Joined
+								th Last Login
+						tbody
+							if !account.members || !account.members.length
+								tr
+									td.text-center.text-muted(colspan="5") No team members
+							else
+								each member in account.members
+									tr
+										td= member.user.name
+										td= member.user.email
+										td.text-capitalize= member.role
+										td= member.joined_at ? new Date(member.joined_at).toLocaleString() : '—'
+										td= member.user.last_login ? new Date(member.user.last_login).toLocaleString() : 'Never'
+
+			.card
+				.card-body
+					dl.row.mb-0
+						dt.col-md-3 Host ID
+						dd.col-md-9
+							code= account.host_id
+						dt.col-md-3 Created
+						dd.col-md-9= account.createdAt ? new Date(account.createdAt).toLocaleString() : '—'
+						dt.col-md-3 Owner Last Login
+						dd.col-md-9= account.owner && account.owner.last_login ? new Date(account.owner.last_login).toLocaleString() : 'Never'
 
 block scripts
-	script(src=`/static/v-${v}/js/admin.js`)
+	script(src=`/static/v-${v}/js/admin_accounts.js`)

@@ -6,6 +6,7 @@ import { listProjects, getProject, getProjectCounts, getProjectDeleteState } fro
 import { listGitRepos } from '../services/git_sync_service.js';
 import { formatTrialEndsIn, getBillingUserForHost, hasProductAccess, hasProFeatureAccess } from '../services/subscription_access_service.js';
 import { serializeWhiteLabelSettings } from '../services/white_label_service.js';
+import { isTenantLimitReached, resolveStoredTenantLimits } from '../modules/tenant_limits.js';
 import config from '../config.js';
 import { createLogger } from '../modules/logger.js';
 
@@ -69,7 +70,7 @@ router.use(async (req, res, next) => {
 	const [user, projects, tenant, billingUser] = await Promise.all([
 		User.findById(req.userId),
 		listProjects(req.host_id),
-		Tenant.findOne({ host_id: req.host_id }).select('plan settings.byo_ai settings.white_label').lean(),
+		Tenant.findOne({ host_id: req.host_id }).select('plan limit_projects limit_users limit_ai_workflows_per_day settings.byo_ai settings.white_label').lean(),
 		getBillingUserForHost(req.host_id, req.userId),
 	]);
 	const activeTenant = (req.accessibleTenants || []).find((item) => item.tenantId === req.tenantId) || null;
@@ -90,8 +91,10 @@ router.use(async (req, res, next) => {
 	res.locals.email_view_enabled = true;
 	res.locals.git_sync_enabled = proOnlyFeatureEnabled;
 	res.locals.white_label = serializeWhiteLabelSettings(tenant || {}, { canUsePro: proOnlyFeatureEnabled });
-	// Pro/trial/self-hosted get unlimited projects; Free is capped (hide the +).
-	res.locals.projects_unlimited = proOnlyFeatureEnabled;
+	res.locals.account_limits = is_hosted
+		? resolveStoredTenantLimits(tenant || {})
+		: { limit_projects: 0, limit_users: 0, limit_ai_workflows_per_day: 0 };
+	res.locals.can_create_project = !is_hosted || !isTenantLimitReached(res.locals.account_limits.limit_projects, projects.length);
 	res.locals.byo_ai_enabled = isByoAiSettingsAccessEnabled(req);
 	res.locals.host_id = req.host_id;
 	res.locals.ws_url = config.wsUrl;

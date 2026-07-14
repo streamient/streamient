@@ -1,36 +1,35 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import config from '../config.js';
 import { effectiveResourceLimits, isAtLimit } from '../services/subscription_access_service.js';
 
-describe('plan resource limits', () => {
-	const now = new Date('2026-06-19T00:00:00.000Z');
-
-	it('caps Free (hosted) tenants at the configured limits', () => {
-		const freeUser = { subscription_status: 'incomplete' };
-		assert.deepEqual(effectiveResourceLimits(freeUser, 'free', true, now), config.planLimits.free);
-		assert.equal(config.planLimits.free.projects, 1);
-		// Users are unlimited on Free (0 = unlimited); only projects are capped.
-		assert.equal(config.planLimits.free.users, 0);
-	});
-
-	it('treats Pro, active trials, and self-hosted as unlimited', () => {
-		const trialUser = {
-			subscription_status: 'trialing',
-			trial_source: 'no_card',
-			trial_ends_at: new Date('2026-06-26T00:00:00.000Z'),
+describe('stored account resource limits', () => {
+	it('uses stored limits for every hosted plan and trial state', () => {
+		const tenant = {
+			plan: 'free',
+			limit_projects: 3,
+			limit_users: 7,
 		};
-		assert.deepEqual(effectiveResourceLimits({}, 'pro', true, now), { projects: 0, users: 0 });
-		assert.deepEqual(effectiveResourceLimits(trialUser, 'free', true, now), { projects: 0, users: 0 });
-		assert.deepEqual(effectiveResourceLimits(null, 'free', false, now), { projects: 0, users: 0 });
+		assert.deepEqual(effectiveResourceLimits(tenant, true), { projects: 3, users: 7 });
+
+		tenant.plan = 'pro';
+		assert.deepEqual(effectiveResourceLimits(tenant, true), { projects: 3, users: 7 });
+		assert.deepEqual(effectiveResourceLimits({
+			...tenant,
+			subscription_status: 'trialing',
+			trial_ends_at: new Date(Date.now() + 86_400_000),
+		}, true), { projects: 3, users: 7 });
 	});
 
-	it('isAtLimit treats 0 as unlimited and enforces non-zero caps', () => {
+	it('treats self-hosted and zero stored limits as unlimited', () => {
+		assert.deepEqual(effectiveResourceLimits({ limit_projects: 1, limit_users: 1 }, false), { projects: 0, users: 0 });
+		assert.deepEqual(effectiveResourceLimits({ plan: 'pro', limit_projects: 0, limit_users: 0 }, true), { projects: 0, users: 0 });
+	});
+
+	it('isAtLimit treats zero as unlimited and enforces positive limits', () => {
+		assert.equal(isAtLimit(0, 1_000), false);
 		assert.equal(isAtLimit(1, 0), false);
 		assert.equal(isAtLimit(1, 1), true);
-		assert.equal(isAtLimit(5, 4), false);
 		assert.equal(isAtLimit(5, 5), true);
-		assert.equal(isAtLimit(0, 1000), false);
 	});
 });

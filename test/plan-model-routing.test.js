@@ -13,6 +13,7 @@ describe('per-plan managed model routing', () => {
 	const originalOpenAiKey = config.llm.openaiApiKey;
 	const originalChatProvider = config.llm.chatProvider;
 	const originalChatModel = config.llm.chatModel;
+	const originalFreePlanModels = { ...config.llm.planModels.free };
 	const originalEncryptionKey = config.gitEncryptionKey;
 	const originalTenantFindOne = Tenant.findOne;
 	let requests;
@@ -28,6 +29,12 @@ describe('per-plan managed model routing', () => {
 		// land on their plan's model matrix, not the global model.
 		config.llm.chatProvider = 'openai';
 		config.llm.chatModel = 'gpt-5.4-mini';
+		config.llm.planModels.free = {
+			provider: 'google',
+			chat: 'gemini-2.5-flash-lite',
+			nlSearch: 'gemini-2.5-flash-lite',
+			conversation: 'gemini-2.5-flash-lite',
+		};
 		tenant = {
 			host_id: 'host-1',
 			plan: 'free',
@@ -54,6 +61,7 @@ describe('per-plan managed model routing', () => {
 		config.llm.openaiApiKey = originalOpenAiKey;
 		config.llm.chatProvider = originalChatProvider;
 		config.llm.chatModel = originalChatModel;
+		config.llm.planModels.free = { ...originalFreePlanModels };
 		Tenant.findOne = originalTenantFindOne;
 	});
 

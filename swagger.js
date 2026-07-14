@@ -22,6 +22,12 @@ const swaggerSpec = {
                 name: 'Authorization',
                 description: 'Personal access token. Value: `Token <your-token>`',
             },
+			AdminSession: {
+				type: 'apiKey',
+				in: 'cookie',
+				name: 'connect.sid',
+				description: 'Authenticated backend-admin session cookie.',
+			},
         },
         schemas: {
             Project: {
@@ -48,6 +54,75 @@ const swaggerSpec = {
                     is_primary: { type: 'boolean' },
                 },
             },
+			TenantLimits: {
+				type: 'object',
+				description: 'Tenant-wide hosted limits. Zero means unlimited.',
+				properties: {
+					limit_projects: { type: 'integer', minimum: 0 },
+					limit_users: { type: 'integer', minimum: 0 },
+					limit_ai_workflows_per_day: { type: 'integer', minimum: 0 },
+				},
+				required: ['limit_projects', 'limit_users', 'limit_ai_workflows_per_day'],
+			},
+			AdminAccountOwner: {
+				type: 'object',
+				properties: {
+					_id: { type: 'string' },
+					name: { type: 'string' },
+					email: { type: 'string', format: 'email' },
+					is_active: { type: 'boolean' },
+					last_login: { type: 'string', format: 'date-time', nullable: true },
+					createdAt: { type: 'string', format: 'date-time', nullable: true },
+				},
+			},
+			AdminAccountMember: {
+				type: 'object',
+				properties: {
+					_id: { type: 'string', nullable: true },
+					role: { type: 'string', enum: ['owner', 'admin', 'member'] },
+					joined_at: { type: 'string', format: 'date-time', nullable: true },
+					user: { $ref: '#/components/schemas/AdminAccountOwner' },
+				},
+			},
+			AdminAccount: {
+				allOf: [
+					{ $ref: '#/components/schemas/TenantLimits' },
+					{
+						type: 'object',
+						properties: {
+							_id: { type: 'string', description: 'Tenant ID' },
+							host_id: { type: 'string' },
+							name: { type: 'string' },
+							is_active: { type: 'boolean' },
+							plan: { type: 'string', enum: ['free', 'pro'] },
+							owner: { $ref: '#/components/schemas/AdminAccountOwner' },
+							members: { type: 'array', items: { $ref: '#/components/schemas/AdminAccountMember' } },
+							memberCount: { type: 'integer', minimum: 0 },
+							projectCount: { type: 'integer', minimum: 0 },
+							itemCount: { type: 'integer', minimum: 0 },
+							createdAt: { type: 'string', format: 'date-time', nullable: true },
+							updatedAt: { type: 'string', format: 'date-time', nullable: true },
+						},
+						required: ['_id', 'host_id', 'name', 'is_active', 'plan'],
+					},
+				],
+			},
+			AdminAccountWrite: {
+				allOf: [
+					{ $ref: '#/components/schemas/TenantLimits' },
+					{
+						type: 'object',
+						properties: {
+							name: { type: 'string', minLength: 1 },
+							owner_name: { type: 'string', minLength: 1 },
+							owner_email: { type: 'string', format: 'email' },
+							plan: { type: 'string', enum: ['free', 'pro'] },
+							is_active: { type: 'boolean' },
+						},
+						required: ['name', 'owner_name', 'owner_email', 'plan'],
+					},
+				],
+			},
             WhiteLabelAsset: {
                 type: 'object',
                 nullable: true,
@@ -387,7 +462,7 @@ const swaggerSpec = {
         },
         responses: {
             AiDailyLimit: {
-                description: 'Daily AI limit reached (hosted Free workspaces on the built-in AI). Add your own OpenAI/Gemini key in Settings → AI or upgrade to Pro for unlimited AI.',
+                description: 'The hosted tenant reached its stored daily AI workflow limit. Zero means unlimited.',
                 content: {
                     'application/json': {
                         schema: {
@@ -395,8 +470,8 @@ const swaggerSpec = {
                             properties: {
                                 error: { type: 'string' },
                                 code: { type: 'string', enum: ['AI_DAILY_LIMIT'] },
-                                limit: { type: 'integer', description: 'AI requests allowed per day per workspace' },
-                                upgrade_url: { type: 'string' },
+                                limit: { type: 'integer', description: 'AI workflows allowed per day for this tenant' },
+                                upgrade_url: { type: 'string', description: 'Account limits details page' },
                             },
                         },
                     },
@@ -406,6 +481,123 @@ const swaggerSpec = {
     },
     security: [{ BearerAuth: [] }, { AccessToken: [] }],
     paths: {
+		// ---- Backend Admin Accounts ----
+		'/admin/api/accounts': {
+			get: {
+				tags: ['Admin'],
+				summary: 'List backend-admin tenant accounts',
+				description: 'Returns one row per tenant, not one row per user. Requires a backend-admin session.',
+				operationId: 'adminListAccounts',
+				security: [{ AdminSession: [] }],
+				servers: [{ url: '/', description: 'Root application endpoint' }],
+				parameters: [
+					{ name: 'status', in: 'query', schema: { type: 'string', enum: ['active', 'inactive'], default: 'active' } },
+					{ name: 'page', in: 'query', schema: { type: 'integer', minimum: 1, default: 1 } },
+				],
+				responses: {
+					200: {
+						description: 'Paginated tenant accounts',
+						content: {
+							'application/json': {
+								schema: {
+									type: 'object',
+									properties: {
+										accounts: { type: 'array', items: { $ref: '#/components/schemas/AdminAccount' } },
+										total: { type: 'integer' },
+										page: { type: 'integer' },
+										pages: { type: 'integer' },
+										status: { type: 'string', enum: ['active', 'inactive'] },
+									},
+								},
+							},
+						},
+					},
+					403: { description: 'Backend-admin session required', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+					500: { description: 'Failed to list accounts', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+				},
+			},
+			post: {
+				tags: ['Admin'],
+				summary: 'Provision a tenant account',
+				description: 'Atomically creates the tenant, verified owner, owner membership, and default project. Zero limits mean unlimited. Post-commit Stripe, Typesense, or magic-link failures return warnings without rolling back the account.',
+				operationId: 'adminCreateAccount',
+				security: [{ AdminSession: [] }],
+				servers: [{ url: '/', description: 'Root application endpoint' }],
+				requestBody: {
+					required: true,
+					content: { 'application/json': { schema: { $ref: '#/components/schemas/AdminAccountWrite' } } },
+				},
+				responses: {
+					201: {
+						description: 'Account created',
+						content: {
+							'application/json': {
+								schema: {
+									type: 'object',
+									properties: {
+										ok: { type: 'boolean' },
+										account: { $ref: '#/components/schemas/AdminAccount' },
+										magic_link_sent: { type: 'boolean' },
+										warnings: { type: 'array', items: { type: 'string' } },
+									},
+								},
+							},
+						},
+					},
+					400: { description: 'Invalid account or limit values', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+					403: { description: 'Backend-admin session required', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+					409: { description: 'Owner email already exists', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+					500: { description: 'Failed to create account', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+				},
+			},
+		},
+		'/admin/api/accounts/{tenantId}': {
+			parameters: [{ name: 'tenantId', in: 'path', required: true, schema: { type: 'string' } }],
+			get: {
+				tags: ['Admin'],
+				summary: 'Get a tenant account and team members',
+				operationId: 'adminGetAccount',
+				security: [{ AdminSession: [] }],
+				servers: [{ url: '/', description: 'Root application endpoint' }],
+				responses: {
+					200: { description: 'Tenant account', content: { 'application/json': { schema: { type: 'object', properties: { account: { $ref: '#/components/schemas/AdminAccount' } } } } } },
+					403: { description: 'Backend-admin session required', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+					404: { description: 'Tenant not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+				},
+			},
+			put: {
+				tags: ['Admin'],
+				summary: 'Update a tenant account',
+				description: 'Updates tenant identity, owner identity, status, plan, and tenant-wide limits. Lowering limits never deletes existing data. Plan changes never rewrite limits.',
+				operationId: 'adminUpdateAccount',
+				security: [{ AdminSession: [] }],
+				servers: [{ url: '/', description: 'Root application endpoint' }],
+				requestBody: {
+					required: true,
+					content: { 'application/json': { schema: { $ref: '#/components/schemas/AdminAccountWrite' } } },
+				},
+				responses: {
+					200: { description: 'Account updated', content: { 'application/json': { schema: { type: 'object', properties: { ok: { type: 'boolean' }, account: { $ref: '#/components/schemas/AdminAccount' } } } } } },
+					400: { description: 'Invalid account or limit values', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+					403: { description: 'Backend-admin session required', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+					404: { description: 'Tenant not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+					409: { description: 'Owner email conflict', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+				},
+			},
+			delete: {
+				tags: ['Admin'],
+				summary: 'Delete a tenant account',
+				description: 'Permanently deletes the exact tenant and its host-scoped Streamient data.',
+				operationId: 'adminDeleteAccount',
+				security: [{ AdminSession: [] }],
+				servers: [{ url: '/', description: 'Root application endpoint' }],
+				responses: {
+					200: { description: 'Account deleted', content: { 'application/json': { schema: { type: 'object', properties: { ok: { type: 'boolean' } } } } } },
+					403: { description: 'Backend-admin session required', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+					404: { description: 'Tenant not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+				},
+			},
+		},
         // ---- Public Import Endpoints ----
         '/import/email': {
             post: {
@@ -477,6 +669,7 @@ const swaggerSpec = {
                 },
                 responses: {
                     201: { description: 'Created', content: { 'application/json': { schema: { type: 'object', properties: { project: { $ref: '#/components/schemas/Project' } } } } } },
+					403: { description: 'Stored account project limit reached', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
                 },
             },
         },
@@ -688,7 +881,7 @@ const swaggerSpec = {
                 responses: {
                     201: { description: 'Created', content: { 'application/json': { schema: { type: 'object', properties: { member: { $ref: '#/components/schemas/TeamMember' } } } } } },
                     400: { description: 'Invalid member payload', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
-                    403: { description: 'Team admin access required', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+                    403: { description: 'Team admin access required or stored account user limit reached', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
                 },
             },
         },

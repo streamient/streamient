@@ -156,7 +156,7 @@ function initChat() {
 				thinkingRow.remove();
 				let message = data?.error || 'Daily AI limit reached — please try again tomorrow.';
 				if (data?.code === 'AI_DAILY_LIMIT' && data?.upgrade_url) {
-					message += ` [Upgrade to Pro](${data.upgrade_url})`;
+					message += ` [View account limits](${data.upgrade_url})`;
 				}
 				addMessage('assistant', message);
 				return;

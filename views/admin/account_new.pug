@@ -1,0 +1,45 @@
+extends layout
+
+block content
+	.row.justify-content-center
+		.col-xl-8
+			h1.mb-5 New Account
+			.card
+				.card-body
+					form#new-account-form
+						h2.mb-3 Account
+						.mb-3
+							label.form-label(for="new-name") Account Name
+							input.form-control.form-control-sm.bg-body-tertiary.border-secondary-subtle#new-name(type="text" required)
+						.row.mb-3
+							.col-md-6
+								label.form-label(for="new-owner-name") Owner Name
+								input.form-control.form-control-sm.bg-body-tertiary.border-secondary-subtle#new-owner-name(type="text" required)
+							.col-md-6
+								label.form-label(for="new-owner-email") Owner Email
+								input.form-control.form-control-sm.bg-body-tertiary.border-secondary-subtle#new-owner-email(type="email" required)
+						.mb-5
+							label.form-label(for="new-plan") Plan
+							select.form-select.form-select-sm.bg-body-tertiary.border-secondary-subtle#new-plan
+								option(value="free" data-limit-projects=plan_limits.free.limit_projects data-limit-users=plan_limits.free.limit_users data-limit-ai-workflows=plan_limits.free.limit_ai_workflows_per_day) Free
+								option(value="pro" data-limit-projects=plan_limits.pro.limit_projects data-limit-users=plan_limits.pro.limit_users data-limit-ai-workflows=plan_limits.pro.limit_ai_workflows_per_day) Pro
+
+						h2.mb-3 Limits
+						.row.mb-3
+							.col-md-4
+								label.form-label(for="new-limit-projects") Projects
+								input.form-control.form-control-sm.bg-body-tertiary.border-secondary-subtle#new-limit-projects(type="number" min="0" step="1" value=plan_limits.free.limit_projects required)
+							.col-md-4
+								label.form-label(for="new-limit-users") Users
+								input.form-control.form-control-sm.bg-body-tertiary.border-secondary-subtle#new-limit-users(type="number" min="0" step="1" value=plan_limits.free.limit_users required)
+							.col-md-4
+								label.form-label(for="new-limit-ai-workflows") AI Workflows / Day
+								input.form-control.form-control-sm.bg-body-tertiary.border-secondary-subtle#new-limit-ai-workflows(type="number" min="0" step="1" value=plan_limits.free.limit_ai_workflows_per_day required)
+						.form-text.mb-5 Zero means unlimited. Selecting a plan loads its defaults; values remain editable.
+
+						.d-flex.justify-content-between.align-items-center
+							a.btn.btn-outline-secondary.btn-sm(href="/admin") Cancel
+							button.btn.btn-primary.btn-sm(type="submit") Create Account
+
+block scripts
+	script(src=`/static/v-${v}/js/admin_accounts.js`)

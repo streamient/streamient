@@ -35,7 +35,7 @@ async function request(server, method, path, body) {
 	});
 }
 
-describe('Free plan team user limit', () => {
+describe('stored account team user limit', () => {
 	const originalAppUrl = config.appUrl;
 	const originalIsHosted = config.isHosted;
 	const originalUserFindById = User.findById;
@@ -62,6 +62,8 @@ describe('Free plan team user limit', () => {
 			name: 'Test Account',
 			is_active: true,
 			plan: 'free',
+			limit_projects: 1,
+			limit_users: 0,
 		};
 
 		User.findById = () => ({
@@ -93,7 +95,7 @@ describe('Free plan team user limit', () => {
 		Tenant.findOne = (filter) => {
 			if (filter?.is_active === true) return tenant;
 			return {
-				select: (fields) => ({ lean: async () => (fields.includes('plan') ? { plan: tenant.plan } : tenant) }),
+				select: () => ({ lean: async () => tenant }),
 			};
 		};
 		TeamInvite.deleteMany = async () => ({ deletedCount: 0 });
@@ -116,7 +118,7 @@ describe('Free plan team user limit', () => {
 		AuditLog.create = originalAuditCreate;
 	});
 
-	it('allows adding a 6th user on Free (users are unlimited)', async () => {
+	it('allows adding a user when the stored limit is zero', async () => {
 		memberCount = 5;
 		const server = await createServer();
 		try {
@@ -132,11 +134,8 @@ describe('Free plan team user limit', () => {
 		}
 	});
 
-	// The quota middleware stays mounted so a future cap is one config edit —
-	// prove the 403 path still works when a user cap is configured.
-	it('enforces a configured user cap with an upgrade-worthy message', async () => {
-		const originalUsers = config.planLimits.free.users;
-		config.planLimits.free.users = 5;
+	it('enforces the stored user limit with an account-specific message', async () => {
+		tenant.limit_users = 5;
 		memberCount = 5;
 		const server = await createServer();
 		try {
@@ -145,11 +144,10 @@ describe('Free plan team user limit', () => {
 			});
 			const json = await res.json();
 			assert.equal(res.status, 403);
-			assert.equal(json.code, 'PLAN_LIMIT');
+			assert.equal(json.code, 'ACCOUNT_LIMIT');
 			assert.equal(json.limit, 'users');
-			assert.match(json.error, /5 users/);
+			assert.match(json.error, /account allows 5 users/);
 		} finally {
-			config.planLimits.free.users = originalUsers;
 			await new Promise((resolve) => server.close(resolve));
 		}
 	});
