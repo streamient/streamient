@@ -82,7 +82,7 @@ describe('per-plan managed model routing', () => {
 		});
 
 		assert.match(requests[0].url, /api\.openai\.com/);
-		assert.equal(requests[0].body.model, 'gpt-5.5');
+		assert.equal(requests[0].body.model, 'gpt-5.6-terra');
 		assert.equal(requests[0].options.headers.Authorization, 'Bearer env-openai');
 	});
 
@@ -102,7 +102,7 @@ describe('per-plan managed model routing', () => {
 	});
 
 	it('keeps the Pro conversation model on the high-quality chat tier', () => {
-		assert.equal(config.llm.planModels.pro.conversation, 'gpt-5.5');
+		assert.equal(config.llm.planModels.pro.conversation, 'gpt-5.6-terra');
 	});
 
 	it('keeps BYOK tenants on their own key and the global model config', async () => {
