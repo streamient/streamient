@@ -60,6 +60,7 @@ After saving a URL, use `create_link` to connect it to related notes or memories
 - HTTP stack = `routes/**` (Express routers) -> `services/**` (business logic) -> `model/**` (Mongoose schemas) with utilities in `modules/**`.
 - Multi-tenant safety matters: `host_id` filtering stays intact. 
 - When adding/editing API endpoints, always update the Swagger docs
+- Never change Redis or MongoDB implementation
 
 ## Implementation Conventions
 - Before adding new dependencies, verify they are compatible with Node 24 and consider whether an existing custom module already covers the need.
