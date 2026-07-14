@@ -6,7 +6,7 @@ import { User } from '../model/user.js';
 import { applyTenantContextToSession, createTenant, initializeSessionTenant } from '../modules/tenancy.js';
 import { ensureCollections } from '../modules/typesense.js';
 import { generateToken } from '../middleware/auth.js';
-import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail } from '../services/email_service.js';
+import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail, sendSignupNotificationEmail } from '../services/email_service.js';
 import { buildHostedTrialFields, ensureFreeSubscriptionForAccountHolder, ensureStripeCustomerForAccountHolder } from '../services/billing_service.js';
 import { sendMagicLink, isMagicLinkValid, verifyMagicLink } from '../services/magic_link_service.js';
 import * as passkeyService from '../services/passkey_service.js';
@@ -192,6 +192,14 @@ router.post('/verify', async (req, res) => {
 
 		// Clean up pending signup
 		await PendingSignup.deleteOne({ _id: pending._id });
+
+		if (req.isHosted) {
+			try {
+				await sendSignupNotificationEmail({ email: user.email, name: user.name, hostId: tenant.host_id });
+			} catch (e) {
+				log.warn({ err: e, email: user.email, host_id: tenant.host_id }, 'Signup notification email failed');
+			}
+		}
 
 		// Send welcome email (fire-and-forget)
 		sendWelcomeEmail(user.email, user.name).catch((e) =>

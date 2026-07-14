@@ -53,7 +53,7 @@ x-environment: &environment
   OPENAI_API_KEY: ${OPENAI_API_KEY:-}
   GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
   # Managed per-plan AI (optional — config.js defaults: Free = google/gemini-2.5-flash-lite;
-  # Pro = openai/gpt-5.5 for chat + conversation and openai/gpt-5.4-mini for intent classification).
+  # Pro = openai/gpt-5.6-terra for chat + conversation and openai/gpt-5.4-mini for intent classification).
   FREE_AI_MODEL_PROVIDER: ${FREE_AI_MODEL_PROVIDER:-}
   FREE_CHAT_AI_MODEL: ${FREE_CHAT_AI_MODEL:-}
   FREE_NL_SEARCH_MODEL: ${FREE_NL_SEARCH_MODEL:-}

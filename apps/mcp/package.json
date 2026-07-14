@@ -16,7 +16,7 @@
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.2",
     "vitepress-openapi": "^0.2.1",
-    "vitepress-plugin-tabs": "^0.9.0",
+    "vitepress-plugin-tabs": "^0.9.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
