@@ -1431,7 +1431,8 @@
                       "$ref": "#/components/schemas/AdminAccount"
                     },
                     "magic_link_sent": {
-                      "type": "boolean"
+                      "type": "boolean",
+                      "description": "True only when the magic-link email was submitted to configured SMTP."
                     },
                     "warnings": {
                       "type": "array",

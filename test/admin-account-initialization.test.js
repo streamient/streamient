@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { initializeAdminProvisionedAccount } from '../routes/admin.js';
 
 describe('admin account post-commit initialization', () => {
-	const user = { email: 'owner@example.com' };
+	const user = { _id: 'user-1', email: 'owner@example.com' };
 	const tenant = { host_id: 'host-1' };
 	const logger = { warn() {} };
 
@@ -12,7 +12,7 @@ describe('admin account post-commit initialization', () => {
 		const result = await initializeAdminProvisionedAccount(user, tenant, {
 			initializeBilling: async () => {},
 			initializeTypesense: async () => {},
-			sendOwnerMagicLink: async () => {},
+			sendOwnerMagicLink: async () => true,
 			logger,
 		});
 		assert.deepEqual(result, { magic_link_sent: true, warnings: [] });
@@ -31,5 +31,18 @@ describe('admin account post-commit initialization', () => {
 			'Typesense setup failed',
 			'Magic-link email failed; the owner can request another from login',
 		]);
+	});
+
+	it('reports a warning when magic-link delivery is explicitly skipped', async () => {
+		const result = await initializeAdminProvisionedAccount(user, tenant, {
+			initializeBilling: async () => {},
+			initializeTypesense: async () => {},
+			sendOwnerMagicLink: async () => false,
+			logger,
+		});
+		assert.deepEqual(result, {
+			magic_link_sent: false,
+			warnings: ['Magic-link email failed; the owner can request another from login'],
+		});
 	});
 });

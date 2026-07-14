@@ -2,12 +2,19 @@ import { MagicLink } from '../model/magic_link.js';
 import { sendMagicLinkEmail } from './email_service.js';
 import { User } from '../model/user.js';
 
-export async function sendMagicLink(email, baseUrl = null) {
-	const user = await User.findOne({ email, is_active: true });
-	if (!user) return; // silent fail to prevent enumeration
+export async function sendMagicLink(email, baseUrl = null, options = {}) {
+	let userId = options.userId || null;
+	if (!userId) {
+		const user = await User.findOne({ email, is_active: true }).select('_id').read('primary');
+		if (!user) return false; // silent fail to prevent enumeration
+		userId = user._id;
+	}
 
-	const link = await MagicLink.generate(user._id);
-	await sendMagicLinkEmail(email, link.token, baseUrl);
+	const generateLink = options.generateLink || ((id) => MagicLink.generate(id));
+	const sendEmail = options.sendEmail || sendMagicLinkEmail;
+	const link = await generateLink(userId);
+	const delivery = await sendEmail(email, link.token, baseUrl);
+	return Boolean(delivery);
 }
 
 export async function isMagicLinkValid(token) {
