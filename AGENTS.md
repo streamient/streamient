@@ -78,7 +78,7 @@ After saving a URL, use `create_link` to connect it to related notes or memories
 - Use Docker compose only
 - compose.yml in root of repo, docker compose down -v (clean up), docker compose up -d to start
 - pnpm as package manager
-- Development host is http://k.lan, MCP on https://mcp.k.lan
+- Development host is http://s.lan, MCP on https://mcp.s.lan
 - To sign into the app you can use nitai@fastmail.com and the localhost:8025 (mailpit) to retrieve the magic link
 
 ## Design
@@ -89,6 +89,8 @@ After saving a URL, use `create_link` to connect it to related notes or memories
 - Always use cursor:pointer for clickable elements, if class doesn't have it already
 - Use sweetalert2 for notifications or questions.
 - Use Bootstrap modal for popups
+- Always use rem units for CSS, never px
+- Always write the product name in humanized form, i.e., Streamient not all upper-case
 
 ## Testing
 - Before running full/integration tests, source:
