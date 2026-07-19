@@ -3,6 +3,7 @@ import Keyv from 'keyv';
 import KeyvValkey from '@keyv/valkey';
 import config from '../config.js';
 import { buildRedisConnectionOptions, isRedisSentinelOptions, isTransientRedisError } from './redis_options.js';
+import { startRedisHeartbeat } from './redis_heartbeat.js';
 import { createLogger } from './logger.js';
 
 const log = createLogger('redis');
@@ -34,6 +35,8 @@ function attachRedisClientHandlers(redisClient, label) {
 		lastReconnectLogAt = now;
 		log.warn({ label, delay_ms: delayMs }, 'Redis client reconnecting');
 	});
+
+	startRedisHeartbeat(redisClient);
 }
 
 function createSharedClient() {
