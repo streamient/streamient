@@ -4,6 +4,7 @@ import Redis from 'ioredis';
 import jwt from 'jsonwebtoken';
 import config from '../config.js';
 import { buildRedisConnectionOptions, isTransientRedisError } from './redis_options.js';
+import { startRedisHeartbeat } from './redis_heartbeat.js';
 import { resolveActiveTenantContext } from './tenancy.js';
 import * as OtelRuntime from './otel_runtime.js';
 import { createLogger } from './logger.js';
@@ -27,7 +28,7 @@ function createRedisClient() {
 		: new Redis(connection.options);
 }
 
-function attachRedisErrorHandler(redisClient, label) {
+export function attachSocketRedisClientHandlers(redisClient, label) {
 	redisClient.on('error', (err) => {
 		if (err && !err.handled) {
 			err.handled = true;
@@ -47,6 +48,8 @@ function attachRedisErrorHandler(redisClient, label) {
 		lastRedisReconnectLogAt = now;
 		log.warn({ label, delay_ms: delayMs }, 'Socket.IO Redis client reconnecting');
 	});
+
+	startRedisHeartbeat(redisClient);
 }
 
 function emitToTenantRoom(host_id, event, data) {
@@ -123,7 +126,7 @@ async function ensureBridgePublisher() {
 	if (bridgePublisher) return bridgePublisher;
 
 	bridgePublisher = createRedisClient();
-	attachRedisErrorHandler(bridgePublisher, 'Socket.IO bridge publisher');
+	attachSocketRedisClientHandlers(bridgePublisher, 'Socket.IO bridge publisher');
 	await bridgePublisher.connect();
 	return bridgePublisher;
 }
@@ -132,7 +135,7 @@ async function setupTenantEventBridge() {
 	if (!config.socketRedis || bridgeSubscriber) return;
 
 	bridgeSubscriber = createRedisClient();
-	attachRedisErrorHandler(bridgeSubscriber, 'Socket.IO bridge subscriber');
+	attachSocketRedisClientHandlers(bridgeSubscriber, 'Socket.IO bridge subscriber');
 	bridgeSubscriber.on('message', (channel, message) => {
 		if (channel !== TENANT_EVENT_BRIDGE_CHANNEL) return;
 		try {
@@ -208,7 +211,7 @@ export async function setupSocketIO(httpServer, sessionMiddleware, handlers = {}
 			let redisClient;
 			try {
 				redisClient = createRedisClient();
-				attachRedisErrorHandler(redisClient, 'Socket.IO Redis client');
+				attachSocketRedisClientHandlers(redisClient, 'Socket.IO Redis client');
 				await redisClient.connect();
 				io.adapter(createAdapter(redisClient, { streamCount: 4, blockTimeInMs: 10_000, heartbeatInterval: 30000, heartbeatTimeout: 90000 }));
 				log.info('Socket.IO Redis streams adapter connected');

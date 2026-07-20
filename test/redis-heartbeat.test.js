@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { startRedisHeartbeat } from '../modules/redis_heartbeat.js';
+import { attachSocketRedisClientHandlers } from '../modules/socket.js';
 
 function wait(ms) {
 	return new Promise(resolve => setTimeout(resolve, ms));
@@ -21,6 +22,16 @@ class FakeRedisClient extends EventEmitter {
 }
 
 describe('Redis heartbeat', () => {
+	it('covers Socket.IO bridge clients', () => {
+		const client = new FakeRedisClient();
+
+		attachSocketRedisClientHandlers(client, 'Socket.IO bridge publisher');
+
+		assert.ok(client._healthCheckInterval);
+		client.emit('end');
+		assert.equal(client._healthCheckInterval, null);
+	});
+
 	it('keeps ready clients active and stops after the client ends', async () => {
 		const client = new FakeRedisClient();
 		const timer = startRedisHeartbeat(client, 10);
