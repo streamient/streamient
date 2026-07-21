@@ -10,6 +10,7 @@ Streamient uses date tags in `YYYYMMDDN` format. Use the latest dated section as
 - Removed remaining ECC (email triage) leftovers: dead ECC CSS, quick-search ECC open mode, unused email AI/triage config, and stale triage wording in MCP instructions and API docs. Email triage lives in Mailtwine; Streamient keeps email storage, import, and search.
 - Fixed project settings API failing for Pro tenants due to a removed email identity service reference.
 - Reindex button text now stays stable while reindex status updates.
+- Switched URL path crawling from Playwright to Crawlee CheerioCrawler for faster static and server-rendered page indexing without bundled browser dependencies.
 
 ## 2026-06-11
 

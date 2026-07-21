@@ -94,7 +94,7 @@ importers:
         specifier: ^3.45.0
         version: 3.45.0(chokidar@3.6.0)(supports-color@5.5.0)
       '@tiptap/core':
-        specifier: ^3.28.0
+        specifier: ^3.22.3
         version: 3.28.0(@tiptap/pm@3.28.0)
       '@tiptap/extension-blockquote':
         specifier: ^3.28.0
@@ -103,7 +103,7 @@ importers:
         specifier: ^3.28.0
         version: 3.28.0(@tiptap/extension-list@3.28.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))(@tiptap/pm@3.28.0))
       '@tiptap/extension-code-block':
-        specifier: ^3.28.0
+        specifier: ^3.22.3
         version: 3.28.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))(@tiptap/pm@3.28.0)
       '@tiptap/extension-heading':
         specifier: ^3.28.0
@@ -127,7 +127,7 @@ importers:
         specifier: ^3.28.0
         version: 3.28.0(@tiptap/extension-list@3.28.0(@tiptap/core@3.28.0(@tiptap/pm@3.28.0))(@tiptap/pm@3.28.0))
       '@tiptap/pm':
-        specifier: ^3.28.0
+        specifier: ^3.22.3
         version: 3.28.0
       '@tiptap/starter-kit':
         specifier: ^3.28.0
@@ -161,7 +161,7 @@ importers:
         version: 1.4.7
       crawlee:
         specifier: ^3.17.0
-        version: 3.17.0(@types/node@26.1.1)(playwright@1.61.1)(supports-color@5.5.0)
+        version: 3.17.0(@types/node@26.1.1)(supports-color@5.5.0)
       croner:
         specifier: ^10.0.1
         version: 10.0.1
@@ -252,9 +252,6 @@ importers:
       pino-pretty:
         specifier: ^13.1.3
         version: 13.1.3
-      playwright:
-        specifier: ^1.61.1
-        version: 1.61.1
       pug:
         specifier: ^3.0.4
         version: 3.0.4
@@ -4012,11 +4009,6 @@ packages:
     resolution: {integrity: sha512-XUBA9XClHbnJWSfBzjkm6RvPsyg3sryZt06BEQoXcF7EK/xpGaQYJgQKDJSUH5SGZ76Y7pFx1QBnXz09rU5Fbw==}
     engines: {node: ^14.17.0 || ^16.13.0 || >=18.0.0}
 
-  fsevents@2.3.2:
-    resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==}
-    engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
-    os: [darwin]
-
   fsevents@2.3.3:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
@@ -5128,16 +5120,6 @@ packages:
   pkg-dir@4.2.0:
     resolution: {integrity: sha512-HRDzbaKjC+AOWVXxAU/x54COGeIv9eb+6CkDSQoNTt4XyWoIJvuPsXizxu/Fr23EiekbtZwmh1IcIG/l/a10GQ==}
     engines: {node: '>=8'}
-
-  playwright-core@1.61.1:
-    resolution: {integrity: sha512-h7Qlt6m4REp25qvIdvbDtVmD4LqVXfpRxhORv9L0jzETM05p4fuPJ3dKyuSXQxDSbXnmS79HAgi9589lGSpLkg==}
-    engines: {node: '>=18'}
-    hasBin: true
-
-  playwright@1.61.1:
-    resolution: {integrity: sha512-DWnY5o3YbLWK4GovuAVwpqL+1VwGNdUGrRr++8j8PtQQzvAVZUIMjKQ90fY689sEJZJBbZVw1rXaOKSTitkzPQ==}
-    engines: {node: '>=18'}
-    hasBin: true
 
   postcss@8.5.19:
     resolution: {integrity: sha512-Mz8SaolMd8nB+G13WkORcxQKHZ/NE4xXevtkJHVuG+guo9/wYKlIMTKAqGdEmYOXR2ijPjTYNHssizdaVSUNdQ==}
@@ -6497,14 +6479,14 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@crawlee/browser-pool@3.17.0(playwright@1.61.1)(supports-color@5.5.0)':
+  '@crawlee/browser-pool@3.17.0(supports-color@5.5.0)':
     dependencies:
       '@apify/log': 2.5.41
       '@apify/timeout': 0.3.5
       '@crawlee/core': 3.17.0(supports-color@5.5.0)
       '@crawlee/types': 3.17.0
       fingerprint-generator: 2.1.82
-      fingerprint-injector: 2.1.82(playwright@1.61.1)
+      fingerprint-injector: 2.1.82
       lodash.merge: 4.6.2
       nanoid: 3.3.16
       ow: 0.28.2
@@ -6513,23 +6495,19 @@ snapshots:
       quick-lru: 5.1.1
       tiny-typed-emitter: 2.1.0
       tslib: 2.8.1
-    optionalDependencies:
-      playwright: 1.61.1
     transitivePeerDependencies:
       - supports-color
 
-  '@crawlee/browser@3.17.0(playwright@1.61.1)(supports-color@5.5.0)':
+  '@crawlee/browser@3.17.0(supports-color@5.5.0)':
     dependencies:
       '@apify/timeout': 0.3.5
       '@crawlee/basic': 3.17.0(supports-color@5.5.0)
-      '@crawlee/browser-pool': 3.17.0(playwright@1.61.1)(supports-color@5.5.0)
+      '@crawlee/browser-pool': 3.17.0(supports-color@5.5.0)
       '@crawlee/types': 3.17.0
       '@crawlee/utils': 3.17.0(supports-color@5.5.0)
       ow: 0.28.2
       tslib: 2.8.1
       type-fest: 4.41.0
-    optionalDependencies:
-      playwright: 1.61.1
     transitivePeerDependencies:
       - supports-color
 
@@ -6647,13 +6625,13 @@ snapshots:
       proper-lockfile: 4.1.2
       tslib: 2.8.1
 
-  '@crawlee/playwright@3.17.0(playwright@1.61.1)(supports-color@5.5.0)':
+  '@crawlee/playwright@3.17.0(supports-color@5.5.0)':
     dependencies:
       '@apify/datastructures': 2.0.6
       '@apify/log': 2.5.41
       '@apify/timeout': 0.3.5
-      '@crawlee/browser': 3.17.0(playwright@1.61.1)(supports-color@5.5.0)
-      '@crawlee/browser-pool': 3.17.0(playwright@1.61.1)(supports-color@5.5.0)
+      '@crawlee/browser': 3.17.0(supports-color@5.5.0)
+      '@crawlee/browser-pool': 3.17.0(supports-color@5.5.0)
       '@crawlee/core': 3.17.0(supports-color@5.5.0)
       '@crawlee/types': 3.17.0
       '@crawlee/utils': 3.17.0(supports-color@5.5.0)
@@ -6665,18 +6643,16 @@ snapshots:
       ow: 0.28.2
       string-comparison: 1.3.0
       tslib: 2.8.1
-    optionalDependencies:
-      playwright: 1.61.1
     transitivePeerDependencies:
       - puppeteer
       - supports-color
 
-  '@crawlee/puppeteer@3.17.0(playwright@1.61.1)(supports-color@5.5.0)':
+  '@crawlee/puppeteer@3.17.0(supports-color@5.5.0)':
     dependencies:
       '@apify/datastructures': 2.0.6
       '@apify/log': 2.5.41
-      '@crawlee/browser': 3.17.0(playwright@1.61.1)(supports-color@5.5.0)
-      '@crawlee/browser-pool': 3.17.0(playwright@1.61.1)(supports-color@5.5.0)
+      '@crawlee/browser': 3.17.0(supports-color@5.5.0)
+      '@crawlee/browser-pool': 3.17.0(supports-color@5.5.0)
       '@crawlee/types': 3.17.0
       '@crawlee/utils': 3.17.0(supports-color@5.5.0)
       cheerio: 1.0.0-rc.12
@@ -10013,24 +9989,22 @@ snapshots:
     dependencies:
       layout-base: 2.0.1
 
-  crawlee@3.17.0(@types/node@26.1.1)(playwright@1.61.1)(supports-color@5.5.0):
+  crawlee@3.17.0(@types/node@26.1.1)(supports-color@5.5.0):
     dependencies:
       '@crawlee/basic': 3.17.0(supports-color@5.5.0)
-      '@crawlee/browser': 3.17.0(playwright@1.61.1)(supports-color@5.5.0)
-      '@crawlee/browser-pool': 3.17.0(playwright@1.61.1)(supports-color@5.5.0)
+      '@crawlee/browser': 3.17.0(supports-color@5.5.0)
+      '@crawlee/browser-pool': 3.17.0(supports-color@5.5.0)
       '@crawlee/cheerio': 3.17.0(supports-color@5.5.0)
       '@crawlee/cli': 3.17.0(@types/node@26.1.1)
       '@crawlee/core': 3.17.0(supports-color@5.5.0)
       '@crawlee/http': 3.17.0(supports-color@5.5.0)
       '@crawlee/jsdom': 3.17.0(supports-color@5.5.0)
       '@crawlee/linkedom': 3.17.0(supports-color@5.5.0)
-      '@crawlee/playwright': 3.17.0(playwright@1.61.1)(supports-color@5.5.0)
-      '@crawlee/puppeteer': 3.17.0(playwright@1.61.1)(supports-color@5.5.0)
+      '@crawlee/playwright': 3.17.0(supports-color@5.5.0)
+      '@crawlee/puppeteer': 3.17.0(supports-color@5.5.0)
       '@crawlee/utils': 3.17.0(supports-color@5.5.0)
       import-local: 3.2.0
       tslib: 2.8.1
-    optionalDependencies:
-      playwright: 1.61.1
     transitivePeerDependencies:
       - '@types/node'
       - bufferutil
@@ -10625,12 +10599,10 @@ snapshots:
       header-generator: 2.1.82
       tslib: 2.8.1
 
-  fingerprint-injector@2.1.82(playwright@1.61.1):
+  fingerprint-injector@2.1.82:
     dependencies:
       fingerprint-generator: 2.1.82
       tslib: 2.8.1
-    optionalDependencies:
-      playwright: 1.61.1
 
   focus-trap@7.8.0:
     dependencies:
@@ -10693,9 +10665,6 @@ snapshots:
   fs-minipass@3.0.3:
     dependencies:
       minipass: 7.1.3
-
-  fsevents@2.3.2:
-    optional: true
 
   fsevents@2.3.3:
     optional: true
@@ -11926,14 +11895,6 @@ snapshots:
   pkg-dir@4.2.0:
     dependencies:
       find-up: 4.1.0
-
-  playwright-core@1.61.1: {}
-
-  playwright@1.61.1:
-    dependencies:
-      playwright-core: 1.61.1
-    optionalDependencies:
-      fsevents: 2.3.2
 
   postcss@8.5.19:
     dependencies:

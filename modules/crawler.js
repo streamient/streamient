@@ -1,4 +1,4 @@
-import { PlaywrightCrawler } from 'crawlee';
+import { CheerioCrawler } from 'crawlee';
 import { ensureCollections, importDocuments, removeDocumentsBySourceIds, toIndexDocs } from '../modules/typesense.js';
 import { Url } from '../model/url.js';
 import { CrawlState } from '../model/crawl_state.js';
@@ -40,7 +40,7 @@ export function shouldSkipCrawledUrl(rawUrl) {
 }
 
 export function isHtmlResponse(response) {
-	const headers = response?.headers?.() || {};
+	const headers = typeof response?.headers === 'function' ? response.headers() : response?.headers || {};
 	const contentType = String(headers['content-type'] || headers['Content-Type'] || '').toLowerCase();
 	return !contentType || contentType.includes('text/html') || contentType.includes('application/xhtml+xml');
 }
@@ -132,7 +132,7 @@ function failureTypeForStatus(statusCode) {
 
 function httpStatusFromError(err) {
 	const message = errorMessage(err);
-	const match = message.match(/\b(?:received|HTTP|status(?: code)?[:\s])\s*([1-5]\d\d)\b/i);
+	const match = message.match(/\b(?:received|HTTP|response\s+code|status(?: code)?[:\s])\s*([1-5]\d\d)\b/i) || message.match(/^\s*([1-5]\d\d)\b/);
 	return normalizeHttpStatus(match?.[1]);
 }
 
@@ -428,7 +428,7 @@ export async function crawlSite(urlDoc, deps = {}) {
 	const projectId = idString(urlDoc.project);
 	const crawlScope = getCrawlScope(urlDoc.url);
 	const stepLimit = deps.stepLimit || getCrawlStepLimit();
-	const crawlerClass = deps.PlaywrightCrawler || PlaywrightCrawler;
+	const crawlerClass = deps.CheerioCrawler || CheerioCrawler;
 	const urlModel = deps.Url || Url;
 	const crawlStateModel = deps.CrawlState || CrawlState;
 	const ensureCollectionsFn = deps.ensureCollections || ensureCollections;
@@ -473,7 +473,7 @@ export async function crawlSite(urlDoc, deps = {}) {
 		maxConcurrency: 3,
 		requestHandlerTimeoutSecs: 30,
 
-		async requestHandler({ request, page, enqueueLinks, response }) {
+		async requestHandler({ request, $, enqueueLinks, response }) {
 			const currentUrl = request.loadedUrl || request.url;
 			const normalizedCurrent = normalizeCrawlUrl(currentUrl);
 			if (!isUrlInCrawlScope(currentUrl, crawlScope)) {
@@ -481,12 +481,12 @@ export async function crawlSite(urlDoc, deps = {}) {
 				failedInRun.set(normalizedRequest, failureEntry(request.url, 'Skipped outside crawl scope', { failureType: 'skipped' }));
 				return;
 			}
-			const statusCode = response?.status?.() || null;
+			const statusCode = normalizeHttpStatus(response?.statusCode);
 			if (statusCode && statusCode >= 400) {
 				failedInRun.set(normalizedCurrent, failureEntryForStatus(currentUrl, statusCode));
 				return;
 			}
-			if (!isHtmlResponse(response)) {
+			if (!isHtmlResponse(response) || typeof $ !== 'function') {
 				failedInRun.set(normalizedCurrent, failureEntry(currentUrl, 'Non-HTML response', { failureType: 'non_html' }));
 				return;
 			}
@@ -495,11 +495,9 @@ export async function crawlSite(urlDoc, deps = {}) {
 				return;
 			}
 
-			const title = await page.title();
-			const textContent = await page.evaluate(() => {
-				const el = document.querySelector('main, article, [role="main"], .content, #content, body');
-				return el ? el.innerText.replace(/\s+/g, ' ').trim() : '';
-			});
+			const title = $('title').first().text().trim();
+			$('script, style, noscript, template, iframe').remove();
+			const textContent = $('main, article, [role="main"], .content, #content, body').first().text().replace(/\s+/g, ' ').trim();
 
 			visitedInRun.set(normalizedCurrent, {
 				url: currentUrl,
