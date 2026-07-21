@@ -1,7 +1,7 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
-import config from '../config.js';
+import config, { getPlanLlmConfig } from '../config.js';
 import { Tenant } from '../modules/tenancy.js';
 import { encrypt } from '../modules/encryption.js';
 import { chatCompletion, nlSearchCompletion } from '../modules/llm_client.js';
@@ -14,6 +14,7 @@ describe('per-plan managed model routing', () => {
 	const originalChatProvider = config.llm.chatProvider;
 	const originalChatModel = config.llm.chatModel;
 	const originalFreePlanModels = { ...config.llm.planModels.free };
+	const originalProPlanModels = { ...config.llm.planModels.pro };
 	const originalEncryptionKey = config.gitEncryptionKey;
 	const originalTenantFindOne = Tenant.findOne;
 	let requests;
@@ -31,9 +32,23 @@ describe('per-plan managed model routing', () => {
 		config.llm.chatModel = 'gpt-5.4-mini';
 		config.llm.planModels.free = {
 			provider: 'google',
-			chat: 'gemini-2.5-flash-lite',
-			nlSearch: 'gemini-2.5-flash-lite',
-			conversation: 'gemini-2.5-flash-lite',
+			chatProvider: 'openai',
+			nlSearchProvider: 'openai',
+			conversationProvider: 'openai',
+			chat: 'gpt-5.4-nano',
+			nlSearch: 'gpt-5.4-nano',
+			conversation: 'gpt-5.4-nano',
+		};
+		config.llm.planModels.pro = {
+			provider: 'openai',
+			chatProvider: 'google',
+			nlSearchProvider: 'google',
+			conversationProvider: 'google',
+			chat: 'gemini-3.6-flash',
+			nlSearch: 'gemini-3.5-flash-lite',
+			conversation: 'gemini-3.5-flash-lite',
+			chatThinkingLevel: 'minimal',
+			nlSearchThinkingLevel: 'minimal',
 		};
 		tenant = {
 			host_id: 'host-1',
@@ -62,10 +77,11 @@ describe('per-plan managed model routing', () => {
 		config.llm.chatProvider = originalChatProvider;
 		config.llm.chatModel = originalChatModel;
 		config.llm.planModels.free = { ...originalFreePlanModels };
+		config.llm.planModels.pro = { ...originalProPlanModels };
 		Tenant.findOne = originalTenantFindOne;
 	});
 
-	it('routes managed Free tenants to the Free plan model on Gemini', async () => {
+	it('keeps managed Free tenants on the nano model through the chat provider slot', async () => {
 		const content = await chatCompletion({
 			hostId: 'host-1',
 			provider: config.llm.chatProvider,
@@ -74,12 +90,12 @@ describe('per-plan managed model routing', () => {
 		});
 
 		assert.equal(content, 'ok');
-		assert.match(requests[0].url, /generativelanguage\.googleapis\.com/);
-		assert.match(requests[0].url, /models\/gemini-2\.5-flash-lite:/);
-		assert.match(requests[0].url, /key=env-gemini/);
+		assert.match(requests[0].url, /api\.openai\.com/);
+		assert.equal(requests[0].body.model, 'gpt-5.4-nano');
+		assert.equal(requests[0].options.headers.Authorization, 'Bearer env-openai');
 	});
 
-	it('routes managed Pro tenants to the Pro chat model on OpenAI', async () => {
+	it('routes managed Pro chat to Gemini 3.6 with minimal thinking', async () => {
 		tenant.plan = 'pro';
 
 		await chatCompletion({
@@ -89,28 +105,43 @@ describe('per-plan managed model routing', () => {
 			messages: [{ role: 'user', content: 'hi' }],
 		});
 
-		assert.match(requests[0].url, /api\.openai\.com/);
-		assert.equal(requests[0].body.model, 'gpt-5.6-terra');
-		assert.equal(requests[0].options.headers.Authorization, 'Bearer env-openai');
+		assert.match(requests[0].url, /generativelanguage\.googleapis\.com/);
+		assert.match(requests[0].url, /models\/gemini-3\.6-flash:/);
+		assert.match(requests[0].url, /key=env-gemini/);
+		assert.equal(requests[0].body.generationConfig.thinkingConfig.thinkingLevel, 'minimal');
 	});
 
-	it('uses the nlSearch plan slot for intent classification', async () => {
+	it('keeps Free intent classification on nano', async () => {
 		await nlSearchCompletion({ hostId: 'host-1', messages: [{ role: 'user', content: 'hi' }] });
 
-		assert.match(requests[0].url, /models\/gemini-2\.5-flash-lite:/);
+		assert.match(requests[0].url, /api\.openai\.com/);
+		assert.equal(requests[0].body.model, 'gpt-5.4-nano');
 	});
 
-	it('uses the Pro nlSearch model for Pro intent classification', async () => {
+	it('routes Pro intent classification to Gemini 3.5 Flash-Lite', async () => {
 		tenant.plan = 'pro';
 
 		await nlSearchCompletion({ hostId: 'host-1', messages: [{ role: 'user', content: 'hi' }] });
 
-		assert.match(requests[0].url, /api\.openai\.com/);
-		assert.equal(requests[0].body.model, 'gpt-5.4-mini');
+		assert.match(requests[0].url, /models\/gemini-3\.5-flash-lite:/);
+		assert.equal(requests[0].body.generationConfig.thinkingConfig.thinkingLevel, 'minimal');
 	});
 
-	it('keeps the Pro conversation model on the high-quality chat tier', () => {
-		assert.equal(config.llm.planModels.pro.conversation, 'gpt-5.6-terra');
+	it('routes Pro Typesense conversations to Gemini 3.5 Flash-Lite', () => {
+		assert.deepEqual(getPlanLlmConfig('pro', 'conversation'), {
+			provider: 'google',
+			model: 'gemini-3.5-flash-lite',
+			thinkingLevel: '',
+		});
+	});
+
+	it('falls back to the legacy plan provider when a slot provider is unset', async () => {
+		delete config.llm.planModels.free.chatProvider;
+		config.llm.planModels.free.chat = 'gemini-3.5-flash-lite';
+
+		await chatCompletion({ hostId: 'host-1', messages: [{ role: 'user', content: 'hi' }] });
+
+		assert.match(requests[0].url, /models\/gemini-3\.5-flash-lite:/);
 	});
 
 	it('keeps BYOK tenants on their own key and the global model config', async () => {
@@ -143,15 +174,14 @@ describe('per-plan managed model routing', () => {
 		assert.equal(requests[0].options.headers.Authorization, 'Bearer env-openai');
 	});
 
-	it('falls back to the other provider default when the plan provider has no env key', async () => {
-		config.llm.googleApiKey = '';
+	it('falls back to the other provider default when the slot provider has no env key', async () => {
+		config.llm.openaiApiKey = '';
 
 		await chatCompletion({ hostId: 'host-1', messages: [{ role: 'user', content: 'hi' }] });
 
 		// Provider switched away from the plan's provider, so the plan model no
 		// longer applies — the resolved provider's default model does.
-		assert.match(requests[0].url, /api\.openai\.com/);
-		assert.equal(requests[0].body.model, config.llm.openaiModel);
-		assert.equal(requests[0].options.headers.Authorization, 'Bearer env-openai');
+		assert.match(requests[0].url, /models\/gemini-3\.6-flash:/);
+		assert.match(requests[0].url, /key=env-gemini/);
 	});
 });

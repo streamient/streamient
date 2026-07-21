@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import Typesense from 'typesense';
-import config from '../config.js';
+import config, { getPlanLlmConfig } from '../config.js';
 import { emitToTenant } from './socket.js';
 import { getRedisClient } from './redis.js';
 import { normalizeLlmScope, resolveLlmKeyContext } from '../services/byo_ai_service.js';
@@ -1559,9 +1559,9 @@ export async function ensureConversationModel(hostId, userId, options = {}) {
 	let configuredProvider;
 	let configuredModel;
 	if (ctx.mode === 'managed') {
-		const planModels = config.llm.planModels[ctx.plan] || {};
-		configuredProvider = planModels.provider || 'google';
-		configuredModel = planModels.conversation || TS_CONVERSATION_FALLBACK_MODELS[configuredProvider] || config.llm.googleModel;
+		const planConfig = getPlanLlmConfig(ctx.plan, 'conversation');
+		configuredProvider = planConfig.provider;
+		configuredModel = planConfig.model || TS_CONVERSATION_FALLBACK_MODELS[configuredProvider] || config.llm.googleModel;
 	} else {
 		configuredProvider = config.llm.tsConversationProvider || 'google';
 		configuredModel = config.llm.tsConversationModel || TS_CONVERSATION_FALLBACK_MODELS[configuredProvider] || config.llm.googleModel;

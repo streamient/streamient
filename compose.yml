@@ -39,20 +39,30 @@ x-env: &env
   GOOGLE_API_KEY: "${GOOGLE_API_KEY:-}"
   # Global models: BYOK tenants and self-hosted installs. Managed (platform-key)
   # hosted tenants use the per-plan matrix below instead.
-  CHAT_AI_MODEL: "gpt-5.4-mini"
-  CHAT_AI_MODEL_PROVIDER: openai
-  NL_SEARCH_MODEL: "gpt-5.4-mini"
-  NL_SEARCH_MODEL_PROVIDER: openai
-  TS_CONVERSATION_MODEL: "gpt-5.4-mini"
-  TS_CONVERSATION_MODEL_PROVIDER: openai
+  CHAT_AI_MODEL: "gemini-3.6-flash"
+  CHAT_AI_MODEL_PROVIDER: google
+  CHAT_AI_THINKING_LEVEL: minimal
+  NL_SEARCH_MODEL: "gemini-3.5-flash-lite"
+  NL_SEARCH_MODEL_PROVIDER: google
+  NL_SEARCH_THINKING_LEVEL: minimal
+  TS_CONVERSATION_MODEL: "gemini-3.5-flash-lite"
+  TS_CONVERSATION_MODEL_PROVIDER: google
   FREE_AI_MODEL_PROVIDER: openai
+  FREE_CHAT_AI_MODEL_PROVIDER: openai
+  FREE_NL_SEARCH_MODEL_PROVIDER: openai
+  FREE_TS_CONVERSATION_MODEL_PROVIDER: openai
   FREE_CHAT_AI_MODEL: "gpt-5.4-nano"
   FREE_NL_SEARCH_MODEL: "gpt-5.4-nano"
   FREE_TS_CONVERSATION_MODEL: "gpt-5.4-nano"
-  PRO_AI_MODEL_PROVIDER: openai
-  PRO_CHAT_AI_MODEL: "gpt-5.6-terra"
-  PRO_NL_SEARCH_MODEL: "gpt-5.4-mini"
-  PRO_TS_CONVERSATION_MODEL: "gpt-5.6-terra"
+  PRO_AI_MODEL_PROVIDER: google
+  PRO_CHAT_AI_MODEL_PROVIDER: google
+  PRO_NL_SEARCH_MODEL_PROVIDER: google
+  PRO_TS_CONVERSATION_MODEL_PROVIDER: google
+  PRO_CHAT_AI_MODEL: "gemini-3.6-flash"
+  PRO_CHAT_AI_THINKING_LEVEL: minimal
+  PRO_NL_SEARCH_MODEL: "gemini-3.5-flash-lite"
+  PRO_NL_SEARCH_THINKING_LEVEL: minimal
+  PRO_TS_CONVERSATION_MODEL: "gemini-3.5-flash-lite"
   FREE_AI_DAILY_LIMIT: "${FREE_AI_DAILY_LIMIT:-}"
   # URLs
   APP_URL: http://app.s.lan
