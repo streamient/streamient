@@ -161,7 +161,7 @@ importers:
         version: 1.4.7
       crawlee:
         specifier: ^3.17.0
-        version: 3.17.0(@types/node@26.1.1)(playwright@1.61.1)(supports-color@5.5.0)
+        version: 3.17.0(@types/node@26.1.1)(supports-color@5.5.0)
       croner:
         specifier: ^10.0.1
         version: 10.0.1
@@ -220,17 +220,17 @@ importers:
         specifier: ^1.12.0
         version: 1.12.0
       marked:
-        specifier: ^18.0.6
-        version: 18.0.6
+        specifier: ^18.0.7
+        version: 18.0.7
       mongodb:
         specifier: ^7.5.0
         version: 7.5.0(socks@2.8.9)
       mongoose:
-        specifier: ^9.7.4
-        version: 9.7.4(socks@2.8.9)
+        specifier: ^9.8.0
+        version: 9.8.0(socks@2.8.9)
       mongoose-lean-virtuals:
         specifier: ^2.1.0
-        version: 2.1.0(mongoose@9.7.4(socks@2.8.9))
+        version: 2.1.0(mongoose@9.8.0(socks@2.8.9))
       n-readlines:
         specifier: ^3.4.1
         version: 3.4.1
@@ -252,9 +252,6 @@ importers:
       pino-pretty:
         specifier: ^13.1.3
         version: 13.1.3
-      playwright:
-        specifier: ^1.61.1
-        version: 1.61.1
       pug:
         specifier: ^3.0.4
         version: 3.0.4
@@ -452,28 +449,28 @@ packages:
     resolution: {integrity: sha512-PIOUXlSnrqM0S+WOgDRb4RzotydJH7ZoT6tOyL7tAO7qJOfvX5wsEW8Pe+PMKMwvuI4/gIyK9cg2H7lJXqnc4Q==}
     engines: {node: '>= 14.0.0'}
 
-  '@apify/consts@2.53.3':
-    resolution: {integrity: sha512-X26SC8d6kLMSWzBcYldKgzKFJXGnTAka/bRmvL+iYHJEabFzVYupj64kGhar6QTPeGKNt6WR/hNE+dToNqHZQA==}
+  '@apify/consts@2.54.0':
+    resolution: {integrity: sha512-QWCP3rLIiZcfpSdzJBvnROXNNR/X1ZKEmzgrA1kYHHQC3YLpfJ6mVU5cDLjApnxslzhNsxtMeNNZtcpMSS1wtw==}
 
   '@apify/datastructures@2.0.6':
     resolution: {integrity: sha512-hI/Q5cCjXXI/g4OPwX+/xuk+JsOtXRhKNXl2wnq/nKmdrji3nYCc9vGsAEc1iXVbs16xQMZy5uRhoY3XTABovA==}
 
-  '@apify/log@2.5.41':
-    resolution: {integrity: sha512-c826B4jhfF6CBOgyGyZyiT4GrhPaFWrZegFbY6bk/ffQc5BCPqAOT315qEEpFE4d6hP0d86tdcsiRknxkEFO0A==}
+  '@apify/log@2.5.42':
+    resolution: {integrity: sha512-fPhqIZtOYrrYwEvn6I1/uoMJzJpmFIBiSGgwOcHxVj8QalyCSOcWma7HDw17eUfck6DhP7Onhmh02Ofz+B18Mg==}
 
   '@apify/ps-tree@1.2.0':
     resolution: {integrity: sha512-VHIswI7rD/R4bToeIDuJ9WJXt+qr5SdhfoZ9RzdjmCs9mgy7l0P4RugQEUCcU+WB4sfImbd4CKwzXcn0uYx1yw==}
     engines: {node: '>= 0.10'}
     hasBin: true
 
-  '@apify/pseudo_url@2.0.82':
-    resolution: {integrity: sha512-xvxh66eNGzwY3OrWGOJevUdiFsNOTzRzRC/jVbiFA5755aUZkS1U+j9c/a3TAVRZDG6/XGVtPOUMXylKICqweQ==}
+  '@apify/pseudo_url@2.0.83':
+    resolution: {integrity: sha512-IMwuLsyaoXRjSBD33AiRQqSrJ3z23coPPLLUsAo+GaDM0ie7OuadcX9uuSrR7v6M5hVz34btK4nwO5f+pbP8gQ==}
 
   '@apify/timeout@0.3.5':
     resolution: {integrity: sha512-3nuQXwxh2sKxBo5tgDoZWuZHiSpqrKg1+sJHjFSk8blhyX6I2FZzpfW7UaCELeYLZiSjWUPh2rXNrc3zLmJGJg==}
 
-  '@apify/utilities@2.34.1':
-    resolution: {integrity: sha512-9jHBMQEcJS/NTQg2joYOH8QdvEZLPNteKwV3dCpSQcQs0dsK8TgrAbc/ZzJWlK4/HSJK/RKQ1QbD1Ntoh9FwUg==}
+  '@apify/utilities@2.34.2':
+    resolution: {integrity: sha512-kjiOXQZYvYRNAvthCOuIlEh5jMyqWqlPGWvBfEdmA0I6mfSnGYvkD3YwVdp9LkBoGLiDCKgevWsebTyh7avZgA==}
 
   '@asamuzakjp/css-color@3.2.0':
     resolution: {integrity: sha512-K1A6z8tS3XsmCMM86xoWdn7Fkdn9m6RSVtocUrJYIwZnFVkng/PvkEoWtOWmP+Scc6saYWHWZYbndEEXxl24jw==}
@@ -2536,11 +2533,11 @@ packages:
   '@tabler/icons@3.45.0':
     resolution: {integrity: sha512-jiATwV8+zGYLTZ7gMLGivCic+KtsMZXcDmufIG8umlLxoHhI6902hGYIEt0Oa9Y9SXblNzUlrisHm5jOFMxOQA==}
 
-  '@tanstack/virtual-core@3.17.4':
-    resolution: {integrity: sha512-nGm5KteqxasUdThLc2izl6dHUqLv0LQj7Nuyo5gYalTPf/U8a9ermvsl7reT+6ioBW1l8WfpP/mcU338nLXpqw==}
+  '@tanstack/virtual-core@3.17.5':
+    resolution: {integrity: sha512-AXfBC3sq6PuYSwyxYORqqgHCNjPGAvKJvZuBBJ1klhztWBB5cgqgwsq8+fNfaQJG7/K4xYBja9S90QFn2zmQAg==}
 
-  '@tanstack/vue-virtual@3.13.32':
-    resolution: {integrity: sha512-E8OCutx7QnwZdvpJijz0Q2PHsYDWBWjnGr3TvgWiqxTU35jB1kVhtkd93scRV7tTFuId2tg3x2iFiw+IE4evjQ==}
+  '@tanstack/vue-virtual@3.13.33':
+    resolution: {integrity: sha512-R1j/o/5pdgzDqV3Us/s7VEV1Il6ocTsElKxK9g04rq66V3m7kIULgKXD04BAQwCO0IMemXsw3ex6LSH4ug3Feg==}
     peerDependencies:
       vue: ^2.7.0 || ^3.0.0
 
@@ -3131,8 +3128,8 @@ packages:
     resolution: {integrity: sha512-lGe34o6EHj9y3Kts9R4ZYs/Gr+6N7MCaMlIFA3F1R2O5/m7K06AxfSeO5530PEERE6/WyEg3lsuyw4GHlPZHog==}
     engines: {node: ^4.5.0 || >= 5.9}
 
-  baseline-browser-mapping@2.10.43:
-    resolution: {integrity: sha512-AjYpR78kDWAY3Efj+cDTFH9t9SCoL7OoTp1BOb0mQV7S+6CiLwnWM3FyxhJtdPufDFKzmCSFoUncKjWgJEZTCQ==}
+  baseline-browser-mapping@2.10.44:
+    resolution: {integrity: sha512-T3ghW+sl/ZJ8w1v/yQx3qvJ9040DWoLBz8JT/CILbAKcFyG9b2MRe75v6W5uXjv6uH1lumK2Kv46y2zSkcej0Q==}
     engines: {node: '>=6.0.0'}
     hasBin: true
 
@@ -3903,8 +3900,8 @@ packages:
     resolution: {integrity: sha512-7yAQpD2UMJzLi1Dqv7qFYnPbaPx7ZfFK6PiIxQ4PfkGPyNyl2Ugx+a/umUonmKqjhM4DnfbMvdX6otXq83soQQ==}
     engines: {node: ^12.20 || >= 14.13}
 
-  figlet@1.11.2:
-    resolution: {integrity: sha512-VXzWZSFTauu1f4CJbj/EnlpDVaTjO33cp/xgH0CLtPS/aP59i3ElwyR2bquCEsAv2Apv9E29PX5Zy39ipeUqSw==}
+  figlet@1.11.3:
+    resolution: {integrity: sha512-7+OS4S6VjQXI2XRvfZlOdHhItd25lI0NgrR1j5UHfuyZfmMh44v65tMQUlb2bSriYGPCHAtGhuY5u23vqelvmg==}
     engines: {node: '>= 17.0.0'}
     hasBin: true
 
@@ -4011,11 +4008,6 @@ packages:
   fs-minipass@3.0.3:
     resolution: {integrity: sha512-XUBA9XClHbnJWSfBzjkm6RvPsyg3sryZt06BEQoXcF7EK/xpGaQYJgQKDJSUH5SGZ76Y7pFx1QBnXz09rU5Fbw==}
     engines: {node: ^14.17.0 || ^16.13.0 || >=18.0.0}
-
-  fsevents@2.3.2:
-    resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==}
-    engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
-    os: [darwin]
 
   fsevents@2.3.3:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
@@ -4211,8 +4203,8 @@ packages:
   immediate@3.0.6:
     resolution: {integrity: sha512-XXOFtyqDjNDAQxVfYxuF7g9Il/IbWmmlQg2MYKOH8ExIT1qg6xc4zyS3HaEEATgs1btfzxq15ciUiY7gjSXRGQ==}
 
-  import-in-the-middle@3.3.1:
-    resolution: {integrity: sha512-0rymlHSFLwZ0ixx8DaQkoIyZojJPY2a0K2nEYslhKJ6jIYO/m0IcCb7iQsFPmS7WmKwISZiIrv5Icstrw/CmqA==}
+  import-in-the-middle@3.3.2:
+    resolution: {integrity: sha512-jTd2FfOgOWOdgjkHuk/1Ms8VKFXkPs15ymYBETw1sAOrO/dY3XeGVRWir9qBbw7pXr0T2eTFwfCZ+N02HmiNGA==}
     engines: {node: '>=18'}
 
   import-local@3.2.0:
@@ -4596,8 +4588,8 @@ packages:
   markdown-it-link-attributes@4.0.1:
     resolution: {integrity: sha512-pg5OK0jPLg62H4k7M9mRJLT61gUp9nvG0XveKYHMOOluASo9OEF13WlXrpAp2aj35LbedAy3QOCgQCw0tkLKAQ==}
 
-  marked@18.0.6:
-    resolution: {integrity: sha512-MrV5puXBfuiy6wl6DLaq3BtIJQAJToAd5zt/ZKhRfGRAuFPALE7/4Y7jnxRQoEgK/pBgurGqLyAuRgZ2xOjr6w==}
+  marked@18.0.7:
+    resolution: {integrity: sha512-iDVQ5ldaiKXn6b2JroX5kgRfmwgqolW7NpaEzTl1k/2Zh1njIEN9yniyLV/mOvWwtsE8OGgkjsCYvijuPk1dtA==}
     engines: {node: '>= 20'}
     hasBin: true
 
@@ -4741,33 +4733,6 @@ packages:
     resolution: {integrity: sha512-ZoS07RoFqpKYQwAk59qmrx8+jJHNHU30UjlU96QktiGn1ltvDr+vCznLX5DiUBLEpMAHatHNWV1nM/74ul66kA==}
     engines: {node: '>=20.19.0'}
 
-  mongodb@7.2.0:
-    resolution: {integrity: sha512-F/2+BMZtLVhY30ioZp0dAmZ+IRZMBqI+nrv6t5+9/1AIwCa8sMRC3jBf81lpxMhnZgqq8CoUD503Z1oZWq1/sw==}
-    engines: {node: '>=20.19.0'}
-    peerDependencies:
-      '@aws-sdk/credential-providers': ^3.806.0
-      '@mongodb-js/zstd': ^7.0.0
-      gcp-metadata: ^7.0.1
-      kerberos: ^7.0.0
-      mongodb-client-encryption: '>=7.0.0 <7.1.0'
-      snappy: ^7.3.2
-      socks: ^2.8.6
-    peerDependenciesMeta:
-      '@aws-sdk/credential-providers':
-        optional: true
-      '@mongodb-js/zstd':
-        optional: true
-      gcp-metadata:
-        optional: true
-      kerberos:
-        optional: true
-      mongodb-client-encryption:
-        optional: true
-      snappy:
-        optional: true
-      socks:
-        optional: true
-
   mongodb@7.5.0:
     resolution: {integrity: sha512-5FnrEDLnvp6ycUOGLNLLU33BfCx2qmp2mJjGPDwKLruYsVzXVSK5fsGpoDXvsXJwBfBsD7ebMRdawbDxC2814g==}
     engines: {node: '>=20.19.0'}
@@ -4801,8 +4766,8 @@ packages:
     peerDependencies:
       mongoose: '>=8.0.0 || ^9.0.0-0'
 
-  mongoose@9.7.4:
-    resolution: {integrity: sha512-nuSYGUWWzNd4EAbGYxE469wPTL+kmxb5+91YvCvMkJ08rvNRht/usZUU3LuFuk7rDutF2QWBZHPHuzM8TxXApA==}
+  mongoose@9.8.0:
+    resolution: {integrity: sha512-PDGx3XACxrBQyWf4YT+5s1Xsx19x84UWGlRVIza4i9RG6qKjGcoG7odotT6uquR6YoaDMTZ6ZZc/jMXLrNPyyA==}
     engines: {node: '>=20.19.0'}
 
   mpath@0.8.4:
@@ -4999,8 +4964,8 @@ packages:
     resolution: {integrity: sha512-R79ZZ/0wAxKGu3oYMlz8jy/kbhsNrS7SKZ7PxEHBgJ5+F2mtFW2fK2cOtBh1cHYkQsbzFV7I+EoRKe6Yt0oK7A==}
     engines: {node: '>=8'}
 
-  p-map@7.0.5:
-    resolution: {integrity: sha512-e8vJF4XdVkzqqSHguEMz41mQO1wKwxKm5ENrUJQUu9kLDCtn83cxbyHZcszr4QC5zEA7WffRRC4gsTecC7J9oA==}
+  p-map@7.0.6:
+    resolution: {integrity: sha512-I4Prw6ivkd6p8PiYR1tXASOAOBzIJwu0TB7fqaX0c/8c3QAehNYmX57EijyGGGBt3c/BIowGwV03RVBtXvHEVg==}
     engines: {node: '>=18'}
 
   p-try@2.2.0:
@@ -5128,20 +5093,6 @@ packages:
   pkg-dir@4.2.0:
     resolution: {integrity: sha512-HRDzbaKjC+AOWVXxAU/x54COGeIv9eb+6CkDSQoNTt4XyWoIJvuPsXizxu/Fr23EiekbtZwmh1IcIG/l/a10GQ==}
     engines: {node: '>=8'}
-
-  playwright-core@1.61.1:
-    resolution: {integrity: sha512-h7Qlt6m4REp25qvIdvbDtVmD4LqVXfpRxhORv9L0jzETM05p4fuPJ3dKyuSXQxDSbXnmS79HAgi9589lGSpLkg==}
-    engines: {node: '>=18'}
-    hasBin: true
-
-  playwright@1.61.1:
-    resolution: {integrity: sha512-DWnY5o3YbLWK4GovuAVwpqL+1VwGNdUGrRr++8j8PtQQzvAVZUIMjKQ90fY689sEJZJBbZVw1rXaOKSTitkzPQ==}
-    engines: {node: '>=18'}
-    hasBin: true
-
-  postcss@8.5.19:
-    resolution: {integrity: sha512-Mz8SaolMd8nB+G13WkORcxQKHZ/NE4xXevtkJHVuG+guo9/wYKlIMTKAqGdEmYOXR2ijPjTYNHssizdaVSUNdQ==}
-    engines: {node: ^10 || ^12 || >=14}
 
   postcss@8.5.20:
     resolution: {integrity: sha512-lW616l85ucIQL+FocMmL7pQFPqBmwejrCMg+iPxyImlrANNJG9NHq/RkyCZopDhd8C3LA03PHRJDjkbGu8vvug==}
@@ -5807,8 +5758,8 @@ packages:
   symbol-tree@3.2.4:
     resolution: {integrity: sha512-9QNk5KwDF+Bvz+PyObkmSYjI5ksVUYtjW7AU22r2NKcfLJcXp96hkDWU3+XndOsUb+AQ9QhfzfCT2O+CNWT5Tw==}
 
-  systeminformation@5.32.0:
-    resolution: {integrity: sha512-7gfXs43T91miPxxTTtrYitotR/8MPsI2gy3XgUMs6kmOE/JCVqZp6nJpx4XkSutoSqDh6+Y2ovvb2A3RQCR+8w==}
+  systeminformation@5.33.0:
+    resolution: {integrity: sha512-0LYSL01CCbjVeJG7iXI8fUCFU76zMjzbHd/EU3or4QpSFYCLMgslR11prwHuA3siz5jmOkqoLhjgOyDRmXBKmA==}
     engines: {node: '>=10.0.0'}
     os: [darwin, linux, win32, freebsd, openbsd, netbsd, sunos, android]
     hasBin: true
@@ -6428,29 +6379,29 @@ snapshots:
     dependencies:
       '@algolia/client-common': 5.56.0
 
-  '@apify/consts@2.53.3': {}
+  '@apify/consts@2.54.0': {}
 
   '@apify/datastructures@2.0.6': {}
 
-  '@apify/log@2.5.41':
+  '@apify/log@2.5.42':
     dependencies:
-      '@apify/consts': 2.53.3
+      '@apify/consts': 2.54.0
       ansi-colors: 4.1.3
 
   '@apify/ps-tree@1.2.0':
     dependencies:
       event-stream: 3.3.4
 
-  '@apify/pseudo_url@2.0.82':
+  '@apify/pseudo_url@2.0.83':
     dependencies:
-      '@apify/log': 2.5.41
+      '@apify/log': 2.5.42
 
   '@apify/timeout@0.3.5': {}
 
-  '@apify/utilities@2.34.1':
+  '@apify/utilities@2.34.2':
     dependencies:
-      '@apify/consts': 2.53.3
-      '@apify/log': 2.5.41
+      '@apify/consts': 2.54.0
+      '@apify/log': 2.5.42
 
   '@asamuzakjp/css-color@3.2.0':
     dependencies:
@@ -6481,9 +6432,9 @@ snapshots:
 
   '@crawlee/basic@3.17.0(supports-color@5.5.0)':
     dependencies:
-      '@apify/log': 2.5.41
+      '@apify/log': 2.5.42
       '@apify/timeout': 0.3.5
-      '@apify/utilities': 2.34.1
+      '@apify/utilities': 2.34.2
       '@crawlee/core': 3.17.0(supports-color@5.5.0)
       '@crawlee/types': 3.17.0
       '@crawlee/utils': 3.17.0(supports-color@5.5.0)
@@ -6497,14 +6448,14 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@crawlee/browser-pool@3.17.0(playwright@1.61.1)(supports-color@5.5.0)':
+  '@crawlee/browser-pool@3.17.0(supports-color@5.5.0)':
     dependencies:
-      '@apify/log': 2.5.41
+      '@apify/log': 2.5.42
       '@apify/timeout': 0.3.5
       '@crawlee/core': 3.17.0(supports-color@5.5.0)
       '@crawlee/types': 3.17.0
       fingerprint-generator: 2.1.82
-      fingerprint-injector: 2.1.82(playwright@1.61.1)
+      fingerprint-injector: 2.1.82
       lodash.merge: 4.6.2
       nanoid: 3.3.16
       ow: 0.28.2
@@ -6513,23 +6464,19 @@ snapshots:
       quick-lru: 5.1.1
       tiny-typed-emitter: 2.1.0
       tslib: 2.8.1
-    optionalDependencies:
-      playwright: 1.61.1
     transitivePeerDependencies:
       - supports-color
 
-  '@crawlee/browser@3.17.0(playwright@1.61.1)(supports-color@5.5.0)':
+  '@crawlee/browser@3.17.0(supports-color@5.5.0)':
     dependencies:
       '@apify/timeout': 0.3.5
       '@crawlee/basic': 3.17.0(supports-color@5.5.0)
-      '@crawlee/browser-pool': 3.17.0(playwright@1.61.1)(supports-color@5.5.0)
+      '@crawlee/browser-pool': 3.17.0(supports-color@5.5.0)
       '@crawlee/types': 3.17.0
       '@crawlee/utils': 3.17.0(supports-color@5.5.0)
       ow: 0.28.2
       tslib: 2.8.1
       type-fest: 4.41.0
-    optionalDependencies:
-      playwright: 1.61.1
     transitivePeerDependencies:
       - supports-color
 
@@ -6558,12 +6505,12 @@ snapshots:
 
   '@crawlee/core@3.17.0(supports-color@5.5.0)':
     dependencies:
-      '@apify/consts': 2.53.3
+      '@apify/consts': 2.54.0
       '@apify/datastructures': 2.0.6
-      '@apify/log': 2.5.41
-      '@apify/pseudo_url': 2.0.82
+      '@apify/log': 2.5.42
+      '@apify/pseudo_url': 2.0.83
       '@apify/timeout': 0.3.5
-      '@apify/utilities': 2.34.1
+      '@apify/utilities': 2.34.2
       '@crawlee/memory-storage': 3.17.0
       '@crawlee/types': 3.17.0
       '@crawlee/utils': 3.17.0(supports-color@5.5.0)
@@ -6586,7 +6533,7 @@ snapshots:
   '@crawlee/http@3.17.0(supports-color@5.5.0)':
     dependencies:
       '@apify/timeout': 0.3.5
-      '@apify/utilities': 2.34.1
+      '@apify/utilities': 2.34.2
       '@crawlee/basic': 3.17.0(supports-color@5.5.0)
       '@crawlee/types': 3.17.0
       '@crawlee/utils': 3.17.0(supports-color@5.5.0)
@@ -6605,7 +6552,7 @@ snapshots:
   '@crawlee/jsdom@3.17.0(supports-color@5.5.0)':
     dependencies:
       '@apify/timeout': 0.3.5
-      '@apify/utilities': 2.34.1
+      '@apify/utilities': 2.34.2
       '@crawlee/http': 3.17.0(supports-color@5.5.0)
       '@crawlee/types': 3.17.0
       '@crawlee/utils': 3.17.0(supports-color@5.5.0)
@@ -6623,7 +6570,7 @@ snapshots:
   '@crawlee/linkedom@3.17.0(supports-color@5.5.0)':
     dependencies:
       '@apify/timeout': 0.3.5
-      '@apify/utilities': 2.34.1
+      '@apify/utilities': 2.34.2
       '@crawlee/http': 3.17.0(supports-color@5.5.0)
       '@crawlee/types': 3.17.0
       linkedom: 0.18.13
@@ -6635,7 +6582,7 @@ snapshots:
 
   '@crawlee/memory-storage@3.17.0':
     dependencies:
-      '@apify/log': 2.5.41
+      '@apify/log': 2.5.42
       '@crawlee/types': 3.17.0
       '@sapphire/async-queue': 1.5.5
       '@sapphire/shapeshift': 3.9.7
@@ -6647,13 +6594,13 @@ snapshots:
       proper-lockfile: 4.1.2
       tslib: 2.8.1
 
-  '@crawlee/playwright@3.17.0(playwright@1.61.1)(supports-color@5.5.0)':
+  '@crawlee/playwright@3.17.0(supports-color@5.5.0)':
     dependencies:
       '@apify/datastructures': 2.0.6
-      '@apify/log': 2.5.41
+      '@apify/log': 2.5.42
       '@apify/timeout': 0.3.5
-      '@crawlee/browser': 3.17.0(playwright@1.61.1)(supports-color@5.5.0)
-      '@crawlee/browser-pool': 3.17.0(playwright@1.61.1)(supports-color@5.5.0)
+      '@crawlee/browser': 3.17.0(supports-color@5.5.0)
+      '@crawlee/browser-pool': 3.17.0(supports-color@5.5.0)
       '@crawlee/core': 3.17.0(supports-color@5.5.0)
       '@crawlee/types': 3.17.0
       '@crawlee/utils': 3.17.0(supports-color@5.5.0)
@@ -6665,18 +6612,16 @@ snapshots:
       ow: 0.28.2
       string-comparison: 1.3.0
       tslib: 2.8.1
-    optionalDependencies:
-      playwright: 1.61.1
     transitivePeerDependencies:
       - puppeteer
       - supports-color
 
-  '@crawlee/puppeteer@3.17.0(playwright@1.61.1)(supports-color@5.5.0)':
+  '@crawlee/puppeteer@3.17.0(supports-color@5.5.0)':
     dependencies:
       '@apify/datastructures': 2.0.6
-      '@apify/log': 2.5.41
-      '@crawlee/browser': 3.17.0(playwright@1.61.1)(supports-color@5.5.0)
-      '@crawlee/browser-pool': 3.17.0(playwright@1.61.1)(supports-color@5.5.0)
+      '@apify/log': 2.5.42
+      '@crawlee/browser': 3.17.0(supports-color@5.5.0)
+      '@crawlee/browser-pool': 3.17.0(supports-color@5.5.0)
       '@crawlee/types': 3.17.0
       '@crawlee/utils': 3.17.0(supports-color@5.5.0)
       cheerio: 1.0.0-rc.12
@@ -6704,7 +6649,7 @@ snapshots:
 
   '@crawlee/utils@3.17.0(supports-color@5.5.0)':
     dependencies:
-      '@apify/log': 2.5.41
+      '@apify/log': 2.5.42
       '@apify/ps-tree': 1.2.0
       '@crawlee/types': 3.17.0
       '@types/sax': 1.2.7
@@ -7906,7 +7851,7 @@ snapshots:
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/instrumentation': 0.220.0(@opentelemetry/api@1.9.1)(supports-color@5.5.0)
-      systeminformation: 5.32.0
+      systeminformation: 5.33.0
     transitivePeerDependencies:
       - supports-color
 
@@ -8351,7 +8296,7 @@ snapshots:
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/api-logs': 0.218.0
-      import-in-the-middle: 3.3.1
+      import-in-the-middle: 3.3.2
       require-in-the-middle: 8.0.1(supports-color@5.5.0)
     transitivePeerDependencies:
       - supports-color
@@ -8360,7 +8305,7 @@ snapshots:
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/api-logs': 0.220.0
-      import-in-the-middle: 3.3.1
+      import-in-the-middle: 3.3.2
       require-in-the-middle: 8.0.1(supports-color@5.5.0)
     transitivePeerDependencies:
       - supports-color
@@ -9012,11 +8957,11 @@ snapshots:
 
   '@tabler/icons@3.45.0': {}
 
-  '@tanstack/virtual-core@3.17.4': {}
+  '@tanstack/virtual-core@3.17.5': {}
 
-  '@tanstack/vue-virtual@3.13.32(vue@3.5.40)':
+  '@tanstack/vue-virtual@3.13.33(vue@3.5.40)':
     dependencies:
-      '@tanstack/virtual-core': 3.17.4
+      '@tanstack/virtual-core': 3.17.5
       vue: 3.5.40
 
   '@thednp/dommatrix@3.0.4': {}
@@ -9320,7 +9265,7 @@ snapshots:
       '@vue/shared': 3.5.40
       estree-walker: 2.0.2
       magic-string: 0.30.21
-      postcss: 8.5.19
+      postcss: 8.5.20
       source-map-js: 1.2.1
 
   '@vue/compiler-ssr@3.5.40':
@@ -9661,7 +9606,7 @@ snapshots:
 
   base64id@2.0.0: {}
 
-  baseline-browser-mapping@2.10.43: {}
+  baseline-browser-mapping@2.10.44: {}
 
   bcryptjs@3.0.3: {}
 
@@ -9739,7 +9684,7 @@ snapshots:
 
   browserslist@4.28.6:
     dependencies:
-      baseline-browser-mapping: 2.10.43
+      baseline-browser-mapping: 2.10.44
       caniuse-lite: 1.0.30001806
       electron-to-chromium: 1.5.393
       node-releases: 2.0.51
@@ -9780,7 +9725,7 @@ snapshots:
       minipass-collect: 2.0.1
       minipass-flush: 1.0.7
       minipass-pipeline: 1.2.4
-      p-map: 7.0.5
+      p-map: 7.0.6
       ssri: 12.0.0
       tar: 7.5.20
       unique-filename: 4.0.0
@@ -10013,24 +9958,22 @@ snapshots:
     dependencies:
       layout-base: 2.0.1
 
-  crawlee@3.17.0(@types/node@26.1.1)(playwright@1.61.1)(supports-color@5.5.0):
+  crawlee@3.17.0(@types/node@26.1.1)(supports-color@5.5.0):
     dependencies:
       '@crawlee/basic': 3.17.0(supports-color@5.5.0)
-      '@crawlee/browser': 3.17.0(playwright@1.61.1)(supports-color@5.5.0)
-      '@crawlee/browser-pool': 3.17.0(playwright@1.61.1)(supports-color@5.5.0)
+      '@crawlee/browser': 3.17.0(supports-color@5.5.0)
+      '@crawlee/browser-pool': 3.17.0(supports-color@5.5.0)
       '@crawlee/cheerio': 3.17.0(supports-color@5.5.0)
       '@crawlee/cli': 3.17.0(@types/node@26.1.1)
       '@crawlee/core': 3.17.0(supports-color@5.5.0)
       '@crawlee/http': 3.17.0(supports-color@5.5.0)
       '@crawlee/jsdom': 3.17.0(supports-color@5.5.0)
       '@crawlee/linkedom': 3.17.0(supports-color@5.5.0)
-      '@crawlee/playwright': 3.17.0(playwright@1.61.1)(supports-color@5.5.0)
-      '@crawlee/puppeteer': 3.17.0(playwright@1.61.1)(supports-color@5.5.0)
+      '@crawlee/playwright': 3.17.0(supports-color@5.5.0)
+      '@crawlee/puppeteer': 3.17.0(supports-color@5.5.0)
       '@crawlee/utils': 3.17.0(supports-color@5.5.0)
       import-local: 3.2.0
       tslib: 2.8.1
-    optionalDependencies:
-      playwright: 1.61.1
     transitivePeerDependencies:
       - '@types/node'
       - bufferutil
@@ -10558,7 +10501,7 @@ snapshots:
       node-domexception: 1.0.0
       web-streams-polyfill: 3.3.3
 
-  figlet@1.11.2:
+  figlet@1.11.3:
     dependencies:
       commander: 14.0.3
 
@@ -10625,12 +10568,10 @@ snapshots:
       header-generator: 2.1.82
       tslib: 2.8.1
 
-  fingerprint-injector@2.1.82(playwright@1.61.1):
+  fingerprint-injector@2.1.82:
     dependencies:
       fingerprint-generator: 2.1.82
       tslib: 2.8.1
-    optionalDependencies:
-      playwright: 1.61.1
 
   focus-trap@7.8.0:
     dependencies:
@@ -10693,9 +10634,6 @@ snapshots:
   fs-minipass@3.0.3:
     dependencies:
       minipass: 7.1.3
-
-  fsevents@2.3.2:
-    optional: true
 
   fsevents@2.3.3:
     optional: true
@@ -10971,7 +10909,7 @@ snapshots:
 
   immediate@3.0.6: {}
 
-  import-in-the-middle@3.3.1:
+  import-in-the-middle@3.3.2:
     dependencies:
       cjs-module-lexer: 2.2.0
       es-module-lexer: 2.3.1
@@ -11413,7 +11351,7 @@ snapshots:
 
   markdown-it-link-attributes@4.0.1: {}
 
-  marked@18.0.6: {}
+  marked@18.0.7: {}
 
   math-intrinsics@1.1.0: {}
 
@@ -11554,14 +11492,6 @@ snapshots:
       '@types/whatwg-url': 13.0.0
       whatwg-url: 14.2.0
 
-  mongodb@7.2.0(socks@2.8.9):
-    dependencies:
-      '@mongodb-js/saslprep': 1.4.12
-      bson: 7.3.1
-      mongodb-connection-string-url: 7.0.2
-    optionalDependencies:
-      socks: 2.8.9
-
   mongodb@7.5.0(socks@2.8.9):
     dependencies:
       '@mongodb-js/saslprep': 1.4.12
@@ -11570,16 +11500,16 @@ snapshots:
     optionalDependencies:
       socks: 2.8.9
 
-  mongoose-lean-virtuals@2.1.0(mongoose@9.7.4(socks@2.8.9)):
+  mongoose-lean-virtuals@2.1.0(mongoose@9.8.0(socks@2.8.9)):
     dependencies:
-      mongoose: 9.7.4(socks@2.8.9)
+      mongoose: 9.8.0(socks@2.8.9)
       mpath: 0.8.4
 
-  mongoose@9.7.4(socks@2.8.9):
+  mongoose@9.8.0(socks@2.8.9):
     dependencies:
       '@standard-schema/spec': 1.1.0
       kareem: 3.3.0
-      mongodb: 7.2.0(socks@2.8.9)
+      mongodb: 7.5.0(socks@2.8.9)
       mpath: 0.9.0
       mquery: 6.0.0
       ms: 2.1.3
@@ -11786,7 +11716,7 @@ snapshots:
     dependencies:
       p-limit: 2.3.0
 
-  p-map@7.0.5: {}
+  p-map@7.0.6: {}
 
   p-try@2.2.0: {}
 
@@ -11926,20 +11856,6 @@ snapshots:
   pkg-dir@4.2.0:
     dependencies:
       find-up: 4.1.0
-
-  playwright-core@1.61.1: {}
-
-  playwright@1.61.1:
-    dependencies:
-      playwright-core: 1.61.1
-    optionalDependencies:
-      fsevents: 2.3.2
-
-  postcss@8.5.19:
-    dependencies:
-      nanoid: 3.3.16
-      picocolors: 1.1.1
-      source-map-js: 1.2.1
 
   postcss@8.5.20:
     dependencies:
@@ -12275,7 +12191,7 @@ snapshots:
       '@floating-ui/vue': 1.1.11(vue@3.5.40)
       '@internationalized/date': 3.12.2
       '@internationalized/number': 3.6.7
-      '@tanstack/vue-virtual': 3.13.32(vue@3.5.40)
+      '@tanstack/vue-virtual': 3.13.33(vue@3.5.40)
       '@vueuse/core': 14.3.0(vue@3.5.40)
       '@vueuse/shared': 14.3.0(vue@3.5.40)
       aria-hidden: 1.2.6
@@ -12835,7 +12751,7 @@ snapshots:
 
   symbol-tree@3.2.4: {}
 
-  systeminformation@5.32.0: {}
+  systeminformation@5.33.0: {}
 
   tabbable@6.5.0: {}
 
@@ -13091,7 +13007,7 @@ snapshots:
   vite@5.4.21(@types/node@26.1.1):
     dependencies:
       esbuild: 0.21.5
-      postcss: 8.5.19
+      postcss: 8.5.20
       rollup: 4.62.2
     optionalDependencies:
       '@types/node': 26.1.1
@@ -13341,7 +13257,7 @@ snapshots:
   yargonaut@1.1.4:
     dependencies:
       chalk: 1.1.3
-      figlet: 1.11.2
+      figlet: 1.11.3
       parent-require: 1.0.0
 
   yargs-parser@21.1.1: {}

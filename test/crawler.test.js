@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import * as cheerio from 'cheerio';
 
 import {
 	buildCrawlStateBulkOps,
@@ -26,6 +27,14 @@ function makeUrlDoc(overrides = {}) {
 		crawl_visited: [],
 		...overrides,
 	};
+}
+
+function makeHtml(title = 'Home', text = 'Body text') {
+	return cheerio.load(`<html><head><title>${title}</title></head><body><main>${text}</main></body></html>`);
+}
+
+function makeHtmlResponse(statusCode = 200, contentType = 'text/html; charset=utf-8') {
+	return { statusCode, headers: { 'content-type': contentType } };
 }
 
 function sameId(left, right) {
@@ -140,11 +149,8 @@ describe('crawler indexing and state', () => {
 				for (const url of batch) {
 					await crawlerOptions.requestHandler({
 						request: { url, loadedUrl: url },
-						response: { status: () => 200, headers: () => ({ 'content-type': 'text/html; charset=utf-8' }) },
-						page: {
-							title: async () => 'Home',
-							evaluate: async () => 'Body text',
-						},
+						response: makeHtmlResponse(),
+						$: makeHtml(),
 						enqueueLinks: async () => {},
 					});
 				}
@@ -154,7 +160,7 @@ describe('crawler indexing and state', () => {
 		await crawlSite(urlDoc, {
 			CrawlState: stateModel,
 			Url: { updateOne: async () => {} },
-			PlaywrightCrawler: FakeCrawler,
+			CheerioCrawler: FakeCrawler,
 			ensureCollections: async () => {},
 			bulkIndexCrawledPages: async () => ({ indexedCount: 1, attemptedCount: 1, chunkCount: 1 }),
 		});
@@ -162,6 +168,39 @@ describe('crawler indexing and state', () => {
 		assert.equal(crawlerOptions.maxRequestsPerCrawl, 100);
 		assert.equal(crawlerOptions.maxRequestRetries, 0);
 		assert.deepEqual(crawlerRuns, [['https://example.com']]);
+	});
+
+	it('extracts normalized static HTML without script or style content', async () => {
+		const urlDoc = makeUrlDoc();
+		const stateModel = makeCrawlStateModel();
+		let indexedPages = [];
+
+		await crawlSite(urlDoc, {
+			CrawlState: stateModel,
+			Url: { updateOne: async () => {} },
+			CheerioCrawler: class {
+				constructor(options) {
+					this.options = options;
+				}
+				async run(batch) {
+					for (const url of batch) {
+						await this.options.requestHandler({
+							request: { url, loadedUrl: url },
+							response: makeHtmlResponse(),
+							$: cheerio.load('<html><head><title> Static title </title><style>.hidden { display: none; }</style><script>document.body.textContent = "Rendered later";</script></head><body><main> Alpha\n <span>beta</span><noscript>Fallback</noscript></main></body></html>'),
+							enqueueLinks: async () => {},
+						});
+					}
+				}
+			},
+			ensureCollections: async () => {},
+			bulkIndexCrawledPages: async (hostId, input) => {
+				indexedPages = input.pages;
+				return { indexedCount: input.pages.length, attemptedCount: input.pages.length, chunkCount: input.pages.length };
+			},
+		});
+
+		assert.deepEqual(indexedPages, [{ url: 'https://example.com', title: 'Static title', text_content: 'Alpha beta' }]);
 	});
 
 	it('builds overlapping Typesense chunks for long crawled page bodies', () => {
@@ -260,11 +299,8 @@ describe('crawler indexing and state', () => {
 				for (const url of batch) {
 					await this.options.requestHandler({
 						request: { url, loadedUrl: url },
-						response: { status: () => 200, headers: () => ({ 'content-type': 'text/html; charset=utf-8' }) },
-						page: {
-							title: async () => 'Start',
-							evaluate: async () => 'Body text',
-						},
+						response: makeHtmlResponse(),
+						$: makeHtml('Start'),
 						enqueueLinks: async ({ transformRequestFunction }) => {
 							transformRequestFunction({ url: 'https://example.com/next' });
 							transformRequestFunction({ url: 'https://example.com/old' });
@@ -281,7 +317,7 @@ describe('crawler indexing and state', () => {
 					urlUpdates.push({ filter, update });
 				},
 			},
-			PlaywrightCrawler: FakeCrawler,
+			CheerioCrawler: FakeCrawler,
 			ensureCollections: async () => {},
 			bulkIndexCrawledPages: async () => ({ indexedCount: 1, attemptedCount: 1, chunkCount: 1 }),
 			stepLimit: 10,
@@ -305,7 +341,7 @@ describe('crawler indexing and state', () => {
 		await crawlSite(urlDoc, {
 			CrawlState: stateModel,
 			Url: { updateOne: async () => {} },
-			PlaywrightCrawler: class {
+			CheerioCrawler: class {
 				constructor(options) {
 					this.options = options;
 				}
@@ -313,11 +349,8 @@ describe('crawler indexing and state', () => {
 					for (const url of batch) {
 						await this.options.requestHandler({
 							request: { url, loadedUrl: url },
-							response: { status: () => 200, headers: () => ({ 'content-type': 'text/html; charset=utf-8' }) },
-							page: {
-								title: async () => 'Docs',
-								evaluate: async () => 'Body text',
-							},
+							response: makeHtmlResponse(),
+							$: makeHtml('Docs'),
 							enqueueLinks: async ({ transformRequestFunction }) => {
 								transformResults.push(transformRequestFunction({ url: 'https://example.com/docs/intro' }));
 								transformResults.push(transformRequestFunction({ url: 'https://example.com/docs?ref=nav' }));
@@ -375,7 +408,7 @@ describe('crawler indexing and state', () => {
 		await crawlSite(urlDoc, {
 			CrawlState: stateModel,
 			Url: { updateOne: async () => {} },
-			PlaywrightCrawler: class {
+			CheerioCrawler: class {
 				constructor(options) {
 					this.options = options;
 				}
@@ -384,11 +417,8 @@ describe('crawler indexing and state', () => {
 					for (const url of batch) {
 						await this.options.requestHandler({
 							request: { url, loadedUrl: url },
-							response: { status: () => 200, headers: () => ({ 'content-type': 'text/html; charset=utf-8' }) },
-							page: {
-								title: async () => 'Docs',
-								evaluate: async () => 'Body text',
-							},
+							response: makeHtmlResponse(),
+							$: makeHtml('Docs'),
 							enqueueLinks: async () => {},
 						});
 					}
@@ -407,8 +437,8 @@ describe('crawler indexing and state', () => {
 	it('skips binary URLs and non-HTML responses without page chunks', async () => {
 		assert.equal(shouldSkipCrawledUrl('https://example.com/file.pdf'), true);
 		assert.equal(shouldSkipCrawledUrl('mailto:test@example.com'), true);
-		assert.equal(isHtmlResponse({ headers: () => ({ 'content-type': 'application/pdf' }) }), false);
-		assert.equal(isHtmlResponse({ headers: () => ({ 'content-type': 'text/html' }) }), true);
+		assert.equal(isHtmlResponse({ headers: { 'content-type': 'application/pdf' } }), false);
+		assert.equal(isHtmlResponse({ headers: { 'content-type': 'text/html' } }), true);
 
 		const urlDoc = makeUrlDoc({ url: 'https://example.com/file.pdf' });
 		const stateModel = makeCrawlStateModel();
@@ -416,7 +446,7 @@ describe('crawler indexing and state', () => {
 		const indexed = await crawlSite(urlDoc, {
 			CrawlState: stateModel,
 			Url: { updateOne: async () => {} },
-			PlaywrightCrawler: class {
+			CheerioCrawler: class {
 				async run() {
 					throw new Error('Crawler should not run for skipped URL');
 				}
@@ -440,7 +470,7 @@ describe('crawler indexing and state', () => {
 		const indexed = await crawlSite(urlDoc, {
 			CrawlState: stateModel,
 			Url: { updateOne: async () => {} },
-			PlaywrightCrawler: class {
+			CheerioCrawler: class {
 				constructor(options) {
 					this.options = options;
 				}
@@ -448,11 +478,8 @@ describe('crawler indexing and state', () => {
 					for (const url of batch) {
 						await this.options.requestHandler({
 							request: { url, loadedUrl: url },
-							response: { status: () => 403, headers: () => ({ 'content-type': 'text/html' }) },
-							page: {
-								title: async () => 'Private',
-								evaluate: async () => 'Should not be indexed',
-							},
+							response: makeHtmlResponse(403, 'text/html'),
+							$: makeHtml('Private', 'Should not be indexed'),
 							enqueueLinks: async () => {},
 						});
 					}
@@ -471,13 +498,13 @@ describe('crawler indexing and state', () => {
 		assert.ok(stateModel.store.some((state) => state.normalized_url === 'https://example.com/private' && state.status === 'failed' && state.error === 'HTTP 403' && state.http_status === 403 && state.failure_type === 'denied'));
 	});
 
-	it('records blocked crawler errors with HTTP status metadata', async () => {
-		const urlDoc = makeUrlDoc({ url: 'https://example.com/private' });
+	it('records HTTP crawler errors with status metadata', async () => {
+		const urlDoc = makeUrlDoc({ url: 'https://example.com/unavailable' });
 		const stateModel = makeCrawlStateModel();
 		const indexed = await crawlSite(urlDoc, {
 			CrawlState: stateModel,
 			Url: { updateOne: async () => {} },
-			PlaywrightCrawler: class {
+			CheerioCrawler: class {
 				constructor(options) {
 					this.options = options;
 				}
@@ -485,7 +512,7 @@ describe('crawler indexing and state', () => {
 					for (const url of batch) {
 						this.options.failedRequestHandler({
 							request: { url },
-							error: new Error('Request blocked - received 403 status code.'),
+							error: new Error('Response code 500 (Internal Server Error)'),
 						});
 					}
 				}
@@ -496,7 +523,7 @@ describe('crawler indexing and state', () => {
 		});
 
 		assert.equal(indexed, 0);
-		assert.ok(stateModel.store.some((state) => state.normalized_url === 'https://example.com/private' && state.status === 'failed' && state.http_status === 403 && state.failure_type === 'denied'));
+		assert.ok(stateModel.store.some((state) => state.normalized_url === 'https://example.com/unavailable' && state.status === 'failed' && state.http_status === 500 && state.failure_type === 'http'));
 	});
 
 	it('does not requeue terminal failed URLs discovered in later steps', async () => {
@@ -525,7 +552,7 @@ describe('crawler indexing and state', () => {
 		await crawlSite(urlDoc, {
 			CrawlState: stateModel,
 			Url: { updateOne: async () => {} },
-			PlaywrightCrawler: class {
+			CheerioCrawler: class {
 				constructor(options) {
 					this.options = options;
 				}
@@ -533,11 +560,8 @@ describe('crawler indexing and state', () => {
 					for (const url of batch) {
 						await this.options.requestHandler({
 							request: { url, loadedUrl: url },
-							response: { status: () => 200, headers: () => ({ 'content-type': 'text/html; charset=utf-8' }) },
-							page: {
-								title: async () => 'Start',
-								evaluate: async () => 'Body text',
-							},
+							response: makeHtmlResponse(),
+							$: makeHtml('Start'),
 							enqueueLinks: async ({ transformRequestFunction }) => {
 								transformResults.push(transformRequestFunction({ url: 'https://example.com/blocked' }));
 								transformResults.push(transformRequestFunction({ url: 'https://example.com/next' }));
@@ -590,7 +614,7 @@ describe('crawler indexing and state', () => {
 		await crawlSite(urlDoc, {
 			CrawlState: stateModel,
 			Url: { updateOne: async () => {} },
-			PlaywrightCrawler: class {
+			CheerioCrawler: class {
 				constructor(options) {
 					this.options = options;
 				}
@@ -598,11 +622,8 @@ describe('crawler indexing and state', () => {
 					for (const url of batch) {
 						await this.options.requestHandler({
 							request: { url, loadedUrl: url },
-							response: { status: () => 200, headers: () => ({ 'content-type': 'text/html; charset=utf-8' }) },
-							page: {
-								title: async () => 'Home',
-								evaluate: async () => 'Body text',
-							},
+							response: makeHtmlResponse(),
+							$: makeHtml(),
 							enqueueLinks: async () => {},
 						});
 					}
@@ -639,7 +660,7 @@ describe('crawler indexing and state', () => {
 		await crawlSite(urlDoc, {
 			CrawlState: stateModel,
 			Url: { updateOne: async () => {} },
-			PlaywrightCrawler: class {
+			CheerioCrawler: class {
 				constructor(options) {
 					this.options = options;
 				}
@@ -647,11 +668,8 @@ describe('crawler indexing and state', () => {
 					for (const url of batch) {
 						await this.options.requestHandler({
 							request: { url, loadedUrl: url },
-							response: { status: () => 200, headers: () => ({ 'content-type': 'text/html; charset=utf-8' }) },
-							page: {
-								title: async () => 'Home',
-								evaluate: async () => 'Body text',
-							},
+							response: makeHtmlResponse(),
+							$: makeHtml(),
 							enqueueLinks: async () => {},
 						});
 					}

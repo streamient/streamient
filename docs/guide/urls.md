@@ -44,4 +44,4 @@ Use the [Browser Extension](/guide/browser-extension/) to save the current page 
 
 When you save a URL, the content extractor (Cheerio-based) fetches the page and pulls out structured data. The extracted content is stored in MongoDB and indexed in Typesense with a vector embedding. If extraction fails (e.g., the page blocks requests), the URL is still saved with whatever metadata you provided.
 
-Crawl-enabled URLs are processed by a Playwright-based crawler that can navigate JavaScript-heavy pages and follow links under the saved URL path.
+Crawl-enabled URLs are processed by Crawlee's CheerioCrawler, which fetches the HTML returned by the server and follows links under the saved URL path. It does not execute client-side JavaScript, so JavaScript-only content and links are not indexed.

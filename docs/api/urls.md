@@ -28,7 +28,7 @@ When saved, Streamient auto-extracts the page title, description, Open Graph ima
 
 If the account already has the same active URL saved, Streamient returns the existing URL with `duplicate: true` and does not create another record.
 
-Set `crawl_enabled: true` to enable URL path crawling with Playwright. Crawled pages are re-indexed every 24 hours.
+Set `crawl_enabled: true` to enable URL path crawling for static and server-rendered HTML with Crawlee. Crawled pages are re-indexed every 24 hours.
 
 ## Get URL
 
