@@ -34,6 +34,9 @@ x-env: &env
   SMTP_USER: ""
   SMTP_PASS: ""
   SMTP_FROM: "noreply@localhost"
+  # LLM
+  OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+  GOOGLE_API_KEY: "${GOOGLE_API_KEY:-}"
   # Global models: BYOK tenants and self-hosted installs. Managed (platform-key)
   # hosted tenants use the per-plan matrix below instead.
   CHAT_AI_MODEL: "gpt-5.4-mini"
@@ -42,8 +45,6 @@ x-env: &env
   NL_SEARCH_MODEL_PROVIDER: openai
   TS_CONVERSATION_MODEL: "gpt-5.4-mini"
   TS_CONVERSATION_MODEL_PROVIDER: openai
-  OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
-  GOOGLE_API_KEY: "${GOOGLE_API_KEY:-}"
   FREE_AI_MODEL_PROVIDER: openai
   FREE_CHAT_AI_MODEL: "gpt-5.4-nano"
   FREE_NL_SEARCH_MODEL: "gpt-5.4-nano"
@@ -53,16 +54,17 @@ x-env: &env
   PRO_NL_SEARCH_MODEL: "gpt-5.4-mini"
   PRO_TS_CONVERSATION_MODEL: "gpt-5.6-terra"
   FREE_AI_DAILY_LIMIT: "${FREE_AI_DAILY_LIMIT:-}"
+  # URLs
   APP_URL: http://app.s.lan
   MCP_BASE_URL: http://mcp.s.lan
   WS_URL: ""
+  API_BASE_URL: http://streamient-app-1:3000
   EMAIL_FORWARD_DOMAIN: "email.streamient.com"
   WHITE_LABEL_ASSETS_DIR: "${WHITE_LABEL_ASSETS_DIR:-assets/white-label}"
   WHITE_LABEL_CNAME_TARGET: "${WHITE_LABEL_CNAME_TARGET:-app.s.lan}"
   WHITE_LABEL_ENFORCE_CUSTOM_DOMAINS: "${WHITE_LABEL_ENFORCE_CUSTOM_DOMAINS:-false}"
   CLOUDFLARE_API_TOKEN: "${CLOUDFLARE_API_TOKEN:-}"
   CLOUDFLARE_ZONE_ID: "${CLOUDFLARE_ZONE_ID:-}"
-  API_BASE_URL: http://streamient-app-1:3000
   SCREENSHOT_URL: ${DEV_SCREENSHOT_URL:-http://screenshot:3000}
   SCREENSHOT_SECRET: "${SCREENSHOT_SECRET:-change-me-screenshot-secret}" # openssl rand -hex 32
   SYSADMIN_EMAIL: "sysadmin@localhost"
