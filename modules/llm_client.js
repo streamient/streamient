@@ -1,4 +1,4 @@
-import config from '../config.js';
+import config, { getPlanLlmConfig } from '../config.js';
 import { resolveLlmKeyContext } from '../services/byo_ai_service.js';
 import * as OtelRuntime from './otel_runtime.js';
 
@@ -35,6 +35,10 @@ function applyTokenLimit(body, providerName, model, maxTokens) {
 	return body;
 }
 
+function supportsGoogleThinkingLevel(model = '') {
+	return /^gemini-3(?:[.-]|$)/i.test(String(model));
+}
+
 // BYOK provider fallback order: try the requested provider first, then the
 // other user-facing provider. This makes "bring your own OpenAI OR Gemini key"
 // work — a tenant only needs one key, whichever provider it's for.
@@ -56,7 +60,7 @@ async function resolveProvider(providerName, options = {}) {
 	const ctx = await resolveLlmKeyContext({ hostId: options.hostId, scope: options.scope });
 	let requested = providerName || config.llm.chatProvider || 'google';
 	if (ctx.mode === 'managed') {
-		requested = config.llm.planModels[ctx.plan]?.provider || 'google';
+		requested = getPlanLlmConfig(ctx.plan, options.purpose).provider;
 	}
 	if (!PROVIDERS[requested]) throw new Error(`Unknown LLM provider: ${requested}`);
 	const candidates = BYO_FALLBACK_ORDER[requested] || [requested];
@@ -79,9 +83,9 @@ async function resolveProvider(providerName, options = {}) {
  * a managed/env key for Pro / active trial / self-hosted. Lets callers surface a
  * friendly "add your key" message before attempting any LLM or Typesense call.
  */
-export async function hasLlmApiKey({ hostId = null, provider, scope = 'global' } = {}) {
+export async function hasLlmApiKey({ hostId = null, provider, scope = 'global', purpose = 'chat' } = {}) {
 	try {
-		await resolveProvider(provider, { hostId, scope });
+		await resolveProvider(provider, { hostId, scope, purpose });
 		return true;
 	} catch (err) {
 		if (err?.code === 'NO_AI_API_KEY') return false;
@@ -101,19 +105,25 @@ export async function hasLlmApiKey({ hostId = null, provider, scope = 'global' }
  *   hostId    - Tenant host ID for account-scoped API key resolution
  *   scope     - LLM key scope: global or email
  *   purpose   - Managed model matrix slot: 'chat' | 'nlSearch' (default 'chat')
+ *   thinkingLevel - Gemini thinking level override (minimal, low, medium, high)
  */
-export async function chatCompletion({ messages, stream = false, provider: providerOverride, model: modelOverride, maxTokens = 4096, hostId = null, scope = 'global', purpose = 'chat' }) {
-	const { name, provider, apiKey, ctx, switched } = await resolveProvider(providerOverride, { hostId, scope });
+export async function chatCompletion({ messages, stream = false, provider: providerOverride, model: modelOverride, maxTokens = 4096, hostId = null, scope = 'global', purpose = 'chat', thinkingLevel: thinkingLevelOverride }) {
+	const { name, provider, apiKey, ctx, switched } = await resolveProvider(providerOverride, { hostId, scope, purpose });
 	// When we fell back to a different provider than requested, the configured
 	// model override was for the original provider — use the resolved provider's
 	// default model instead. Managed (platform-key) tenants are forced onto their
 	// plan's model — the caller's override only applies to BYOK/self-hosted.
 	let model;
+	let thinkingLevel = thinkingLevelOverride;
 	if (ctx.mode === 'managed') {
-		model = (switched ? '' : config.llm.planModels[ctx.plan]?.[purpose]) || provider.defaultModel;
+		const planConfig = getPlanLlmConfig(ctx.plan, purpose);
+		model = (switched ? '' : planConfig.model) || provider.defaultModel;
+		if (thinkingLevel === undefined) thinkingLevel = planConfig.thinkingLevel;
 	} else {
 		model = (switched ? '' : modelOverride) || provider.defaultModel;
+		if (thinkingLevel === undefined) thinkingLevel = config.llm[`${purpose}ThinkingLevel`] || '';
 	}
+	const googleThinkingLevel = name === 'google' && supportsGoogleThinkingLevel(model) ? thinkingLevel : '';
 
 	return OtelRuntime.createCustomSpan('gen_ai.chat.completion', async (span) => {
 		span.setAttribute('gen_ai.system', name);
@@ -122,9 +132,10 @@ export async function chatCompletion({ messages, stream = false, provider: provi
 		span.setAttribute('gen_ai.request.stream', stream);
 		span.setAttribute('gen_ai.input.messages', messages.length);
 		span.setAttribute('gen_ai.input.estimated_tokens', estimateMessageTokens(messages));
+		if (googleThinkingLevel) span.setAttribute('gen_ai.request.thinking_level', googleThinkingLevel);
 
 		if (name === 'google') {
-			const result = await googleChat({ messages, model, stream, apiKey, maxTokens });
+			const result = await googleChat({ messages, model, stream, apiKey, maxTokens, thinkingLevel: googleThinkingLevel });
 			if (!stream) span.setAttribute('gen_ai.output.estimated_tokens', estimateTextTokens(result));
 			return result;
 		}
@@ -172,7 +183,7 @@ function estimateMessageTokens(messages = []) {
 	return messages.reduce((sum, message) => sum + estimateTextTokens(message.content), 0);
 }
 
-async function googleChat({ messages, model, stream, apiKey, maxTokens = 4096 }) {
+async function googleChat({ messages, model, stream, apiKey, maxTokens = 4096, thinkingLevel = '' }) {
 	// Convert OpenAI format to Gemini format
 	const contents = messages
 		.filter((m) => m.role !== 'system')
@@ -187,6 +198,7 @@ async function googleChat({ messages, model, stream, apiKey, maxTokens = 4096 })
 	const url = `${PROVIDERS.google.baseUrl}/models/${model}:${endpoint}?key=${apiKey}${stream ? '&alt=sse' : ''}`;
 
 	const body = { contents, generationConfig: { maxOutputTokens: maxTokens } };
+	if (thinkingLevel) body.generationConfig.thinkingConfig = { thinkingLevel };
 	if (systemInstruction) {
 		body.systemInstruction = { parts: [{ text: systemInstruction.content }] };
 	}

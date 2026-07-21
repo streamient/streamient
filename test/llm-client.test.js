@@ -21,7 +21,7 @@ describe('LLM client model routing', () => {
 			requests.push({ url, options, body: JSON.parse(options.body) });
 			return {
 				ok: true,
-				json: async () => ({ choices: [{ message: { content: 'ok' } }] }),
+				json: async () => ({ choices: [{ message: { content: 'ok' } }], candidates: [{ content: { parts: [{ text: 'ok' }] } }] }),
 			};
 		};
 	});
@@ -61,5 +61,36 @@ describe('LLM client model routing', () => {
 		assert.equal(requests[0].body.model, 'gpt-5.4-mini');
 		assert.equal(requests[0].body.max_tokens, undefined);
 		assert.equal(requests[0].body.max_completion_tokens, 400);
+	});
+
+	it('sends the configured Gemini thinking level', async () => {
+		config.llm.googleApiKey = 'env-gemini';
+
+		await chatCompletion({
+			provider: 'google',
+			model: 'gemini-3.6-flash',
+			thinkingLevel: 'minimal',
+			maxTokens: 256,
+			messages: [{ role: 'user', content: 'Classify this request' }],
+		});
+
+		assert.match(requests[0].url, /models\/gemini-3\.6-flash:/);
+		assert.deepEqual(requests[0].body.generationConfig, {
+			maxOutputTokens: 256,
+			thinkingConfig: { thinkingLevel: 'minimal' },
+		});
+	});
+
+	it('omits thinkingLevel for older Gemini models', async () => {
+		config.llm.googleApiKey = 'env-gemini';
+
+		await chatCompletion({
+			provider: 'google',
+			model: 'gemini-2.5-flash',
+			thinkingLevel: 'minimal',
+			messages: [{ role: 'user', content: 'Summarize this note' }],
+		});
+
+		assert.equal(requests[0].body.generationConfig.thinkingConfig, undefined);
 	});
 });

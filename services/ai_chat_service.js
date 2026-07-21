@@ -1,5 +1,5 @@
 import { searchAll, conversationSearch, getCollectionCounts } from '../modules/typesense.js';
-import { nlSearchCompletion, chatModelCompletion, parseStreamChunks, getChatProviderName, hasLlmApiKey } from '../modules/llm_client.js';
+import { nlSearchCompletion, chatModelCompletion, parseStreamChunks, hasLlmApiKey } from '../modules/llm_client.js';
 import * as noteService from './note_service.js';
 import * as memoryService from './memory_service.js';
 import * as urlService from './url_service.js';
@@ -437,7 +437,7 @@ async function handleStatsStream({ hostId, query, conversationId, includeEmails 
 	});
 
 	return {
-		stream: parseStreamChunks(body, getChatProviderName()),
+		stream: parseStreamChunks(body),
 		conversationId: conversationId || null,
 	};
 }
@@ -479,7 +479,7 @@ async function handleAnalysisStream({ hostId, userId, query, conversationId, pro
 	});
 
 	return {
-		stream: parseStreamChunks(body, getChatProviderName()),
+		stream: parseStreamChunks(body),
 		results: flatResults,
 		conversationId: conversation.conversationId,
 	};

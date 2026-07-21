@@ -81,11 +81,13 @@ Streamient uses three separate model tiers for different tasks:
 
 | Variable | Description | Required | Default |
 | --- | --- | --- | --- |
-| `CHAT_AI_MODEL` | Model for analysis, stats, and general chat responses | No | `gemini-2.5-flash` |
+| `CHAT_AI_MODEL` | Model for analysis, stats, and general chat responses | No | `gemini-3.6-flash` |
 | `CHAT_AI_MODEL_PROVIDER` | Provider: `google` or `openai` | No | `google` |
-| `NL_SEARCH_MODEL` | Lightweight model for intent classification | No | `gemini-2.5-flash-lite` |
+| `CHAT_AI_THINKING_LEVEL` | Gemini thinking level for chat: `minimal`, `low`, `medium`, or `high` | No | `minimal` |
+| `NL_SEARCH_MODEL` | Lightweight model for intent classification | No | `gemini-3.5-flash-lite` |
 | `NL_SEARCH_MODEL_PROVIDER` | Provider for intent classification model | No | `google` |
-| `TS_CONVERSATION_MODEL` | Model for Typesense conversation search | No | `gemini-2.5-flash-lite` |
+| `NL_SEARCH_THINKING_LEVEL` | Gemini thinking level for intent classification | No | `minimal` |
+| `TS_CONVERSATION_MODEL` | Model for Typesense conversation search | No | `gemini-3.5-flash-lite` |
 | `TS_CONVERSATION_MODEL_PROVIDER` | Provider for conversation model | No | `google` |
 | `GOOGLE_API_KEY` | Google AI API key (required when using Google models) | Conditional | — |
 | `OPENAI_API_KEY` | OpenAI API key (required when using OpenAI models) | Conditional | — |
