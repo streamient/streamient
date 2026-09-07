@@ -28,6 +28,7 @@ services:
     environment:
       <<: *dbh-ca-environment
       VITE_STREAMIENT_SERVER: "https://${DBH_PROFILE}.s.lan"
+      __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: "mobile.${DBH_PROFILE}.s.lan"
     volumes: *dbh-ca-volumes
     networks:
       dbh_proxy:
@@ -41,4 +42,3 @@ networks:
   dbh_proxy:
     name: "${DBH_PROXY_NETWORK}"
     external: true
-
