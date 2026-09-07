@@ -4,6 +4,9 @@ set -euo pipefail
 remote="origin"
 develop_branch="develop"
 main_branch="main"
+image_build="github"
+ghcr_image="${GHCR_IMAGE:-ghcr.io/streamient/streamient}"
+github_workflow="docker-publish.yml"
 dry_run=0
 assume_yes=0
 release_worktree=""
@@ -12,6 +15,7 @@ usage() {
 	printf '%s\n' "Usage: ./release.sh [options]"
 	printf '%s\n' ""
 	printf '%s\n' "Options:"
+	printf '%s\n' "    --build <github|local> Build and push the image on GitHub or locally (default: github)"
 	printf '%s\n' "    --dry-run              Show release steps without changing git state"
 	printf '%s\n' "    --yes                  Skip confirmation prompt"
 	printf '%s\n' "    --remote <name>        Remote to use (default: origin)"
@@ -20,6 +24,8 @@ usage() {
 	printf '%s\n' "    --help                 Show this help"
 	printf '%s\n' ""
 	printf '%s\n' "Environment:"
+	printf '%s\n' "    GHCR_IMAGE=<image>     Override local image name (default: ghcr.io/streamient/streamient)"
+	printf '%s\n' "    GHCR_USERNAME=<user>   Override username for local GHCR login"
 	printf '%s\n' "    RELEASE_DATE=YYYYMMDD  Override release date for tag creation"
 }
 
@@ -30,6 +36,12 @@ log() {
 fail() {
 	printf 'Error: %s\n' "$*" >&2
 	exit 1
+}
+
+require_command() {
+	local command_name="$1"
+
+	command -v "$command_name" >/dev/null 2>&1 || fail "${command_name} is required for --build ${image_build}"
 }
 
 run() {
@@ -215,7 +227,7 @@ confirm_release() {
 		return 0
 	fi
 
-	printf 'Release %s into %s and push tag %s? [y/N] ' "$develop_branch" "$main_branch" "$tag"
+	printf 'Release %s into %s, push tag %s, and build via %s? [y/N] ' "$develop_branch" "$main_branch" "$tag" "$image_build"
 
 	local answer
 	read -r answer
@@ -229,9 +241,80 @@ confirm_release() {
 	fail "release cancelled"
 }
 
+prepare_image_build() {
+	if [ "$dry_run" -eq 1 ]; then
+		return 0
+	fi
+
+	require_command gh
+	gh auth token --hostname github.com >/dev/null 2>&1 || fail "GitHub CLI is not authenticated"
+
+	if [ "$image_build" = "local" ]; then
+		require_command docker
+		docker buildx version >/dev/null 2>&1 || fail "Docker Buildx is not available"
+	fi
+}
+
+login_to_ghcr() {
+	if [ "$dry_run" -eq 1 ]; then
+		log "+ gh auth token --hostname github.com | docker login ghcr.io --username <github-user> --password-stdin"
+		return 0
+	fi
+
+	local ghcr_username
+	ghcr_username="${GHCR_USERNAME:-$(gh api user --hostname github.com --jq .login)}"
+	gh auth token --hostname github.com | docker login ghcr.io --username "$ghcr_username" --password-stdin
+}
+
+build_image_locally() {
+	local tag="$1"
+	local release_commit="$2"
+
+	log "Logging into GHCR"
+	login_to_ghcr
+
+	log "Building and pushing ${ghcr_image}:${tag} and ${ghcr_image}:latest locally"
+	run docker buildx build --platform linux/amd64 --file "$release_worktree/docker/dockerfiles/prod.Dockerfile" --build-arg "APP_VERSION=${tag}" --build-arg "STREAMIENT_DOCS_VANITY_BASE=/" --label "org.opencontainers.image.revision=${release_commit}" --label "org.opencontainers.image.version=${tag}" --provenance=false --tag "${ghcr_image}:${tag}" --tag "${ghcr_image}:latest" --push "$release_worktree"
+}
+
+dispatch_github_image_build() {
+	local tag="$1"
+
+	log "Dispatching GitHub image build for ${tag}"
+	run gh workflow run "$github_workflow" --ref "$tag" --field dry_run=false
+}
+
+publish_image() {
+	local tag="$1"
+	local release_commit="$2"
+
+	case "$image_build" in
+	github)
+		dispatch_github_image_build "$tag"
+		;;
+	local)
+		build_image_locally "$tag" "$release_commit"
+		;;
+	esac
+}
+
 parse_args() {
 	while [ "$#" -gt 0 ]; do
 		case "$1" in
+			--build)
+				[ "$#" -ge 2 ] || fail "--build requires github or local"
+
+				case "$2" in
+					github|local)
+						image_build="$2"
+						;;
+					*)
+						fail "--build must be github or local"
+						;;
+				esac
+
+				shift 2
+				;;
 			--dry-run)
 				dry_run=1
 				shift
@@ -299,6 +382,7 @@ main() {
 	tag="$(next_tag_for_date "$date_prefix")"
 
 	confirm_release "$tag"
+	prepare_image_build
 
 	log "Creating release worktree"
 	create_release_worktree
@@ -326,8 +410,13 @@ main() {
 	run git -C "$release_worktree" push --atomic "$remote" "HEAD:refs/heads/${main_branch}" "refs/tags/${tag}"
 
 	fast_forward_local_main "$release_commit"
+	publish_image "$tag" "$release_commit"
 
-	log "Release ${tag} complete"
+	if [ "$image_build" = "github" ]; then
+		log "Release ${tag} complete; GitHub image build dispatched"
+	else
+		log "Release ${tag} and local image push complete"
+	fi
 }
 
 main "$@"
