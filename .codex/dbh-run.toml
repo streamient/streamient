@@ -9,6 +9,9 @@ DEV_STREAMIENT_MONGODB_URI = "mongodb://dbh.pipefish-mermaid.ts.net:27017/stream
 DEV_TYPESENSE_HOST = "typesense"
 DEV_TYPESENSE_KEY = "hmsecure"
 
+[test]
+compose_args = ["exec", "-e", "APP_URL=http://s.lan", "-e", "MCP_BASE_URL=http://mcp.s.lan", "app", "pnpm", "test"]
+
 [urls]
 app = "https://{profile}.s.lan"
 mcp = "https://mcp.{profile}.s.lan"

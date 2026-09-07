@@ -63,7 +63,7 @@ end'''
 name = "compose tests"
 icon = "run"
 command = '''if test (hostname) = "NadaMini"
-	dbh-run compose -- exec app pnpm test
+	dbh-run test
 else
 	docker compose exec app pnpm test
 end'''
