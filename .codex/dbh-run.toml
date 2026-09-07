@@ -1,0 +1,13 @@
+repo = "streamient"
+default_files = ["compose.yml", "compose.dbh.yml"]
+
+[environment]
+APP_URL = "https://{profile}.s.lan"
+MCP_BASE_URL = "https://mcp.{profile}.s.lan"
+WHITE_LABEL_CNAME_TARGET = "app.{profile}.s.lan"
+
+[urls]
+app = "https://{profile}.s.lan"
+mcp = "https://mcp.{profile}.s.lan"
+mobile = "https://mobile.{profile}.s.lan"
+
