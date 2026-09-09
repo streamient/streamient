@@ -27,8 +27,8 @@ services:
     ports: !override []
     environment:
       <<: *dbh-ca-environment
-      VITE_STREAMIENT_SERVER: "https://${DBH_PROFILE}.s.lan"
-      __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: "mobile.${DBH_PROFILE}.s.lan"
+      VITE_STREAMIENT_SERVER: "https://s.${DBH_PROFILE}.lan"
+      __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: "mobile.s.${DBH_PROFILE}.lan"
     volumes: *dbh-ca-volumes
     networks:
       dbh_proxy:
