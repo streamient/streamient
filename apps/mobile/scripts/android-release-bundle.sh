@@ -85,13 +85,14 @@ pnpm --dir apps/mobile exec cap sync android
 cd "${ANDROID_DIR}"
 ./gradlew :app:bundleRelease
 
-VERIFY_OUTPUT="$(jarsigner -verify -verbose -certs "${AAB_PATH}" 2>&1 || true)"
-if echo "${VERIFY_OUTPUT}" | grep -qi "jar is unsigned"; then
+VERIFY_STATUS=0
+VERIFY_OUTPUT="$(LC_ALL=C "${JAVA_HOME}/bin/jarsigner" -verify "${AAB_PATH}" 2>&1)" || VERIFY_STATUS=$?
+if [[ "${VERIFY_OUTPUT}" == *"jar is unsigned"* ]]; then
 	echo "${VERIFY_OUTPUT}" >&2
 	echo "Release bundle is unsigned: ${AAB_PATH}" >&2
 	exit 1
 fi
-if ! echo "${VERIFY_OUTPUT}" | grep -qi "jar verified"; then
+if [[ "${VERIFY_STATUS}" -ne 0 || "${VERIFY_OUTPUT}" != *"jar verified."* ]]; then
 	echo "${VERIFY_OUTPUT}" >&2
 	echo "Could not verify release bundle signature: ${AAB_PATH}" >&2
 	exit 1
