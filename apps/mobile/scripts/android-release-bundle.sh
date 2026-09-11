@@ -4,7 +4,26 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 ANDROID_DIR="${REPO_ROOT}/apps/mobile/android"
-LOCAL_ANDROID_CONFIG_PATH="${STREAMIENT_ANDROID_CONFIG_PATH:-${REPO_ROOT}/../helpmonks-install-script/macos_config.fish}"
+HOST_OS="$(uname -s)"
+LOCAL_ANDROID_CONFIG_PATH="${STREAMIENT_ANDROID_CONFIG_PATH:-}"
+if [ -z "${LOCAL_ANDROID_CONFIG_PATH}" ] && [ "${HOST_OS}" = "Darwin" ]; then
+	LOCAL_ANDROID_CONFIG_PATH="${REPO_ROOT}/../helpmonks-install-script/macos_config.fish"
+fi
+
+# Reuse signing credentials already exported by the user's shell.
+LOCAL_SHARED_KEYSTORE="${REPO_ROOT}/../helpmonks-install-script/android/helpmonks-upload-key.jks"
+for suffix in KEYSTORE_PATH KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+	app_variable="STREAMIENT_ANDROID_${suffix}"
+	shared_variable="HELPMONKS_ANDROID_${suffix}"
+	if [ -z "${!app_variable:-}" ]; then
+		value="${!shared_variable:-}"
+		# A shared path copied from macOS can refer to the same key in the sibling checkout.
+		if [ "${suffix}" = "KEYSTORE_PATH" ] && [ ! -f "${value}" ] && [ "${value##*/}" = "helpmonks-upload-key.jks" ] && [ -f "${LOCAL_SHARED_KEYSTORE}" ]; then
+			value="${LOCAL_SHARED_KEYSTORE}"
+		fi
+		export "${app_variable}=${value}"
+	fi
+done
 
 release_signing_configured() {
 	[ -n "${STREAMIENT_ANDROID_KEYSTORE_PATH:-}" ] && [ -n "${STREAMIENT_ANDROID_KEYSTORE_PASSWORD:-}" ] && [ -n "${STREAMIENT_ANDROID_KEY_ALIAS:-}" ] && [ -n "${STREAMIENT_ANDROID_KEY_PASSWORD:-}" ]
@@ -15,24 +34,36 @@ if ! release_signing_configured && [ "${STREAMIENT_ANDROID_CONFIG_LOADED:-false}
 		echo "fish is required to load Android signing config from ${LOCAL_ANDROID_CONFIG_PATH}" >&2
 		exit 1
 	fi
-	exec fish -c '
+	exec fish --no-config -c '
 		source "$argv[1]"
-		set -q STREAMIENT_ANDROID_KEYSTORE_PATH; or set -gx STREAMIENT_ANDROID_KEYSTORE_PATH "$HELPMONKS_ANDROID_KEYSTORE_PATH"
-		set -q STREAMIENT_ANDROID_KEYSTORE_PASSWORD; or set -gx STREAMIENT_ANDROID_KEYSTORE_PASSWORD "$HELPMONKS_ANDROID_KEYSTORE_PASSWORD"
-		set -q STREAMIENT_ANDROID_KEY_ALIAS; or set -gx STREAMIENT_ANDROID_KEY_ALIAS "$HELPMONKS_ANDROID_KEY_ALIAS"
-		set -q STREAMIENT_ANDROID_KEY_PASSWORD; or set -gx STREAMIENT_ANDROID_KEY_PASSWORD "$HELPMONKS_ANDROID_KEY_PASSWORD"
 		set -gx STREAMIENT_ANDROID_CONFIG_LOADED true
 		exec bash "$argv[2]"
 	' "${LOCAL_ANDROID_CONFIG_PATH}" "${BASH_SOURCE[0]}"
 fi
 
-ANDROID_STUDIO_JDK_HOME="${ANDROID_STUDIO_JDK_HOME:-/Applications/Android Studio.app/Contents/jbr/Contents/Home}"
-DEFAULT_ANDROID_SDK_HOME="${HOME}/Library/Android/sdk"
+if [ "${HOST_OS}" = "Darwin" ]; then
+	DEFAULT_JDK_HOME="$(/usr/libexec/java_home -v 21 2>/dev/null || true)"
+	DEFAULT_JDK_HOME="${DEFAULT_JDK_HOME:-/Applications/Android Studio.app/Contents/jbr/Contents/Home}"
+	DEFAULT_ANDROID_SDK_HOME="${HOME}/Library/Android/sdk"
+else
+	DEFAULT_JDK_HOME="/usr/lib/jvm/java-21-openjdk"
+	DEFAULT_ANDROID_SDK_HOME="${HOME}/Android/Sdk"
+fi
+ANDROID_STUDIO_JDK_HOME="${ANDROID_STUDIO_JDK_HOME:-${JAVA_HOME:-${DEFAULT_JDK_HOME}}}"
 ANDROID_SDK_HOME="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-${DEFAULT_ANDROID_SDK_HOME}}}"
 AAB_PATH="${ANDROID_DIR}/app/build/outputs/bundle/release/app-release.aab"
 
-if [ ! -x "${ANDROID_STUDIO_JDK_HOME}/bin/java" ]; then
-	echo "Android Studio JDK not found at ${ANDROID_STUDIO_JDK_HOME}" >&2
+if [ ! -x "${ANDROID_STUDIO_JDK_HOME}/bin/javac" ] || [ ! -x "${ANDROID_STUDIO_JDK_HOME}/bin/jarsigner" ]; then
+	echo "JDK not found at ${ANDROID_STUDIO_JDK_HOME}. Set JAVA_HOME or ANDROID_STUDIO_JDK_HOME to JDK 21." >&2
+	exit 1
+fi
+JAVA_MAJOR="$("${ANDROID_STUDIO_JDK_HOME}/bin/java" -XshowSettings:properties -version 2>&1 | awk -F= '/^[[:space:]]*java\.specification\.version[[:space:]]*=/ { gsub(/[[:space:]]/, "", $2); print $2 }')"
+if [[ ! "${JAVA_MAJOR}" =~ ^(21|22|23|24)$ ]]; then
+	echo "Java ${JAVA_MAJOR:-unknown} cannot run this Android build. Set JAVA_HOME or ANDROID_STUDIO_JDK_HOME to JDK 21 (supported: 21-24)." >&2
+	exit 1
+fi
+if ! release_signing_configured || [ ! -f "${STREAMIENT_ANDROID_KEYSTORE_PATH:-}" ]; then
+	echo "Release signing is not configured or the keystore is missing. Set STREAMIENT_ANDROID_KEYSTORE_PATH, STREAMIENT_ANDROID_KEYSTORE_PASSWORD, STREAMIENT_ANDROID_KEY_ALIAS, and STREAMIENT_ANDROID_KEY_PASSWORD (or HELPMONKS_ANDROID_*)." >&2
 	exit 1
 fi
 if [ ! -d "${ANDROID_SDK_HOME}/platforms" ] || [ ! -d "${ANDROID_SDK_HOME}/build-tools" ]; then
@@ -54,13 +85,14 @@ pnpm --dir apps/mobile exec cap sync android
 cd "${ANDROID_DIR}"
 ./gradlew :app:bundleRelease
 
-VERIFY_OUTPUT="$(jarsigner -verify -verbose -certs "${AAB_PATH}" 2>&1 || true)"
-if echo "${VERIFY_OUTPUT}" | grep -qi "jar is unsigned"; then
+VERIFY_STATUS=0
+VERIFY_OUTPUT="$(LC_ALL=C "${JAVA_HOME}/bin/jarsigner" -verify "${AAB_PATH}" 2>&1)" || VERIFY_STATUS=$?
+if [[ "${VERIFY_OUTPUT}" == *"jar is unsigned"* ]]; then
 	echo "${VERIFY_OUTPUT}" >&2
 	echo "Release bundle is unsigned: ${AAB_PATH}" >&2
 	exit 1
 fi
-if ! echo "${VERIFY_OUTPUT}" | grep -qi "jar verified"; then
+if [[ "${VERIFY_STATUS}" -ne 0 || "${VERIFY_OUTPUT}" != *"jar verified."* ]]; then
 	echo "${VERIFY_OUTPUT}" >&2
 	echo "Could not verify release bundle signature: ${AAB_PATH}" >&2
 	exit 1

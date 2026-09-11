@@ -1,0 +1,44 @@
+x-dbh-ca-environment: &dbh-ca-environment
+  NODE_EXTRA_CA_CERTS: /usr/local/share/ca-certificates/dbh-caddy-root.crt
+
+x-dbh-ca-volumes: &dbh-ca-volumes
+  - "${DBH_CADDY_CA}:/usr/local/share/ca-certificates/dbh-caddy-root.crt:ro"
+
+services:
+  app:
+    ports: !override []
+    environment: *dbh-ca-environment
+    volumes: *dbh-ca-volumes
+    networks:
+      dbh_proxy:
+        aliases:
+          - "${DBH_PROFILE}-streamient-app"
+
+  mcp:
+    ports: !override []
+    environment: *dbh-ca-environment
+    volumes: *dbh-ca-volumes
+    networks:
+      dbh_proxy:
+        aliases:
+          - "${DBH_PROFILE}-streamient-mcp"
+
+  mobile:
+    ports: !override []
+    environment:
+      <<: *dbh-ca-environment
+      VITE_STREAMIENT_SERVER: "https://s.${DBH_PROFILE}.lan"
+      __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: "mobile.s.${DBH_PROFILE}.lan"
+    volumes: *dbh-ca-volumes
+    networks:
+      dbh_proxy:
+        aliases:
+          - "${DBH_PROFILE}-streamient-mobile"
+
+networks:
+  hmnet16:
+    name: "${DBH_INTERNAL_NETWORK}"
+    external: true
+  dbh_proxy:
+    name: "${DBH_PROXY_NETWORK}"
+    external: true

@@ -1,12 +1,7 @@
 name: Rebuild Docs
 
 on:
-    push:
-        branches:
-            - main
-        paths:
-            - "docs/**"
-            - "swagger.js"
+    workflow_dispatch:
 
 env:
     GHCR_IMAGE: ghcr.io/streamient/streamient

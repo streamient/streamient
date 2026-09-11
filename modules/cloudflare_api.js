@@ -51,3 +51,8 @@ export async function getHostnameStatus(customHostnameId) {
 	const { client, zoneId } = getCloudflareClient();
 	return client.customHostnames.get(customHostnameId, { zone_id: zoneId });
 }
+
+export async function deleteHostname(customHostnameId) {
+	const { client, zoneId } = getCloudflareClient();
+	try { await client.customHostnames.delete(customHostnameId, { zone_id: zoneId }); } catch (error) { if (error.status !== 404) throw error; }
+}

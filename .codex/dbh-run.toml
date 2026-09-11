@@ -1,0 +1,18 @@
+repo = "streamient"
+default_files = ["compose.yml", "compose.dbh.yml"]
+
+[environment]
+APP_URL = "https://s.{profile}.lan"
+MCP_BASE_URL = "https://mcp.s.{profile}.lan"
+WHITE_LABEL_CNAME_TARGET = "app.s.{profile}.lan"
+DEV_STREAMIENT_MONGODB_URI = "mongodb://dbh.pipefish-mermaid.ts.net:27017/streamient?replicaSet=hmrs0"
+DEV_TYPESENSE_HOST = "typesense"
+DEV_TYPESENSE_KEY = "hmsecure"
+
+[test]
+compose_args = ["exec", "-e", "APP_URL=http://s.lan", "-e", "MCP_BASE_URL=http://mcp.s.lan", "app", "pnpm", "test"]
+
+[urls]
+app = "https://s.{profile}.lan"
+mcp = "https://mcp.s.{profile}.lan"
+mobile = "https://mobile.s.{profile}.lan"

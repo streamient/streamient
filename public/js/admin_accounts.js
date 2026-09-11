@@ -111,22 +111,56 @@ document.addEventListener('DOMContentLoaded', () => {
 		const Swal = await getSwal();
 		const confirmation = await Swal.fire({
 			icon: 'warning',
-			title: `Delete account "${name}"?`,
-			text: 'This permanently removes the account, members, projects, content, and search indexes. This cannot be undone.',
+			titleText: `Delete account "${name}"?`,
+			text: 'This permanently removes the account and all team data. Type DELETE to confirm.',
+			input: 'text',
+			inputLabel: 'Confirmation',
+			customClass: { input: 'form-control form-control-sm' },
+			reverseButtons: true,
+			inputValidator: (value) => value === 'DELETE' ? undefined : 'Type DELETE to confirm',
 			showCancelButton: true,
 			confirmButtonText: 'Delete Account',
 			confirmButtonColor: '#d63939',
 		});
 		if (!confirmation.isConfirmed) return;
 		try {
-			const response = await fetch(`/admin/api/accounts/${id}`, { method: 'DELETE' });
-			await parseResponse(response);
-			window.location.href = '/admin';
+			const response = await fetch(`/admin/api/accounts/${id}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirmation: confirmation.value }) });
+			const result = await parseResponse(response);
+			if (response.status !== 202 || !result.deletion?.requested_at) throw new Error('Deletion was not accepted');
+			const row = document.querySelector(`[data-account-id="${id}"]`);
+			if (row) row.remove();
+			if (editForm) {
+				editForm.querySelectorAll('input, select, button').forEach((control) => { control.disabled = true; });
+				document.getElementById('admin-deletion-status').dataset.stage = result.deletion.stage;
+				pollDeletion();
+			}
+			await showToast('Account deletion requested');
+
 		} catch (err) {
-			console.error('Delete account error:', err);
+			console.error('Delete error:', err);
 			await showError(err.message);
 		}
 	}
+
+	const deletionStatus = document.getElementById('admin-deletion-status');
+	const retryDeletion = document.getElementById('retry-account-deletion');
+	async function pollDeletion() {
+		if (!deletionStatus) return;
+		try {
+			const data = await parseResponse(await fetch(`/admin/api/accounts/${deletionStatus.dataset.id}/deletion`, { headers: { Accept: 'application/json' } }));
+			const state = data.deletion;
+			if (!state) return;
+			deletionStatus.textContent = `Deletion: ${state.stage}${state.error ? ' — ' + state.error : ''}`;
+			retryDeletion.hidden = state.stage !== 'failed';
+			editForm.querySelectorAll('input, select, button').forEach((control) => { control.disabled = true; });
+			if (!['failed', 'complete'].includes(state.stage)) setTimeout(pollDeletion, 3000);
+		} catch (error) { await showError(error.message); }
+	}
+	if (deletionStatus?.dataset.stage) pollDeletion();
+	retryDeletion?.addEventListener('click', async () => {
+		retryDeletion.disabled = true;
+		try { await parseResponse(await fetch(`/admin/api/accounts/${deletionStatus.dataset.id}/deletion/retry`, { method: 'POST' })); await pollDeletion(); } catch (error) { await showError(error.message); } finally { retryDeletion.disabled = false; }
+	});
 
 	document.getElementById('delete-account')?.addEventListener('click', () => {
 		deleteAccount(document.getElementById('account-id').value, document.getElementById('name').value);

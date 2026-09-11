@@ -1,3 +1,4 @@
+import { acquireTenantWork } from '../modules/tenancy.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -46,6 +47,8 @@ export async function startExport(userId, hostId, userEmail, userName) {
 }
 
 async function processExport(exportId, hostId, userEmail, userName) {
+	const releaseAccountWork = await acquireTenantWork(hostId);
+	try {
 	const doc = await queryForSave(Export.findById(exportId));
 	if (!doc) return;
 
@@ -95,6 +98,7 @@ async function processExport(exportId, hostId, userEmail, userName) {
 		// Clean up partial file
 		fs.unlink(filePath, () => {});
 	}
+	} finally { await releaseAccountWork(); }
 }
 
 export async function getExportStatus(hostId) {

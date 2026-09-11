@@ -1,3 +1,4 @@
+import { assertTenantAvailable } from './modules/tenancy.js';
 import express from 'express';
 import session from 'express-session';
 import MongoStore from 'connect-mongo';
@@ -184,7 +185,7 @@ app.use('/static', (req, res, next) => {
     next();
 });
 app.use('/static', express.static(path.join(__dirname, 'public'), _static_cache_control));
-app.use('/white-label-assets', express.static(getWhiteLabelAssetsDir(), _static_cache_control));
+app.use('/white-label-assets', async (req, res, next) => { try { await assertTenantAvailable(req.path.split('/')[1]); next(); } catch { res.sendStatus(404); } }, express.static(getWhiteLabelAssetsDir(), _static_cache_control));
 app.get('/auth-assets/:name', serveAuthAsset);
 
 // No cache for dynamic content
@@ -294,6 +295,8 @@ async function start() {
 	await initTypesense();
 
 	if (SERVER_MODE === 'scheduler') {
+		const { startAccountDeletionWorker } = await import('./services/account_cleanup_service.js');
+		await startAccountDeletionWorker();
 		const { startScheduler } = await import('./modules/scheduler.js');
 		startScheduler();
 		log.info({ env: config.env }, 'Streamient scheduler running');

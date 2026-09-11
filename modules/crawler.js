@@ -1,3 +1,4 @@
+import { acquireTenantWork } from './tenancy.js';
 import { CheerioCrawler } from 'crawlee';
 import { ensureCollections, importDocuments, removeDocumentsBySourceIds, toIndexDocs } from '../modules/typesense.js';
 import { Url } from '../model/url.js';
@@ -423,6 +424,8 @@ function skippedCrawlEntry(rawUrl, scope) {
 * parent Url document never grows toward MongoDB's BSON limit.
 */
 export async function crawlSite(urlDoc, deps = {}) {
+	const releaseAccountWork = await acquireTenantWork(urlDoc.host_id);
+	try {
 	const urlId = idString(urlDoc._id);
 	const hostId = urlDoc.host_id;
 	const projectId = idString(urlDoc.project);
@@ -556,6 +559,7 @@ export async function crawlSite(urlDoc, deps = {}) {
 
 	log.info({ requests: pages.length, url: urlDoc.url, indexed: indexResult.indexedCount, partial: summary.partial, frontierRemaining: summary.queued }, 'Crawl step complete');
 	return indexResult.indexedCount;
+	} finally { await releaseAccountWork(); }
 }
 
 /**

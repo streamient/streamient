@@ -36,7 +36,7 @@ block content
 								td.text-center.text-muted(colspan="7") No accounts found
 						else
 							each account in accounts
-								tr
+								tr(data-account-id=account._id)
 									td
 										.fw-semibold= account.name
 										code.small= account.host_id
@@ -52,7 +52,7 @@ block content
 									td= account.itemCount
 									td.text-end
 										a.btn.btn-sm.btn-outline-primary.me-3(href=`/admin/accounts/${account._id}/edit`) Edit
-										button.btn.btn-sm.btn-outline-danger.btn-delete(type="button" data-id=account._id data-name=account.name) Delete
+										button.btn.btn-sm.btn-outline-danger.btn-delete(type="button" data-id=account._id data-name=account.name disabled=Boolean(account.deletion)) Delete
 
 			if pages > 1
 				nav(aria-label="Accounts pagination")

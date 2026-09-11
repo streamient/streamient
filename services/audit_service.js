@@ -1,3 +1,4 @@
+import { withTenantWork } from '../modules/tenancy.js';
 import { AuditLog } from '../model/audit_log.js';
 import { createLogger } from '../modules/logger.js';
 
@@ -15,7 +16,7 @@ const SKIP_DIFF_KEYS = new Set(['updatedAt', '__v', 'is_indexed']);
  * Fire-and-forget audit log write. Never throws, never blocks.
  */
 export function log(params) {
-    AuditLog.create(params).catch((err) => {
+    (params.host_id ? withTenantWork(params.host_id, () => AuditLog.create(params)) : AuditLog.create(params)).catch((err) => {
         auditLog.error({ err }, 'Audit log write error');
     });
 }

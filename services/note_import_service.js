@@ -1,3 +1,4 @@
+import { acquireTenantWork } from '../modules/tenancy.js';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { createReadStream, createWriteStream } from 'node:fs';
@@ -329,6 +330,8 @@ async function assembleUpload(upload) {
 export async function processUpload(uploadId) {
 	const upload = await NoteImportUpload.findOne({ _id: uploadId, state: { $in: ['processing', 'failed'] } }).lean();
 	if (!upload) return;
+	const releaseAccountWork = await acquireTenantWork(upload.host_id);
+	try {
 	await NoteImportUpload.updateOne({ _id: upload._id }, { $set: { state: 'processing', error: '', last_activity_at: new Date(), expires_at: expiryDate() } });
 	try {
 		const filePath = await assembleUpload(upload);
@@ -347,6 +350,7 @@ export async function processUpload(uploadId) {
 		emitToTenant(upload.host_id, 'note-import:failed', publicUpload(failed));
 		throw err;
 	}
+	} finally { await releaseAccountWork(); }
 }
 
 export function createNoteImportWorker() {
@@ -369,4 +373,9 @@ export async function cleanupOrphanedImportFiles() {
 
 export function logImportWorkerError(err) {
 	log.error({ err }, 'Note import worker error');
+}
+
+export async function deleteImportFilesForHost(hostId) {
+	const uploads = await NoteImportUpload.find({ host_id: hostId }).select('_id').read('primary').lean();
+	for (const upload of uploads) await rm(uploadDir(upload._id), { recursive: true, force: true });
 }

@@ -1,3 +1,8 @@
+import { beforeEach as beforeAccountWork, afterEach as afterAccountWork } from 'node:test';
+import { mockTenantWork } from './helpers/tenant-work.js';
+let restoreAccountWork;
+beforeAccountWork(() => { restoreAccountWork = mockTenantWork(); });
+afterAccountWork(() => { restoreAccountWork(); });
 import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -20,7 +25,7 @@ const originals = {
 	tenantFind: Tenant.find,
 	tenantFindById: Tenant.findById,
 	tenantCountDocuments: Tenant.countDocuments,
-	tenantFindByIdAndUpdate: Tenant.findByIdAndUpdate,
+	tenantFindOneAndUpdate: Tenant.findOneAndUpdate,
 	userFindOne: User.findOne,
 	userFindByIdAndUpdate: User.findByIdAndUpdate,
 	memberFind: TenantMember.find,
@@ -34,6 +39,7 @@ const originals = {
 function queryResult(value) {
 	const query = {
 		select() { return query; },
+		read() { return query; },
 		populate() { return query; },
 		sort() { return query; },
 		skip() { return query; },
@@ -47,7 +53,7 @@ afterEach(() => {
 	Tenant.find = originals.tenantFind;
 	Tenant.findById = originals.tenantFindById;
 	Tenant.countDocuments = originals.tenantCountDocuments;
-	Tenant.findByIdAndUpdate = originals.tenantFindByIdAndUpdate;
+	Tenant.findOneAndUpdate = originals.tenantFindOneAndUpdate;
 	User.findOne = originals.userFindOne;
 	User.findByIdAndUpdate = originals.userFindByIdAndUpdate;
 	TenantMember.find = originals.memberFind;
@@ -137,7 +143,7 @@ describe('admin tenant accounts', () => {
 		const tenantId = new mongoose.Types.ObjectId();
 		const updates = [];
 		Tenant.findById = () => queryResult({ owner: new mongoose.Types.ObjectId() });
-		Tenant.findByIdAndUpdate = async (id, update, options) => updates.push({ id, update, options });
+		Tenant.findOneAndUpdate = async (id, update, options) => { updates.push({ id, update, options }); return {}; };
 		User.findByIdAndUpdate = async () => {};
 
 		await updateAdminAccount(tenantId.toString(), {

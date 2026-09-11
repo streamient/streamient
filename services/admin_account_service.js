@@ -64,6 +64,7 @@ export function formatAdminAccount(tenant, counts = {}) {
 		_id: tenant._id?.toString() || '',
 		host_id: tenant.host_id || '',
 		name: tenant.name || '',
+		deletion: tenant.deletion?.requested_at ? { requested_at: tenant.deletion.requested_at, stage: tenant.deletion.stage, error: tenant.deletion.error || '', job_id: tenant.deletion.job_id } : null,
 		is_active: tenant.is_active !== false,
 		plan: tenant.plan || 'free',
 		...resolveStoredTenantLimits(tenant),
@@ -92,7 +93,7 @@ export async function listAdminAccounts({ status = 'active', page = 1, limit = 5
 	const filter = normalizedStatus === 'inactive' ? { is_active: false } : { is_active: { $ne: false } };
 	const [tenants, total] = await Promise.all([
 		Tenant.find(filter)
-			.select('host_id name owner is_active plan limit_projects limit_users limit_ai_workflows_per_day createdAt updatedAt')
+			.select('deletion host_id name owner is_active plan limit_projects limit_users limit_ai_workflows_per_day createdAt updatedAt')
 			.populate('owner', 'name email is_active last_login createdAt')
 			.sort({ createdAt: -1 })
 			.skip((normalizedPage - 1) * limit)
@@ -122,7 +123,7 @@ export async function listAdminAccounts({ status = 'active', page = 1, limit = 5
 export async function getAdminAccount(tenantId) {
 	if (!mongoose.isValidObjectId(tenantId)) return null;
 	const tenant = await Tenant.findById(tenantId)
-		.select('host_id name owner is_active plan limit_projects limit_users limit_ai_workflows_per_day createdAt updatedAt')
+		.select('deletion host_id name owner is_active plan limit_projects limit_users limit_ai_workflows_per_day createdAt updatedAt')
 		.populate('owner', 'name email is_active last_login createdAt')
 		.lean();
 	if (!tenant) return null;
@@ -155,8 +156,9 @@ export async function getAdminAccount(tenantId) {
 
 export async function updateAdminAccount(tenantId, input = {}, options = {}) {
 	if (!mongoose.isValidObjectId(tenantId)) return null;
-	const tenant = await Tenant.findById(tenantId).select('owner').lean();
+	const tenant = await Tenant.findById(tenantId).select('owner deletion').read('primary').lean();
 	if (!tenant) return null;
+	if (tenant.deletion?.requested_at) throw new AdminAccountError('Account deletion is in progress', 409, 'account_deletion_locked');
 
 	const tenantUpdate = {};
 	const ownerUpdate = {};
@@ -193,7 +195,8 @@ export async function updateAdminAccount(tenantId, input = {}, options = {}) {
 	try {
 		await transaction(async (session) => {
 			if (Object.keys(tenantUpdate).length) {
-				await Tenant.findByIdAndUpdate(tenantId, tenantUpdate, { session, runValidators: true });
+				const updated = await Tenant.findOneAndUpdate({ _id: tenantId, 'deletion.requested_at': null }, tenantUpdate, { session, runValidators: true });
+				if (!updated) throw new AdminAccountError('Account deletion is in progress', 409, 'account_deletion_locked');
 			}
 			if (Object.keys(ownerUpdate).length) {
 				await User.findByIdAndUpdate(ownerId, ownerUpdate, { session, runValidators: true });

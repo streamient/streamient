@@ -8,32 +8,65 @@ script = ""
 [[actions]]
 name = "compose up"
 icon = "run"
-command = "docker compose up -d"
+command = '''if test (hostname) = "NadaMini"
+	dbh-run compose -- up -d
+else
+	docker compose up -d
+end'''
 
 [[actions]]
 name = "compose restart"
 icon = "run"
-command = "docker compose restart"
+command = '''if test (hostname) = "NadaMini"
+	dbh-run compose -- restart
+else
+	docker compose restart
+end'''
 
 [[actions]]
 name = "compose rebuild"
 icon = "run"
-command = "docker compose up -d --build --force-recreate"
+command = '''if test (hostname) = "NadaMini"
+	dbh-run compose -- up -d --build --force-recreate
+else
+	docker compose up -d --build --force-recreate
+end'''
 
 [[actions]]
 name = "compose stop"
 icon = "run"
-command = "docker compose stop"
+command = '''if test (hostname) = "NadaMini"
+	dbh-run compose -- stop
+else
+	docker compose stop
+end'''
 
 [[actions]]
 name = "compose status"
 icon = "run"
-command = "docker compose ps"
+command = '''if test (hostname) = "NadaMini"
+	dbh-run status
+else
+	docker compose ps
+end'''
 
 [[actions]]
 name = "compose logs"
 icon = "run"
-command = "docker compose logs --tail=200 -f"
+command = '''if test (hostname) = "NadaMini"
+	dbh-run logs -- --follow
+else
+	docker compose logs --tail=200 -f
+end'''
+
+[[actions]]
+name = "compose tests"
+icon = "run"
+command = '''if test (hostname) = "NadaMini"
+	dbh-run test
+else
+	docker compose exec app pnpm test
+end'''
 
 [[actions]]
 name = "release"

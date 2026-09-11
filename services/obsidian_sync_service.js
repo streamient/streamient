@@ -1,3 +1,4 @@
+import { acquireTenantWork } from '../modules/tenancy.js';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import matter from 'gray-matter';
@@ -1214,6 +1215,8 @@ export async function resolveVaultPaths(hostId, connectionId, values) {
 }
 
 export async function syncStreamientItem(type, itemId, hostId, options = {}) {
+	const releaseAccountWork = await acquireTenantWork(hostId);
+	try {
 	if (!config.obsidian.enabled) return null;
 	const Model = markdownProjection(type)?.Model;
 	if (!Model) return null;
@@ -1244,6 +1247,7 @@ export async function syncStreamientItem(type, itemId, hostId, options = {}) {
 		operationId: `streamient:${type}:${item._id}:update:${file.revision + 1}`,
 	});
 	return file;
+	} finally { await releaseAccountWork(); }
 }
 
 export async function cleanupObsidianRetention(now = new Date()) {
@@ -1279,6 +1283,8 @@ export async function cleanupObsidianRetention(now = new Date()) {
 }
 
 export async function processObsidianExtraction(fileId, hostId) {
+	const releaseAccountWork = await acquireTenantWork(hostId);
+	try {
 	const file = await queryForSave(ObsidianFile.findOne({ _id: fileId, host_id: hostId, in_trash: false }));
 	if (!file || !file.blob || !['canvas', 'base', 'document'].includes(file.kind)) return null;
 	file.extraction_status = 'processing';
@@ -1300,6 +1306,7 @@ export async function processObsidianExtraction(fileId, hostId) {
 		await file.save();
 		throw err;
 	}
+	} finally { await releaseAccountWork(); }
 }
 
 export function createObsidianExtractionWorker() {

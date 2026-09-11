@@ -1,3 +1,4 @@
+import { assertTenantAvailable, acquireTenantWork } from './tenancy.js';
 import { Server } from 'socket.io';
 import { createAdapter as createMongoAdapter } from '@socket.io/mongo-adapter';
 import { Emitter as MongoEmitter } from '@socket.io/mongo-emitter';
@@ -144,6 +145,19 @@ export function getIO() {
 	return io;
 }
 
+export async function disconnectTenantSockets(hostId) {
+	if (io) return io.in(`account:${hostId}`).in(`tenant:${hostId}`).disconnectSockets(true);
+	if (usesMongoSocketTransport()) (await ensureMongoEmitter()).in(`account:${hostId}`).in(`tenant:${hostId}`).disconnectSockets(true);
+}
+
+export async function deleteTenantSocketPackets(hostId) {
+	if (!usesMongoSocketTransport()) return;
+	const collection = await getSocketMongoCollection();
+	// Keep transport control messages long enough for every replica to observe
+	// the disconnect. Remove buffered customer payloads and recovery sessions.
+	await collection.deleteMany({ $or: [{ 'data.opts.rooms': `tenant:${hostId}`, 'data.packet': { $exists: true } }, { 'data.rooms': `tenant:${hostId}`, 'data.sid': { $exists: true } }] });
+}
+
 export async function setupSocketIO(httpServer, sessionMiddleware, handlers = {}) {
 	return OtelRuntime.createCustomSpan('socketio.setup', async (span) => {
 		emailCountsHandler = handlers.emailCountsHandler || emailCountsHandler;
@@ -163,7 +177,7 @@ export async function setupSocketIO(httpServer, sessionMiddleware, handlers = {}
 				// the backup duration of the sessions and the packets
 				maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes
 				// whether to skip middlewares upon successful recovery
-				skipMiddlewares: true,
+				skipMiddlewares: false,
 			},
 			tls: { rejectUnauthorized: false },
 			perMessageDeflate: { threshold: 32768 },
@@ -178,7 +192,9 @@ export async function setupSocketIO(httpServer, sessionMiddleware, handlers = {}
 				if (!socket.request?.session?.userId || !socket.request?.session?.host_id) {
 					await authenticateSocketBearer(socket);
 				}
-				next();
+				const identity = getSocketIdentity(socket);
+			if (identity.hostId) { await assertTenantAvailable(identity.hostId); socket.join(`account:${identity.hostId}`); }
+			next();
 			} catch (err) {
 				next(new Error(err.message || 'Socket authentication failed'));
 			}
@@ -198,8 +214,9 @@ export async function setupSocketIO(httpServer, sessionMiddleware, handlers = {}
 			});
 			log.info({ socketId: socket.id, app: process.env.STREAMIENT_APP || 'web' }, 'Socket.IO client connected');
 
-			socket.on('subscribe', (room, userId, hostId, app = '') => {
+			socket.on('subscribe', async (room, userId, hostId, app = '') => {
 				const authorizedRoom = resolveAuthorizedSubscribeRoom(getSocketIdentity(socket), room, userId, hostId);
+			try { await assertTenantAvailable(hostId); } catch { socket.disconnect(true); return; }
 				if (!authorizedRoom) return;
 				OtelRuntime.createCustomSpan('socketio.subscribe', (subscribeSpan) => {
 					subscribeSpan.setAttribute('socket.id', socket.id);

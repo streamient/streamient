@@ -68,3 +68,7 @@ View your current workspace usage at **Settings > Usage**:
 - Storage used
 
 Usage limits depend on your [billing plan](/cloud/billing).
+
+## Delete account
+
+Owners can permanently delete the account from Settings > Subscription. See [Delete your account](./account-deletion) for eligibility and what is removed.

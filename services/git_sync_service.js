@@ -1,3 +1,4 @@
+import { acquireTenantWork } from '../modules/tenancy.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -36,9 +37,10 @@ function repoDir(hostId, repoId) {
 	return path.join(GIT_REPOS_DIR, hostId, repoId.toString());
 }
 
-export function deleteGitRepoHostDirectory(hostId) {
+export async function deleteGitRepoHostDirectory(hostId) {
+	if (!/^[a-f\d]{24}$/i.test(hostId)) throw new Error('Invalid host storage scope');
 	const dir = path.join(GIT_REPOS_DIR, hostId);
-	fs.rm(dir, { recursive: true, force: true }, () => {});
+	await fs.promises.rm(dir, { recursive: true, force: true });
 }
 
 function cloneUrl(repoUrl, token) {
@@ -475,6 +477,8 @@ export async function syncRepo(repoId, userId, hostId, ctx = { channel: 'api' })
 }
 
 async function executeSyncRepo(repoId, userId, hostId, ctx, gitRepoDoc, summary) {
+	const releaseAccountWork = await acquireTenantWork(hostId);
+	try {
 	try {
 		const token = gitRepoDoc.auth_token ? decrypt(gitRepoDoc.auth_token) : '';
 		const dir = repoDir(hostId, repoId);
@@ -554,6 +558,7 @@ async function executeSyncRepo(repoId, userId, hostId, ctx, gitRepoDoc, summary)
 		await logSyncEvent(gitRepoDoc, 'error', `Sync failed: ${err.message}`, syncLogDetails(summary));
 		throw err;
 	}
+	} finally { await releaseAccountWork(); }
 }
 
 async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, summary) {
