@@ -2979,4 +2979,43 @@ Object.assign(swaggerSpec.paths, {
 	'/obsidian/revisions/{id}/content': { get: { tags: ['Obsidian Sync'], summary: 'Download a recoverable losing conflict revision before its 30-day expiry', security: obsidianReadSecurity, responses: { ...obsidianErrors, 200: { description: 'Revision bytes', content: { 'application/octet-stream': { schema: { type: 'string', format: 'binary' } } } } } } },
 });
 
+swaggerSpec.components.schemas.AccountDeletionState = {
+	type: 'object', nullable: true, properties: { requested_at: { type: 'string', format: 'date-time' }, stage: { type: 'string' }, error: { type: 'string' }, job_id: { type: 'string' } },
+};
+swaggerSpec.paths['/account/deletion'] = {
+	parameters: [{ name: 'host_id', in: 'query', required: true, schema: { type: 'string', pattern: '^[a-fA-F0-9]{24}$' } }],
+	get: {
+		tags: ['Account'], summary: 'Preview permanent account deletion', operationId: 'previewAccountDeletion', security: [{ BrowserSession: [] }],
+		description: 'Hosted owner session and explicit account context required. Checks live Stripe subscriptions and schedules. Returns a session-bound confirmation token valid for ten minutes. Impersonation and bearer tokens are rejected.',
+		responses: {
+			200: { description: 'Eligible account and confirmation token', content: { 'application/json': { schema: { type: 'object', required: ['host_id', 'name', 'eligible', 'confirmation_token'], properties: { host_id: { type: 'string' }, name: { type: 'string' }, eligible: { type: 'boolean' }, confirmation_token: { type: 'string' }, deletion: { $ref: '#/components/schemas/AccountDeletionState' } } } } } },
+			400: { description: 'Explicit account context required' }, 403: { description: 'Owner browser session required' }, 409: { description: 'Subscription not fully canceled' }, 503: { description: 'Billing could not be verified' },
+		},
+	},
+	post: {
+		tags: ['Account'], summary: 'Request permanent account deletion', operationId: 'requestAccountDeletion', security: [{ BrowserSession: [] }],
+		description: 'Checks billing again, durably locks the host, revokes access, and schedules retryable cleanup. Duplicate requests reuse the same task. Retains access to other accounts and billing history. Original external sources remain.',
+		requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['confirmation', 'confirmation_token'], properties: { confirmation: { type: 'string', enum: ['DELETE'] }, confirmation_token: { type: 'string' } } } } } },
+		responses: {
+			202: { description: 'Deletion accepted, not yet completed', content: { 'application/json': { schema: { type: 'object', properties: { host_id: { type: 'string' }, deletion: { $ref: '#/components/schemas/AccountDeletionState' }, message: { type: 'string' }, redirect_to: { type: 'string' } } } } } },
+			400: { description: 'Confirmation must be DELETE' }, 403: { description: 'Invalid owner session, context, or confirmation token' }, 409: { description: 'Subscription not fully canceled' }, 503: { description: 'Billing could not be verified' },
+		},
+	},
+};
+Object.assign(swaggerSpec.paths['/admin/api/accounts/{tenantId}'].delete, {
+	description: 'Durably locks the host and schedules the same verified background cleanup used by account owners. Requires fully canceled paid subscriptions. Retains Stripe billing history.',
+	requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['confirmation'], properties: { confirmation: { type: 'string', enum: ['DELETE'] } } } } } },
+	responses: { 202: { description: 'Deletion accepted' }, 400: { description: 'Confirmation required' }, 403: { description: 'Admin session required' }, 404: { description: 'Account not found' }, 409: { description: 'Subscription not canceled' }, 503: { description: 'Billing could not be verified' } },
+});
+swaggerSpec.paths['/admin/api/accounts/{tenantId}/deletion'] = {
+	servers: [{ url: '/' }], parameters: [{ name: 'tenantId', in: 'path', required: true, schema: { type: 'string' } }],
+	get: { tags: ['Admin'], summary: 'Get account deletion progress', operationId: 'getAccountDeletionStatus', security: [{ AdminSession: [] }], responses: { 200: { description: 'Deletion state, including complete when the host no longer exists' }, 403: { description: 'Admin session required' } } },
+};
+swaggerSpec.paths['/admin/api/accounts/{tenantId}/deletion/retry'] = {
+	servers: [{ url: '/' }], parameters: [{ name: 'tenantId', in: 'path', required: true, schema: { type: 'string' } }],
+	post: { tags: ['Admin'], summary: 'Retry a failed account deletion', operationId: 'retryAccountDeletion', security: [{ AdminSession: [] }], responses: { 202: { description: 'Existing deletion task requeued' }, 403: { description: 'Admin session required' }, 409: { description: 'No failed deletion to retry' } } },
+};
+
+
+if (swaggerSpec.components.schemas.AdminAccount?.allOf) swaggerSpec.components.schemas.AdminAccount.allOf.push({ type: 'object', properties: { deletion: { $ref: '#/components/schemas/AccountDeletionState' } } });
 export default swaggerSpec;

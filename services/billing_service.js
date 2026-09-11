@@ -1,3 +1,4 @@
+import { acquireTenantWork, assertTenantAvailable } from '../modules/tenancy.js';
 import { getStripe } from '../modules/stripe.js';
 import { queryForSave } from '../model/mongoose.js';
 import { User } from '../model/user.js';
@@ -6,6 +7,77 @@ import config from '../config.js';
 import { createLogger } from '../modules/logger.js';
 
 const log = createLogger('billing');
+
+async function listDeletionBillingObjects(resource, params) {
+	const items = [];
+	let startingAfter;
+	for (let page = 0; page < 1000; page++) {
+		const result = await resource.list({ ...params, limit: 100, ...(startingAfter ? { starting_after: startingAfter } : {}) });
+		if (!Array.isArray(result?.data) || typeof result.has_more !== 'boolean') throw new Error('Invalid Stripe pagination');
+		items.push(...result.data);
+		if (!result.has_more) return items;
+		const lastId = result.data.at(-1)?.id;
+		if (!lastId || lastId === startingAfter) throw new Error('Invalid Stripe pagination cursor');
+		startingAfter = lastId;
+	}
+	throw new Error('Stripe pagination limit exceeded');
+}
+
+export function isDeletionTrackingSubscription(subscription, tenant, settings = config) {
+	const prices = subscription?.items?.data;
+	return Boolean(settings.stripe.freePriceId && prices?.length && !subscription.items.has_more && prices.every((item) => item.price?.id === settings.stripe.freePriceId && item.price.unit_amount === 0));
+}
+
+export async function checkAccountDeletionBilling(tenant, options = {}) {
+	const settings = options.config || config;
+	const user = options.user || await User.findById(tenant.owner).select('+stripe_customer_id +stripe_subscription_id +stripe_free_subscription_id subscription_status trial_source').read('primary').lean();
+	const knownSubscription = Boolean(user?.stripe_subscription_id || user?.stripe_free_subscription_id || ['active', 'past_due', 'unpaid', 'canceled', 'incomplete_expired', 'paused'].includes(user?.subscription_status) || (user?.subscription_status === 'trialing' && user?.trial_source !== 'no_card'));
+	if (!settings.stripe.secretKey && !options.stripe) {
+		if (user?.stripe_customer_id || knownSubscription) throw Object.assign(new Error('Unable to verify Stripe billing. Please try again later.'), { status: 503, code: 'billing_unavailable' });
+		return { eligible: true, tracking_ids: [], customer_id: '' };
+	}
+	const stripe = options.stripe || getStripe();
+	const customerId = user?.stripe_customer_id || tenant.host_id;
+	let subscriptions;
+	let schedules;
+	try {
+		const customer = await stripe.customers.retrieve(customerId);
+		if (customer.deleted) return { eligible: true, tracking_ids: [], customer_id: '' };
+		if (customer.metadata?.host_id && customer.metadata.host_id !== tenant.host_id) throw new Error('Stripe customer account mismatch');
+		[subscriptions, schedules] = await Promise.all([
+			listDeletionBillingObjects(stripe.subscriptions, { customer: customerId, status: 'all', expand: ['data.discounts.source.coupon'] }),
+			listDeletionBillingObjects(stripe.subscriptionSchedules, { customer: customerId }),
+		]);
+	} catch (error) {
+		if (error?.code === 'resource_missing' && !knownSubscription && !user?.stripe_customer_id) return { eligible: true, tracking_ids: [], customer_id: '' };
+		throw Object.assign(new Error('Unable to verify Stripe billing. Please try again later.'), { status: 503, code: 'billing_unavailable', cause: error });
+	}
+	const tracking = subscriptions.filter((subscription) => !['canceled', 'incomplete_expired'].includes(subscription.status) && isDeletionTrackingSubscription(subscription, tenant, settings));
+	const blocking = subscriptions.some((subscription) => !['canceled', 'incomplete_expired'].includes(subscription.status) && !tracking.includes(subscription));
+	if (blocking || schedules.some((schedule) => !['canceled', 'completed', 'released'].includes(schedule.status))) throw Object.assign(new Error('Cancel your subscription in Stripe first. Scheduled cancellation must finish before you can delete this account.'), { status: 409, code: 'subscription_not_canceled' });
+	return { eligible: true, tracking_ids: tracking.map((subscription) => subscription.id), customer_id: customerId };
+}
+
+export async function cancelAccountTrackingSubscriptions(tenant, options = {}) {
+	const billing = await checkAccountDeletionBilling(tenant, options);
+	const stripe = options.stripe || (billing.customer_id ? getStripe() : null);
+	if (billing.customer_id) {
+		const sessions = await listDeletionBillingObjects(stripe.checkout.sessions, { customer: billing.customer_id, status: 'open' });
+		for (const session of sessions) await stripe.checkout.sessions.expire(session.id);
+	}
+	for (const id of billing.tracking_ids) {
+		try { await stripe.subscriptions.cancel(id, { invoice_now: false, prorate: false }); } catch (error) { if (error?.code !== 'resource_missing') throw error; }
+	}
+	const checked = await checkAccountDeletionBilling(tenant, options);
+	if (checked.tracking_ids.length) throw new Error('Stripe subscription cancellation is still pending');
+	return checked;
+}
+
+export async function getSubscriptionCancellationPortalStatus(options = {}) {
+	const stripe = options.stripe || getStripe();
+	const portal = config.stripe.portalConfigId ? await stripe.billingPortal.configurations.retrieve(config.stripe.portalConfigId) : (await stripe.billingPortal.configurations.list({ is_default: true, limit: 1 })).data?.[0];
+	return { enabled: portal?.active === true && portal?.features?.subscription_cancel?.enabled === true };
+}
 
 export const BILLING_SUBSCRIPTION_URL = 'https://app.streamient.com/settings/subscription';
 
@@ -93,6 +165,8 @@ export async function ensureStripeCustomerForAccountHolder(user, tenant = null, 
 		return user.stripe_customer_id;
 	}
 
+	const release = !options.userModel || options.userModel === User ? await acquireTenantWork(tenant?.host_id || user.host_id) : null;
+	try {
 	const stripe = options.stripe || getStripe();
 	const userModel = options.userModel || User;
 	const customerParams = buildStripeCustomerParams(user, tenant);
@@ -111,6 +185,7 @@ export async function ensureStripeCustomerForAccountHolder(user, tenant = null, 
 	await userModel.findByIdAndUpdate(user._id, { stripe_customer_id: customerId });
 	user.stripe_customer_id = customerId;
 	return customerId;
+	} finally { if (release) await release(); }
 }
 
 export function buildFreeSubscriptionParams(customerId, user, tenant = null) {
@@ -147,6 +222,8 @@ export async function ensureFreeSubscriptionForAccountHolder(user, tenant = null
 	const customerId = user.stripe_customer_id;
 	if (!customerId) return null;
 
+	const release = !options.userModel || options.userModel === User ? await acquireTenantWork(tenant?.host_id || user.host_id) : null;
+	try {
 	const stripe = options.stripe || getStripe();
 	const userModel = options.userModel || User;
 	// Remote idempotency: reuse an existing active free-price subscription so
@@ -162,6 +239,7 @@ export async function ensureFreeSubscriptionForAccountHolder(user, tenant = null
 	await userModel.findByIdAndUpdate(user._id, { stripe_free_subscription_id: subscription.id });
 	user.stripe_free_subscription_id = subscription.id;
 	return subscription.id;
+	} finally { if (release) await release(); }
 }
 
 /**
@@ -185,6 +263,9 @@ export async function cancelFreeSubscriptionForUser(userId, options = {}) {
 }
 
 export async function applySubscriptionToUser(userId, subscription, stripeCustomerId = undefined) {
+	const owner = await User.findById(userId).select('host_id').read('primary').lean();
+	if (!owner) return null;
+	await assertTenantAvailable(owner.host_id);
 	const plan = resolvePlanFromSubscription(subscription);
 	const user = await User.findByIdAndUpdate(
 		userId,
@@ -242,6 +323,8 @@ export async function createCheckoutSession(user, options = {}) {
     if (!priceId) {
         throw new Error('Stripe price ID is not configured for the Pro plan (STRIPE_PRO_PRICE_ID).');
     }
+	const release = !options.userModel || options.userModel === User ? await acquireTenantWork(options.tenant?.host_id || user.host_id) : null;
+	try {
     const stripe = options.stripe || getStripe();
 
     // Create or reuse Stripe customer
@@ -256,6 +339,7 @@ export async function createCheckoutSession(user, options = {}) {
     const session = await stripe.checkout.sessions.create(buildCheckoutSessionParams(user, customerId, priceId));
 
     return session.url;
+	} finally { if (release) await release(); }
 }
 
 /**
@@ -263,6 +347,8 @@ export async function createCheckoutSession(user, options = {}) {
  * Returns the portal URL.
  */
 export async function createPortalSession(user, options = {}) {
+	const release = !options.userModel || options.userModel === User ? await acquireTenantWork(options.tenant?.host_id || user.host_id) : null;
+	try {
     const stripe = options.stripe || getStripe();
 
     const customerId = user.stripe_customer_id || await ensureStripeCustomerForAccountHolder(user, null, {
@@ -273,6 +359,7 @@ export async function createPortalSession(user, options = {}) {
     const portalSession = await stripe.billingPortal.sessions.create(buildPortalSessionParams(user, customerId));
 
     return portalSession.url;
+	} finally { if (release) await release(); }
 }
 
 /**
@@ -283,6 +370,16 @@ export async function handleWebhook(rawBody, sig) {
     const stripe = getStripe();
     const event = stripe.webhooks.constructEvent(rawBody, sig, config.stripe.webhookSecret);
 
+
+	const object = event.data.object;
+	const customerId = typeof object.customer === 'string' ? object.customer : object.customer?.id;
+	const subscriptionId = object.object === 'subscription' ? object.id : object.subscription;
+	const user = await User.findOne({ $or: [...(customerId ? [{ stripe_customer_id: customerId }] : []), ...(subscriptionId ? [{ stripe_subscription_id: subscriptionId }] : []), { _id: null }] }).select('host_id').read('primary').lean();
+	const hostId = object.metadata?.host_id || user?.host_id;
+	if (!hostId) return;
+	let release;
+	try { release = await acquireTenantWork(hostId); } catch (error) { if (error.code === 'account_unavailable') return; throw error; }
+	try {
     switch (event.type) {
         case 'checkout.session.completed': {
             const session = event.data.object;
@@ -360,4 +457,5 @@ export async function handleWebhook(rawBody, sig) {
         default:
             break;
     }
+	} finally { await release(); }
 }

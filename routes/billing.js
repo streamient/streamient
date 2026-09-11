@@ -1,3 +1,4 @@
+import { getSubscriptionCancellationPortalStatus } from '../services/billing_service.js';
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { requireTenant } from '../modules/tenancy.js';
@@ -146,7 +147,8 @@ router.get('/billing/portal', async (req, res) => {
         const billingUser = await getBillingUserForHost(req.host_id, req.userId);
         if (!billingUser) return res.redirect('/login');
 
-        const portalUrl = await createPortalSession(billingUser);
+        if (!(await getSubscriptionCancellationPortalStatus()).enabled) return res.status(503).render('billing/checkout_cancel', { title: 'Subscription management unavailable', message: 'Subscription cancellation is not available in the billing portal. Please contact support.', retry_url: '/settings/subscription' });
+		const portalUrl = await createPortalSession(billingUser);
         res.redirect(portalUrl);
     } catch (err) {
         log.error({ err, user_id: req.userId }, 'Portal error');

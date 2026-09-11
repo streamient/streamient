@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import mongoose from '../model/mongoose.js';
 import { User } from '../model/user.js';
 import { TenantMember } from '../model/tenant_member.js';
@@ -22,6 +23,8 @@ const tenantSchema = new mongoose.Schema(
 		name: { type: String, required: true },
 		owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 		is_active: { type: Boolean, default: true },
+		deletion: { type: mongoose.Schema.Types.Mixed, default: null },
+		active_work: { type: mongoose.Schema.Types.Mixed, default: {} },
 		plan: { type: String, enum: TENANT_PLANS, default: 'free' },
 		limit_projects: {
 			type: Number,
@@ -92,6 +95,38 @@ tenantSchema.index(
 );
 
 export const Tenant = mongoose.model('Tenant', tenantSchema);
+
+function primaryTenantQuery(query) {
+	if (typeof query?.read === 'function') query = query.read('primary');
+	if (typeof query?.lean === 'function') query = query.lean();
+	return query;
+}
+
+// Always read the authoritative tenant state for access/side-effect checks.
+async function assertTenantAvailableImpl(hostId) {
+	if (!hostId) throw Object.assign(new Error('Account context is required'), { status: 403, code: 'account_context_required' });
+	const tenant = await Tenant.findOne({ host_id: String(hostId), is_active: { $ne: false }, 'deletion.requested_at': null }).select('_id').read('primary').lean();
+	if (!tenant) throw Object.assign(new Error('Account access is unavailable'), { status: 403, code: 'account_unavailable' });
+}
+
+// Deletion waits for accepted writers to finish. Heartbeats distinguish a
+// slow live operation from a process that died without releasing its lease.
+async function acquireTenantWorkImpl(hostId) {
+	const key = `active_work.${crypto.randomUUID()}`;
+	const expiry = () => new Date(Date.now() + 5 * 60 * 1000);
+	const result = await Tenant.updateOne({ host_id: hostId, is_active: { $ne: false }, 'deletion.requested_at': null }, { $set: { [key]: expiry() } }, { timestamps: false });
+	if (!result.matchedCount) throw Object.assign(new Error('Account access is unavailable'), { status: 403, code: 'account_unavailable' });
+	const timer = setInterval(() => { void Tenant.updateOne({ host_id: hostId, [key]: { $exists: true } }, { $set: { [key]: expiry() } }, { timestamps: false }).catch(() => {}); }, 20000);
+	timer.unref();
+	return async () => { clearInterval(timer); await Tenant.updateOne({ host_id: hostId }, { $unset: { [key]: '' } }, { timestamps: false }); };
+}
+
+
+export async function withTenantWork(hostId, callback) {
+	const release = await acquireTenantWork(hostId);
+	try { return await callback(); } finally { await release(); }
+}
+
 
 /**
  * One-off migration: the legacy `starter` plan has been removed. Convert any
@@ -164,8 +199,13 @@ export async function ensureOwnerMembershipForUser(userOrId) {
 		: await User.findById(userOrId).select('tenant host_id');
 
 	if (!user?.tenant || !user?.host_id) return null;
+	const ownedTenant = await primaryTenantQuery(Tenant.findOne({ _id: user.tenant, host_id: user.host_id, owner: user._id, is_active: { $ne: false }, 'deletion.requested_at': null }).select('_id'));
+	if (!ownedTenant) return null;
 
-	return TenantMember.findOneAndUpdate(
+	let release;
+	try { release = await acquireTenantWork(user.host_id); } catch (error) { if (error.code === 'account_unavailable') return null; throw error; }
+	try {
+	return await TenantMember.findOneAndUpdate(
 		{ tenant: user.tenant, user: user._id },
 		{
 			$setOnInsert: {
@@ -176,22 +216,21 @@ export async function ensureOwnerMembershipForUser(userOrId) {
 		},
 		{ upsert: true, returnDocument: 'after' },
 	);
+	} finally { await release(); }
 }
 
 export async function listAccessibleTenantsForUser(userId) {
-	const user = await User.findById(userId).select('tenant host_id');
-	if (!user) return [];
+	const user = await primaryTenantQuery(User.findById(userId).select('tenant host_id is_active'));
+	if (!user || user.is_active === false) return [];
 
 	if (user.tenant && user.host_id) {
 		await ensureOwnerMembershipForUser(user);
 	}
 
-	const memberships = await TenantMember.find({ user: userId })
-		.populate('tenant', 'name host_id is_active')
-		.lean();
+	const memberships = await primaryTenantQuery(TenantMember.find({ user: userId }).populate({ path: 'tenant', select: 'name host_id is_active deletion.requested_at', options: { readPreference: 'primary' } }));
 
 	return memberships
-		.filter((membership) => membership.tenant && membership.tenant.is_active !== false)
+		.filter((membership) => membership.tenant && membership.tenant.is_active !== false && !membership.tenant.deletion?.requested_at)
 		.map((membership) => mapAccessibleTenant(user, membership))
 		.filter(Boolean)
 		.sort((a, b) => {
@@ -272,3 +311,18 @@ export function requireTenant(req, res, next) {
 	}
 	next();
 }
+
+export async function holdTenantRequest(hostId, req, res) {
+	const release = await acquireTenantWork(hostId);
+	let finished = false;
+	const finish = () => { if (!finished) { finished = true; void release().catch(() => {}); } };
+	res.once('finish', finish);
+	const end = res.end;
+	res.end = function (...args) { const result = end.apply(this, args); finish(); return result; };
+}
+
+// A small injectable boundary lets service unit fixtures model account
+// availability without replacing their business-data writes.
+export const accountWork = { acquire: acquireTenantWorkImpl, assertAvailable: assertTenantAvailableImpl };
+export function acquireTenantWork(hostId) { return accountWork.acquire(hostId); }
+export function assertTenantAvailable(hostId) { return accountWork.assertAvailable(hostId); }

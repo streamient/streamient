@@ -88,81 +88,15 @@ describe('account cleanup for users without host_id', () => {
 		assert.deepEqual(calls.User, { _id: 'user-1' });
 	});
 
-	it('falls back to the owned tenant host when the user doc lacks host_id', async () => {
-		const calls = {};
-		const models = {};
-		for (const name of HOST_SCOPED_MODELS) {
-			models[name] = {
-				deleteMany: async (query) => {
-					calls[name] = query;
-					return { deletedCount: 0 };
-				},
-			};
-		}
-		models.Export.find = () => ({
-			select: () => ({
-				lean: async () => [],
-			}),
+
+	it('dispatches the exact owned host to the guarded deletion entry point', async () => {
+		const tenant = { _id: 'tenant-9', host_id: 'host-9' };
+		let scope;
+		const result = await deleteAccountDataForUser({ _id: 'user-1' }, {
+			models: { Tenant: { findOne: async () => tenant } },
+			deleteTenantData: async (hostId, tenantId) => { scope = { hostId, tenantId }; return { pending: true }; },
 		});
-		models.UserPasskey = {
-			deleteMany: async (query) => {
-				calls.UserPasskey = query;
-				return { deletedCount: 0 };
-			},
-		};
-		models.MagicLink = {
-			deleteMany: async (query) => {
-				calls.MagicLink = query;
-				return { deletedCount: 0 };
-			},
-		};
-		models.User = {
-			find: () => ({
-				select: () => ({
-					lean: async () => [{ _id: 'user-1', email: 'owner@example.com' }],
-				}),
-			}),
-			deleteMany: async (query) => {
-				calls.User = query;
-				return { deletedCount: 1 };
-			},
-		};
-		models.Tenant = {
-			findById: async (tenantId) => (tenantId === 'tenant-9' ? { _id: 'tenant-9', host_id: 'host-9' } : null),
-			findOne: async (query) => {
-				calls.TenantFindOne = query;
-				return { _id: 'tenant-9', host_id: 'host-9' };
-			},
-			findByIdAndDelete: async (tenantId) => {
-				calls.TenantDelete = tenantId;
-				return { _id: tenantId };
-			},
-		};
-
-		const deletedCollections = [];
-		const result = await deleteAccountDataForUser(
-			{ _id: 'user-1', email: 'owner@example.com' },
-			{
-				models,
-				deleteTypesenseCollection: async (collectionName) => {
-					deletedCollections.push(collectionName);
-					return true;
-				},
-				deleteGitRepoHostDirectory: () => {},
-				deleteConversationDataForHost: async () => {},
-				unlink: (filePath, callback) => callback(),
-			},
-		);
-
-		assert.equal(result.deleted, true);
-		assert.equal(result.host_id, 'host-9');
-		assert.equal(result.tenant_id, 'tenant-9');
-		assert.deepEqual(calls.TenantFindOne, { owner: 'user-1' });
-		assert.equal(calls.Note.host_id, 'host-9');
-		assert.equal(calls.Url.host_id, 'host-9');
-		assert.equal(calls.Project.host_id, 'host-9');
-		assert.equal(calls.TenantDelete, 'tenant-9');
-		assert.deepEqual(calls.User._id.$in, ['user-1']);
-		assert.deepEqual(deletedCollections, getTenantTypesenseCollectionNames('host-9'));
+		assert.deepEqual(scope, { hostId: 'host-9', tenantId: 'tenant-9' });
+		assert.equal(result.pending, true);
 	});
 });

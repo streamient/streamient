@@ -120,6 +120,7 @@ export default defineConfig({
                     items: [
                         { text: 'Overview', link: '/cloud/' },
                         { text: 'Account', link: '/cloud/account' },
+                        { text: 'Delete account', link: '/cloud/account-deletion' },
                         { text: 'Billing', link: '/cloud/billing' },
                         { text: 'Support', link: '/cloud/support' },
                     ],

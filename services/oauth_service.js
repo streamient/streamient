@@ -1,3 +1,5 @@
+import { assertTenantAvailable } from '../modules/tenancy.js';
+import { acquireTenantWork } from '../modules/tenancy.js';
 import crypto from 'node:crypto';
 import { isIP } from 'node:net';
 import bcrypt from 'bcryptjs';
@@ -735,6 +737,7 @@ export async function exchangeAuthorizationCode({ code, clientId, redirectUri, c
 		throw new OAuthError('invalid_grant', 'PKCE verification failed', 400);
 	}
 
+	await assertTenantAvailable(authCode.host_id);
 	authCode.used_at = new Date();
 	await authCode.save();
 
@@ -767,6 +770,8 @@ async function storeRefreshToken({ userId, tenantId, host_id, client, scopes, re
 }
 
 export async function issueTokenPair({ userId, tenantId, host_id, client, scopes, resource }) {
+	const releaseAccountWork = await acquireTenantWork(host_id);
+	try {
 	const normalizedScopes = normalizeScopesForResource(scopes, resource);
 	const accessToken = signMcpAccessToken({
 		userId,
@@ -799,6 +804,7 @@ export async function issueTokenPair({ userId, tenantId, host_id, client, scopes
 		refresh_token: refreshToken,
 		scope: scopeString(normalizedScopes),
 	};
+	} finally { await releaseAccountWork(); }
 }
 
 export async function exchangeRefreshToken({ refreshToken, client, host_id = null }) {

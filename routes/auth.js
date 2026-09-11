@@ -1,3 +1,6 @@
+import config from '../config.js';
+import { Tenant } from '../modules/tenancy.js';
+import { previewAccountDeletion, requestAccountDeletion, pruneDeletedAccountSession } from '../services/account_cleanup_service.js';
 import { Router } from 'express';
 import crypto from 'node:crypto';
 import { generateSecret, verifySync, generateURI } from 'otplib';
@@ -20,6 +23,43 @@ import { PendingSignup } from '../model/pending_signup.js';
 import { isSysadminCredentials, requireSysadmin } from '../middleware/sysadmin.js';
 
 const router = Router();
+
+async function deletionActor(req) {
+	const hosted = req.isHosted === undefined ? config.isHosted : req.isHosted;
+	if (!hosted || !req.session?.userId || req.session.impersonating || req.headers.authorization) throw Object.assign(new Error('Account deletion requires the owner’s browser session'), { status: 403 });
+	const hostId = String(req.query.host_id || '');
+	if (!/^[a-f\d]{24}$/i.test(hostId) || hostId !== String(req.session.host_id || '')) throw Object.assign(new Error('Select the account to delete'), { status: 403 });
+	if (req.whiteLabelHostId && req.whiteLabelHostId !== hostId) throw Object.assign(new Error('Account context does not match this domain'), { status: 403 });
+	const tenant = await Tenant.findOne({ host_id: hostId, _id: req.session.tenantId, owner: req.session.userId }).read('primary').lean();
+	if (!tenant) throw Object.assign(new Error('Only the account owner can delete this account'), { status: 403 });
+	return { tenant, actor: { userId: String(req.session.userId) } };
+}
+
+router.get('/api/v1/account/deletion', async (req, res) => {
+	try {
+		const { tenant, actor } = await deletionActor(req);
+		const preview = await previewAccountDeletion(tenant.host_id, actor);
+		const token = crypto.randomBytes(32).toString('hex');
+		req.session.accountDeletionConfirmation = { host_id: tenant.host_id, token, expires_at: Date.now() + 10 * 60 * 1000 };
+		res.set('Cache-Control', 'no-store');
+		return res.json({ ...preview, confirmation_token: token });
+	} catch (error) { return res.status(error.status || 503).json({ error: error.status ? error.message : 'Unable to verify account deletion. Please try again.', code: error.code || 'deletion_unavailable' }); }
+});
+
+router.post('/api/v1/account/deletion', async (req, res) => {
+	try {
+		const { tenant, actor } = await deletionActor(req);
+		const confirmation = req.session.accountDeletionConfirmation;
+		if (!confirmation || confirmation.host_id !== tenant.host_id || confirmation.expires_at < Date.now() || typeof req.body.confirmation_token !== 'string' || req.body.confirmation_token !== confirmation.token) return res.status(403).json({ error: 'Deletion confirmation expired. Please try again.' });
+		const result = await requestAccountDeletion(tenant.host_id, actor, req.body.confirmation);
+		const user = await User.findById(actor.userId).select('is_active').read('primary').lean();
+		const destination = await pruneDeletedAccountSession(req.session, tenant, user?.is_active !== false && user ? [] : [actor.userId]);
+		const redirectTo = destination ? '/dashboard' : '/login';
+		if (!destination) return req.session.destroy(() => { res.clearCookie('connect.sid'); res.status(202).json({ ...result, redirect_to: redirectTo }); });
+		return req.session.save(() => res.status(202).json({ ...result, redirect_to: redirectTo }));
+	} catch (error) { return res.status(error.status || 503).json({ error: error.status ? error.message : 'Unable to request account deletion. Please try again.', code: error.code || 'deletion_unavailable' }); }
+});
+
 
 // Re-exported for backward compatibility (now defined in billing_service.js).
 export { buildHostedTrialFields };

@@ -1,3 +1,4 @@
+import { holdTenantRequest } from '../modules/tenancy.js';
 import jwt from 'jsonwebtoken';
 import config from '../config.js';
 import { User } from '../model/user.js';
@@ -14,6 +15,7 @@ async function applyTenantContext(req, userId, preferredTenantId = null, preferr
 		: await resolveActiveTenantContext(userId, preferredTenantId, preferredHostId);
 
 	if (!context?.activeTenant) return false;
+	if (!updateSession && ((preferredTenantId && String(preferredTenantId) !== context.activeTenant.tenantId) || (preferredHostId && String(preferredHostId) !== context.activeTenant.host_id))) return false;
 
 	req.tenantId = context.activeTenant.tenantId;
 	req.host_id = context.activeTenant.host_id;
@@ -24,7 +26,7 @@ async function applyTenantContext(req, userId, preferredTenantId = null, preferr
 }
 
 export async function requireAuth(req, res, next) {
-	if (req.session?.userId) {
+	if (req.session?.userId && !/^(Bearer|Token) /.test(req.headers.authorization || '')) {
 		req.userId = req.session.userId;
 		req.authMethod = 'session';
 		const preferredTenantId = req.whiteLabelHostId ? null : req.session.tenantId;
@@ -50,7 +52,7 @@ export async function requireAuth(req, res, next) {
 			req.session.lastLoginRecordedAt = timestamp.toISOString();
 			await User.findByIdAndUpdate(req.userId, { $set: { last_login: timestamp } });
 		}
-		return next();
+		return acceptAuthenticatedRequest(req, res, next);
 	}
 
 	const authHeader = req.headers.authorization;
@@ -84,8 +86,9 @@ export async function requireAuth(req, res, next) {
 			const preferredHostId = req.whiteLabelHostId || payload.host_id;
 			const ok = await applyTenantContext(req, req.userId, preferredTenantId, preferredHostId, false);
 			if (!ok) return res.status(401).json({ error: 'Token is not valid for any active account' });
+			if ((payload.host_id && payload.host_id !== req.host_id) || (payload.tenantId && String(payload.tenantId) !== req.tenantId)) return res.status(401).json({ error: 'Token is not valid for this account' });
 			if (req.whiteLabelHostId && req.host_id !== req.whiteLabelHostId) return res.status(403).json({ error: 'Token is not valid for this branded account' });
-			return next();
+			return acceptAuthenticatedRequest(req, res, next);
 		} catch {
 			return res.status(401).json({ error: 'Invalid token' });
 		}
@@ -108,7 +111,7 @@ export async function requireAuth(req, res, next) {
 			const ok = await applyTenantContext(req, req.userId, preferredTenantId, preferredHostId, false);
 			if (!ok) return res.status(401).json({ error: 'Token is not valid for any active account' });
 			if (req.whiteLabelHostId && req.host_id !== req.whiteLabelHostId) return res.status(403).json({ error: 'Token is not valid for this branded account' });
-			return next();
+			return acceptAuthenticatedRequest(req, res, next);
 		}
 	}
 
@@ -138,4 +141,12 @@ export function generateToken(userId, host_id, tenantId = null) {
 
 export function generateSocketToken(userId, host_id, tenantId = null) {
 	return jwt.sign({ userId, host_id, tenantId }, config.jwtSecret, { expiresIn: SOCKET_TOKEN_EXPIRES_IN_SECONDS, audience: 'streamient-socket' });
+}
+
+
+async function acceptAuthenticatedRequest(req, res, next) {
+	if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+		try { await holdTenantRequest(req.host_id, req, res); } catch (error) { return res.status(error.status || 503).json({ error: error.message, code: error.code }); }
+	}
+	return next();
 }

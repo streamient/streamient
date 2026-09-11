@@ -1,3 +1,8 @@
+import { beforeEach as beforeAccountWork, afterEach as afterAccountWork } from 'node:test';
+import { mockTenantWork } from './helpers/tenant-work.js';
+let restoreAccountWork;
+beforeAccountWork(() => { restoreAccountWork = mockTenantWork(); });
+afterAccountWork(() => { restoreAccountWork(); });
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';

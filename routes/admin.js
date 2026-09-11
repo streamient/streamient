@@ -7,7 +7,7 @@ import emailTemplates from '../config/email_templates.js';
 import { getByCategory, setSetting, deleteSetting } from '../services/system_settings_service.js';
 import { sendTestEmail } from '../services/email_service.js';
 import * as auditService from '../services/audit_service.js';
-import { deleteTenantData } from '../services/account_cleanup_service.js';
+import { requestAccountDeletion, publicDeletionState, retryAccountDeletion } from '../services/account_cleanup_service.js';
 import { ensureFreeSubscriptionForAccountHolder, ensureStripeCustomerForAccountHolder } from '../services/billing_service.js';
 import { sendMagicLink } from '../services/magic_link_service.js';
 import { AccountProvisioningError, provisionAccount } from '../services/account_provisioning_service.js';
@@ -197,15 +197,25 @@ router.put('/api/accounts/:id', async (req, res) => {
 	}
 });
 
+
+router.get('/api/accounts/:id/deletion', async (req, res) => {
+	try {
+		const tenant = await Tenant.findById(req.params.id).select('host_id deletion').read('primary').lean();
+		res.json({ host_id: tenant?.host_id || '', deletion: tenant ? publicDeletionState(tenant) : { stage: 'complete' } });
+	} catch { res.status(400).json({ error: 'Invalid account ID' }); }
+});
+router.post('/api/accounts/:id/deletion/retry', async (req, res) => {
+	try { res.status(202).json({ deletion: await retryAccountDeletion(req.params.id) }); } catch (error) { res.status(error.status || 503).json({ error: error.message }); }
+});
+
 router.delete('/api/accounts/:id', async (req, res) => {
 	try {
 		const account = await getAdminAccount(req.params.id);
 		if (!account) return res.status(404).json({ error: 'Not found' });
-		await deleteTenantData(account.host_id, account._id);
-		res.json({ ok: true });
+		res.status(202).json(await requestAccountDeletion(account.host_id, { admin: true }, req.body?.confirmation));
 	} catch (err) {
 		log.error({ err, account_id: req.params.id }, 'Admin delete account error');
-		res.status(500).json({ error: 'Failed to delete account' });
+		res.status(err.status || 503).json({ error: err.status ? err.message : 'Failed to request account deletion' });
 	}
 });
 

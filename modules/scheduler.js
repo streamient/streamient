@@ -1,3 +1,4 @@
+import { recoverAccountDeletions } from '../services/account_cleanup_service.js';
 import { Cron } from 'croner';
 import { reindexDue } from './crawler.js';
 import { runStreamientIndexer } from './typesense.js';
@@ -123,6 +124,7 @@ export async function runProductUpdateSync(sync = syncProductUpdates) {
  * Schedule spam/trash email retention cleanup daily.
  */
 export function startScheduler() {
+	new Cron('*/30 * * * * *', () => recoverAccountDeletions().catch((error) => console.error('Account deletion recovery failed:', error.message)));
 	void runProductUpdateSync();
 	new Cron('*/15 * * * *', () => runProductUpdateSync());
 	const noteImportWorker = createNoteImportWorker();

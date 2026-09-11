@@ -1,0 +1,9 @@
+if member_role === 'owner' && !impersonating
+	.card.border-danger.mb-5#account-deletion
+		.card-body
+			h2.mb-3 Delete account
+			p.mb-3 Permanently delete this Streamient account and all its team data. Your original Git repositories, local Obsidian vaults, and Stripe billing history remain.
+			p.small.mb-3#account-deletion-status(role="status") Checking deletion availability…
+			.d-flex.justify-content-end
+				button.btn.btn-sm.btn-outline-danger#request-account-deletion(type="button" hidden data-preview-url=`/api/v1/account/deletion?host_id=${encodeURIComponent(host_id)}`) Delete account
+	script(src=`/static/v-${v}/js/account_deletion.js`)

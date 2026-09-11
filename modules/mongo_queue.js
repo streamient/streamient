@@ -1,3 +1,4 @@
+import { acquireTenantWork } from './tenancy.js';
 import mongoose from '../model/mongoose.js';
 import { createLogger } from './logger.js';
 
@@ -54,6 +55,13 @@ export const MongoQueue = {
 		await ensureIndexes();
 		const col = getCollection();
 		const now = new Date();
+		const hostId = queueName === 'account_deletion' ? '' : await resolveJobHost(data, options);
+		if (hostId) {
+			const tenant = await mongoose.connection.db.collection('tenants').findOne({ host_id: hostId, is_active: { $ne: false }, 'deletion.requested_at': null }, { projection: { _id: 1 }, readPreference: 'primary' });
+			if (!tenant) throw Object.assign(new Error('Account access is unavailable'), { code: 'account_unavailable' });
+			data = { ...data, host_id: hostId };
+		}
+
 		const appInstance = getAppInstance(options);
 		const doc = {
 			app_instance: appInstance,
@@ -74,7 +82,14 @@ export const MongoQueue = {
 			const result = await col.insertOne(doc);
 			return { _id: result.insertedId, ...doc };
 		} catch (err) {
-			if (err?.code === 11000 && options.dedupKey) return null;
+			if (err?.code === 11000 && options.dedupKey) {
+				if (options.requeueCompleted || options.requeueFailed) {
+					const statuses = [...(options.requeueCompleted ? [STATUS.COMPLETED] : []), ...(options.requeueFailed ? [STATUS.FAILED] : [])];
+					const { _id, ...update } = doc;
+					return col.findOneAndUpdate(namespaced({ queue: queueName, dedup_key: doc.dedup_key, status: { $in: statuses } }, appInstance), { $set: update }, { returnDocument: 'after' });
+				}
+				return null;
+			}
 			throw err;
 		}
 	},
@@ -175,12 +190,21 @@ export class MongoWorker {
 		const jobId = String(claimed._id);
 		const startedAt = Date.now();
 		try {
+			const hostId = this.queueName === 'account_deletion' ? '' : await resolveJobHost(claimed.data);
+			if (hostId) {
+				await col.updateOne({ _id: claimed._id }, { $set: { 'data.host_id': hostId } });
+				const tenant = await mongoose.connection.db.collection('tenants').findOne({ host_id: hostId, is_active: { $ne: false }, 'deletion.requested_at': null }, { projection: { _id: 1 }, readPreference: 'primary' });
+				if (!tenant) { await col.deleteOne({ _id: claimed._id }); return; }
+			}
+			const controller = new AbortController();
 			let timeoutHandle;
 			const timeout = new Promise((_, reject) => {
-				timeoutHandle = setTimeout(() => reject(new Error(`Job handler timed out after ${this.handlerTimeoutMs}ms`)), this.handlerTimeoutMs);
+				timeoutHandle = setTimeout(() => { const error = new Error('Job handler timed out'); controller.abort(error); reject(error); }, this.handlerTimeoutMs);
 			});
 			try {
-				await Promise.race([this.handler({ id: claimed._id, data: claimed.data, attempts: claimed.attempts }), timeout]);
+				const release = hostId ? await acquireTenantWork(hostId) : null;
+				const running = Promise.resolve().then(() => this.handler({ id: claimed._id, data: claimed.data, attempts: claimed.attempts, signal: controller.signal })).finally(async () => { if (release) await release(); });
+				await Promise.race([running, timeout]);
 			} finally {
 				clearTimeout(timeoutHandle);
 			}
@@ -223,3 +247,19 @@ export class MongoWorker {
 		if (result.modifiedCount) log.warn({ queue: this.queueName, recovered: result.modifiedCount }, 'MongoWorker recovered stalled jobs');
 	}
 }
+
+export const JOB_HOST_REFERENCES = Object.freeze({ upload_id: 'noteimportuploads', uploadId: 'noteimportuploads', file_id: 'obsidianfiles', repo_id: 'gitrepos', url_id: 'urls' });
+
+export async function resolveJobHost(data, options = {}) {
+	if (data?.host_id || data?.hostId) return String(data.host_id || data.hostId);
+	const db = options.db || mongoose.connection.db;
+	for (const [key, name] of Object.entries(JOB_HOST_REFERENCES)) {
+		if (!data?.[key] || !mongoose.isValidObjectId(data[key])) continue;
+		const row = await db.collection(name).findOne({ _id: new mongoose.Types.ObjectId(data[key]) }, { projection: { host_id: 1 }, readPreference: 'primary', ...(options.session ? { session: options.session } : {}) });
+		if (row?.host_id) return row.host_id;
+		return '__missing_account__';
+	}
+	return '';
+}
+
+export { getAppInstance as getQueueAppInstance };

@@ -1,3 +1,4 @@
+import { acquireTenantWork } from './tenancy.js';
 import { createHash } from 'node:crypto';
 import Typesense from 'typesense';
 import config, { getPlanLlmConfig } from '../config.js';
@@ -682,6 +683,8 @@ const schemas = {
  * Ensure all 4 collections exist for a given host.
  */
 export async function ensureCollections(host_id) {
+	const releaseAccountWork = await acquireTenantWork(host_id);
+	try {
 	if (ensuredCollectionHosts.has(host_id)) return;
 	const ts = getTypesenseClient();
 	for (const [type, schemaFn] of Object.entries(schemas)) {
@@ -712,6 +715,7 @@ export async function ensureCollections(host_id) {
 		}
 	}
 	ensuredCollectionHosts.add(host_id);
+	} finally { await releaseAccountWork(); }
 }
 
 /**
@@ -828,6 +832,8 @@ export async function indexDocument(host_id, type, doc) {
  * Returns the array of per-document result objects.
  */
 export async function importDocuments(host_id, type, docs, action = 'upsert') {
+	const releaseAccountWork = await acquireTenantWork(host_id);
+	try {
 	const ts = getTypesenseClient();
 	const collectionName = buildCollectionName(type, host_id);
 	try {
@@ -846,6 +852,7 @@ export async function importDocuments(host_id, type, docs, action = 'upsert') {
 		log.error({ errorInfo: summarizeImportError(err), docCount: docs.length, collection: collectionName }, 'Streamient indexer: import failed');
 		return docs.map(() => ({ success: false, error }));
 	}
+	} finally { await releaseAccountWork(); }
 }
 
 /**
@@ -1835,6 +1842,8 @@ Always include project_id in action params. If the user doesn't specify a projec
  * Collection: conversation_store, a single shared collection for all tenants.
  */
 export async function ensureConversationModel(hostId, userId, options = {}) {
+	const releaseAccountWork = await acquireTenantWork(hostId);
+	try {
 	const ts = getTypesenseClient();
 	const collectionName = CONVERSATION_STORE_COLLECTION;
 	const llmScope = normalizeLlmScope(options.llmScope);
@@ -1998,6 +2007,7 @@ export async function ensureConversationModel(hostId, userId, options = {}) {
 		log.error({ err, modelId }, 'Error creating conversation model');
 		throw err;
 	}
+	} finally { await releaseAccountWork(); }
 }
 
 /**
@@ -2298,24 +2308,54 @@ export async function deleteConversation(hostId, userId, conversationId) {
  * Used during tenant deletion — the shared conversation_store collection itself
  * is never dropped, so we remove only this host's documents and models.
  */
-export async function deleteConversationDataForHost(hostId, userIds = []) {
-	const ts = getTypesenseClient();
-	const scopes = ['global', 'email'];
-	for (const userId of userIds) {
-		for (const scope of scopes) {
-			const modelId = getConversationModelId(hostId, userId, scope);
-			await withTypesenseResilience(
-				`delete conversation docs ${CONVERSATION_STORE_COLLECTION}/${modelId}`,
-				() => ts.collections(CONVERSATION_STORE_COLLECTION).documents().delete({ filter_by: `model_id:=${modelId}` }),
-				{ fallback: null },
-			);
-			try {
-				await ts.conversations().models(modelId).delete();
-			} catch (err) {
-				if (err.httpStatus !== 404) {
-					log.error({ err, modelId }, 'Failed to delete conversation model during tenant cleanup');
-				}
-			}
+export async function deleteConversationDataForHost(hostId, userIds = [], options = {}) {
+	if (!/^[a-f\d]{24}$/i.test(hostId)) throw new Error('Invalid account ID for conversation cleanup');
+	const ts = options.client || getTypesenseClient();
+	await assertConversationCleanupOwnership(hostId, { ...options, client: ts });
+	const prefix = `convo-${hostId}-`;
+	const filter = `model_id:=${prefix}*`;
+
+	try {
+		const documents = ts.collections(CONVERSATION_STORE_COLLECTION).documents();
+		for (let batch = 0; batch < 10; batch++) {
+			options.signal?.throwIfAborted();
+			const page = await documents.search({ q: '*', filter_by: filter, per_page: 100, include_fields: 'id,model_id', use_cache: false });
+			if (!page.found) break;
+			const records = (page.hits || []).map((hit) => hit.document);
+			if (!records.length || records.some((record) => !String(record.model_id).startsWith(prefix) || !/^[a-zA-Z0-9_-]+$/.test(record.id))) throw new Error('Conversation cleanup ownership could not be verified');
+			// Prefix filtering is supported by search, but not consistently by
+			// delete-by-query. Delete only the exact IDs we just verified.
+			const deleted = await documents.delete({ filter_by: `id:=[${records.map((record) => record.id).join(',')}]` });
+			if (!deleted.num_deleted) throw new Error('Conversation cleanup made no progress');
 		}
+		const remaining = await documents.search({ q: '*', filter_by: filter, per_page: 1, use_cache: false });
+		if (remaining.found) return { pending: true };
+	} catch (error) { if (error.httpStatus !== 404) throw error; }
+
+	// Enumerating models also finds former members absent from the current
+	// membership table. Never delete another host's conversation model.
+	const response = await ts.conversations().models().retrieve();
+	const models = Array.isArray(response) ? response : response.models;
+	if (!Array.isArray(models)) throw new Error('Invalid conversation model inventory');
+	const ids = new Set([...models.filter((model) => String(model.id).startsWith(prefix)).map((model) => model.id), ...userIds.flatMap((id) => ['global', 'email'].map((scope) => getConversationModelId(hostId, id, scope)))]);
+	for (const modelId of ids) {
+		try { await ts.conversations().models(modelId).delete(); } catch (error) { if (error.httpStatus !== 404) throw error; }
+		syncedConvoModels.delete(modelId);
+		await cacheDelete(getConversationModelSyncKey(modelId));
 	}
+	await cacheDelete(getReindexStatusKey(hostId));
+}
+
+export async function assertConversationCleanupOwnership(hostId, options = {}) {
+	const ts = options.client || getTypesenseClient();
+	const owned = new Set(['notes', 'memory', 'urls', 'emails', 'pages', 'vault_files'].map((type) => buildCollectionName(type, hostId)));
+	const collections = await ts.collections().retrieve();
+	const other = collections.filter((collection) => collection.name.endsWith('_' + hostId) && !owned.has(collection.name));
+	const bare = other.some((collection) => ['notes', 'memory', 'urls', 'emails', 'pages', 'vault_files'].some((type) => collection.name === type + '_' + hostId));
+	if (!other.length) return;
+	let history = false;
+	try { history = (await ts.collections(CONVERSATION_STORE_COLLECTION).documents().search({ q: '*', filter_by: `model_id:=convo-${hostId}-*`, per_page: 1 })).found > 0; } catch (error) { if (error.httpStatus !== 404) throw error; }
+	const models = await ts.conversations().models().retrieve();
+	if (!Array.isArray(models)) throw new Error('Invalid conversation ownership inventory');
+	if (bare || history || models.some((model) => String(model.id).startsWith(`convo-${hostId}-`))) throw Object.assign(new Error('Legacy search data ownership is shared or ambiguous. Contact support before deleting this account.'), { status: 409, code: 'search_ownership_unknown' });
 }
