@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import test, { mock } from 'node:test';
+import config from '../config.js';
 import mongoose, { connectDB } from '../db.js';
 import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
@@ -21,7 +25,7 @@ import { updateNote } from '../services/note_service.js';
 import { updateMemory } from '../services/memory_service.js';
 import { updateUrl } from '../services/url_service.js';
 import { applyMutations, deleteObsidianHostDirectory, getMarkdownContent, materializeProjectExports, syncStreamientItem, __test as syncTest } from '../services/obsidian_sync_service.js';
-import { storeBuffer } from '../services/obsidian_blob_service.js';
+import { readBlobBuffer, storeBuffer } from '../services/obsidian_blob_service.js';
 
 class MoveFixture {
 	hostId = `obsidian-move-${Date.now()}-${process.pid}`;
@@ -78,6 +82,20 @@ test('Obsidian-linked search moves persist without export rollback or stale-vaul
 	const fixture = new MoveFixture();
 	t.after(async () => { try { await fixture.cleanup(); } finally { await mongoose.disconnect(); } });
 	await fixture.setup();
+
+	await t.test('publishes concurrent identical content past an abandoned hash directory', async () => {
+		const plain = Buffer.from('Shared Markdown for concurrent URL moves');
+		const sha256 = crypto.createHash('sha256').update(plain).digest('hex');
+		const directory = path.resolve(config.obsidian.vaultsDir, 'blobs', fixture.hostId, sha256);
+		await mkdir(directory, { recursive: true });
+		await writeFile(path.join(directory, '0.part'), 'Existing encrypted bytes must remain untouched');
+		const blobs = await Promise.all(Array.from({ length: 12 }, () => storeBuffer(fixture.hostId, plain, 'text/markdown')));
+		assert.equal(new Set(blobs.map((blob) => String(blob._id))).size, 1);
+		assert.equal(await ObsidianBlob.countDocuments({ host_id: fixture.hostId, sha256 }), 1);
+		assert.deepEqual(await readBlobBuffer(blobs[0], fixture.hostId), plain);
+		assert.equal(await readFile(path.join(directory, '0.part'), 'utf8'), 'Existing encrypted bytes must remain untouched');
+		assert.equal((await readdir(path.dirname(directory))).filter((name) => name.startsWith(sha256)).length, 2, 'Keep the original directory and the winning blob only');
+	});
 
 	const originalNote = fixture.records[0];
 	const markdown = '---\ntitle: Move note\nstreamient_type: note\ncustom: preserve-me\ntags: [move-regression, KeepCase]\n---\n# Canonical Markdown\n\n**Preserve this body**\n';
