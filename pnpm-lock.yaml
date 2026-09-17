@@ -24,6 +24,9 @@ overrides:
 
 packageExtensionsChecksum: sha256-Cpbat+j5lhKCCxAHJbIsAlpzJVUX4JmSM4/pUqI6Ty4=
 
+patchedDependencies:
+  connect-mongo@6.0.0: 776f9ca07878836db0f8b15d05ff450abbd4dffb07702d73ca542bd033f59bc1
+
 importers:
 
   .:
@@ -168,7 +171,7 @@ importers:
         version: 7.1.0
       connect-mongo:
         specifier: ^6.0.0
-        version: 6.0.0(express-session@1.19.0(supports-color@5.5.0))(mongodb@7.6.0(socks@2.8.10))(supports-color@5.5.0)
+        version: 6.0.0(patch_hash=776f9ca07878836db0f8b15d05ff450abbd4dffb07702d73ca542bd033f59bc1)(express-session@1.19.0(supports-color@5.5.0))(mongodb@7.6.0(socks@2.8.10))(supports-color@5.5.0)
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7
@@ -10535,7 +10538,7 @@ snapshots:
       normalize-path: 3.0.0
       readable-stream: 4.7.0
 
-  connect-mongo@6.0.0(express-session@1.19.0(supports-color@5.5.0))(mongodb@7.6.0(socks@2.8.10))(supports-color@5.5.0):
+  connect-mongo@6.0.0(patch_hash=776f9ca07878836db0f8b15d05ff450abbd4dffb07702d73ca542bd033f59bc1)(express-session@1.19.0(supports-color@5.5.0))(mongodb@7.6.0(socks@2.8.10))(supports-color@5.5.0):
     dependencies:
       debug: 4.4.3(supports-color@5.5.0)
       express-session: 1.19.0(supports-color@5.5.0)

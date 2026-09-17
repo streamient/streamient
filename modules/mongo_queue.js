@@ -125,6 +125,10 @@ export class MongoWorker {
 		this.changeStream = null;
 		this.sweepInterval = null;
 		this.stalledInterval = null;
+		this.sweepPromise = null;
+		this.sweepRequested = false;
+		this.sweepRetryAt = 0;
+		this.recoveryPromise = null;
 	}
 
 	async start() {
@@ -133,6 +137,7 @@ export class MongoWorker {
 		await ensureIndexes();
 		await this.recoverStalledJobs();
 		await this.sweepPendingJobs();
+		if (!this.running) return;
 		this.openChangeStream();
 		this.sweepInterval = setInterval(() => this.sweepPendingJobs().catch((err) => log.error({ err, queue: this.queueName }, 'MongoWorker sweep error')), 30000);
 		this.stalledInterval = setInterval(() => this.recoverStalledJobs().catch((err) => log.error({ err, queue: this.queueName }, 'MongoWorker stalled recovery error')), 120000);
@@ -147,6 +152,7 @@ export class MongoWorker {
 	}
 
 	openChangeStream() {
+		if (!this.running) return;
 		try {
 			const col = getCollection();
 			this.changeStream = col.watch([{
@@ -173,78 +179,110 @@ export class MongoWorker {
 	}
 
 	tryProcess(doc) {
-		if (this.activeCount >= this.concurrency) return;
+		if (!this.running || this.activeCount >= this.concurrency) return;
 		this.processJob(doc).catch((err) => log.error({ err, queue: this.queueName, job_id: String(doc?._id || '') }, 'MongoWorker process error'));
 	}
 
 	async processJob(doc) {
-		const col = getCollection();
-		const result = await col.findOneAndUpdate(
-			namespaced({ _id: doc._id, queue: this.queueName, status: STATUS.PENDING, scheduled_at: { $lte: new Date() } }, this.appInstance),
-			{ $set: { status: STATUS.PROCESSING, updated_at: new Date() }, $inc: { attempts: 1 } },
-			{ returnDocument: 'after' },
-		);
-		const claimed = result?.value || result;
-		if (!claimed?._id) return;
+		if (this.activeCount >= this.concurrency) return;
+		// Reserve capacity before the asynchronous claim, including change-stream claims.
 		this.activeCount++;
-		const jobId = String(claimed._id);
-		const startedAt = Date.now();
+		let claimed;
+		let claimFinished = false;
 		try {
-			const hostId = this.queueName === 'account_deletion' ? '' : await resolveJobHost(claimed.data);
-			if (hostId) {
-				await col.updateOne({ _id: claimed._id }, { $set: { 'data.host_id': hostId } });
-				const tenant = await mongoose.connection.db.collection('tenants').findOne({ host_id: hostId, is_active: { $ne: false }, 'deletion.requested_at': null }, { projection: { _id: 1 }, readPreference: 'primary' });
-				if (!tenant) { await col.deleteOne({ _id: claimed._id }); return; }
-			}
-			const controller = new AbortController();
-			let timeoutHandle;
-			const timeout = new Promise((_, reject) => {
-				timeoutHandle = setTimeout(() => { const error = new Error('Job handler timed out'); controller.abort(error); reject(error); }, this.handlerTimeoutMs);
-			});
+			const col = getCollection();
+			const result = await col.findOneAndUpdate(
+				namespaced({ _id: doc._id, queue: this.queueName, status: STATUS.PENDING, scheduled_at: { $lte: new Date() } }, this.appInstance),
+				{ $set: { status: STATUS.PROCESSING, updated_at: new Date() }, $inc: { attempts: 1 } },
+				{ returnDocument: 'after' },
+			);
+			claimFinished = true;
+			claimed = result?.value || result;
+			if (!claimed?._id) return;
+			const jobId = String(claimed._id);
+			const startedAt = Date.now();
 			try {
-				const release = hostId ? await acquireTenantWork(hostId) : null;
-				const running = Promise.resolve().then(() => this.handler({ id: claimed._id, data: claimed.data, attempts: claimed.attempts, signal: controller.signal })).finally(async () => { if (release) await release(); });
-				await Promise.race([running, timeout]);
-			} finally {
-				clearTimeout(timeoutHandle);
+				const hostId = this.queueName === 'account_deletion' ? '' : await resolveJobHost(claimed.data);
+				if (hostId) {
+					await col.updateOne({ _id: claimed._id }, { $set: { 'data.host_id': hostId } });
+					const tenant = await mongoose.connection.db.collection('tenants').findOne({ host_id: hostId, is_active: { $ne: false }, 'deletion.requested_at': null }, { projection: { _id: 1 }, readPreference: 'primary' });
+					if (!tenant) { await col.deleteOne({ _id: claimed._id }); return; }
+				}
+				const controller = new AbortController();
+				let timeoutHandle;
+				const timeout = new Promise((_, reject) => {
+					timeoutHandle = setTimeout(() => { const error = new Error('Job handler timed out'); controller.abort(error); reject(error); }, this.handlerTimeoutMs);
+				});
+				try {
+					const release = hostId ? await acquireTenantWork(hostId) : null;
+					const running = Promise.resolve().then(() => this.handler({ id: claimed._id, data: claimed.data, attempts: claimed.attempts, signal: controller.signal })).finally(async () => { if (release) await release(); });
+					await Promise.race([running, timeout]);
+				} finally {
+					clearTimeout(timeoutHandle);
+				}
+				await col.updateOne(namespaced({ _id: claimed._id }, this.appInstance), { $set: { status: STATUS.COMPLETED, updated_at: new Date(), completed_at: new Date() } });
+				log.debug({ queue: this.queueName, job_id: jobId, attempts: claimed.attempts, duration_ms: Date.now() - startedAt }, 'Job completed');
+			} catch (err) {
+				const error = err?.message || String(err);
+				const willRetry = claimed.attempts < claimed.max_attempts;
+				const nextStatus = willRetry ? STATUS.PENDING : STATUS.FAILED;
+				const failedAt = new Date();
+				const update = { status: nextStatus, error, updated_at: failedAt };
+				if (willRetry) update.scheduled_at = new Date(failedAt.getTime() + this.retryDelayMs);
+				await col.updateOne(namespaced({ _id: claimed._id }, this.appInstance), { $set: update });
+				log[willRetry ? 'warn' : 'error']({ err, queue: this.queueName, job_id: jobId, attempts: claimed.attempts, max_attempts: claimed.max_attempts, will_retry: willRetry, duration_ms: Date.now() - startedAt }, willRetry ? 'Job failed; will retry' : 'Job failed permanently');
+				throw err;
 			}
-			await col.updateOne(namespaced({ _id: claimed._id }, this.appInstance), { $set: { status: STATUS.COMPLETED, updated_at: new Date(), completed_at: new Date() } });
-			log.debug({ queue: this.queueName, job_id: jobId, attempts: claimed.attempts, duration_ms: Date.now() - startedAt }, 'Job completed');
 		} catch (err) {
-			const error = err?.message || String(err);
-			const willRetry = claimed.attempts < claimed.max_attempts;
-			const nextStatus = willRetry ? STATUS.PENDING : STATUS.FAILED;
-			const failedAt = new Date();
-			const update = { status: nextStatus, error, updated_at: failedAt };
-			if (willRetry) update.scheduled_at = new Date(failedAt.getTime() + this.retryDelayMs);
-			await col.updateOne(namespaced({ _id: claimed._id }, this.appInstance), { $set: update });
-			log[willRetry ? 'warn' : 'error']({ err, queue: this.queueName, job_id: jobId, attempts: claimed.attempts, max_attempts: claimed.max_attempts, will_retry: willRetry, duration_ms: Date.now() - startedAt }, willRetry ? 'Job failed; will retry' : 'Job failed permanently');
+			if (!claimed?._id) this.sweepRetryAt = Date.now() + 30000;
 			throw err;
 		} finally {
-			this.activeCount = Math.max(0, this.activeCount - 1);
+			this.activeCount--;
+			if (claimFinished && this.running) this.sweepPendingJobs().catch((err) => log.error({ err, queue: this.queueName }, 'MongoWorker refill error'));
 		}
 	}
 
 	async sweepPendingJobs() {
-		if (!this.running) return;
-		const col = getCollection();
-		const docs = await col.find(namespaced({
-			queue: this.queueName,
-			status: STATUS.PENDING,
-			scheduled_at: { $lte: new Date() },
-		}, this.appInstance)).sort({ scheduled_at: 1 }).limit(this.concurrency).toArray();
-		for (const doc of docs) this.tryProcess(doc);
+		if (!this.running || Date.now() < this.sweepRetryAt) return;
+		if (this.sweepPromise) {
+			this.sweepRequested = true;
+			return this.sweepPromise;
+		}
+		if (this.activeCount >= this.concurrency) return;
+		// Completion, timer, and concurrent triggers share one query and one pending follow-up.
+		this.sweepPromise = (async () => {
+			do {
+				this.sweepRequested = false;
+				const col = getCollection();
+				const docs = await col.find(namespaced({ queue: this.queueName, status: STATUS.PENDING, scheduled_at: { $lte: new Date() } }, this.appInstance), { maxTimeMS: 10000 }).sort({ scheduled_at: 1 }).limit(this.concurrency - this.activeCount).toArray();
+				for (const doc of docs) this.tryProcess(doc);
+			} while (this.sweepRequested && this.running && this.activeCount < this.concurrency);
+		})();
+		try {
+			await this.sweepPromise;
+		} catch (err) {
+			this.sweepRetryAt = Date.now() + 30000;
+			throw err;
+		} finally {
+			this.sweepPromise = null;
+			if (this.sweepRequested && this.running && this.activeCount < this.concurrency && Date.now() >= this.sweepRetryAt) queueMicrotask(() => this.sweepPendingJobs().catch((err) => log.error({ err, queue: this.queueName }, 'MongoWorker follow-up error')));
+			this.sweepRequested = false;
+		}
 	}
 
 	async recoverStalledJobs() {
-		const col = getCollection();
-		const staleBefore = new Date(Date.now() - this.stalledThresholdMs);
-		const result = await col.updateMany(namespaced({
-			queue: this.queueName,
-			status: STATUS.PROCESSING,
-			updated_at: { $lt: staleBefore },
-		}, this.appInstance), { $set: { status: STATUS.PENDING, updated_at: new Date(), error: 'Recovered stalled job' } });
-		if (result.modifiedCount) log.warn({ queue: this.queueName, recovered: result.modifiedCount }, 'MongoWorker recovered stalled jobs');
+		if (this.recoveryPromise) return this.recoveryPromise;
+		this.recoveryPromise = (async () => {
+			const col = getCollection();
+			const staleBefore = new Date(Date.now() - this.stalledThresholdMs);
+			const result = await col.updateMany(namespaced({
+				queue: this.queueName,
+				status: STATUS.PROCESSING,
+				updated_at: { $lt: staleBefore },
+			}, this.appInstance), { $set: { status: STATUS.PENDING, updated_at: new Date(), error: 'Recovered stalled job' } });
+			if (result.modifiedCount) log.warn({ queue: this.queueName, recovered: result.modifiedCount }, 'MongoWorker recovered stalled jobs');
+		})();
+		try { await this.recoveryPromise; } finally { this.recoveryPromise = null; }
 	}
 }
 
