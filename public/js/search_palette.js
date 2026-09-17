@@ -163,7 +163,7 @@
 		}
 		renderEmpty('Searching...');
 		try {
-			var res = await api('POST', '/search/quick', { query: query, limit: 12, per_page: 6 });
+			var res = await api('POST', '/search/quick', { query: query, project_id: window.currentProjectId || '', limit: 12, per_page: 6 });
 			if (seq !== requestSeq) return;
 			renderResults(res.results || []);
 		} catch (err) {
@@ -254,5 +254,10 @@
 		helpEl = document.getElementById('st-search-help');
 		if (!trigger || !palette || !input || !resultsEl) return;
 		bindEvents();
+		document.getElementById('st-search-view-all')?.addEventListener('click', function () {
+			const filters = { query: input.value.trim(), project_id: window.currentProjectId || '' };
+			closePalette();
+			window.__sections.search.open(filters);
+		});
 	});
 })();

@@ -1,0 +1,21 @@
+each item in items
+	article.card.mb-3.search-result(data-search-key=`${item.type}:${item.id}` data-search-version=item.version)
+		.card-body.p-3.d-flex.align-items-center
+			input.form-check-input.h-20px.w-30px.me-3.cursor-pointer.search-select(type="checkbox" aria-label=`Select ${item.title}` data-search-id=item.id)
+			.flex-grow-1.overflow-hidden
+				.d-flex.align-items-center.flex-wrap.mb-1
+					span.badge.me-2= item.type
+					button.btn.btn-link.p-0.text-start.text-break.cursor-pointer.search-open(type="button")= item.title
+				.small.text-muted.mb-1
+					span.me-3= item.project_name || 'Deleted project'
+					if item.updated_at
+						time(datetime=new Date(item.updated_at * 1000).toISOString())= new Date(item.updated_at * 1000).toLocaleDateString('en-US')
+				if item.tags.length
+					.d-flex.flex-wrap.gap-1.mb-1
+						each tag in item.tags
+							span.badge.bg-secondary-lt= tag
+				if item.excerpt
+					.small.text-muted= item.excerpt
+				if !item.actions.length
+					.small.text-muted Bulk actions unavailable for this record type.
+				.small.text-danger.search-item-error(role="status")

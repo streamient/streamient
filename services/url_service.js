@@ -154,7 +154,7 @@ export async function updateUrl(host_id, urlId, data, ctx = {}) {
 	const before = ctx.user_id ? await Url.findOne({ _id: urlId, host_id }).lean() : null;
 
 	const urlDoc = await Url.findOneAndUpdate(
-		{ _id: urlId, host_id },
+		{ _id: urlId, host_id, ...(ctx.expected_updated_at ? { updatedAt: new Date(ctx.expected_updated_at), in_trash: { $ne: true } } : {}) },
 		{ $set: update },
 		{ returnDocument: 'after' },
 	);
@@ -175,7 +175,7 @@ export async function updateUrl(host_id, urlId, data, ctx = {}) {
 
 export async function deleteUrl(host_id, urlId, ctx = {}) {
 	const urlDoc = await Url.findOneAndUpdate(
-		{ _id: urlId, host_id, in_trash: { $ne: true } },
+		{ _id: urlId, host_id, in_trash: { $ne: true }, ...(ctx.expected_updated_at ? { updatedAt: new Date(ctx.expected_updated_at) } : {}) },
 		{ $set: { in_trash: true, trashed_at: new Date(), is_indexed: false } },
 		{ returnDocument: 'after' },
 	);

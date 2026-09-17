@@ -55,6 +55,28 @@ function initChat() {
 
 	// Populate project filter
 	const projectFilterReady = loadProjectFilter();
+	let scopeProject = window.currentProjectId || '';
+	let activeProject = scopeProject;
+	let scopeRevision = 0;
+	Promise.resolve(projectFilterReady).then(() => {
+		scopeProject = window.currentProjectId || '';
+		activeProject = scopeProject;
+		if (projectFilter) projectFilter.value = scopeProject;
+	});
+	projectFilter?.addEventListener('change', () => {
+		scopeProject = projectFilter.value;
+		scopeRevision++;
+		currentConversationId = null;
+		currentChatResults = [];
+	});
+	window.addEventListener('search-project-changed', (event) => {
+		scopeProject = event.detail.project_id;
+		activeProject = scopeProject;
+		scopeRevision++;
+		if (projectFilter) projectFilter.value = scopeProject;
+		currentConversationId = null;
+		currentChatResults = [];
+	});
 
 	// Welcome state — hide on first interaction
 	const chatWelcome = document.getElementById('chat-welcome');
@@ -137,7 +159,17 @@ function initChat() {
 		messagesEl.scrollTop = messagesEl.scrollHeight;
 
 		try {
-			const projectId = projectFilter?.value || undefined;
+			await projectFilterReady;
+			if (activeProject !== (window.currentProjectId || '')) {
+				activeProject = window.currentProjectId || '';
+				scopeProject = activeProject;
+				scopeRevision++;
+				projectFilter.value = scopeProject;
+				currentConversationId = null;
+				currentChatResults = [];
+			}
+			const projectId = scopeProject || undefined;
+			const requestScope = scopeRevision;
 			const body = {
 				query,
 				conversation_id: currentConversationId,
@@ -212,6 +244,7 @@ function initChat() {
 						try {
 							const data = JSON.parse(payload);
 
+							if (requestScope !== scopeRevision) continue;
 							if (currentEvent === 'token') {
 								if (!bubble) {
 									thinkingRow.remove();
@@ -230,7 +263,10 @@ function initChat() {
 								if (data.conversation_reset) {
 									addMessage('assistant', 'Your previous chat thread expired, so I started a new conversation for this reply.');
 								}
-								if (data.results?.length && data.display_in === 'panel') {
+								if (data.search_filters) {
+									currentConversationId = null;
+									await window.__sections.search.open(data.search_filters);
+								} else if (data.results?.length && data.display_in === 'panel') {
 									renderResults(data.results, resultsList, resultsPanel);
 								}
 								if (data.action?.completed) {

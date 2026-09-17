@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { MCP_JSON_OUTPUT_SCHEMA, mcpJson } from './output.js';
-import { MCP_PER_PAGE_SCHEMA, mcpPerPage } from './retrieval.js';
+import { MCP_PER_PAGE_SCHEMA, MCP_SEARCH_FILTER_SCHEMA, mcpPerPage } from './retrieval.js';
 import { slimSearchResults } from './search-results.js';
 
 const MCP_KNOWLEDGE_SEARCH_EXCLUDE_FIELDS = {
@@ -52,6 +52,7 @@ export function memoryTools(api, defaultProjectId) {
       annotations: READ_ONLY,
       outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
+        ...MCP_SEARCH_FILTER_SCHEMA,
         query: z.string().describe('What to search for'),
         project_id: z.string().optional().describe('Filter results to a specific project (optional; omit to search all projects)'),
         per_page: MCP_PER_PAGE_SCHEMA,
@@ -59,6 +60,8 @@ export function memoryTools(api, defaultProjectId) {
       handler: async (args) => {
         const { results } = await api.post('/memories/search', {
           query: args.query,
+          tags: args.tags,
+          page: args.page,
           project_id: args.project_id,
           options: {
             perPage: mcpPerPage(args),
@@ -75,6 +78,7 @@ export function memoryTools(api, defaultProjectId) {
       annotations: READ_ONLY,
       outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
+        ...MCP_SEARCH_FILTER_SCHEMA,
         query: z.string().describe('What to search for'),
         project_id: z.string().optional().describe('Filter results to a specific project (optional; omit to search all projects)'),
         per_page: MCP_PER_PAGE_SCHEMA,
@@ -82,6 +86,8 @@ export function memoryTools(api, defaultProjectId) {
       handler: async (args) => {
         const { results } = await api.post('/memories/search', {
           query: args.query,
+          tags: args.tags,
+          page: args.page,
           project_id: args.project_id,
           options: {
             perPage: mcpPerPage(args),
@@ -164,6 +170,7 @@ export function memoryTools(api, defaultProjectId) {
       annotations: READ_ONLY,
       outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
+        ...MCP_SEARCH_FILTER_SCHEMA,
         query: z.string().describe('Search query'),
         project_id: z.string().optional().describe('Filter results to a specific project (optional)'),
         per_page: MCP_PER_PAGE_SCHEMA,
@@ -171,6 +178,8 @@ export function memoryTools(api, defaultProjectId) {
       handler: async (args) => {
         const { results } = await api.post('/search/knowledge', {
           query: args.query,
+          tags: args.tags,
+          page: args.page,
           project_id: args.project_id,
           per_page: mcpPerPage(args),
           options: {

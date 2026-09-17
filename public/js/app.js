@@ -81,6 +81,7 @@ window.currentProjectId = null;
 
 function setActiveProject(projectId) {
 	currentProjectId = projectId;
+	window.dispatchEvent(new CustomEvent('search-project-changed', { detail: { project_id: projectId || '' } }));
 	document.querySelectorAll('.project-item').forEach((el) => {
 		el.classList.toggle('active', el.dataset.id === projectId);
 	});
@@ -343,6 +344,7 @@ var __currentRoute = null;
 var __isNavigating = false;
 
 var ROUTES = {
+	'/search': { section: 'search', title: 'Search results', partial: '/ajax/section/search' },
 	'/dashboard': { section: 'dashboard', title: 'Dashboard', partial: '/ajax/section/dashboard' },
 	'/notes': { section: 'notes', title: 'Notes', partial: '/ajax/section/notes', batch: true },
 	'/memories': { section: 'memories', title: 'Memories', partial: '/ajax/section/memories', batch: true },

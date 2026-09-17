@@ -213,6 +213,7 @@ router.use(productUpdatesRouter);
 
 router.get('/dashboard', (req, res) => res.render('dashboard', { title: 'Dashboard' }));
 router.get('/notes', (req, res) => res.render('notes', { title: 'Notes' }));
+router.get('/search', (req, res) => res.render('search', { title: 'Search results' }));
 router.get('/memories', (req, res) => res.render('memories', { title: 'Memory' }));
 router.get('/urls', (req, res) => res.render('urls', { title: 'URLs' }));
 router.get('/emails', (req, res) => res.render('emails', { title: 'Emails' }));
@@ -239,6 +240,7 @@ router.get('/settings/subscription', (req, res) => {
 
 router.get('/ajax/section/dashboard', (req, res) => res.render('ajax/section/dashboard'));
 router.get('/ajax/section/notes', (req, res) => res.render('ajax/section/notes'));
+router.get('/ajax/section/search', (req, res) => res.render('ajax/section/search'));
 router.get('/ajax/section/memories', (req, res) => res.render('ajax/section/memories'));
 router.get('/ajax/section/urls', (req, res) => res.render('ajax/section/urls'));
 router.get('/ajax/section/emails', (req, res) => res.render('ajax/section/emails'));

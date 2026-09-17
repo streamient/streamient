@@ -15,6 +15,9 @@ import * as urlService from '../services/url_service.js';
 import * as emailIngestService from '../services/email_ingest_service.js';
 import { searchKnowledge, aiChatSearch, processChat, processChatStream, friendlyChatError } from '../services/ai_chat_service.js';
 import { quickSearchKnowledge } from '../services/quick_search_service.js';
+import { SearchResults } from '../modules/search_results.js';
+import { SearchFilters } from '../modules/search_filters.js';
+import { renderFile } from 'pug';
 import { listConversations, getConversationMessages, deleteConversation } from '../modules/typesense.js';
 import * as trashService from '../services/trash_service.js';
 import { crawlSite } from '../modules/crawler.js';
@@ -367,8 +370,13 @@ router.delete('/notes/:id', async (req, res) => {
 });
 
 router.post('/notes/search', async (req, res) => {
+	const filters = SearchFilters.parse(req.body);
+	if (filters.tags.length || req.body.page) {
+		const data = await new SearchResults(req.host_id).list({ ...filters, types: ['notes'], page: req.body.page, per_page: req.body.options?.perPage });
+		return res.json({ results: data.results.notes });
+	}
 	const options = { ...(req.body.options || {}) };
-	if (req.body.project_id) options.filter_by = `project_id:=${req.body.project_id}`;
+	if (filters.project_id) options.filter_by = SearchFilters.typesense(filters);
 	const results = await noteService.searchNotes(req.host_id, req.body.query, options);
 	res.json({ results });
 });
@@ -407,8 +415,13 @@ router.delete('/memories/:id', async (req, res) => {
 });
 
 router.post('/memories/search', async (req, res) => {
+	const filters = SearchFilters.parse(req.body);
+	if (filters.tags.length || req.body.page) {
+		const data = await new SearchResults(req.host_id).list({ ...filters, types: ['memory'], page: req.body.page, per_page: req.body.options?.perPage });
+		return res.json({ results: data.results.memory });
+	}
 	const options = { ...(req.body.options || {}) };
-	if (req.body.project_id) options.filter_by = `project_id:=${req.body.project_id}`;
+	if (filters.project_id) options.filter_by = SearchFilters.typesense(filters);
 	const results = await memoryService.recallMemory(req.host_id, req.body.query, options);
 	res.json({ results });
 });
@@ -623,7 +636,14 @@ router.delete('/urls/:id', async (req, res) => {
 });
 
 router.post('/urls/search', async (req, res) => {
-	const results = await urlService.searchUrls(req.host_id, req.body.query, req.body.options);
+	const filters = SearchFilters.parse(req.body);
+	if (filters.tags.length || req.body.page) {
+		const data = await new SearchResults(req.host_id).list({ ...filters, types: ['urls'], page: req.body.page, per_page: req.body.options?.perPage });
+		return res.json({ results: data.results.urls });
+	}
+	const options = { ...req.body.options };
+	if (filters.project_id) options.filter_by = SearchFilters.typesense(filters);
+	const results = await urlService.searchUrls(req.host_id, req.body.query, options);
 	res.json({ results });
 });
 
@@ -1033,11 +1053,47 @@ router.delete('/settings/white-label/assets/:kind', requireRestrictedSettingsAcc
 
 // ---- Search / Knowledge ----
 
+router.post(['/search/results', '/search/selection', '/search/actions', '/search/item'], async (req, res) => {
+	try {
+		const search = new SearchResults(req.host_id, { includeEmails: await getEmailFeatureAccess(req.host_id, req.billingUser) });
+		if (req.path === '/search/selection') return res.json({ items: await search.selection(req.body) });
+		let payload;
+		if (req.path === '/search/actions') payload = { outcomes: await search.apply(req.body, auditCtx(req)) };
+		else if (req.path === '/search/item') payload = { outcomes: [await search.refresh(req.body)] };
+		else payload = await search.list(req.body);
+		const items = payload.items || payload.outcomes.filter((outcome) => outcome.item).map((outcome) => outcome.item);
+		const names = await projectService.getProjectNames(req.host_id, items.map((item) => item.project_id));
+		for (const item of items) item.project_name = names.get(item.project_id) || 'Deleted project';
+		const view = path.join(path.dirname(fileURLToPath(import.meta.url)), '../views/ajax/search_rows.pug');
+		if (payload.items) payload.html = renderFile(view, { items });
+		else for (const outcome of payload.outcomes) if (outcome.item && !outcome.removed) outcome.html = renderFile(view, { items: [outcome.item] });
+		res.json(payload);
+	} catch (err) {
+		log.error({ err, host_id: req.host_id }, 'Search results error');
+		res.status(err.status || 500).json({ error: err.status ? err.message : 'Search failed. Please retry.' });
+	}
+});
+
+router.get('/search/tags', async (req, res) => {
+	try {
+		const filters = SearchFilters.parse({ project_id: req.query.project_id });
+		const tags = await Promise.all([Note, Memory, Url].map((Model) => Model.distinct('tags', SearchFilters.mongo(req.host_id, filters))));
+		res.json({ tags: [...new Set(tags.flat())].sort() });
+	} catch (err) {
+		res.status(err.status || 500).json({ error: 'Unable to load tags' });
+	}
+});
+
 router.post('/search/quick', async (req, res) => {
 	try {
 		const query = String(req.body.query || '').trim();
-		if (!query) return res.status(400).json({ error: 'query required' });
+		const filters = SearchFilters.parse(req.body);
+		if (!query && !filters.tags.length) return res.status(400).json({ error: 'query required' });
 		const emailEnabled = await getEmailFeatureAccess(req.host_id, req.billingUser);
+		if (filters.tags.length) {
+			const data = await new SearchResults(req.host_id, { includeEmails: emailEnabled }).list({ ...filters, per_page: 6 });
+			return res.json({ query, found: data.total, filters, results: data.items.slice(0, 12).map((item) => ({ ...item, label: item.type, subtitle: item.tags.join(', '), open_target: { kind: 'modal', type: item.type, id: item.id, project_id: item.project_id } })) });
+		}
 		const result = await quickSearchKnowledge(req.host_id, query, {
 			projectId: req.body.project_id,
 			includeEmails: emailEnabled,
@@ -1047,17 +1103,22 @@ router.post('/search/quick', async (req, res) => {
 		res.json({ query, ...result });
 	} catch (err) {
 		log.error({ err, host_id: req.host_id }, 'Quick search error');
-		res.status(500).json({ error: 'Search failed' });
+		res.status(err.status || 500).json({ error: err.status ? err.message : 'Search failed' });
 	}
 });
 
 router.post('/search/knowledge', async (req, res) => {
+	const filters = SearchFilters.parse(req.body);
 	const emailEnabled = await getEmailFeatureAccess(req.host_id, req.billingUser);
+	if (filters.tags.length || req.body.page) {
+		const data = await new SearchResults(req.host_id, { includeEmails: emailEnabled }).list({ ...filters, page: req.body.page, per_page: req.body.per_page });
+		return res.json({ results: data.results, total: data.total, page: data.page, pages: data.pages });
+	}
 	const results = await searchKnowledge(req.host_id, req.body.query, {
-		projectId: req.body.project_id,
+		...req.body.options,
+		projectId: filters.project_id,
 		perPage: req.body.per_page,
 		includeEmails: emailEnabled,
-		...req.body.options,
 	});
 	res.json({ results });
 });
@@ -1092,6 +1153,7 @@ router.post('/chat', aiDailyLimiter, async (req, res) => {
 		res.json({
 			answer: result.answer,
 			results: result.results,
+			search_filters: result.searchFilters,
 			action: result.action,
 			conversation_id: result.conversationId,
 			conversation_reset: conversationReset,
@@ -1154,6 +1216,7 @@ router.post('/chat/stream', aiDailyLimiter, async (req, res) => {
 		sendSSE('done', {
 			conversation_id: metadata.conversationId,
 			results: metadata.results,
+			search_filters: metadata.searchFilters,
 			action: metadata.action,
 			display_in: metadata.displayIn,
 			conversation_reset: conversationReset,

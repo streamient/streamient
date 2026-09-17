@@ -1862,3 +1862,16 @@ body:not(.swal2-shown) > .swal2-container {
 #productUpdatesModal .modal-footer {
 	flex-shrink: 0;
 }
+
+#search-page button[aria-busy="true"]::after,
+#batchProjectModal button[aria-busy="true"]::after {
+	content: '';
+	display: inline-block;
+	width: 0.75rem;
+	height: 0.75rem;
+	margin-left: 0.5rem;
+	border: 0.125rem solid currentColor;
+	border-right-color: transparent;
+	border-radius: 50%;
+	animation: spinner-border 0.75s linear infinite;
+}

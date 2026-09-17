@@ -16,7 +16,7 @@
 					.invalid-feedback#batch-project-validation Project required.
 				if !hasProjects
 					.form-text.text-warning#batch-project-empty No other projects available.
-			.modal-footer
+			.modal-footer.justify-content-between
 				button.btn.btn-secondary.btn-sm(type="button" data-bs-dismiss="modal" data-batch-project-cancel) Cancel
 				button.btn.btn-primary.btn-sm(type="submit" data-batch-project-submit disabled=!hasProjects)
 					span.spinner-border.spinner-border-sm.me-2.d-none(role="status" aria-hidden="true" data-batch-project-spinner)

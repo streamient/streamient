@@ -80,7 +80,7 @@ export async function updateMemory(host_id, memoryId, data, ctx = {}) {
 	const before = ctx.user_id ? await Memory.findOne({ _id: memoryId, host_id }).lean() : null;
 
 	const mem = await Memory.findOneAndUpdate(
-		{ _id: memoryId, host_id },
+		{ _id: memoryId, host_id, ...(ctx.expected_updated_at ? { updatedAt: new Date(ctx.expected_updated_at), in_trash: { $ne: true } } : {}) },
 		{ $set: update },
 		{ returnDocument: 'after' },
 	);
@@ -101,7 +101,7 @@ export async function updateMemory(host_id, memoryId, data, ctx = {}) {
 
 export async function deleteMemory(host_id, memoryId, ctx = {}) {
 	const mem = await Memory.findOneAndUpdate(
-		{ _id: memoryId, host_id, in_trash: { $ne: true } },
+		{ _id: memoryId, host_id, in_trash: { $ne: true }, ...(ctx.expected_updated_at ? { updatedAt: new Date(ctx.expected_updated_at) } : {}) },
 		{ $set: { in_trash: true, trashed_at: new Date(), is_indexed: false } },
 		{ returnDocument: 'after' },
 	);

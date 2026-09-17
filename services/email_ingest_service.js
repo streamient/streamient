@@ -704,7 +704,7 @@ export async function updateEmail(host_id, emailId, data, ctx = {}) {
 
 	const before = ctx.user_id ? await Email.findOne({ _id: emailId, host_id }).lean() : null;
 	const email = await Email.findOneAndUpdate(
-		{ _id: emailId, host_id },
+		{ _id: emailId, host_id, ...(ctx.expected_updated_at ? { updatedAt: new Date(ctx.expected_updated_at), in_trash: { $ne: true } } : {}) },
 		{ $set: update },
 		{ returnDocument: 'after' },
 	);
@@ -727,7 +727,7 @@ export async function updateEmail(host_id, emailId, data, ctx = {}) {
 
 export async function deleteEmail(host_id, emailId, ctx = {}) {
 	const email = await Email.findOneAndUpdate(
-		{ _id: emailId, host_id, in_trash: { $ne: true } },
+		{ _id: emailId, host_id, in_trash: { $ne: true }, ...(ctx.expected_updated_at ? { updatedAt: new Date(ctx.expected_updated_at) } : {}) },
 		{ $set: { in_trash: true, labels: [], trashed_at: new Date(), is_indexed: false } },
 		{ returnDocument: 'after' },
 	);
