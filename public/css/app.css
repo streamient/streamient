@@ -1539,8 +1539,12 @@ body.backend-admin .navbar-dark .navbar-nav .nav-link:focus {
 
 .batch-cb-wrap {
 	display: flex;
-	align-items: center;
+	align-items: flex-start;
+	align-self: stretch;
 	flex-shrink: 0;
+	padding: 0.75rem;
+	margin: -0.75rem 0 -0.75rem -0.75rem;
+	cursor: pointer;
 }
 
 .batch-cb {

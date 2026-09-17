@@ -6,6 +6,7 @@ afterAccountWork(() => { restoreAccountWork(); });
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import * as cheerio from 'cheerio';
+import { createServer } from 'node:http';
 
 import {
 	buildCrawlStateBulkOps,
@@ -126,6 +127,36 @@ function makeCrawlStateModel(initialStates = []) {
 }
 
 describe('crawler indexing and state', () => {
+	it('crawls a newly saved URL even when another record already crawled the same address', async () => {
+		const server = createServer((req, res) => {
+			res.setHeader('Content-Type', 'text/html');
+			res.end('<html><title>Saved page</title><body>Indexed content</body></html>');
+		});
+		await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+		const url = `http://127.0.0.1:${server.address().port}/`;
+		const indexed = [];
+		try {
+			for (const ids of [['64f000000000000000000011'], ['64f000000000000000000012'], ['64f000000000000000000011', '64f000000000000000000012']]) {
+				await Promise.all(ids.map(async (id) => {
+					const count = await crawlSite(makeUrlDoc({ _id: id, url }), {
+						CrawlState: makeCrawlStateModel(),
+						Url: { updateOne: async () => {} },
+						ensureCollections: async () => {},
+						bulkIndexCrawledPages: async (host, data) => {
+							indexed.push(data);
+							return { indexedCount: data.pages.length, attemptedCount: data.pages.length };
+						},
+					});
+					assert.equal(count, 1);
+				}));
+			}
+			assert.equal(indexed.length, 4);
+			assert.notEqual(indexed[0].urlId, indexed[1].urlId);
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
 	it('limits crawl scope to the saved URL and descendant paths', () => {
 		const scope = getCrawlScope('https://example.com/docs/');
 

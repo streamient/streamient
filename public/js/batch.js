@@ -147,6 +147,11 @@
 
 		if (!cb) return;
 		if (e.target.closest('.batch-cb-wrap')) e.stopPropagation();
+		if (e.target !== cb) {
+			e.preventDefault();
+			cb.checked = !cb.checked;
+			cb.dispatchEvent(new Event('change', { bubbles: true }));
+		}
 
 		if (e.shiftKey && lastChecked && lastChecked !== cb) {
 			var all = Array.from(getAllCheckboxes());
