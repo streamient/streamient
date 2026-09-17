@@ -165,8 +165,6 @@ services:
       - 3000
     environment:
       <<: *env
-    dns:
-      - 100.100.100.100
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:3000/health"]
       interval: 30s
