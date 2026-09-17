@@ -1108,7 +1108,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 	}
 
 	// ── Same-tab CRUD: refresh counts immediately when items change via modals / batch ──
-	for (const evt of ['item-modal-saved', 'item-modal-deleted']) {
+	for (const evt of ['item-modal-saved', 'item-modal-deleted', 'counts:refresh']) {
 		window.addEventListener(evt, () => {
 			refreshCounts();
 			loadTrashCount();
@@ -1131,11 +1131,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Refresh sidebar counts via API
 let countDebounce = null;
+let countRequest = 0;
+let countErrorShown = false;
 async function refreshCounts() {
 	clearTimeout(countDebounce);
+	const request = ++countRequest;
 	countDebounce = setTimeout(async () => {
 		try {
 			const counts = await api('GET', '/counts');
+			if (request !== countRequest) return;
+			if (!counts || typeof counts !== 'object' || Array.isArray(counts)) throw new Error('Invalid project counts response');
+			countErrorShown = false;
 			document.querySelectorAll('.project-item').forEach(el => {
 				const pid = el.dataset.id;
 				const pc = counts[pid] || { notes: 0, memory: 0, urls: 0, emails: 0 };
@@ -1156,7 +1162,10 @@ async function refreshCounts() {
 				if (cards[3]) cards[3].textContent = pc.emails;
 			}
 		} catch (err) {
+			if (request !== countRequest) return;
 			console.error('Failed to refresh counts:', err);
+			if (!countErrorShown) showError('Unable to refresh project counts. Existing counts were kept.');
+			countErrorShown = true;
 		}
 	}, 300);
 }

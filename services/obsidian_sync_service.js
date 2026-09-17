@@ -327,77 +327,26 @@ function markdownProjection(type) {
 async function removeOtherMarkdownProjections(file, retainedType) {
 	for (const projection of MARKDOWN_PROJECTIONS) {
 		if (projection.type === retainedType || !file[projection.field]) continue;
-		await projection.Model.findOneAndDelete({ _id: file[projection.field], host_id: file.host_id });
+		const removed = await projection.Model.findOneAndDelete({ _id: file[projection.field], host_id: file.host_id, project: file.project, 'obsidian_source.file_id': file._id });
+		if (!removed) throw new ObsidianSyncError('The linked record changed project or vault; synchronize again.', 409, 'projection_changed');
 		emitToTenant(file.host_id, `${projection.type}:deleted`, { _id: file[projection.field] });
 		file[projection.field] = null;
 	}
 }
 
 async function projectMarkdownFile(file, raw, ownerId) {
+	if (file.projection_detached) return null;
 	const parsed = parsedMarkdown(raw, file.path);
 	const now = file.modified_at || new Date();
 	const currentProjectionType = file.url ? 'url' : file.memory ? 'memory' : file.note ? 'note' : '';
 	const changesUrlBoundary = Boolean(currentProjectionType) && (currentProjectionType === 'url') !== (parsed.type === 'url');
 	if (changesUrlBoundary) throw new ObsidianSyncError('Create a separate file instead of changing a saved URL record type', 409, 'url_type_change');
 	await removeOtherMarkdownProjections(file, parsed.type);
-	if (parsed.type === 'url') {
-		let url = file.url ? await queryForSave(Url.findOne({ _id: file.url, host_id: file.host_id })) : null;
-		const created = !url;
-		const data = {
-			url: parsed.url,
-			normalized_url: normalizeUrl(parsed.url),
-			title: parsed.title,
-			description: parsed.body.trim(),
-			tags: parsed.tags,
-			project: file.project,
-			owner: ownerId,
-			host_id: file.host_id,
-			is_indexed: false,
-			in_trash: file.in_trash,
-			trashed_at: file.in_trash ? file.trashed_at || new Date() : null,
-			obsidian_source: { connection_id: file.connection, file_id: file._id },
-			updatedAt: now,
-		};
-		if (url) url = await Url.findByIdAndUpdate(url._id, { $set: data }, { returnDocument: 'after', timestamps: false });
-		else {
-			url = await Url.create(data);
-			file.url = url._id;
-		}
-		emitToTenant(file.host_id, created ? 'url:created' : 'url:updated', url);
-		return url;
-	}
-	if (parsed.type === 'memory') {
-		let memory = file.memory ? await queryForSave(Memory.findOne({ _id: file.memory, host_id: file.host_id })) : null;
-		const data = {
-			title: parsed.title,
-			content: parsed.body.trim(),
-			tags: parsed.tags,
-			project: file.project,
-			owner: ownerId,
-			host_id: file.host_id,
-			is_indexed: false,
-			in_trash: file.in_trash,
-			trashed_at: file.in_trash ? file.trashed_at || new Date() : null,
-			obsidian_source: { connection_id: file.connection, file_id: file._id },
-			updatedAt: now,
-		};
-		if (memory) {
-			await Memory.findByIdAndUpdate(memory._id, { $set: data }, { timestamps: false });
-		} else {
-			memory = await Memory.create(data);
-			file.memory = memory._id;
-		}
-		emitToTenant(file.host_id, memory.createdAt?.getTime?.() === memory.updatedAt?.getTime?.() ? 'memory:created' : 'memory:updated', memory);
-		return memory;
-	}
-
-	const html = renderCanonicalMarkdown(parsed.body);
-	const textContent = striptags(html, [], ' ').replace(/\s+/g, ' ').trim();
-	let note = file.note ? await queryForSave(Note.findOne({ _id: file.note, host_id: file.host_id })) : null;
+	const projection = markdownProjection(parsed.type);
+	let record = file[projection.field] ? await projection.Model.findOne({ _id: file[projection.field], host_id: file.host_id }).lean() : null;
+	const created = !record;
 	const data = {
 		title: parsed.title,
-		content: html,
-		text_content: textContent,
 		tags: parsed.tags,
 		project: file.project,
 		owner: ownerId,
@@ -408,14 +357,21 @@ async function projectMarkdownFile(file, raw, ownerId) {
 		obsidian_source: { connection_id: file.connection, file_id: file._id },
 		updatedAt: now,
 	};
-	if (note) {
-		await Note.findByIdAndUpdate(note._id, { $set: data }, { timestamps: false });
-	} else {
-		note = await Note.create(data);
-		file.note = note._id;
+	if (parsed.type === 'url') Object.assign(data, { url: parsed.url, normalized_url: normalizeUrl(parsed.url), description: parsed.body.trim() });
+	else if (parsed.type === 'memory') data.content = parsed.body.trim();
+	else {
+		data.content = renderCanonicalMarkdown(parsed.body);
+		data.text_content = striptags(data.content, [], ' ').replace(/\s+/g, ' ').trim();
 	}
-	emitToTenant(file.host_id, note.createdAt?.getTime?.() === note.updatedAt?.getTime?.() ? 'note:created' : 'note:updated', note);
-	return note;
+	if (record) {
+		record = await projection.Model.findOneAndUpdate({ _id: record._id, host_id: file.host_id, project: file.project, 'obsidian_source.file_id': file._id, updatedAt: record.updatedAt }, { $set: data }, { returnDocument: 'after', timestamps: false });
+		if (!record) throw new ObsidianSyncError('The linked record changed project or vault; synchronize again.', 409, 'projection_changed');
+	} else {
+		record = await projection.Model.create(data);
+		file[projection.field] = record._id;
+	}
+	emitToTenant(file.host_id, `${parsed.type}:${created ? 'created' : 'updated'}`, record);
+	return record;
 }
 
 function canvasText(raw) {
@@ -446,20 +402,14 @@ async function extractFileText(file, blob) {
 }
 
 async function updateProjection(file, ownerId) {
+	if (file.projection_detached) return;
 	if (file.in_trash) {
 		file.extraction_status = 'not_needed';
 		file.extraction_error = '';
-		if (file.note) {
-			await Note.findOneAndUpdate({ _id: file.note, host_id: file.host_id }, { $set: { in_trash: true, trashed_at: file.trashed_at || new Date(), is_indexed: false } });
-			emitToTenant(file.host_id, 'note:deleted', { _id: file.note });
-		}
-		if (file.memory) {
-			await Memory.findOneAndUpdate({ _id: file.memory, host_id: file.host_id }, { $set: { in_trash: true, trashed_at: file.trashed_at || new Date(), is_indexed: false } });
-			emitToTenant(file.host_id, 'memory:deleted', { _id: file.memory });
-		}
-		if (file.url) {
-			await Url.findOneAndUpdate({ _id: file.url, host_id: file.host_id }, { $set: { in_trash: true, trashed_at: file.trashed_at || new Date(), is_indexed: false } });
-			emitToTenant(file.host_id, 'url:deleted', { _id: file.url });
+		for (const projection of MARKDOWN_PROJECTIONS) {
+			if (!file[projection.field]) continue;
+			const record = await projection.Model.findOneAndUpdate({ _id: file[projection.field], host_id: file.host_id, project: file.project, 'obsidian_source.file_id': file._id }, { $set: { in_trash: true, trashed_at: file.trashed_at || new Date(), is_indexed: false } });
+			if (record) emitToTenant(file.host_id, `${projection.type}:deleted`, { _id: file[projection.field] });
 		}
 		file.is_indexed = file.kind === 'markdown';
 		return;
@@ -542,7 +492,12 @@ async function commitFile(connection, file, operation, options) {
 		file.trashed_at = null;
 	}
 	file.is_indexed = false;
-	await updateProjection(file, connection.owner);
+	if (options.updateRecord === false && file.kind === 'markdown') {
+		file.text_content = '';
+		file.extraction_status = 'not_needed';
+		file.extraction_error = '';
+		file.is_indexed = true;
+	} else await updateProjection(file, connection.owner);
 	await file.save();
 	await enqueueExtraction(file).catch(async (err) => {
 		log.error({ err, file_id: file._id }, 'Obsidian file extraction queue failed');
@@ -605,7 +560,7 @@ async function resolveRenamePath(connection, file, requestedPath, modifiedAt, op
 	return { path: requestedPath, conflict: true };
 }
 
-async function recordLosingConflict(connection, file, mutation, blob, modifiedAt, source, deviceId) {
+async function recordLosingConflict(connection, file, mutation, blob, modifiedAt, source, deviceId, reason = 'Current file is newer') {
 	let losingRevision = null;
 	if (blob) {
 		losingRevision = await ObsidianRevision.create({
@@ -629,7 +584,7 @@ async function recordLosingConflict(connection, file, mutation, blob, modifiedAt
 		operationId: mutation.operation_id,
 		previousPath: mutation.path && mutation.path !== file.path ? mutation.path : '',
 		conflict: true,
-		conflictReason: 'Current file is newer',
+		conflictReason: reason,
 		losingRevision: losingRevision?._id || null,
 	});
 	return { accepted: false, conflict: true, file: publicFile(file), change: publicChange(change) };
@@ -654,6 +609,7 @@ async function applyMutation(connection, userId, mutation, source = 'obsidian') 
 	let blob = null;
 	if (['create', 'update', 'restore'].includes(operation) && mutation.upload_id) blob = await uploadBlobForMutation(connection, userId, mutation.upload_id);
 	if (['create', 'update'].includes(operation) && !blob) throw new ObsidianSyncError('File content upload required', 400, 'upload_required');
+	if (file?.projection_detached) return recordLosingConflict(connection, file, mutation, blob, modifiedAt, source, deviceId, 'The linked record moved to another project');
 	if (!file) {
 		file = new ObsidianFile({
 			connection: connection._id,
@@ -703,7 +659,7 @@ async function uniqueExportPath(connection, desired) {
 	return candidate;
 }
 
-async function exportProjectItem(connection, type, item) {
+async function exportProjectItem(connection, type, item, options = {}) {
 	const folder = type === 'memory' ? `${connection.streamient_folder}/Memories` : type === 'url' ? `${connection.streamient_folder}/URLs` : connection.streamient_folder;
 	const filePath = await uniqueExportPath(connection, `${folder}/${safeFileName(item.title)}.md`);
 	const file = new ObsidianFile({
@@ -722,26 +678,28 @@ async function exportProjectItem(connection, type, item) {
 	const Model = markdownProjection(type)?.Model;
 	if (!Model) throw new ObsidianSyncError('Unsupported Streamient projection type', 400, 'invalid_projection_type');
 	const claimed = await Model.findOneAndUpdate(
-		{ _id: item._id, host_id: connection.host_id, $or: [{ 'obsidian_source.connection_id': { $exists: false } }, { 'obsidian_source.connection_id': null }] },
+		{ _id: item._id, host_id: connection.host_id, project: connection.project, updatedAt: item.updatedAt, $or: [{ 'obsidian_source.connection_id': { $exists: false } }, { 'obsidian_source.connection_id': null }] },
 		{ $set: { obsidian_source: { connection_id: connection._id, file_id: file._id } } },
-		{ returnDocument: 'after' },
+		{ returnDocument: 'after', timestamps: false },
 	);
 	if (!claimed) {
 		const current = await Model.findOne({ _id: item._id, host_id: connection.host_id }).select('obsidian_source').read('primary').lean();
-		return current?.obsidian_source?.file_id ? ObsidianFile.findOne({ _id: current.obsidian_source.file_id, host_id: connection.host_id }).read('primary') : null;
+		return current?.obsidian_source?.file_id ? ObsidianFile.findOne({ _id: current.obsidian_source.file_id, connection: connection._id, host_id: connection.host_id }).read('primary') : null;
 	}
 	try {
-		const raw = itemMarkdown(type, claimed);
+		const raw = typeof options.markdown === 'string' ? options.markdown : itemMarkdown(type, claimed, options.existingRaw || '');
 		const blob = await storeBuffer(connection.host_id, Buffer.from(raw), 'text/markdown');
 		await commitFile(connection, file, 'create', {
 			blob,
 			modifiedAt: claimed.updatedAt || new Date(),
 			source: 'streamient',
-			operationId: `streamient:${type}:${item._id}:create`,
+			updateRecord: typeof options.markdown === 'string',
+			operationId: `streamient:${type}:${item._id}:create:${file._id}`,
 		});
+		item.obsidian_source = claimed.obsidian_source;
 		return file;
 	} catch (err) {
-		await Model.updateOne({ _id: item._id, host_id: connection.host_id, 'obsidian_source.file_id': file._id }, { $unset: { obsidian_source: '' } });
+		if (!(await ObsidianFile.exists({ _id: file._id, host_id: connection.host_id }).read('primary'))) await Model.updateOne({ _id: item._id, host_id: connection.host_id, 'obsidian_source.file_id': file._id }, { $unset: { obsidian_source: '' } }, { timestamps: false });
 		throw err;
 	}
 }
@@ -751,7 +709,7 @@ function pendingProjectQuery(connection) {
 		host_id: connection.host_id,
 		project: connection.project,
 		in_trash: { $ne: true },
-		$or: [{ 'obsidian_source.connection_id': { $exists: false } }, { 'obsidian_source.connection_id': null }],
+		'obsidian_source.connection_id': { $ne: connection._id },
 	};
 }
 
@@ -787,7 +745,7 @@ async function staleProjectItemBatch(connection, limit) {
 				ObsidianFile.deleteMany({ connection: connection._id, host_id: connection.host_id, _id: { $in: fileIds }, blob: null }),
 			]);
 		}
-		await projection.Model.updateMany({ _id: { $in: docs.map((item) => item._id) }, host_id: connection.host_id, 'obsidian_source.connection_id': connection._id }, { $unset: { obsidian_source: '' } });
+		await projection.Model.updateMany({ _id: { $in: docs.map((item) => item._id) }, host_id: connection.host_id, 'obsidian_source.connection_id': connection._id }, { $unset: { obsidian_source: '' } }, { timestamps: false });
 		items.push(...docs.map((item) => ({ type: projection.type, item })));
 	}
 	return items;
@@ -825,8 +783,8 @@ async function exportProjectBatch(connection, limit = OBSIDIAN_EXPORT_BATCH_SIZE
 	const candidates = await staleProjectItemBatch(connection, limit);
 	candidates.push(...await pendingProjectItemBatch(connection, limit - candidates.length, candidates));
 	for (const { type, item } of candidates) {
-		const file = await exportProjectItem(connection, type, item);
-		if (file) files.push(file);
+		const file = await syncStreamientItem(type, item._id, connection.host_id);
+		if (file && String(file.connection) === String(connection._id)) files.push(file);
 	}
 	return { files, hasMore: await hasPendingProjectItems(connection) || await hasStaleProjectItems(connection) };
 }
@@ -1220,31 +1178,46 @@ export async function syncStreamientItem(type, itemId, hostId, options = {}) {
 	if (!config.obsidian.enabled) return null;
 	const Model = markdownProjection(type)?.Model;
 	if (!Model) return null;
-	const item = await queryForSave(Model.findOne({ _id: itemId, host_id: hostId }));
-	if (!item) return null;
-	const connection = await queryForSave(ObsidianConnection.findOne({ project: item.project, host_id: hostId, enabled: true }));
+	const item = options.item || await Model.findOne({ _id: itemId, host_id: hostId }).read('primary').lean();
+	if (!item || String(item._id) !== String(itemId) || item.host_id !== hostId) return null;
+	if (options.item && !(await Model.exists({ _id: itemId, host_id: hostId, project: item.project, updatedAt: item.updatedAt }).read('primary'))) return null;
+	const connection = await ObsidianConnection.findOne({ project: item.project, host_id: hostId, enabled: true }).read('primary').lean();
+	let file = item.obsidian_source?.file_id ? await queryForSave(ObsidianFile.findOne({ _id: item.obsidian_source.file_id, host_id: hostId }).read('primary')) : null;
+	const existingRaw = file?.blob ? await getMarkdownContent(hostId, file._id) : '';
+	if (item.obsidian_source?.file_id && (!file || file.projection_detached || String(file.project) !== String(item.project) || (connection && String(file.connection) !== String(connection._id)))) {
+		if (file) {
+			const previousConnection = await ObsidianConnection.findOne({ _id: file.connection, host_id: hostId }).read('primary').lean();
+			if (!previousConnection) throw new ObsidianSyncError('The original vault connection is unavailable', 409, 'connection_not_found');
+			file.projection_detached = true;
+			await commitFile(previousConnection, file, 'trash', { modifiedAt: item.updatedAt || new Date(), source: 'streamient', updateRecord: false, operationId: `streamient:${type}:${item._id}:${file._id}:move:${file.revision + 1}` });
+		}
+		const detached = await Model.updateOne({ _id: itemId, host_id: hostId, project: item.project, updatedAt: item.updatedAt, 'obsidian_source.file_id': item.obsidian_source.file_id }, { $unset: { obsidian_source: '' } }, { timestamps: false });
+		if (!detached.modifiedCount) return null;
+		item.obsidian_source = undefined;
+		file = null;
+	}
 	if (!connection) return null;
-	let file = item.obsidian_source?.file_id ? await queryForSave(ObsidianFile.findOne({ _id: item.obsidian_source.file_id, connection: connection._id, host_id: hostId })) : null;
-	if (!file) return exportProjectItem(connection, type, item);
+	if (!file) return item.in_trash ? null : exportProjectItem(connection, type, item, { ...options, existingRaw });
+	if (new Date(file.modified_at).getTime() > new Date(item.updatedAt).getTime() && typeof options.markdown !== 'string') return file;
 	if (item.in_trash) {
 		const changeTime = item.trashed_at || new Date();
 		await commitFile(connection, file, 'trash', {
 			modifiedAt: changeTime,
 			source: 'streamient',
-			operationId: `streamient:${type}:${item._id}:trash:${file.revision + 1}`,
+			updateRecord: false,
+			operationId: `streamient:${type}:${item._id}:${file._id}:trash:${file.revision + 1}`,
 		});
 		return file;
 	}
-	let existingRaw = '';
-	if (!options.markdown && file.blob) existingRaw = await getMarkdownContent(hostId, file._id);
-	const raw = options.markdown || itemMarkdown(type, item, existingRaw);
+	const raw = typeof options.markdown === 'string' ? options.markdown : itemMarkdown(type, item, existingRaw);
 	const blob = await storeBuffer(hostId, Buffer.from(raw), 'text/markdown');
-	const changeTime = options.markdown ? new Date() : item.updatedAt || new Date();
+	const changeTime = typeof options.markdown === 'string' ? new Date() : item.updatedAt || new Date();
 	await commitFile(connection, file, file.in_trash ? 'restore' : 'update', {
 		blob,
 		modifiedAt: changeTime,
 		source: 'streamient',
-		operationId: `streamient:${type}:${item._id}:update:${file.revision + 1}`,
+		updateRecord: typeof options.markdown === 'string',
+		operationId: `streamient:${type}:${item._id}:${file._id}:update:${file.revision + 1}`,
 	});
 	return file;
 	} finally { await releaseAccountWork(); }
@@ -1318,4 +1291,4 @@ export async function deleteObsidianHostDirectory(hostId) {
 	for (const area of ['blobs', 'uploads', 'server', 'extract']) await rm(path.resolve(config.obsidian.vaultsDir, area, String(hostId)), { recursive: true, force: true });
 }
 
-export const __test = { normalizedModifiedAt, parsedMarkdown, itemMarkdown, projectMarkdownFile, renderCanonicalMarkdown, canvasText, conflictPath, publicFile, publicChange, applyMutation, normalizeSyncScope, pathInSyncScope, summarizeActions, registerDeviceOnConnection, reconcileManifestEntries, scopeMongoFilter };
+export const __test = { normalizedModifiedAt, parsedMarkdown, itemMarkdown, projectMarkdownFile, commitFile, renderCanonicalMarkdown, canvasText, conflictPath, publicFile, publicChange, applyMutation, normalizeSyncScope, pathInSyncScope, summarizeActions, registerDeviceOnConnection, reconcileManifestEntries, scopeMongoFilter };

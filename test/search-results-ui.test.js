@@ -8,7 +8,9 @@ describe('shared search UI contract', () => {
 	it('renders accessible filters, selection and all four actions without placeholders', () => {
 		const html = pug.renderFile(new URL('../views/ajax/section/search.pug', import.meta.url).pathname, { projects: [{ _id: 'source', name: 'Source' }], icon: () => '' });
 		assert.doesNotMatch(html, /<h1/);
-		for (const id of ['search-query', 'search-project', 'search-tags', 'search-select-all']) assert.ok(html.includes('id="' + id + '"'));
+		for (const id of ['search-query', 'search-project', 'search-tags', 'search-types', 'search-select-all']) assert.ok(html.includes('id="' + id + '"'));
+		assert.match(html, /id="search-types" multiple/);
+		assert.match(html, /type:note,memory,url,email/);
 		assert.doesNotMatch(html, /search-select-page/);
 		assert.match(html, /class="batch-floating-bar d-none"/);
 		for (const action of ['move', 'add_tags', 'remove_tags', 'trash']) assert.ok(html.includes('data-search-action="' + action + '"'));
@@ -24,6 +26,7 @@ describe('shared search UI contract', () => {
 		assert.match(updater, /refreshes\.get\(key\) !== sequence/);
 		assert.match(updater, /focus\(\{ preventScroll: true \}\)/);
 		assert.match(action, /applyItem\(outcome/);
+		assert.match(action, /dispatchEvent\(new CustomEvent\('counts:refresh'\)\)/);
 		assert.doesNotMatch(updater + action, /location\.reload|location\.href|navigateTo|loadSection|load\(|\/search\/results|batch-done/);
 		assert.doesNotMatch(script, /innerHTML\s*=\s*['"`]</);
 	});
@@ -32,5 +35,7 @@ describe('shared search UI contract', () => {
 		assert.equal(swagger.paths['/search/actions'].post.requestBody.content['application/json'].schema.properties.items.maxItems, 50);
 		assert.deepEqual(swagger.components.schemas.SearchSelectionItem.required, ['id', 'type', 'version', 'ticket']);
 		for (const path of ['/search/knowledge', '/notes/search', '/memories/search', '/urls/search']) assert.ok(swagger.paths[path].post.requestBody.content['application/json'].schema.properties.tags);
+		for (const path of ['/search/quick', '/search/knowledge']) assert.ok(swagger.paths[path].post.requestBody.content['application/json'].schema.properties.types);
+		assert.ok(swagger.paths['/counts'].get.responses[500]);
 	});
 });

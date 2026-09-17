@@ -69,6 +69,10 @@ Large scoped manifests are uploaded in ordered batches of 500 entries. The previ
 
 Changing **Project folder** moves existing synchronized files and history in resumable batches instead of disconnecting the old paths. The plugin removes source folders only when they are empty, preserves unrelated content, and requires a fresh review after the move.
 
+Moving a Note, Memory, or saved URL to another Streamient project keeps the same record and content. Its old linked Markdown file becomes a protected trash entry. If the destination has an enabled Obsidian connection, the record is exported into that project's managed folder; otherwise it remains in the destination without a vault link and can be exported when a connection is enabled later. Existing files are preserved when names collide.
+
+Late edits or restores from the old file cannot move the record back or overwrite its new copy. Uploaded offline edits are retained as recoverable conflict revisions. To move the record back, use Streamient's project move action rather than restoring the old vault file. Exporting current Streamient content to Markdown does not reimport it or reset the record's project, tags, or modification time.
+
 ## Abort and Resume
 
 Select **Abort** on the active project to stop after the current request or upload chunk. An incomplete upload session is canceled and removed. Already completed changes remain synchronized; no rollback is attempted. The project stays paused until **Resume** is selected.

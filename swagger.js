@@ -2979,6 +2979,8 @@ Object.assign(swaggerSpec.paths, {
 	'/obsidian/revisions/{id}/content': { get: { tags: ['Obsidian Sync'], summary: 'Download a recoverable losing conflict revision before its 30-day expiry', security: obsidianReadSecurity, responses: { ...obsidianErrors, 200: { description: 'Revision bytes', content: { 'application/octet-stream': { schema: { type: 'string', format: 'binary' } } } } } } },
 });
 
+swaggerSpec.paths['/obsidian/connections/{connectionId}/mutations'].post.description = 'A file detached by a Streamient project move remains a protected trash entry. Late mutations return accepted=false and conflict=true regardless of device timestamps; uploaded content is retained as a recoverable revision. The moved record keeps its identity and destination project. Concurrent changes to a record project or vault binding return projection_changed (409).';
+
 swaggerSpec.components.schemas.AccountDeletionState = {
 	type: 'object', nullable: true, properties: { requested_at: { type: 'string', format: 'date-time' }, stage: { type: 'string' }, error: { type: 'string' }, job_id: { type: 'string' } },
 };
@@ -3021,12 +3023,12 @@ if (swaggerSpec.components.schemas.AdminAccount?.allOf) swaggerSpec.components.s
 swaggerSpec.components.schemas.SearchFilters = {
 	type: 'object',
 	properties: {
-		query: { type: 'string', description: 'Text query; supports tag:name and tag:"name with spaces". Empty for tag-only search.' },
+		query: { type: 'string', description: 'Text query; supports tag:name, tag:"name with spaces" and type:note,memory,url,email. Types are OR; tags and project are AND. Empty for filter-only search.' },
 		project_id: { type: 'string', description: 'Restrict to this project; omit for all accessible projects.' },
 		tags: { type: 'array', items: { type: 'string' }, description: 'Exact required tags. Every tag must be present; additional tags are allowed. Applies to notes, memories and URLs.' },
 		page: { type: 'integer', minimum: 1, default: 1 },
 		per_page: { type: 'integer', minimum: 1, maximum: 100, default: 10, description: 'Records per collection per page.' },
-		types: { type: 'array', items: { type: 'string', enum: ['notes', 'memory', 'urls', 'emails', 'pages', 'vault_files'] } },
+		types: { type: 'array', items: { type: 'string', enum: ['note', 'notes', 'memory', 'memories', 'url', 'urls', 'email', 'emails', 'pages', 'vault_files'] }, description: 'Match any listed type, merged with inline type filters. Normalized to notes, memory, urls, emails, pages or vault_files. Empty or omitted means all permitted types. Unknown or empty values return 400.' },
 	},
 };
 swaggerSpec.components.schemas.SearchSelectionItem = {
@@ -3053,10 +3055,14 @@ for (const path of ['/search/knowledge', '/search/quick', '/notes/search', '/mem
 	const schema = swaggerSpec.paths[path]?.post?.requestBody?.content?.['application/json']?.schema;
 	if (!schema) continue;
 	Object.assign(schema.properties, { project_id: swaggerSpec.components.schemas.SearchFilters.properties.project_id, tags: swaggerSpec.components.schemas.SearchFilters.properties.tags });
+	Object.assign(schema.properties, { query: swaggerSpec.components.schemas.SearchFilters.properties.query, types: swaggerSpec.components.schemas.SearchFilters.properties.types });
+	swaggerSpec.paths[path].post.responses[400] = { description: 'Invalid search filters' };
 	if (path !== '/search/quick') schema.properties.page = swaggerSpec.components.schemas.SearchFilters.properties.page;
 	schema.required = [];
 }
 for (const path of ['/chat', '/chat/stream']) {
-	if (swaggerSpec.paths[path]?.post) swaggerSpec.paths[path].post.description = (swaggerSpec.paths[path].post.description || '') + ' Search responses include search_filters for the shared selectable results page. Exact tag requests preserve project_id and never use prior conversation results to expand scope.';
+	if (swaggerSpec.paths[path]?.post) swaggerSpec.paths[path].post.description = (swaggerSpec.paths[path].post.description || '') + ' Search responses include search_filters for the shared selectable results page. Exact tag and type requests preserve project_id and never use prior conversation results to expand scope.';
 }
+swaggerSpec.paths['/chat'].post.responses[400] = { description: 'Invalid search filters or missing query' };
+swaggerSpec.paths['/counts'].get.responses[500] = { description: 'Counts unavailable; retain previously displayed counts. Successful responses contain MongoDB record totals per project and are not cached.' };
 export default swaggerSpec;

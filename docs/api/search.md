@@ -18,6 +18,7 @@ POST /api/v1/search/knowledge
     "query": "search term",
     "project_id": "optional-project-id",
     "tags": ["typerelay"],
+    "types": ["notes", "memory"],
     "page": 1,
     "per_page": 10
 }
@@ -37,17 +38,21 @@ POST /api/v1/search/knowledge
 }
 ```
 
-This endpoint searches notes, memories, URLs, emails, crawled pages, and vault files. Queries without tags or a page number retain semantic search. Paginated searches use text matching; tag-only searches read stored records, including records awaiting indexing.
+This endpoint searches notes, memories, URLs, emails, crawled pages, and vault files. Queries without tags, types, or a page number retain semantic search. Filtered and paginated text searches use text matching; filter-only searches of notes, memories, URLs, and emails read stored records, including records awaiting indexing.
 
 - `project_id` limits results to one project. Omit it to search all projects in the current account.
 - `tags` requires exact membership of every requested tag. A record tagged `typerelay`, `api`, and `debugging` matches `tags: ["typerelay"]`. Text mentions and similar tag names do not match.
+- `types` matches any listed type. Use `type:note,memory,url,email` in either search input, or send an array such as `types: ["notes", "memory"]`. Singular aliases normalize to `notes`, `memory`, `urls`, and `emails`; existing `pages` and `vault_files` filters remain supported. Inline and array values merge and deduplicate. Empty or unknown values inside a type filter return HTTP 400; an omitted or empty array leaves types unrestricted.
+- Types combine with project and tag filters: `type:note,memory tag:typerelay` returns only notes or memories carrying that exact tag. Email access restrictions still apply.
 - Tags apply to notes, memories, and URLs. Emails retain labels; pages and vault files retain their existing fields.
 - Set `query` to `""` for tag-only searches, or use `tag:typerelay` and `tag:"public api"` syntax.
-- `per_page` counts records **per collection**. With `page` or tags, the response includes `total`, `page`, and `pages`. Iterate through `pages` for every match.
+- `per_page` counts records **per collection**. With `page`, tags, or types, the response includes `total`, `page`, and `pages`. Iterate through `pages` for every match.
 
 ## Selectable Results and Bulk Actions
 
 The search modal's **View all results** opens the same results page used by AI search. Select individual records, Shift-click checkboxes to select or deselect a range on the current page, or use the single **Select all** checkbox for every matching record, including other pages. The standard floating action bar appears only while records are selected; its close button clears the selection. Selection persists across pagination and clears when applying different filters.
+
+The results form includes a **Types** multi-select alongside Search, Project, and Tags. Typed filters populate the pickers after searching; clearing all types restores unrestricted search. Filters survive pagination and page refresh. Successful bulk actions refresh sidebar counts even without a socket connection; delayed responses cannot overwrite newer counts. Count-fetch errors retain existing values and show an error notification.
 
 - `POST /api/v1/search/results`: filters, paginated records, counts, and server-rendered row fragments.
 - `GET /api/v1/search/tags?project_id=...`: available tags for the project.
@@ -57,7 +62,7 @@ The search modal's **View all results** opens the same results page used by AI s
 
 Use the exact item references returned by results or selection. Send `filters`, `items`, and `action`; moves also require the destination `project_id`, while tag actions require `tags`. Each item contains `id`, `type`, `version`, and `ticket`.
 
-Tickets bind the account, record version, and filters. Records changed since selection fail individually and remain selected for review; successful records update immediately. Unsupported actions also fail individually. Trash is reversible; this API never permanently deletes records.
+Tickets bind the account, record version, and filters, including normalized types. Changing the type scope invalidates old selection tickets. Records changed since selection fail individually and remain selected for review; successful records update immediately. Unsupported actions also fail individually. Trash is reversible; this API never permanently deletes records.
 
 MCP `search_knowledge`, `search_notes`, `recall_memory`/`search_memory`, and `search_urls` accept `tags` and `page`. URL search also accepts `project_id`. Pass an empty query for tag-only retrieval. The CLI exposes the same fields through MCP schemas.
 

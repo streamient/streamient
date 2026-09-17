@@ -11,6 +11,7 @@
 	let selectionRequest = 0;
 	let selectionAnchor = null;
 	let tagPicker;
+	let typePicker;
 	let listeners = [];
 	const rows = new Map();
 	const selected = new Map();
@@ -112,6 +113,7 @@
 		const options = [...new Set([...data.tags, ...picked])].sort().map((tag) => ({ value: tag, text: tag }));
 		const { TomSelect } = await import('/static/js/vendor.js');
 		if (!root || epoch !== generation) return;
+		if (!typePicker) typePicker = new TomSelect(root.querySelector('#search-types'), { plugins: ['remove_button'], create: false, closeAfterSelect: true });
 		if (!tagPicker) tagPicker = new TomSelect(select, { plugins: ['remove_button'], create: false, options, closeAfterSelect: true });
 		else {
 			tagPicker.clear(true);
@@ -131,7 +133,7 @@
 		try {
 			const data = await api('POST', '/search/results', { ...filters, page });
 			if (!root || epoch !== generation) return;
-			filters = { ...data.filters, types: filters.types, per_page: data.per_page };
+			filters = { ...data.filters, per_page: data.per_page };
 			if ((window.currentProjectId || '') !== filters.project_id) setActiveProject(filters.project_id || null);
 			pages = data.pages;
 			total = data.total;
@@ -140,6 +142,8 @@
 			root.querySelector('#search-list').innerHTML = data.html;
 			root.querySelector('#search-query').value = filters.query;
 			await loadTags();
+			if (!root || epoch !== generation) return;
+			typePicker.setValue(filters.types || [], true);
 			updateSelection();
 			persist();
 		} catch (error) {
@@ -160,6 +164,7 @@
 		try {
 			for (let offset = 0; offset < chosen.length; offset += 25) {
 				const data = await api('POST', '/search/actions', { filters: snapshot, items: chosen.slice(offset, offset + 25), action, ...extra });
+				if (data.outcomes.some((outcome) => outcome.success)) window.dispatchEvent(new CustomEvent('counts:refresh'));
 				for (const outcome of data.outcomes) {
 					applyItem(outcome, { epoch, mutation: true });
 					if (outcome.success) done++;
@@ -244,7 +249,7 @@
 			on(root.querySelector('#search-form'), 'submit', (event) => {
 				event.preventDefault();
 				if (busy) return;
-				filters = { query: root.querySelector('#search-query').value, project_id: root.querySelector('#search-project').value, tags: [...root.querySelector('#search-tags').selectedOptions].map((option) => option.value) };
+				filters = { query: root.querySelector('#search-query').value, project_id: root.querySelector('#search-project').value, tags: [...root.querySelector('#search-tags').selectedOptions].map((option) => option.value), types: [...root.querySelector('#search-types').selectedOptions].map((option) => option.value) };
 				selected.clear(); tombstones.clear(); revisions.clear();
 				page = 1;
 				load(root.querySelector('#search-submit'));
@@ -322,6 +327,8 @@
 			selectingAll = false;
 			tagPicker?.destroy();
 			tagPicker = null;
+			typePicker?.destroy();
+			typePicker = null;
 			listeners.forEach(([target, event, handler]) => target?.removeEventListener(event, handler));
 			listeners = [];
 			root = null;

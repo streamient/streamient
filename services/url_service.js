@@ -84,7 +84,7 @@ export async function saveUrl(userId, host_id, data, ctx = {}) {
 	emitToTenant(host_id, 'url:created', urlDoc);
 	invalidateGraphCache(host_id).catch(() => {});
 	audit.log({ action: 'create', resource: 'url', resource_id: urlDoc._id.toString(), user_id: userId, host_id, ...ctx });
-	await syncStreamientItem('url', urlDoc._id, host_id).catch((err) => log.error({ err, url_id: urlDoc._id }, 'Obsidian URL export deferred'));
+	await syncStreamientItem('url', urlDoc._id, host_id, { item: urlDoc }).catch((err) => log.error({ err, url_id: urlDoc._id }, 'Obsidian URL export deferred'));
 
 	if (!screenshot) {
 		// Fire-and-forget: capture screenshot in background
@@ -167,7 +167,7 @@ export async function updateUrl(host_id, urlId, data, ctx = {}) {
 			const details = audit.diffSnapshot(before, urlDoc);
 			audit.log({ action: 'update', resource: 'url', resource_id: urlId, host_id, details, ...ctx });
 		}
-		await syncStreamientItem('url', urlId, host_id);
+		await syncStreamientItem('url', urlId, host_id, { item: urlDoc });
 	}
 
 	return urlDoc;
@@ -185,7 +185,7 @@ export async function deleteUrl(host_id, urlId, ctx = {}) {
 		emitToTenant(host_id, 'url:deleted', { _id: urlId });
 		invalidateGraphCache(host_id).catch(() => {});
 		if (ctx.user_id) audit.log({ action: 'delete', resource: 'url', resource_id: urlId, host_id, ...ctx });
-		await syncStreamientItem('url', urlId, host_id);
+		await syncStreamientItem('url', urlId, host_id, { item: urlDoc });
 	}
 	return urlDoc;
 }

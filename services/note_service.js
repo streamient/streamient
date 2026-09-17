@@ -22,7 +22,7 @@ export async function createNote(userId, host_id, data, ctx = {}) {
 	emitToTenant(host_id, 'note:created', note);
 	invalidateGraphCache(host_id).catch(() => {});
 	audit.log({ action: 'create', resource: 'note', resource_id: note._id.toString(), user_id: userId, host_id, ...ctx });
-	await syncStreamientItem('note', note._id, host_id).catch((err) => log.error({ err, note_id: note._id }, 'Obsidian note export deferred'));
+	await syncStreamientItem('note', note._id, host_id, { item: note }).catch((err) => log.error({ err, note_id: note._id }, 'Obsidian note export deferred'));
 	return note;
 }
 
@@ -77,7 +77,7 @@ export async function updateNote(host_id, noteId, data, ctx = {}) {
 			const details = audit.diffSnapshot(before, note);
 			audit.log({ action: 'update', resource: 'note', resource_id: noteId, host_id, details, ...ctx });
 		}
-		await syncStreamientItem('note', noteId, host_id);
+		await syncStreamientItem('note', noteId, host_id, { item: note });
 	}
 
 	return note;
@@ -95,7 +95,7 @@ export async function deleteNote(host_id, noteId, ctx = {}) {
 		emitToTenant(host_id, 'note:deleted', { _id: noteId });
 		invalidateGraphCache(host_id).catch(() => {});
 		if (ctx.user_id) audit.log({ action: 'delete', resource: 'note', resource_id: noteId, host_id, ...ctx });
-		await syncStreamientItem('note', noteId, host_id);
+		await syncStreamientItem('note', noteId, host_id, { item: note });
 	}
 	return note;
 }

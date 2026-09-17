@@ -59,11 +59,11 @@ export class SearchResults {
 		return { found: indexed.found || 0, page, hits };
 	}
 
-	async list(input = {}) {
+	async list(input = {}, allowedTypes = Object.keys(SearchResults.fields)) {
 		const filters = SearchFilters.parse(input);
 		const page = Math.max(1, Math.floor(Number(input.page) || 1));
 		const perPage = Math.min(100, Math.max(1, Math.floor(Number(input.per_page) || 10)));
-		const types = Object.keys(SearchResults.fields).filter((type) => (this.includeEmails || type !== 'emails') && (!filters.tags.length || ['notes', 'memory', 'urls'].includes(type)) && (!input.types || input.types.includes(type)));
+		const types = allowedTypes.filter((type) => (this.includeEmails || type !== 'emails') && SearchFilters.includesType(filters, type));
 		const collections = await Promise.all(types.map(async (type) => [type, await this.collection(type, filters, page, perPage)]));
 		const results = Object.fromEntries(collections);
 		const items = collections.flatMap(([, data]) => data.hits.map((hit) => hit.document));
@@ -90,6 +90,7 @@ export class SearchResults {
 		const { type, id } = input;
 		const Model = this.models[type];
 		if (!Model || (type === 'emails' && !this.includeEmails) || !/^[a-f\d]{24}$/i.test(id || '')) throw Object.assign(new Error('Invalid record'), { status: 400 });
+		if (!SearchFilters.includesType(filters, type)) return { id, type, success: true, removed: true, item: null };
 		let doc = await Model.findOne({ ...SearchFilters.mongo(this.hostId, filters), _id: id }).lean();
 		if (doc && filters.query && doc.is_indexed !== false) {
 			const matches = await this.search(this.hostId, type, filters.query, { queryBy: SearchResults.fields[type], filter_by: [SearchFilters.typesense(filters), 'source_id:=' + SearchFilters.exact(id)].filter(Boolean).join(' && '), perPage: 1, paginate: true, strict: true });
@@ -122,6 +123,7 @@ export class SearchResults {
 				if (typeof item.ticket !== 'string' || item.ticket.length !== signature.length || !timingSafeEqual(Buffer.from(item.ticket), Buffer.from(signature))) throw new Error('Selection is invalid; search again.');
 				const operation = SearchResults.operations[item.type];
 				if (!operation || (item.type === 'emails' && (!this.includeEmails || input.action.endsWith('tags')))) throw new Error('This action is unavailable for this record type.');
+				if (!SearchFilters.includesType(filters, item.type)) throw new Error('Record type is outside the selected filters.');
 				const doc = await this.models[item.type].findOne({ ...SearchFilters.mongo(this.hostId, filters), _id: item.id }).lean();
 				if (!doc || this.row(item.type, doc, filters).version !== item.version) throw new Error('Record changed since selection; review it before retrying.');
 				const update = input.action === 'move' ? { project: input.project_id } : { tags: input.action === 'add_tags' ? [...new Set([...(doc.tags || []), ...tags])] : (doc.tags || []).filter((tag) => !tags.includes(tag)) };

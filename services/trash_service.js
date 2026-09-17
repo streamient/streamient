@@ -157,9 +157,9 @@ async function restoreItemsByType(host_id, type, ids, deps = {}) {
 		if (failed.length) log.error({ failed, type, host_id }, 'Typesense bulk restore index error');
 		for (const doc of docs) {
 			emitToTenant(host_id, `${eventTypeForTrashType(type)}:created`, doc);
-			if (type === 'notes' && doc.obsidian_source?.file_id) await syncStreamientItem('note', doc._id, host_id);
-			if (type === 'memories' && doc.obsidian_source?.file_id) await syncStreamientItem('memory', doc._id, host_id);
-			if (type === 'urls' && doc.obsidian_source?.file_id) await syncStreamientItem('url', doc._id, host_id);
+			if (type === 'notes' && doc.obsidian_source?.file_id) await syncStreamientItem('note', doc._id, host_id, { item: doc });
+			if (type === 'memories' && doc.obsidian_source?.file_id) await syncStreamientItem('memory', doc._id, host_id, { item: doc });
+			if (type === 'urls' && doc.obsidian_source?.file_id) await syncStreamientItem('url', doc._id, host_id, { item: doc });
 		}
 	}
 	if (missingIds.length) {

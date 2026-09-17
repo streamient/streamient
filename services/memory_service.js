@@ -41,7 +41,7 @@ export async function storeMemory(userId, host_id, data, ctx = {}) {
 	emitToTenant(host_id, 'memory:created', mem);
 	invalidateGraphCache(host_id).catch(() => {});
 	audit.log({ action: 'create', resource: 'memory', resource_id: mem._id.toString(), user_id: userId, host_id, ...ctx });
-	await syncStreamientItem('memory', mem._id, host_id).catch((err) => log.error({ err, memory_id: mem._id }, 'Obsidian memory export deferred'));
+	await syncStreamientItem('memory', mem._id, host_id, { item: mem }).catch((err) => log.error({ err, memory_id: mem._id }, 'Obsidian memory export deferred'));
 	return mem;
 }
 
@@ -93,7 +93,7 @@ export async function updateMemory(host_id, memoryId, data, ctx = {}) {
 			const details = audit.diffSnapshot(before, mem);
 			audit.log({ action: 'update', resource: 'memory', resource_id: memoryId, host_id, details, ...ctx });
 		}
-		await syncStreamientItem('memory', memoryId, host_id);
+		await syncStreamientItem('memory', memoryId, host_id, { item: mem });
 	}
 
 	return mem;
@@ -111,7 +111,7 @@ export async function deleteMemory(host_id, memoryId, ctx = {}) {
 		emitToTenant(host_id, 'memory:deleted', { _id: memoryId });
 		invalidateGraphCache(host_id).catch(() => {});
 		if (ctx.user_id) audit.log({ action: 'delete', resource: 'memory', resource_id: memoryId, host_id, ...ctx });
-		await syncStreamientItem('memory', memoryId, host_id);
+		await syncStreamientItem('memory', memoryId, host_id, { item: mem });
 	}
 	return mem;
 }

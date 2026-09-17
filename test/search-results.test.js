@@ -41,6 +41,21 @@ class Records {
 afterEach(() => mock.restoreAll());
 
 describe('exact search filters', () => {
+	it('normalizes all public types and combines inline types with picker values', () => {
+		for (const [singular, canonical] of [['note', 'notes'], ['memory', 'memory'], ['url', 'urls'], ['email', 'emails']]) assert.deepEqual(SearchFilters.parse({ query: 'type:' + singular }).types, [canonical]);
+		const filters = SearchFilters.parse({ query: 'redis type:note,memory TYPE:URL tag:"type:email"', types: ['notes', 'EMAIL'], project_id: PROJECT });
+		assert.deepEqual(filters.types, ['emails', 'memory', 'notes', 'urls']);
+		assert.equal(filters.query, 'redis');
+		assert.deepEqual(filters.tags, ['type:email']);
+		assert.equal(filters.project_id, PROJECT);
+		assert.deepEqual(SearchFilters.parse(filters), filters);
+		assert.equal(SearchFilters.parse({ types: [] }).types, undefined);
+		assert.equal(SearchFilters.parse({ types: null }).types, undefined);
+	});
+	it('rejects incomplete, unknown and incorrectly shaped type filters', () => {
+		for (const query of ['type:', 'type:note,', 'type:,memory', 'type:note,,url', 'type:bogus', 'type:constructor', 'type:"note"']) assert.throws(() => SearchFilters.parse({ query }), { status: 400 });
+		for (const types of ['notes', [1], [''], ['unknown']]) assert.throws(() => SearchFilters.parse({ types }), { status: 400 });
+	});
 	it('requires membership, allows extra tags, and deduplicates typed and picker tags', () => {
 		const filters = SearchFilters.parse({ query: 'tag:typerelay tag:"public api"', tags: ['typerelay'], project_id: PROJECT });
 		assert.deepEqual(filters.tags, ['public api', 'typerelay']);
@@ -62,6 +77,58 @@ describe('exact search filters', () => {
 });
 
 describe('search selection and bulk actions', () => {
+	it('applies OR types with AND tags/project across pagination and select-all', async () => {
+		const docs = Array.from({ length: 115 }, (_, index) => Records.record(index + 1));
+		const search = new SearchResults('tenant-one', { models: { notes: new Records(docs), memory: new Records([Records.record(200)]), urls: new Records([Records.record(201)]) }, secret: 'test-secret' });
+		const input = { query: 'type:note,memory tag:typerelay', project_id: PROJECT, per_page: 10 };
+		const first = await search.list(input);
+		assert.equal(first.total, 116);
+		assert.equal(first.pages, 12);
+		assert.deepEqual(Object.keys(first.results), ['notes', 'memory']);
+		assert.equal((await search.list({ ...input, page: 2 })).items.length, 10);
+		const selection = await search.selection(input);
+		assert.equal(selection.length, 116);
+		assert.ok(selection.every((item) => ['notes', 'memory'].includes(item.type)));
+		assert.equal((await search.list(input, ['urls'])).total, 0);
+	});
+	it('reads type-only searches from stored records and preserves email gating and tag support', async () => {
+		const doc = Records.record(1, { is_indexed: false });
+		const search = new SearchResults('tenant-one', { models: { notes: new Records([doc]), emails: new Records([doc]) }, search: async () => { throw new Error('Must not use Typesense for type-only queries'); } });
+		assert.equal((await search.list({ query: 'type:note,email' })).total, 2);
+		assert.equal((await search.list({ query: 'type:email tag:typerelay' })).total, 0);
+		search.includeEmails = false;
+		assert.deepEqual(Object.keys((await search.list({ query: 'type:note,email' })).results), ['notes']);
+	});
+	it('sends only the remaining text and project/tag filters to selected Typesense collections', async () => {
+		const calls = [];
+		const doc = Records.record(1);
+		const search = new SearchResults('tenant-one', { models: { notes: new Records([doc]) }, search: async (host, type, query, options) => { calls.push({ host, type, query, options }); return { found: 1, hits: [{ document: { source_id: doc._id } }] }; } });
+		const result = await search.list({ query: 'redis type:note tag:typerelay', project_id: PROJECT, page: 2 });
+		assert.equal(result.total, 1);
+		assert.equal(calls.length, 1);
+		assert.equal(calls[0].type, 'notes');
+		assert.equal(calls[0].query, 'redis');
+		assert.equal(calls[0].options.page, 2);
+		assert.match(calls[0].options.filter_by, /project_id:=.*tags:=/);
+	});
+	it('binds normalized types into tickets and prevents excluded records from refreshing or mutating', async () => {
+		const doc = Records.record(1);
+		const search = Records.search([doc]);
+		const filters = { query: 'type:note tag:typerelay' };
+		const item = (await search.list(filters)).items[0];
+		assert.equal(item.ticket, search.ticket(item, { types: ['notes'], tags: ['typerelay'] }));
+		assert.notEqual(item.ticket, search.ticket(item, { types: ['notes', 'memory'], tags: ['typerelay'] }));
+		const update = mock.method(SearchResults.operations.notes, 'update', async () => { throw new Error('Must not mutate'); });
+		const [changedScope] = await search.apply({ filters: { types: ['memory'], tags: ['typerelay'] }, items: [item], action: 'add_tags', tags: ['api'] });
+		assert.equal(changedScope.success, false);
+		const excluded = search.row('notes', doc, { types: ['memory'] });
+		const [outsideScope] = await search.apply({ filters: { types: ['memory'] }, items: [excluded], action: 'add_tags', tags: ['api'] });
+		assert.match(outsideScope.error, /outside the selected filters/);
+		assert.equal(update.mock.callCount(), 0);
+		const read = mock.method(search.models.notes, 'findOne', () => { throw new Error('Excluded types must not be read'); });
+		assert.deepEqual(await search.refresh({ type: 'notes', id: doc._id, filters: { types: ['memory'] } }), { id: doc._id, type: 'notes', success: true, removed: true, item: null });
+		assert.equal(read.mock.callCount(), 0);
+	});
 	it('keeps distinct typed records and reports unsupported types individually', async () => {
 		const doc = Records.record(1);
 		const models = { notes: new Records([doc]), memory: new Records([doc]), urls: new Records([doc]) };
@@ -182,6 +249,18 @@ describe('search selection and bulk actions', () => {
 });
 
 describe('AI exact-tag routing', () => {
+	it('hands normalized type-only and combined filters to both search transports', async () => {
+		const calls = [];
+		mock.method(SearchResults.prototype, 'list', async (input) => { calls.push(input); return { total: 2, items: [] }; });
+		for (const query of ['type:note,memory', 'type:note,memory tag:typerelay']) {
+			const input = { hostId: 'tenant-one', userId: 'user-one', query, projectId: PROJECT, conversationId: 'old-conversation' };
+			const result = await processChat(input);
+			const stream = await processChatStream(input);
+			assert.deepEqual(result.searchFilters.types, ['memory', 'notes']);
+			assert.deepEqual(stream.metadata.searchFilters, result.searchFilters);
+		}
+		assert.ok(calls.every((input) => input.query === '' && input.project_id === PROJECT));
+	});
 	it('preserves project boundaries in both transports despite prior conversation context', async () => {
 		const calls = [];
 		mock.method(SearchResults.prototype, 'list', async (input) => { calls.push(input); return { total: 42, items: [] }; });
