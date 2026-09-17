@@ -253,9 +253,9 @@ async function bulkWriteCrawlState(crawlStateModel, ops) {
 async function countCrawlStates(crawlStateModel, urlDoc) {
 	const filter = { host_id: urlDoc.host_id, parent_url_id: urlDoc._id };
 	const [queued, visited, failed] = await Promise.all([
-		crawlStateModel.countDocuments({ ...filter, status: 'queued' }),
-		crawlStateModel.countDocuments({ ...filter, status: 'visited' }),
-		crawlStateModel.countDocuments({ ...filter, status: 'failed' }),
+		crawlStateModel.countDocuments({ ...filter, status: 'queued' }).read('primary'),
+		crawlStateModel.countDocuments({ ...filter, status: 'visited' }).read('primary'),
+		crawlStateModel.countDocuments({ ...filter, status: 'failed' }).read('primary'),
 	]);
 	return { queued, visited, failed };
 }
@@ -294,7 +294,7 @@ async function seedInitialCrawlState(urlDoc, crawlStateModel, { reset = false, r
 	if (reset) {
 		await resetCrawlState(urlDoc, crawlStateModel, { resetFailed });
 	} else {
-		const existing = await crawlStateModel.countDocuments(filter);
+		const existing = await crawlStateModel.countDocuments(filter).read('primary');
 		if (existing > 0) return;
 	}
 
@@ -307,6 +307,8 @@ async function seedInitialCrawlState(urlDoc, crawlStateModel, { reset = false, r
 async function getQueuedCrawlStates(urlDoc, crawlStateModel, limit) {
 	return crawlStateModel
 		.find({ host_id: urlDoc.host_id, parent_url_id: urlDoc._id, status: 'queued' })
+		// This queue was just seeded/reset; stale reads must not mark it complete.
+		.read('primary')
 		.sort({ updatedAt: 1 })
 		.limit(limit)
 		.lean();
@@ -319,6 +321,7 @@ async function getCrawlStateUrlSet(urlDoc, crawlStateModel, status) {
 			parent_url_id: urlDoc._id,
 			status,
 		}, { normalized_url: 1, _id: 0 })
+		.read('primary')
 		.lean()
 		.cursor({ batchSize: CRAWL_STATE_CURSOR_BATCH_SIZE });
 	const urls = new Set();

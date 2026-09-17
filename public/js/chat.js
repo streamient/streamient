@@ -1731,6 +1731,7 @@ function initResultModalHandlers() {
 
 		try {
 			const isCreate = !rmCurrentId;
+			let savedUrl = null;
 
 			if (rmCurrentType === 'notes') {
 				const title = document.getElementById('rm-note-title').value.trim() || 'Untitled';
@@ -1768,15 +1769,18 @@ function initResultModalHandlers() {
 				if (isCreate) {
 					const resp = await api('POST', '/urls', data);
 					rmCurrentId = resp.url._id;
+					savedUrl = resp.url;
 				} else {
-					await api('PUT', `/urls/${rmCurrentId}`, data);
+					const resp = await api('PUT', `/urls/${rmCurrentId}`, data);
+					savedUrl = resp.url;
 				}
 				await rmSyncLinks(rmCurrentId, 'urls');
 			}
 
 			showSuccess(isCreate ? 'Created' : 'Saved');
+			const savedDetail = { type: rmCurrentType, id: rmCurrentId, ...(savedUrl ? { url: savedUrl } : {}) };
 			BsModal.getInstance(modalEl)?.hide();
-			window.dispatchEvent(new CustomEvent('item-modal-saved', { detail: { type: rmCurrentType, id: rmCurrentId } }));
+			window.dispatchEvent(new CustomEvent('item-modal-saved', { detail: savedDetail }));
 		} catch (err) {
 			showError('Save failed: ' + (err.message || 'Unknown error'));
 		}
@@ -1791,8 +1795,9 @@ function initResultModalHandlers() {
 			const endpoint = typeEndpoints[rmCurrentType];
 			if (endpoint) await api('DELETE', `/${endpoint}/${rmCurrentId}`);
 			showSuccess('Moved to trash');
+			const deletedDetail = { type: rmCurrentType, id: rmCurrentId };
 			BsModal.getInstance(modalEl)?.hide();
-			window.dispatchEvent(new CustomEvent('item-modal-deleted', { detail: { type: rmCurrentType, id: rmCurrentId } }));
+			window.dispatchEvent(new CustomEvent('item-modal-deleted', { detail: deletedDetail }));
 		} catch (err) {
 			showError('Delete failed: ' + (err.message || 'Unknown error'));
 		}

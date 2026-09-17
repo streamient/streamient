@@ -827,6 +827,10 @@
             "type": "string",
             "description": "Signed URL to screenshot image (time-limited)"
           },
+          "html": {
+            "type": "string",
+            "description": "Server-rendered URL list item for incremental UI updates; included by list, get, save and update endpoints."
+          },
           "project": {
             "type": "string"
           },
@@ -5824,7 +5828,7 @@
           "Batch"
         ],
         "summary": "Batch delete items",
-        "description": "For emails, moves each email to trash and clears all labels.",
+        "description": "For emails, moves each email to trash and clears all labels. For URLs, also returns deleted_ids for incremental list updates.",
         "requestBody": {
           "required": true,
           "content": {
@@ -5876,6 +5880,13 @@
                     },
                     "deleted": {
                       "type": "integer"
+                    },
+                    "deleted_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "Successfully deleted URL IDs, when type is urls."
                     }
                   }
                 }
@@ -5891,6 +5902,7 @@
           "Batch"
         ],
         "summary": "Batch move items to a project",
+        "description": "For URLs, also returns urls containing the updated records and rendered list items.",
         "requestBody": {
           "required": true,
           "content": {
@@ -5946,6 +5958,13 @@
                     },
                     "moved": {
                       "type": "integer"
+                    },
+                    "urls": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Url"
+                      },
+                      "description": "Successfully moved URLs, when type is urls."
                     }
                   }
                 }
@@ -5961,6 +5980,7 @@
           "Batch"
         ],
         "summary": "Batch copy items to a project",
+        "description": "For URLs, also returns urls containing the new records and rendered list items.",
         "requestBody": {
           "required": true,
           "content": {
@@ -6016,6 +6036,13 @@
                     },
                     "copied": {
                       "type": "integer"
+                    },
+                    "urls": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Url"
+                      },
+                      "description": "Newly copied URLs, when type is urls."
                     }
                   }
                 }

@@ -514,7 +514,7 @@ router.post('/urls', async (req, res) => {
 		crawlSite(url).catch((err) => log.error({ err }, 'Background crawl error'));
 	}
 
-	res.status(wasDuplicate ? 200 : 201).json({ url, duplicate: wasDuplicate });
+	res.status(wasDuplicate ? 200 : 201).json({ url: urlService.attachScreenshotUrl(url), duplicate: wasDuplicate });
 });
 
 router.get('/urls/:id', async (req, res) => {
@@ -619,14 +619,14 @@ router.put('/urls/:id', async (req, res) => {
 	if (shouldRemoveCrawledPages) {
 		try {
 			const deletedPages = await removeUrlPages(req.host_id, req.params.id);
-			return res.json({ url, deleted_pages: deletedPages });
+			return res.json({ url: urlService.attachScreenshotUrl(url), deleted_pages: deletedPages });
 		} catch (err) {
 			log.error({ err }, 'Disable URL crawl cleanup error');
 			return res.status(500).json({ error: 'URL saved but failed to delete crawled pages' });
 		}
 	}
 
-	res.json({ url });
+	res.json({ url: urlService.attachScreenshotUrl(url) });
 });
 
 router.delete('/urls/:id', async (req, res) => {
@@ -692,7 +692,7 @@ router.post('/batch/delete', async (req, res) => {
 		const ctx = auditCtx(req);
 		const results = await Promise.all(ids.map((id) => deleteFn(req.host_id, id, ctx).catch(() => null)));
 		const deleted = results.filter(Boolean).length;
-		res.json({ message: `${deleted} items deleted`, deleted });
+		res.json({ message: `${deleted} items deleted`, deleted, ...(type === 'urls' ? { deleted_ids: results.filter(Boolean).map((url) => String(url._id)) } : {}) });
 	} catch (err) {
 		log.error({ err }, 'Batch delete error');
 		res.status(500).json({ error: 'Batch delete failed' });
@@ -716,7 +716,7 @@ router.post('/batch/move', async (req, res) => {
 		const results = await Promise.all(ids.map((id) => updateFn(req.host_id, id, { project }, ctx).catch(() => null)));
 		const moved = results.filter(Boolean).length;
 		if (moved) emitToTenant(req.host_id, 'counts:refresh');
-		res.json({ message: `${moved} items moved`, moved });
+		res.json({ message: `${moved} items moved`, moved, ...(type === 'urls' ? { urls: results.filter(Boolean).map(urlService.attachScreenshotUrl) } : {}) });
 	} catch (err) {
 		log.error({ err }, 'Batch move error');
 		res.status(500).json({ error: 'Batch move failed' });
@@ -752,7 +752,7 @@ router.post('/batch/copy', async (req, res) => {
 		});
 		const inserted = await Model.insertMany(copies);
 		if (inserted.length) emitToTenant(req.host_id, 'counts:refresh');
-		res.json({ message: `${inserted.length} items copied`, copied: inserted.length });
+		res.json({ message: `${inserted.length} items copied`, copied: inserted.length, ...(type === 'urls' ? { urls: inserted.map(urlService.attachScreenshotUrl) } : {}) });
 	} catch (err) {
 		log.error({ err }, 'Batch copy error');
 		res.status(500).json({ error: 'Batch copy failed' });
