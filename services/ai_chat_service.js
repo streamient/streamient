@@ -316,13 +316,13 @@ export async function processChatStream({ hostId, userId, query, conversationId,
 // ────────────────────────────────────────────────────────────────────
 
 async function handleSearch({ hostId, query, projectId, intent, includeEmails = true }) {
-	const filters = SearchFilters.parse({ query: intent.query ?? query, tags: intent.tags || [], project_id: projectId });
+	const filters = SearchFilters.parse({ query: intent.query ?? query, tags: intent.tags || [], types: intent.types, project_id: projectId });
 	const perPage = Math.min(100, Math.max(1, Number(intent.limit) || 10));
-	const data = await new SearchResults(hostId, { includeEmails }).list({ ...filters, types: intent.types, per_page: perPage });
+	const data = await new SearchResults(hostId, { includeEmails }).list({ ...filters, per_page: perPage });
 	return {
 		answer: `Found ${data.total} matching record${data.total === 1 ? '' : 's'}. Use the results list to select records and apply actions.`,
 		results: data.items,
-		searchFilters: { ...filters, types: intent.types || undefined, per_page: perPage },
+		searchFilters: { ...filters, per_page: perPage },
 		action: null,
 		conversationId: null,
 		displayIn: 'panel',

@@ -1893,7 +1893,7 @@
         "properties": {
           "query": {
             "type": "string",
-            "description": "Text query; supports tag:name and tag:\"name with spaces\". Empty for tag-only search."
+            "description": "Text query; supports tag:name, tag:\"name with spaces\" and type:note,memory,url,email. Types are OR; tags and project are AND. Empty for filter-only search."
           },
           "project_id": {
             "type": "string",
@@ -1923,14 +1923,19 @@
             "items": {
               "type": "string",
               "enum": [
+                "note",
                 "notes",
                 "memory",
+                "memories",
+                "url",
                 "urls",
+                "email",
                 "emails",
                 "pages",
                 "vault_files"
               ]
-            }
+            },
+            "description": "Match any listed type, merged with inline type filters. Normalized to notes, memory, urls, emails, pages or vault_files. Empty or omitted means all permitted types. Unknown or empty values return 400."
           }
         }
       },
@@ -4161,7 +4166,8 @@
                 "type": "object",
                 "properties": {
                   "query": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Text query; supports tag:name, tag:\"name with spaces\" and type:note,memory,url,email. Types are OR; tags and project are AND. Empty for filter-only search."
                   },
                   "options": {
                     "type": "object"
@@ -4176,6 +4182,25 @@
                       "type": "string"
                     },
                     "description": "Exact required tags. Every tag must be present; additional tags are allowed. Applies to notes, memories and URLs."
+                  },
+                  "types": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "note",
+                        "notes",
+                        "memory",
+                        "memories",
+                        "url",
+                        "urls",
+                        "email",
+                        "emails",
+                        "pages",
+                        "vault_files"
+                      ]
+                    },
+                    "description": "Match any listed type, merged with inline type filters. Normalized to notes, memory, urls, emails, pages or vault_files. Empty or omitted means all permitted types. Unknown or empty values return 400."
                   },
                   "page": {
                     "type": "integer",
@@ -4206,6 +4231,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Invalid search filters"
           }
         }
       }
@@ -4462,7 +4490,8 @@
                 "type": "object",
                 "properties": {
                   "query": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Text query; supports tag:name, tag:\"name with spaces\" and type:note,memory,url,email. Types are OR; tags and project are AND. Empty for filter-only search."
                   },
                   "options": {
                     "type": "object"
@@ -4477,6 +4506,25 @@
                       "type": "string"
                     },
                     "description": "Exact required tags. Every tag must be present; additional tags are allowed. Applies to notes, memories and URLs."
+                  },
+                  "types": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "note",
+                        "notes",
+                        "memory",
+                        "memories",
+                        "url",
+                        "urls",
+                        "email",
+                        "emails",
+                        "pages",
+                        "vault_files"
+                      ]
+                    },
+                    "description": "Match any listed type, merged with inline type filters. Normalized to notes, memory, urls, emails, pages or vault_files. Empty or omitted means all permitted types. Unknown or empty values return 400."
                   },
                   "page": {
                     "type": "integer",
@@ -4507,6 +4555,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Invalid search filters"
           }
         }
       }
@@ -5573,7 +5624,8 @@
                 "type": "object",
                 "properties": {
                   "query": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Text query; supports tag:name, tag:\"name with spaces\" and type:note,memory,url,email. Types are OR; tags and project are AND. Empty for filter-only search."
                   },
                   "options": {
                     "type": "object"
@@ -5588,6 +5640,25 @@
                       "type": "string"
                     },
                     "description": "Exact required tags. Every tag must be present; additional tags are allowed. Applies to notes, memories and URLs."
+                  },
+                  "types": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "note",
+                        "notes",
+                        "memory",
+                        "memories",
+                        "url",
+                        "urls",
+                        "email",
+                        "emails",
+                        "pages",
+                        "vault_files"
+                      ]
+                    },
+                    "description": "Match any listed type, merged with inline type filters. Normalized to notes, memory, urls, emails, pages or vault_files. Empty or omitted means all permitted types. Unknown or empty values return 400."
                   },
                   "page": {
                     "type": "integer",
@@ -5618,6 +5689,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Invalid search filters"
           }
         }
       }
@@ -6051,7 +6125,8 @@
                 "type": "object",
                 "properties": {
                   "query": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Text query; supports tag:name, tag:\"name with spaces\" and type:note,memory,url,email. Types are OR; tags and project are AND. Empty for filter-only search."
                   },
                   "project_id": {
                     "type": "string",
@@ -6070,6 +6145,25 @@
                       "type": "string"
                     },
                     "description": "Exact required tags. Every tag must be present; additional tags are allowed. Applies to notes, memories and URLs."
+                  },
+                  "types": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "note",
+                        "notes",
+                        "memory",
+                        "memories",
+                        "url",
+                        "urls",
+                        "email",
+                        "emails",
+                        "pages",
+                        "vault_files"
+                      ]
+                    },
+                    "description": "Match any listed type, merged with inline type filters. Normalized to notes, memory, urls, emails, pages or vault_files. Empty or omitted means all permitted types. Unknown or empty values return 400."
                   },
                   "page": {
                     "type": "integer",
@@ -6097,6 +6191,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Invalid search filters"
           }
         }
       }
@@ -6116,7 +6213,8 @@
                 "type": "object",
                 "properties": {
                   "query": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Text query; supports tag:name, tag:\"name with spaces\" and type:note,memory,url,email. Types are OR; tags and project are AND. Empty for filter-only search."
                   },
                   "project_id": {
                     "type": "string",
@@ -6136,6 +6234,25 @@
                       "type": "string"
                     },
                     "description": "Exact required tags. Every tag must be present; additional tags are allowed. Applies to notes, memories and URLs."
+                  },
+                  "types": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "note",
+                        "notes",
+                        "memory",
+                        "memories",
+                        "url",
+                        "urls",
+                        "email",
+                        "emails",
+                        "pages",
+                        "vault_files"
+                      ]
+                    },
+                    "description": "Match any listed type, merged with inline type filters. Normalized to notes, memory, urls, emails, pages or vault_files. Empty or omitted means all permitted types. Unknown or empty values return 400."
                   }
                 },
                 "required": []
@@ -6220,14 +6337,7 @@
             }
           },
           "400": {
-            "description": "Invalid request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
+            "description": "Invalid search filters"
           },
           "500": {
             "description": "Search failed",
@@ -6318,6 +6428,9 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Counts unavailable; retain previously displayed counts. Successful responses contain MongoDB record totals per project and are not cached."
           }
         }
       }
@@ -7011,7 +7124,7 @@
           "AI Chat"
         ],
         "summary": "AI-powered chat with intent classification",
-        "description": "Classifies the query intent (search, action, analysis, conversation), routes to the appropriate handler, and returns results + conversational answer. Results are displayed in the main panel. Search responses include search_filters for the shared selectable results page. Exact tag requests preserve project_id and never use prior conversation results to expand scope.",
+        "description": "Classifies the query intent (search, action, analysis, conversation), routes to the appropriate handler, and returns results + conversational answer. Results are displayed in the main panel. Search responses include search_filters for the shared selectable results page. Exact tag and type requests preserve project_id and never use prior conversation results to expand scope.",
         "requestBody": {
           "required": true,
           "content": {
@@ -7088,6 +7201,9 @@
               }
             }
           },
+          "400": {
+            "description": "Invalid search filters or missing query"
+          },
           "429": {
             "$ref": "#/components/responses/AiDailyLimit"
           }
@@ -7100,7 +7216,7 @@
           "AI Chat"
         ],
         "summary": "AI-powered chat with streaming SSE response",
-        "description": "Same intent classification as POST /chat, but streams the answer as Server-Sent Events. For stats and analysis intents, LLM tokens are streamed incrementally. For search/conversation/action intents, the answer is sent as a single token event. A final \"done\" event contains metadata (conversation_id, results, action, display_in). Search responses include search_filters for the shared selectable results page. Exact tag requests preserve project_id and never use prior conversation results to expand scope.",
+        "description": "Same intent classification as POST /chat, but streams the answer as Server-Sent Events. For stats and analysis intents, LLM tokens are streamed incrementally. For search/conversation/action intents, the answer is sent as a single token event. A final \"done\" event contains metadata (conversation_id, results, action, display_in). Search responses include search_filters for the shared selectable results page. Exact tag and type requests preserve project_id and never use prior conversation results to expand scope.",
         "requestBody": {
           "required": true,
           "content": {

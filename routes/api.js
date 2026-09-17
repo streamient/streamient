@@ -371,9 +371,9 @@ router.delete('/notes/:id', async (req, res) => {
 
 router.post('/notes/search', async (req, res) => {
 	const filters = SearchFilters.parse(req.body);
-	if (filters.tags.length || req.body.page) {
-		const data = await new SearchResults(req.host_id).list({ ...filters, types: ['notes'], page: req.body.page, per_page: req.body.options?.perPage });
-		return res.json({ results: data.results.notes });
+	if (filters.tags.length || filters.types || req.body.page) {
+		const data = await new SearchResults(req.host_id).list({ ...filters, page: req.body.page, per_page: req.body.options?.perPage }, ['notes']);
+		return res.json({ results: data.results.notes || { found: 0, page: data.page, hits: [] } });
 	}
 	const options = { ...(req.body.options || {}) };
 	if (filters.project_id) options.filter_by = SearchFilters.typesense(filters);
@@ -416,9 +416,9 @@ router.delete('/memories/:id', async (req, res) => {
 
 router.post('/memories/search', async (req, res) => {
 	const filters = SearchFilters.parse(req.body);
-	if (filters.tags.length || req.body.page) {
-		const data = await new SearchResults(req.host_id).list({ ...filters, types: ['memory'], page: req.body.page, per_page: req.body.options?.perPage });
-		return res.json({ results: data.results.memory });
+	if (filters.tags.length || filters.types || req.body.page) {
+		const data = await new SearchResults(req.host_id).list({ ...filters, page: req.body.page, per_page: req.body.options?.perPage }, ['memory']);
+		return res.json({ results: data.results.memory || { found: 0, page: data.page, hits: [] } });
 	}
 	const options = { ...(req.body.options || {}) };
 	if (filters.project_id) options.filter_by = SearchFilters.typesense(filters);
@@ -637,9 +637,9 @@ router.delete('/urls/:id', async (req, res) => {
 
 router.post('/urls/search', async (req, res) => {
 	const filters = SearchFilters.parse(req.body);
-	if (filters.tags.length || req.body.page) {
-		const data = await new SearchResults(req.host_id).list({ ...filters, types: ['urls'], page: req.body.page, per_page: req.body.options?.perPage });
-		return res.json({ results: data.results.urls });
+	if (filters.tags.length || filters.types || req.body.page) {
+		const data = await new SearchResults(req.host_id).list({ ...filters, page: req.body.page, per_page: req.body.options?.perPage }, ['urls']);
+		return res.json({ results: data.results.urls || { found: 0, page: data.page, hits: [] } });
 	}
 	const options = { ...req.body.options };
 	if (filters.project_id) options.filter_by = SearchFilters.typesense(filters);
@@ -858,15 +858,16 @@ router.get('/graph', async (req, res) => {
 	}
 });
 
-// ---- Typesense Counts ----
+// ---- Project Counts ----
 
 router.get('/counts', async (req, res) => {
+	res.setHeader('Cache-Control', 'no-store');
 	try {
 		const counts = await getProjectCounts(req.host_id);
 		res.json(counts);
 	} catch (err) {
 		log.error({ err }, 'Counts error');
-		res.json({});
+		res.status(500).json({ error: 'Unable to refresh project counts. Please retry.' });
 	}
 });
 
@@ -1088,9 +1089,9 @@ router.post('/search/quick', async (req, res) => {
 	try {
 		const query = String(req.body.query || '').trim();
 		const filters = SearchFilters.parse(req.body);
-		if (!query && !filters.tags.length) return res.status(400).json({ error: 'query required' });
+		if (!query && !filters.tags.length && !filters.types) return res.status(400).json({ error: 'query required' });
 		const emailEnabled = await getEmailFeatureAccess(req.host_id, req.billingUser);
-		if (filters.tags.length) {
+		if (filters.tags.length || filters.types) {
 			const data = await new SearchResults(req.host_id, { includeEmails: emailEnabled }).list({ ...filters, per_page: 6 });
 			return res.json({ query, found: data.total, filters, results: data.items.slice(0, 12).map((item) => ({ ...item, label: item.type, subtitle: item.tags.join(', '), open_target: { kind: 'modal', type: item.type, id: item.id, project_id: item.project_id } })) });
 		}
@@ -1110,7 +1111,7 @@ router.post('/search/quick', async (req, res) => {
 router.post('/search/knowledge', async (req, res) => {
 	const filters = SearchFilters.parse(req.body);
 	const emailEnabled = await getEmailFeatureAccess(req.host_id, req.billingUser);
-	if (filters.tags.length || req.body.page) {
+	if (filters.tags.length || filters.types || req.body.page) {
 		const data = await new SearchResults(req.host_id, { includeEmails: emailEnabled }).list({ ...filters, page: req.body.page, per_page: req.body.per_page });
 		return res.json({ results: data.results, total: data.total, page: data.page, pages: data.pages });
 	}
@@ -1162,7 +1163,7 @@ router.post('/chat', aiDailyLimiter, async (req, res) => {
 		});
 	} catch (err) {
 		log.error({ err, host_id: req.host_id }, 'AI Chat error');
-		res.status(500).json({ error: friendlyChatError(err) });
+		res.status(err.status || 500).json({ error: err.status ? err.message : friendlyChatError(err) });
 	}
 });
 
@@ -1224,7 +1225,7 @@ router.post('/chat/stream', aiDailyLimiter, async (req, res) => {
 		});
 	} catch (err) {
 		log.error({ err, host_id: req.host_id }, 'AI Chat stream error');
-		sendSSE('error', { error: friendlyChatError(err) });
+		sendSSE('error', { error: err.status ? err.message : friendlyChatError(err) });
 	}
 
 	res.end();

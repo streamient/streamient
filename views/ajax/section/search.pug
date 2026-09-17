@@ -4,17 +4,26 @@
 			.col-12.col-lg-4.mb-2
 				label.form-label.form-label-sm.mb-1(for="search-query") Search
 				input.form-control.form-control-sm#search-query(type="search" autocomplete="off")
-			.col-6.col-lg-4.mb-2
+			.col-6.col-lg-2.mb-2
 				label.form-label.form-label-sm.mb-1(for="search-project") Project
 				select.form-select.form-select-sm#search-project
 					option(value="") All projects
 					each project in projects || []
 						option(value=project._id)= project.name
-			.col-6.col-lg-4.mb-2
+			.col-6.col-lg-3.mb-2
+				label.form-label.form-label-sm.mb-1(for="search-types") Types
+				select.form-select.form-select-sm#search-types(multiple aria-describedby="search-tag-help")
+					option(value="notes") Note
+					option(value="memory") Memory
+					option(value="urls") URL
+					option(value="emails") Email
+					option(value="pages") Crawled page
+					option(value="vault_files") Vault file
+			.col-12.col-lg-3.mb-2
 				label.form-label.form-label-sm.mb-1(for="search-tags") Tags
 				select.form-select.form-select-sm#search-tags(multiple aria-describedby="search-tag-help")
 		.d-flex.align-items-center.justify-content-between.gap-3.mt-2
-			.form-text.mt-0#search-tag-help Select tags or use tag:typerelay. All selected tags must match.
+			.form-text.mt-0#search-tag-help Use tag:typerelay or type:note,memory,url,email. Any selected type; all selected tags. No types selected searches all types.
 			button.btn.btn-primary.btn-sm.cursor-pointer#search-submit(type="submit") Search
 	.st-list-toolbar.mb-3
 		#batch-toolbar
