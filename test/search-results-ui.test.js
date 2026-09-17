@@ -7,7 +7,7 @@ import swagger from '../swagger.js';
 describe('shared search UI contract', () => {
 	it('renders accessible filters, selection and all four actions without placeholders', () => {
 		const html = pug.renderFile(new URL('../views/ajax/section/search.pug', import.meta.url).pathname, { projects: [{ _id: 'source', name: 'Source' }] });
-		assert.match(html, /<h1[^>]*>Search results/);
+		assert.doesNotMatch(html, /<h1/);
 		for (const id of ['search-query', 'search-project', 'search-tags', 'search-select-page', 'search-select-all']) assert.ok(html.includes('id="' + id + '"'));
 		for (const action of ['move', 'add_tags', 'remove_tags', 'trash']) assert.ok(html.includes('data-search-action="' + action + '"'));
 		assert.doesNotMatch(html, /placeholder=/);

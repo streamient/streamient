@@ -88,7 +88,7 @@ html(lang="en")
 											include includes/logo_white
 										span.st-logo-light
 											include includes/logo_black
-							nav.st-topnav
+							nav.st-topnav.ps-3
 								a.st-navbtn(href="/dashboard" class={active: page !== 'graph' && page !== 'news'} data-streamient-projects-nav) Projects
 								a.st-navbtn(href="/graph" class={active: page === 'graph'}) Graph
 						.st-global-search
@@ -188,9 +188,12 @@ html(lang="en")
 					label.visually-hidden(for="st-search-input") Search
 					input.form-control.form-control-sm#st-search-input(type="search" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="st-search-help")
 					kbd Esc
-				#st-search-help.st-search-help Search everything
+				.st-search-help.d-flex.align-items-center.justify-content-between.gap-3
+					span#st-search-help Search everything
+					button.btn.btn-link.btn-sm.py-0.text-nowrap.cursor-pointer.d-none#st-search-view-all(type="button") View all results
 				#st-search-results.st-search-results(role="listbox" aria-label="Search results")
-				button.btn.btn-link.btn-sm.cursor-pointer#st-search-view-all(type="button") View all results
+				template#st-search-empty-template
+					include ajax/search_palette_empty
 				.st-search-footer
 					span
 						kbd Up

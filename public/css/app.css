@@ -1863,6 +1863,26 @@ body:not(.swal2-shown) > .swal2-container {
 	flex-shrink: 0;
 }
 
+#search-form .form-label {
+	font-size: 0.75rem;
+	font-weight: 500;
+}
+
+#search-form .form-control,
+#search-form .form-select,
+#search-form .ts-control,
+#search-form .ts-control input {
+	font-size: 0.8125rem;
+}
+
+#search-form .form-text {
+	font-size: 0.75rem;
+}
+
+#search-page .search-open {
+	font-size: 0.875rem;
+}
+
 #search-page button[aria-busy="true"]::after,
 #batchProjectModal button[aria-busy="true"]::after {
 	content: '';

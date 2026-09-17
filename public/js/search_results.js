@@ -35,6 +35,7 @@
 	const updateSelection = () => {
 		if (!root) return;
 		root.querySelector('#search-selected').textContent = selected.size + ' selected';
+		root.querySelector('#search-clear').classList.toggle('d-none', !selected.size);
 		root.querySelector('#search-total').textContent = total + ' matching records';
 		root.querySelector('#search-select-all').textContent = 'Select all ' + total + ' matching records';
 		root.querySelector('#search-page-number').textContent = 'Page ' + page + ' of ' + pages;

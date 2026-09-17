@@ -1,28 +1,27 @@
 #search-page
-	h1.mb-5 Search results
-	form#search-form.mb-5
+	form#search-form.mb-4.pb-4
 		.row.align-items-center
-			.col-md-8.mb-3
-				label.form-label(for="search-query") Search
+			.col-12.col-lg-4.mb-2
+				label.form-label.form-label-sm.mb-1(for="search-query") Search
 				input.form-control.form-control-sm#search-query(type="search" autocomplete="off")
-			.col-md-4.mb-3
-				label.form-label(for="search-project") Project
+			.col-6.col-lg-4.mb-2
+				label.form-label.form-label-sm.mb-1(for="search-project") Project
 				select.form-select.form-select-sm#search-project
 					option(value="") All projects
 					each project in projects || []
 						option(value=project._id)= project.name
-			.col-12.mb-3
-				label.form-label(for="search-tags") Tags
+			.col-6.col-lg-4.mb-2
+				label.form-label.form-label-sm.mb-1(for="search-tags") Tags
 				select.form-select.form-select-sm#search-tags(multiple aria-describedby="search-tag-help")
-				.form-text#search-tag-help Select tags or use tag:typerelay. Match every selected tag; other tags allowed.
-		.d-flex.justify-content-end
+		.d-flex.align-items-center.justify-content-between.gap-3.mt-2
+			.form-text.mt-0#search-tag-help Select tags or use tag:typerelay. All selected tags must match.
 			button.btn.btn-primary.btn-sm.cursor-pointer#search-submit(type="submit") Search
 	.d-flex.flex-wrap.align-items-center.gap-3.mb-3
 		span#search-total(role="status")
 		span#search-selected(role="status")
 		button.btn.btn-outline-secondary.btn-sm.cursor-pointer#search-select-page(type="button") Select page
 		button.btn.btn-outline-secondary.btn-sm.cursor-pointer#search-select-all(type="button") Select all matching
-		button.btn.btn-link.btn-sm.cursor-pointer#search-clear(type="button") Clear selection
+		button.btn.btn-link.btn-sm.cursor-pointer.d-none#search-clear(type="button") Clear selection
 	.d-flex.flex-wrap.align-items-center.gap-3.mb-3
 		button.btn.btn-outline-primary.btn-sm.cursor-pointer(data-search-action="move" type="button" disabled) Move project
 		button.btn.btn-outline-primary.btn-sm.cursor-pointer(data-search-action="add_tags" type="button" disabled) Add tags

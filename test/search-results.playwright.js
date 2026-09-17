@@ -34,7 +34,11 @@ async (page) => {
 		await page.locator('#chat-send').click();
 		await page.waitForFunction(() => document.querySelector('#search-total')?.textContent === '12 matching records');
 		if (await page.locator('#search-project').inputValue() !== projects[0]) throw new Error('AI UI lost the selected project');
+		if (await page.locator('#search-page h1').count()) throw new Error('Search page heading should be removed');
+		if (await page.locator('#search-clear').isVisible()) throw new Error('Clear selection shown with no selection');
 		await page.locator('#st-global-search-trigger').click();
+		if (await page.locator('#st-search-view-all').isVisible()) throw new Error('View all results shown before results exist');
+		if (!(await page.locator('#st-search-results .st-search-examples').isVisible())) throw new Error('Tag examples missing from empty search');
 		await page.locator('#st-search-input').fill('tag:' + tag);
 		const paletteResults = page.waitForResponse((response) => response.url().endsWith('/api/v1/search/results'));
 		await page.locator('#st-search-view-all').click();
@@ -42,6 +46,7 @@ async (page) => {
 		await page.waitForFunction(() => document.querySelector('#search-total')?.textContent === '12 matching records');
 		if (await page.locator('.search-result').count() !== 10) throw new Error('First page should contain 10 records');
 		await page.getByRole('button', { name: 'Select page', exact: true }).click();
+		if (!(await page.locator('#search-clear').isVisible())) throw new Error('Clear selection missing after selecting records');
 		await page.getByRole('button', { name: 'Next', exact: true }).click();
 		await page.waitForFunction(() => document.querySelector('#search-page-number')?.textContent === 'Page 2 of 2');
 		if (await page.locator('#search-selected').textContent() !== '10 selected') throw new Error('Selection lost across pagination');
