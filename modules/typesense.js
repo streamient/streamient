@@ -1735,12 +1735,14 @@ export async function runStreamientIndexer(models) {
 			}
 			const failed = Array.from(failedIds.entries()).map(([id, error]) => ({ id, error }));
 
-			// Mark successful docs as indexed in one updateMany
+			// A move/edit during import must remain queued for its current version.
 			if (successIds.length) {
-				await model.updateMany({ _id: { $in: successIds } }, { $set: { is_indexed: true } }, { timestamps: false });
-				totalIndexed += successIds.length;
-				progress.indexed += successIds.length;
-				progress.by_type[type] += successIds.length;
+				const successful = new Set(successIds.map(String));
+				const versions = docs.filter((doc) => successful.has(String(doc._id))).map((doc) => ({ _id: doc._id, updatedAt: doc.updatedAt || { $exists: false } }));
+				const marked = await model.updateMany({ host_id, $or: versions }, { $set: { is_indexed: true } }, { timestamps: false });
+				totalIndexed += marked.modifiedCount;
+				progress.indexed += marked.modifiedCount;
+				progress.by_type[type] += marked.modifiedCount;
 			}
 
 			if (failed.length) {

@@ -17,6 +17,7 @@ const obsidianFileSchema = new mongoose.Schema({
 	note: { type: mongoose.Schema.Types.ObjectId, ref: 'Note', default: null },
 	memory: { type: mongoose.Schema.Types.ObjectId, ref: 'Memory', default: null },
 	url: { type: mongoose.Schema.Types.ObjectId, ref: 'Url', default: null },
+	projection_detached: { type: Boolean, default: false },
 	text_content: { type: String, default: '' },
 	is_indexed: { type: Boolean, default: false },
 	extraction_status: { type: String, enum: ['not_needed', 'pending', 'processing', 'complete', 'failed'], default: 'not_needed' },

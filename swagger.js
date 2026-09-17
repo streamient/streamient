@@ -2979,6 +2979,8 @@ Object.assign(swaggerSpec.paths, {
 	'/obsidian/revisions/{id}/content': { get: { tags: ['Obsidian Sync'], summary: 'Download a recoverable losing conflict revision before its 30-day expiry', security: obsidianReadSecurity, responses: { ...obsidianErrors, 200: { description: 'Revision bytes', content: { 'application/octet-stream': { schema: { type: 'string', format: 'binary' } } } } } } },
 });
 
+swaggerSpec.paths['/obsidian/connections/{connectionId}/mutations'].post.description = 'A file detached by a Streamient project move remains a protected trash entry. Late mutations return accepted=false and conflict=true regardless of device timestamps; uploaded content is retained as a recoverable revision. The moved record keeps its identity and destination project. Concurrent changes to a record project or vault binding return projection_changed (409).';
+
 swaggerSpec.components.schemas.AccountDeletionState = {
 	type: 'object', nullable: true, properties: { requested_at: { type: 'string', format: 'date-time' }, stage: { type: 'string' }, error: { type: 'string' }, job_id: { type: 'string' } },
 };
