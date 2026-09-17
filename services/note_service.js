@@ -64,7 +64,7 @@ export async function updateNote(host_id, noteId, data, ctx = {}) {
 	const before = ctx.user_id ? await Note.findOne({ _id: noteId, host_id }).lean() : null;
 
 	const note = await Note.findOneAndUpdate(
-		{ _id: noteId, host_id },
+		{ _id: noteId, host_id, ...(ctx.expected_updated_at ? { updatedAt: new Date(ctx.expected_updated_at), in_trash: { $ne: true } } : {}) },
 		{ $set: update },
 		{ returnDocument: 'after' },
 	);
@@ -85,7 +85,7 @@ export async function updateNote(host_id, noteId, data, ctx = {}) {
 
 export async function deleteNote(host_id, noteId, ctx = {}) {
 	const note = await Note.findOneAndUpdate(
-		{ _id: noteId, host_id, in_trash: { $ne: true } },
+		{ _id: noteId, host_id, in_trash: { $ne: true }, ...(ctx.expected_updated_at ? { updatedAt: new Date(ctx.expected_updated_at) } : {}) },
 		{ $set: { in_trash: true, trashed_at: new Date(), is_indexed: false } },
 		{ returnDocument: 'after' },
 	);

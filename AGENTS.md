@@ -51,7 +51,7 @@ After saving a URL, use `create_link` to connect it to related notes or memories
 - Store any relevant learnings, insights, or decisions in Streamient using `store_memory` or `create_note` so future sessions can recall them. Link related items together in the knowledge graph for easy navigation.
 
 ## Managani Changelog
-- After verified implementation changes, use `$managani-changelog` before completion. Create the configured unpublished Streamient draft or record a justified skip.
+- Never invoke `$managani-changelog` automatically after a turn or intermediate follow-up. Only invoke it once when the user explicitly asks to finalize the Streamient changelog for the whole code change.
 
 ## System Overview
 - Node.js monolith serving Streamient; entrypoint `app.js`

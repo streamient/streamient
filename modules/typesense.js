@@ -6,6 +6,7 @@ import { emitToTenant } from './socket.js';
 import { cacheDelete, cacheGet, cacheSet } from './cache.js';
 import { normalizeLlmScope, resolveLlmKeyContext } from '../services/byo_ai_service.js';
 import { sanitizeDeep } from './text_sanitize.js';
+import { SearchFilters } from './search_filters.js';
 import { buildEmailExcerpt } from './email_display.js';
 import { createLogger } from './logger.js';
 
@@ -347,7 +348,7 @@ function includeSourceIdField(includeFields) {
 }
 
 function exactFilterValue(value) {
-	return '`' + String(value).replace(/`/g, '\\`') + '`';
+	return SearchFilters.exact(value);
 }
 
 function hasTrashFilter(filterBy) {
@@ -933,10 +934,11 @@ export async function searchCollection(host_id, type, query, options = {}) {
 		q: query,
 		query_by: options.queryBy || 'title',
 		prefix: false,
-		per_page: fetchSize,
+		per_page: options.paginate ? requested : fetchSize,
 		page: options.page || 1,
 		...options.extra,
 	};
+	if (options.paginate && isChunked) Object.assign(params, { group_by: 'source_id', group_limit: 1 });
 	if (includeFields) {
 		params.include_fields = isChunked ? includeSourceIdField(includeFields) : includeFields;
 	} else {
@@ -948,9 +950,9 @@ export async function searchCollection(host_id, type, query, options = {}) {
 		`search ${collectionName}`,
 		async () => {
 			const result = await ts.collections(collectionName).documents().search(params);
-			return isChunked ? dedupeHitsBySourceId(result, requested) : result;
+			return options.paginate ? normalizeGroupedSearchResult(result) : isChunked ? dedupeHitsBySourceId(result, requested) : result;
 		},
-		{ fallback: { hits: [], found: 0, out_of: 0, page: params.page || 1 } },
+		options.strict ? {} : { fallback: { hits: [], found: 0, out_of: 0, page: params.page || 1 } },
 	);
 }
 

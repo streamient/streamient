@@ -1,0 +1,61 @@
+#search-page
+	form#search-form.mb-4.pb-4
+		.row.align-items-center
+			.col-12.col-lg-4.mb-2
+				label.form-label.form-label-sm.mb-1(for="search-query") Search
+				input.form-control.form-control-sm#search-query(type="search" autocomplete="off")
+			.col-6.col-lg-4.mb-2
+				label.form-label.form-label-sm.mb-1(for="search-project") Project
+				select.form-select.form-select-sm#search-project
+					option(value="") All projects
+					each project in projects || []
+						option(value=project._id)= project.name
+			.col-6.col-lg-4.mb-2
+				label.form-label.form-label-sm.mb-1(for="search-tags") Tags
+				select.form-select.form-select-sm#search-tags(multiple aria-describedby="search-tag-help")
+		.d-flex.align-items-center.justify-content-between.gap-3.mt-2
+			.form-text.mt-0#search-tag-help Select tags or use tag:typerelay. All selected tags must match.
+			button.btn.btn-primary.btn-sm.cursor-pointer#search-submit(type="submit") Search
+	.st-list-toolbar.mb-3
+		#batch-toolbar
+			.d-flex.align-items-center.justify-content-between.gap-3
+				.form-check.mb-2
+					input.form-check-input.cursor-pointer#search-select-all(type="checkbox" disabled title="Select all matching records, including other pages")
+					label.form-check-label.small.cursor-pointer(for="search-select-all") Select all
+				span.small.text-muted#search-total(role="status")
+			#search-actions.batch-floating-bar.d-none(role="toolbar" aria-label="Selected search records")
+				.batch-floating-inner
+					.d-flex.align-items-center.gap-3
+						span.batch-floating-count#search-selected(role="status") 0 selected
+						.d-flex.align-items-center.gap-2
+							button.btn.btn-sm.cursor-pointer(data-search-action="trash" type="button" disabled)
+								!= icon('delete', 'me-1')
+								span Delete
+							button.btn.btn-sm.cursor-pointer(data-search-action="move" type="button" disabled)
+								!= icon('drive_file_move', 'me-1')
+								span Move
+							button.btn.btn-sm.cursor-pointer(data-search-action="add_tags" type="button" disabled) Add tags
+							button.btn.btn-sm.cursor-pointer(data-search-action="remove_tags" type="button" disabled) Remove tags
+					button.btn.btn-sm.batch-floating-close.cursor-pointer#search-clear(type="button" aria-label="Clear selection" title="Clear selection")
+						!= icon('close')
+	#search-action-status.small.mb-3(role="status")
+	#search-list
+	#search-empty.text-muted.mb-3.d-none No matching records.
+	.d-flex.align-items-center.justify-content-end.gap-3.mb-5
+		button.btn.btn-outline-secondary.btn-sm.cursor-pointer#search-prev(type="button" disabled) Previous
+		span#search-page-number
+		button.btn.btn-outline-secondary.btn-sm.cursor-pointer#search-next(type="button" disabled) Next
+	.modal.fade#search-tags-modal(tabindex="-1" aria-labelledby="search-tags-title" aria-hidden="true")
+		.modal-dialog.modal-dialog-centered
+			form.modal-content#search-tags-form
+				.modal-header
+					h6.modal-title#search-tags-title Tags
+					button.btn-close.cursor-pointer(type="button" data-bs-dismiss="modal" aria-label="Close")
+				.modal-body
+					p#search-tags-count
+					.mb-3
+						label.form-label(for="search-action-tags") Tags, one per line
+						textarea.form-control.form-control-sm#search-action-tags(rows="3" required)
+				.modal-footer.justify-content-between
+					button.btn.btn-secondary.btn-sm.cursor-pointer(type="button" data-bs-dismiss="modal") Cancel
+					button.btn.btn-primary.btn-sm.cursor-pointer(type="submit") Apply

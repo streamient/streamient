@@ -3018,4 +3018,45 @@ swaggerSpec.paths['/admin/api/accounts/{tenantId}/deletion/retry'] = {
 
 
 if (swaggerSpec.components.schemas.AdminAccount?.allOf) swaggerSpec.components.schemas.AdminAccount.allOf.push({ type: 'object', properties: { deletion: { $ref: '#/components/schemas/AccountDeletionState' } } });
+swaggerSpec.components.schemas.SearchFilters = {
+	type: 'object',
+	properties: {
+		query: { type: 'string', description: 'Text query; supports tag:name and tag:"name with spaces". Empty for tag-only search.' },
+		project_id: { type: 'string', description: 'Restrict to this project; omit for all accessible projects.' },
+		tags: { type: 'array', items: { type: 'string' }, description: 'Exact required tags. Every tag must be present; additional tags are allowed. Applies to notes, memories and URLs.' },
+		page: { type: 'integer', minimum: 1, default: 1 },
+		per_page: { type: 'integer', minimum: 1, maximum: 100, default: 10, description: 'Records per collection per page.' },
+		types: { type: 'array', items: { type: 'string', enum: ['notes', 'memory', 'urls', 'emails', 'pages', 'vault_files'] } },
+	},
+};
+swaggerSpec.components.schemas.SearchSelectionItem = {
+	type: 'object', required: ['id', 'type', 'version', 'ticket'],
+	properties: { id: { type: 'string' }, type: { type: 'string' }, version: { type: 'string' }, ticket: { type: 'string', description: 'Server-issued selection signature bound to tenant, record version and filters.' } },
+};
+for (const [path, summary, schema] of [
+	['/search/results', 'Paginated selectable search results', { $ref: '#/components/schemas/SearchFilters' }],
+	['/search/selection', 'Resolve every matching record into a fixed selection', { $ref: '#/components/schemas/SearchFilters' }],
+	['/search/actions', 'Apply an action to selected records', { type: 'object', required: ['filters', 'items', 'action'], properties: { filters: { $ref: '#/components/schemas/SearchFilters' }, items: { type: 'array', minItems: 1, maxItems: 50, items: { $ref: '#/components/schemas/SearchSelectionItem' } }, action: { type: 'string', enum: ['move', 'add_tags', 'remove_tags', 'trash'] }, project_id: { type: 'string', description: 'Destination for move; must belong to the current tenant.' }, tags: { type: 'array', items: { type: 'string' }, description: 'Tags to add or remove.' } } }],
+	['/search/item', 'Reconcile one search result after an item event', { type: 'object', required: ['type', 'id', 'filters'], properties: { type: { type: 'string' }, id: { type: 'string' }, filters: { $ref: '#/components/schemas/SearchFilters' } } }],
+]) {
+	swaggerSpec.paths[path] = { post: { tags: ['Search'], summary, description: path.endsWith('actions') ? 'Returns per-record outcomes with success, error, removed and updated item/HTML. Stale or unsupported selections fail individually. No permanent deletion. Send batches of at most 50 using the same selection filters.' : 'Returns tenant-scoped records. Results include filters, items, collections, total, page, pages and Pug HTML; selection returns signed item references for every page; item returns a single reconciliation outcome. Tags match stored values exactly, including unindexed records for tag-only queries.', requestBody: { required: true, content: { 'application/json': { schema } } }, responses: { 200: { description: 'Search results, selected item references or per-record outcomes', content: { 'application/json': { schema: { type: 'object', additionalProperties: true } } } }, 400: { description: 'Invalid filters, selection or action' }, 401: { description: 'Authentication required' }, 500: { description: 'Search unavailable; do not interpret as no matches' } } } };
+}
+swaggerSpec.paths['/search/tags'] = {
+	get: {
+		tags: ['Search'],
+		summary: 'List available exact tags',
+		parameters: [{ name: 'project_id', in: 'query', schema: { type: 'string' } }],
+		responses: { 200: { description: 'Distinct active note, memory and URL tags in the selected project', content: { 'application/json': { schema: { type: 'object', properties: { tags: { type: 'array', items: { type: 'string' } } } } } } } },
+	},
+};
+for (const path of ['/search/knowledge', '/search/quick', '/notes/search', '/memories/search', '/urls/search']) {
+	const schema = swaggerSpec.paths[path]?.post?.requestBody?.content?.['application/json']?.schema;
+	if (!schema) continue;
+	Object.assign(schema.properties, { project_id: swaggerSpec.components.schemas.SearchFilters.properties.project_id, tags: swaggerSpec.components.schemas.SearchFilters.properties.tags });
+	if (path !== '/search/quick') schema.properties.page = swaggerSpec.components.schemas.SearchFilters.properties.page;
+	schema.required = [];
+}
+for (const path of ['/chat', '/chat/stream']) {
+	if (swaggerSpec.paths[path]?.post) swaggerSpec.paths[path].post.description = (swaggerSpec.paths[path].post.description || '') + ' Search responses include search_filters for the shared selectable results page. Exact tag requests preserve project_id and never use prior conversation results to expand scope.';
+}
 export default swaggerSpec;

@@ -1,4 +1,6 @@
 import { searchAll, conversationSearch, getCollectionCounts } from '../modules/typesense.js';
+import { SearchResults } from '../modules/search_results.js';
+import { SearchFilters } from '../modules/search_filters.js';
 import { nlSearchCompletion, chatModelCompletion, parseStreamChunks, hasLlmApiKey } from '../modules/llm_client.js';
 import * as noteService from './note_service.js';
 import * as memoryService from './memory_service.js';
@@ -60,7 +62,9 @@ Intent types:
 - "conversation": Follow-up, clarification, or general chat (e.g. "tell me more", "what did you mean", "thanks")
 
 Respond:
-{"intent": "search|stats|action|analysis|conversation", "query": "extracted search keywords (for search/analysis)", "action_type": "create_note|create_memory|save_url|move_to_project|delete|null", "params": {}, "limit": null, "types": null}
+{"intent": "search|stats|action|analysis|conversation", "query": "extracted search keywords (for search/analysis)", "tags": [], "action_type": "create_note|create_memory|save_url|move_to_project|delete|null", "params": {}, "limit": null, "types": null}
+
+For searches requesting tags, put exact tag names in tags, not in query. A request for all records with tags has an empty query. Additional record tags are allowed. Never broaden a tag request into a semantic search.
 
 Rules for "limit": if the user specifies a count (e.g. "show me 3 notes", "latest 5 URLs"), set limit to that number. Otherwise null.
 Rules for "types": if the user specifies a content type (e.g. "notes", "memories", "urls", "emails"), set types to an array like ["notes"] or ["notes","memory"]. Use these type names: notes, memory, urls, emails, pages. Otherwise null (search all).
@@ -76,6 +80,8 @@ For action intents, extract params from the user message:
  * Classify user intent using the lightweight NL search model.
  */
 async function classifyIntent(hostId, query) {
+	const exactSearch = SearchFilters.intent(query);
+	if (exactSearch) return exactSearch;
 	const fallbackIntent = inferActionIntent(query);
 
 	try {
@@ -230,7 +236,7 @@ export function normalizeIntentForConversationFollowup(intent, query, conversati
  */
 export async function processChat({ hostId, userId, query, conversationId, projectId, contextResults = [], includeEmails = true, ctx = {} }) {
 	// Free (BYOK) tenants with no key configured: short-circuit with guidance.
-	if (!(await hasLlmApiKey({ hostId }))) {
+	if (!SearchFilters.intent(query) && !(await hasLlmApiKey({ hostId }))) {
 		return noAiKeyResult(conversationId);
 	}
 
@@ -267,7 +273,7 @@ export async function processChat({ hostId, userId, query, conversationId, proje
 export async function processChatStream({ hostId, userId, query, conversationId, projectId, contextResults = [], includeEmails = true, allowActions = true, ctx = {} }) {
 	// Free (BYOK) tenants with no key configured: short-circuit with guidance
 	// (the non-stream answer path renders it as a normal assistant message).
-	if (!(await hasLlmApiKey({ hostId }))) {
+	if (!SearchFilters.intent(query) && !(await hasLlmApiKey({ hostId }))) {
 		return { stream: null, answer: NO_AI_KEY_ANSWER, metadata: { results: [], action: null, conversationId: conversationId || null, displayIn: 'chat' } };
 	}
 
@@ -300,7 +306,7 @@ export async function processChatStream({ hostId, userId, query, conversationId,
 		case 'search':
 		default: {
 			const result = await handleSearch({ hostId, userId, query, conversationId, projectId, intent, includeEmails, llmScope });
-			return { stream: null, answer: result.answer, metadata: { results: result.results, action: result.action, conversationId: result.conversationId, displayIn: result.displayIn } };
+			return { stream: null, answer: result.answer, metadata: { results: result.results, searchFilters: result.searchFilters, action: result.action, conversationId: result.conversationId, displayIn: result.displayIn } };
 		}
 	}
 }
@@ -309,27 +315,16 @@ export async function processChatStream({ hostId, userId, query, conversationId,
 // Search Handler
 // ────────────────────────────────────────────────────────────────────
 
-async function handleSearch({ hostId, userId, query, conversationId, projectId, intent, includeEmails = true, llmScope = 'global' }) {
-	const searchQuery = intent.query || query;
-	const limit = intent.limit || null;
-	const types = intent.types || null;
-
-	const { results, conversation, action } = await conversationSearch(hostId, userId, searchQuery, {
-		conversationId,
-		projectId,
-		perPage: limit || 10,
-		includeEmails,
-		llmScope,
-	});
-
-	let flat = flattenResults(results, types);
-	if (limit) flat = flat.slice(0, limit);
-
+async function handleSearch({ hostId, query, projectId, intent, includeEmails = true }) {
+	const filters = SearchFilters.parse({ query: intent.query ?? query, tags: intent.tags || [], project_id: projectId });
+	const perPage = Math.min(100, Math.max(1, Number(intent.limit) || 10));
+	const data = await new SearchResults(hostId, { includeEmails }).list({ ...filters, types: intent.types, per_page: perPage });
 	return {
-		answer: conversation.answer,
-		results: flat,
-		action,
-		conversationId: conversation.conversationId,
+		answer: `Found ${data.total} matching record${data.total === 1 ? '' : 's'}. Use the results list to select records and apply actions.`,
+		results: data.items,
+		searchFilters: { ...filters, types: intent.types || undefined, per_page: perPage },
+		action: null,
+		conversationId: null,
 		displayIn: 'panel',
 	};
 }

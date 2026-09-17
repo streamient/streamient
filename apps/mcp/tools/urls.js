@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { MCP_JSON_OUTPUT_SCHEMA, mcpJson } from './output.js';
-import { MCP_PER_PAGE_SCHEMA, mcpPerPage } from './retrieval.js';
+import { MCP_PER_PAGE_SCHEMA, MCP_SEARCH_FILTER_SCHEMA, mcpPerPage } from './retrieval.js';
 import { slimSearchResults } from './search-results.js';
 
 const MCP_URL_SEARCH_EXCLUDE_FIELDS = 'embedding';
@@ -58,12 +58,17 @@ export function urlTools(api, defaultProjectId) {
       annotations: READ_ONLY,
       outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
+        ...MCP_SEARCH_FILTER_SCHEMA,
         query: z.string().describe('Search query'),
+        project_id: z.string().optional().describe('Filter by project'),
         per_page: MCP_PER_PAGE_SCHEMA,
       },
       handler: async (args) => {
         const { results } = await api.post('/urls/search', {
           query: args.query,
+          project_id: args.project_id,
+          tags: args.tags,
+          page: args.page,
           options: {
             perPage: mcpPerPage(args),
             include_fields: MCP_URL_SEARCH_INCLUDE_FIELDS,

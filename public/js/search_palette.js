@@ -6,6 +6,7 @@
 	var input;
 	var resultsEl;
 	var helpEl;
+	var viewAll;
 	var debounceTimer = null;
 	var activeIndex = -1;
 	var results = [];
@@ -19,6 +20,8 @@
 
 	function setOpen(open) {
 		if (!palette || !backdrop || !input) return;
+		requestSeq++;
+		window.clearTimeout(debounceTimer);
 		palette.classList.toggle('d-none', !open);
 		backdrop.classList.toggle('d-none', !open);
 		document.body.classList.toggle('st-search-open', open);
@@ -26,7 +29,7 @@
 			input.value = '';
 			results = [];
 			activeIndex = -1;
-			renderEmpty('Type to search everything.');
+			renderEmpty('Type to search everything.', true);
 			window.setTimeout(function () { input.focus(); }, 0);
 		}
 	}
@@ -68,12 +71,15 @@
 		return wrap;
 	}
 
-	function renderEmpty(message) {
+	function renderEmpty(message, showExamples) {
 		if (!resultsEl) return;
-		resultsEl.innerHTML = '';
-		var empty = document.createElement('div');
-		empty.className = 'st-search-empty';
-		empty.textContent = message;
+		results = [];
+		activeIndex = -1;
+		viewAll?.classList.add('d-none');
+		resultsEl.replaceChildren();
+		var empty = document.getElementById('st-search-empty-template').content.cloneNode(true);
+		empty.querySelector('.st-search-empty-message').textContent = message;
+		empty.querySelector('.st-search-examples').classList.toggle('d-none', !showExamples);
 		resultsEl.appendChild(empty);
 		if (helpEl) helpEl.textContent = 'Search everything';
 	}
@@ -96,6 +102,7 @@
 			return;
 		}
 		if (helpEl) helpEl.textContent = results.length + ' result' + (results.length === 1 ? '' : 's');
+		viewAll?.classList.remove('d-none');
 
 		results.forEach(function (item, index) {
 			var row = document.createElement('button');
@@ -158,12 +165,12 @@
 		var query = input.value.trim();
 		var seq = ++requestSeq;
 		if (!query) {
-			renderEmpty('Type to search everything.');
+			renderEmpty('Type to search everything.', true);
 			return;
 		}
 		renderEmpty('Searching...');
 		try {
-			var res = await api('POST', '/search/quick', { query: query, limit: 12, per_page: 6 });
+			var res = await api('POST', '/search/quick', { query: query, project_id: window.currentProjectId || '', limit: 12, per_page: 6 });
 			if (seq !== requestSeq) return;
 			renderResults(res.results || []);
 		} catch (err) {
@@ -173,6 +180,8 @@
 	}
 
 	function scheduleSearch() {
+		requestSeq++;
+		renderEmpty(input.value.trim() ? 'Searching...' : 'Type to search everything.', !input.value.trim());
 		window.clearTimeout(debounceTimer);
 		debounceTimer = window.setTimeout(runSearch, 180);
 	}
@@ -252,7 +261,13 @@
 		input = document.getElementById('st-search-input');
 		resultsEl = document.getElementById('st-search-results');
 		helpEl = document.getElementById('st-search-help');
+		viewAll = document.getElementById('st-search-view-all');
 		if (!trigger || !palette || !input || !resultsEl) return;
 		bindEvents();
+		document.getElementById('st-search-view-all')?.addEventListener('click', function () {
+			const filters = { query: input.value.trim(), project_id: window.currentProjectId || '' };
+			closePalette();
+			window.__sections.search.open(filters);
+		});
 	});
 })();
