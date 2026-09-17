@@ -293,7 +293,7 @@ test('encrypts stored vault bytes and decrypts them for authorized reads', async
 	const originalCreate = ObsidianBlob.create;
 	config.obsidian.vaultsDir = root;
 	config.obsidian.encryptionKey = 'a'.repeat(64);
-	ObsidianBlob.findOne = async () => null;
+	ObsidianBlob.findOne = () => ({ read() { return this; }, lean: async () => null });
 	ObsidianBlob.create = async (data) => ({ _id: 'blob-1', ...data });
 	t.after(() => {
 		config.obsidian.vaultsDir = previous.dir;

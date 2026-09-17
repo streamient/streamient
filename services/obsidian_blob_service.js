@@ -45,7 +45,8 @@ function uploadChunkPath(hostId, uploadId, offset) {
 
 function blobDir(hostId, sha256) {
 	if (!/^[a-f0-9]{64}$/.test(sha256)) throw new ObsidianBlobError('Invalid SHA-256', 400, 'invalid_checksum');
-	return path.join(storageRoot(), 'blobs', cleanSegment(hostId), sha256);
+	// Each writer owns its ciphertext directory; the unique blob record deduplicates content.
+	return path.join(storageRoot(), 'blobs', cleanSegment(hostId), `${sha256}-${crypto.randomUUID()}`);
 }
 
 function blobChunkPath(blob, chunk) {
@@ -273,12 +274,14 @@ export async function completeUpload(userId, hostId, id) {
 		await upload.save();
 		throw new ObsidianBlobError(upload.error, 409, 'file_integrity_conflict');
 	}
-	let blob = await ObsidianBlob.findOne({ host_id: hostId, sha256 });
+	let blob = await ObsidianBlob.findOne({ host_id: hostId, sha256 }).read('primary').lean();
 	if (!blob) {
 		const destination = blobDir(hostId, sha256);
+		let installed = false;
 		await mkdir(path.dirname(destination), { recursive: true });
 		try {
 			await rename(uploadDir(hostId, upload._id), destination);
+			installed = true;
 			blob = await ObsidianBlob.create({
 				host_id: hostId,
 				sha256,
@@ -288,8 +291,9 @@ export async function completeUpload(userId, hostId, id) {
 				chunks: upload.chunks,
 			});
 		} catch (err) {
-			blob = await ObsidianBlob.findOne({ host_id: hostId, sha256 });
+			blob = await ObsidianBlob.findOne({ host_id: hostId, sha256 }).read('primary').lean();
 			if (!blob) throw err;
+			if (installed && blob.storage_key !== path.relative(storageRoot(), destination)) await rm(destination, { recursive: true, force: true });
 			await rm(uploadDir(hostId, upload._id), { recursive: true, force: true }).catch(() => {});
 		}
 	} else {
@@ -306,7 +310,7 @@ export async function storeBuffer(hostId, value, mimeType = 'application/octet-s
 	const buffer = Buffer.isBuffer(value) ? value : Buffer.from(value);
 	if (config.obsidian.maxFileBytes && buffer.length > config.obsidian.maxFileBytes) throw new ObsidianBlobError('File exceeds the configured Obsidian sync limit', 413, 'file_too_large');
 	const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
-	const existing = await ObsidianBlob.findOne({ host_id: hostId, sha256 });
+	const existing = await ObsidianBlob.findOne({ host_id: hostId, sha256 }).read('primary').lean();
 	if (existing) return existing;
 	const temporary = path.join(storageRoot(), 'server', cleanSegment(hostId), crypto.randomUUID());
 	await mkdir(temporary, { recursive: true });
@@ -319,9 +323,11 @@ export async function storeBuffer(hostId, value, mimeType = 'application/octet-s
 			chunks.push({ ...encrypted, offset, file_name: fileName });
 		}
 		const destination = blobDir(hostId, sha256);
+		let installed = false;
 		await mkdir(path.dirname(destination), { recursive: true });
 		try {
 			await rename(temporary, destination);
+			installed = true;
 			return await ObsidianBlob.create({
 				host_id: hostId,
 				sha256,
@@ -331,8 +337,9 @@ export async function storeBuffer(hostId, value, mimeType = 'application/octet-s
 				chunks,
 			});
 		} catch (err) {
-			const raced = await ObsidianBlob.findOne({ host_id: hostId, sha256 });
+			const raced = await ObsidianBlob.findOne({ host_id: hostId, sha256 }).read('primary').lean();
 			if (!raced) throw err;
+			if (installed && raced.storage_key !== path.relative(storageRoot(), destination)) await rm(destination, { recursive: true, force: true });
 			await rm(temporary, { recursive: true, force: true });
 			return raced;
 		}
