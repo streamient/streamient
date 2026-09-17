@@ -7,39 +7,19 @@
 	var loadingMore = false;
 	var hasMore = false;
 	var loadSeq = 0;
+	var records = new Map();
+	var deletedIds = new Set();
+	var itemRequests = new Map();
 
 	function addWindowListener(event, handler) {
 		window.addEventListener(event, handler);
 		windowListeners.push([event, handler]);
 	}
 
-	function escapeHtml(str) {
-		var div = document.createElement('div');
-		div.textContent = str || '';
-		return div.innerHTML;
-	}
-
 	function urlsPath(page) {
 		var params = ['page=' + page, 'limit=' + PAGE_SIZE];
 		if (currentProjectId) params.push('project=' + encodeURIComponent(currentProjectId));
 		return '/urls?' + params.join('&');
-	}
-
-	function renderUrlItemHtml(u) {
-		var date = u.createdAt ? window.StreamientDateFormat?.formatLocale(u.createdAt) || '' : '';
-		var image = u.screenshot_url || u.og_image || '';
-		return '<div class="list-group-item url-item d-flex align-items-start gap-3" data-id="' + escapeHtml(u._id) + '" role="button" style="cursor:pointer">'
-			+ '<div class="batch-cb-wrap"><input type="checkbox" class="form-check-input batch-cb" value="' + escapeHtml(u._id) + '"></div>'
-			+ (image ? '<img src="' + escapeHtml(image) + '" class="og-image-thumb rounded flex-shrink-0" alt="">' : '')
-			+ '<div class="flex-grow-1 overflow-hidden">'
-			+ '<div class="d-flex justify-content-between align-items-center gap-2">'
-			+ '<strong class="text-truncate">' + escapeHtml(u.title || u.url) + '</strong>'
-			+ '<span class="text-muted small text-nowrap flex-shrink-0" data-date-value="' + escapeHtml(u.createdAt || '') + '" data-date-format="locale">' + escapeHtml(date) + '</span>'
-			+ '</div>'
-			+ '<div class="text-truncate"><a href="' + escapeHtml(u.url) + '" target="_blank" class="text-muted small url-link">' + escapeHtml(u.url) + '</a></div>'
-			+ '<p class="mb-0 text-muted small text-truncate">' + escapeHtml(u.description?.slice(0, 200) || '') + '</p>'
-			+ (u.crawl_enabled ? '<span class="badge text-bg-success mt-1">' + kkIcon('sync') + ' Crawling</span>' : '')
-			+ '</div></div>';
 	}
 
 	function bindUrlItem(item) {
@@ -49,32 +29,93 @@
 		});
 	}
 
-	function renderUrls(urls, append) {
+	function updateEmptyState() {
 		if (!listEl) return;
-		if (!append && !urls.length) {
-			listEl.innerHTML = '<p class="text-muted p-3 url-empty">No URLs saved yet. Hint: Add new URLs and notes with the <a href="https://docs.streamient.com/guide/browser-extension" target="_blank">Streamient browser extension</a></p>';
+		if (listEl.querySelector('.url-item')) listEl.querySelector('.url-empty')?.remove();
+		else if (!listEl.querySelector('.url-empty')) listEl.appendChild(document.getElementById('urls-empty-template').content.cloneNode(true));
+	}
+
+	function applyUrlItem(url) {
+		if (!listEl || !url?._id) return;
+		var id = String(url._id);
+		if (deletedIds.has(id)) return;
+		var previous = records.get(id);
+		if (previous && new Date(previous.updatedAt || 0) > new Date(url.updatedAt || 0)) return;
+		var existing = listEl.querySelector('.url-item[data-id="' + CSS.escape(id) + '"]');
+		var projectId = String(url.project?._id || url.project || '');
+		if (url.in_trash || (currentProjectId && projectId !== String(currentProjectId))) {
+			records.set(id, url);
+			existing?.remove();
+			updateEmptyState();
+			window.updateBatchBar?.();
 			return;
 		}
-		if (!urls.length) return;
-
-		if (!append) {
-			listEl.innerHTML = urls.map(renderUrlItemHtml).join('');
-			listEl.querySelectorAll('.url-item').forEach(bindUrlItem);
+		if (!url.html) return;
+		if (existing && previous?.html === url.html) {
+			records.set(id, url);
 			return;
 		}
+		var template = document.createElement('template');
+		template.innerHTML = url.html;
+		var item = template.content.firstElementChild;
+		if (!item || item.dataset.id !== id) return;
+		var root = document.getElementById('main-content');
+		var scrollTop = root?.scrollTop;
+		var focused = existing?.contains(document.activeElement) ? document.activeElement : null;
+		var checked = existing?.querySelector('.batch-cb')?.checked;
+		item.querySelector('.batch-cb').checked = !!checked;
+		bindUrlItem(item);
+		records.set(id, url);
+		if (existing) existing.replaceWith(item);
+		else {
+			var next = Array.from(listEl.querySelectorAll('.url-item')).find(function (row) {
+				var other = records.get(row.dataset.id);
+				var date = new Date(other?.createdAt || 0).getTime();
+				var created = new Date(url.createdAt || 0).getTime();
+				return date < created || (date === created && row.dataset.id < id);
+			});
+			listEl.insertBefore(item, next || null);
+		}
+		window.StreamientDateFormat?.refresh(item);
+		if (focused) item.querySelector(focused.matches('.batch-cb') ? '.batch-cb' : '.url-link')?.focus({ preventScroll: true });
+		if (root) root.scrollTop = scrollTop;
+		updateEmptyState();
+		window.updateBatchBar?.();
+	}
 
-		listEl.querySelector('.url-empty')?.remove();
-		var wrapper = document.createElement('div');
-		wrapper.innerHTML = urls.map(renderUrlItemHtml).join('');
-		Array.prototype.slice.call(wrapper.children).forEach(function (item) {
-			bindUrlItem(item);
-			listEl.appendChild(item);
-		});
+	async function onUrlUpdated(e) {
+		var url = typeof e.detail?.url === 'object' ? e.detail.url : e.detail;
+		var id = String(url?._id || url?.id || '');
+		if (!id || !listEl || deletedIds.has(id)) return;
+		if (url.html) return applyUrlItem(url);
+		var seq = loadSeq;
+		var request = (itemRequests.get(id) || 0) + 1;
+		itemRequests.set(id, request);
+		try {
+			var data = await api('GET', '/urls/' + encodeURIComponent(id));
+			if (seq === loadSeq && request === itemRequests.get(id)) applyUrlItem(data.url);
+		} catch (err) {
+			if (listEl && seq === loadSeq && !deletedIds.has(id)) showError('Failed to update URL: ' + (err.message || 'Unknown error'));
+		}
+	}
+
+	function onUrlDeleted(e) {
+		var id = String(e.detail?._id || e.detail?.id || '');
+		if (!id || !listEl) return;
+		deletedIds.add(id);
+		records.delete(id);
+		listEl.querySelector('.url-item[data-id="' + CSS.escape(id) + '"]')?.remove();
+		updateEmptyState();
+		window.updateBatchBar?.();
 	}
 
 	async function loadUrls() {
 		if (!listEl) return;
 		var seq = ++loadSeq;
+		records.clear();
+		deletedIds.clear();
+		itemRequests.clear();
+		listEl.replaceChildren();
 		pageNum = 1;
 		loadingMore = false;
 		hasMore = false;
@@ -82,7 +123,8 @@
 		if (!listEl || seq !== loadSeq) return;
 		var urls = data.urls || [];
 		hasMore = urls.length === PAGE_SIZE;
-		renderUrls(urls, false);
+		urls.forEach(applyUrlItem);
+		updateEmptyState();
 		infiniteScroll?.kick();
 	}
 
@@ -98,7 +140,7 @@
 			var urls = data.urls || [];
 			pageNum = page;
 			hasMore = urls.length === PAGE_SIZE;
-			renderUrls(urls, true);
+			urls.forEach(applyUrlItem);
 			appended = urls.length > 0;
 		} catch (err) {
 			showError('Failed to load more URLs: ' + (err.message || 'Unknown error'));
@@ -122,8 +164,8 @@
 		});
 	}
 
-	function onModalSaved(e) { if (e.detail?.type === 'urls') loadUrls(); }
-	function onModalDeleted(e) { if (e.detail?.type === 'urls') loadUrls(); }
+	function onModalSaved(e) { if (e.detail?.type === 'urls') onUrlUpdated(e); }
+	function onModalDeleted(e) { if (e.detail?.type === 'urls') onUrlDeleted(e); }
 
 	function mount() {
 		listEl = document.getElementById('urls-list');
@@ -131,18 +173,22 @@
 		newBtn?.addEventListener('click', function () { window.openItemModal('urls'); });
 
 		addWindowListener('project-changed', loadUrls);
-		addWindowListener('batch-done', loadUrls);
 		addWindowListener('item-modal-saved', onModalSaved);
 		addWindowListener('item-modal-deleted', onModalDeleted);
+		addWindowListener('url:created', onUrlUpdated);
+		addWindowListener('url:updated', onUrlUpdated);
+		addWindowListener('url:deleted', onUrlDeleted);
 
 		setupInfiniteScroll();
 		loadUrls().then(function () {
+			if (!listEl) return;
 			var openId = new URLSearchParams(window.location.search).get('open');
 			if (openId) window.openItemModal('urls', openId);
-		});
+		}).catch(function (err) { if (listEl) showError('Failed to load URLs: ' + (err.message || 'Unknown error')); });
 	}
 
 	function unmount() {
+		loadSeq++;
 		for (var i = 0; i < windowListeners.length; i++) {
 			window.removeEventListener(windowListeners[i][0], windowListeners[i][1]);
 		}

@@ -9,15 +9,18 @@ import { saveScreenshot, saveScreenshotDataUrl, signScreenshotUrl } from '../mod
 import { normalizeUrl } from '../modules/screenshot.js';
 import { createLogger } from '../modules/logger.js';
 import { syncStreamientItem } from './obsidian_sync_service.js';
+import { renderFile } from 'pug';
+import { fileURLToPath } from 'node:url';
 
 const log = createLogger('url');
 
-function attachScreenshotUrl(doc) {
+export function attachScreenshotUrl(doc) {
 	if (!doc) return doc;
 	const obj = typeof doc.toObject === 'function' ? doc.toObject() : { ...doc };
 	if (obj.screenshot) {
 		obj.screenshot_url = signScreenshotUrl(obj.screenshot);
 	}
+	obj.html = renderFile(fileURLToPath(new URL('../views/ajax/url_item.pug', import.meta.url)), { url: obj, cache: true });
 	return obj;
 }
 
@@ -81,7 +84,7 @@ export async function saveUrl(userId, host_id, data, ctx = {}) {
 		host_id,
 	});
 
-	emitToTenant(host_id, 'url:created', urlDoc);
+	emitToTenant(host_id, 'url:created', attachScreenshotUrl(urlDoc));
 	invalidateGraphCache(host_id).catch(() => {});
 	audit.log({ action: 'create', resource: 'url', resource_id: urlDoc._id.toString(), user_id: userId, host_id, ...ctx });
 	await syncStreamientItem('url', urlDoc._id, host_id, { item: urlDoc }).catch((err) => log.error({ err, url_id: urlDoc._id }, 'Obsidian URL export deferred'));
@@ -134,7 +137,7 @@ export async function listUrls(host_id, projectId, { page = 1, limit = 50 } = {}
 }
 
 export async function getUrl(host_id, urlId) {
-	const doc = await Url.findOne({ _id: urlId, host_id });
+	const doc = await Url.findOne({ _id: urlId, host_id }).read('primary').lean();
 	return attachScreenshotUrl(doc);
 }
 
@@ -161,7 +164,7 @@ export async function updateUrl(host_id, urlId, data, ctx = {}) {
 
 	if (urlDoc) {
 		removeDocument(host_id, 'urls', urlId).catch((err) => log.error({ err }, 'Typesense remove error'));
-		emitToTenant(host_id, 'url:updated', urlDoc);
+		emitToTenant(host_id, 'url:updated', attachScreenshotUrl(urlDoc));
 		invalidateGraphCache(host_id).catch(() => {});
 		if (ctx.user_id) {
 			const details = audit.diffSnapshot(before, urlDoc);

@@ -1,0 +1,16 @@
+- const image = url.screenshot_url || url.og_image || '';
+- const created = url.createdAt ? new Date(url.createdAt).toISOString() : '';
+.list-group-item.url-item.d-flex.align-items-start.gap-3(data-id=String(url._id) role="button" style="cursor:pointer")
+	.batch-cb-wrap
+		input.form-check-input.batch-cb.h-20px.w-30px(type="checkbox" value=String(url._id) aria-label=`Select ${url.title || url.url}`)
+	if image
+		img.og-image-thumb.rounded.flex-shrink-0(src=image alt="")
+	.flex-grow-1.overflow-hidden
+		.d-flex.justify-content-between.align-items-center.gap-2
+			strong.text-truncate= url.title || url.url
+			span.text-muted.small.text-nowrap.flex-shrink-0(data-date-value=created data-date-format="locale")= created
+		.text-truncate
+			a.text-muted.small.url-link(href=url.url target="_blank" rel="noopener noreferrer")= url.url
+		p.mb-0.text-muted.small.text-truncate= (url.description || '').slice(0, 200)
+		if url.crawl_enabled
+			span.badge.text-bg-success.mt-1 Crawling

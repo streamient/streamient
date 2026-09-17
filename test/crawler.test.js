@@ -54,7 +54,7 @@ function matchesFilter(state, filter) {
 	});
 }
 
-function makeCrawlStateModel(initialStates = []) {
+function makeCrawlStateModel(initialStates = [], { staleReads = false } = {}) {
 	const store = initialStates.map((state) => ({ ...state }));
 	const model = {
 		store,
@@ -72,8 +72,10 @@ function makeCrawlStateModel(initialStates = []) {
 			}
 			return { deletedCount };
 		},
-		async countDocuments(filter) {
-			return store.filter((state) => matchesFilter(state, filter)).length;
+		countDocuments(filter) {
+			const query = model.find(filter);
+			query.then = function (resolve, reject) { return Promise.resolve(this._results().length).then(resolve, reject); };
+			return query;
 		},
 		async distinct(field, filter) {
 			throw new Error(`Unexpected distinct(${field}) call`);
@@ -81,6 +83,11 @@ function makeCrawlStateModel(initialStates = []) {
 		find(filter) {
 			const query = {
 				_limit: null,
+				_primary: false,
+				read(preference) {
+					this._primary = preference === 'primary';
+					return this;
+				},
 				sort() {
 					return this;
 				},
@@ -95,7 +102,8 @@ function makeCrawlStateModel(initialStates = []) {
 					return this;
 				},
 				_results() {
-					const results = store.filter((state) => matchesFilter(state, filter));
+					const visible = staleReads && !this._primary ? initialStates : store;
+					const results = visible.filter((state) => matchesFilter(state, filter));
 					return this._limit ? results.slice(0, this._limit) : results;
 				},
 				then(resolve, reject) {
@@ -127,6 +135,29 @@ function makeCrawlStateModel(initialStates = []) {
 }
 
 describe('crawler indexing and state', () => {
+	it('starts and completes a new crawl when ordinary reads do not yet see the acknowledged queue writes', async () => {
+		const stateModel = makeCrawlStateModel([], { staleReads: true });
+		const updates = [];
+		class FakeCrawler {
+			constructor(options) { this.options = options; }
+			async run(batch) {
+				assert.deepEqual(batch, ['https://example.com']);
+				await this.options.requestHandler({ request: { url: batch[0] }, response: makeHtmlResponse(), $: makeHtml(), enqueueLinks: async () => {} });
+			}
+		}
+		const count = await crawlSite(makeUrlDoc(), {
+			CrawlState: stateModel,
+			Url: { updateOne: async (filter, update) => updates.push(update.$set) },
+			CheerioCrawler: FakeCrawler,
+			ensureCollections: async () => {},
+			bulkIndexCrawledPages: async (host, data) => ({ indexedCount: data.pages.length, attemptedCount: data.pages.length }),
+		});
+		assert.equal(count, 1);
+		assert.equal(updates.at(-1).crawl_visited_count, 1);
+		assert.equal(updates.at(-1).crawl_frontier_count, 0);
+		assert.equal(updates.at(-1).crawl_partial, false);
+	});
+
 	it('crawls a newly saved URL even when another record already crawled the same address', async () => {
 		const server = createServer((req, res) => {
 			res.setHeader('Content-Type', 'text/html');

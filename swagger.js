@@ -321,6 +321,7 @@ const swaggerSpec = {
                     tags: { type: 'array', items: { type: 'string' } },
                     screenshot: { type: 'string', description: 'Screenshot filename (hash)' },
                     screenshot_url: { type: 'string', description: 'Signed URL to screenshot image (time-limited)' },
+                    html: { type: 'string', description: 'Server-rendered URL list item for incremental UI updates; included by list, get, save and update endpoints.' },
                     project: { type: 'string' },
                     crawl_enabled: { type: 'boolean' },
                     is_indexed: { type: 'boolean', description: 'Whether the saved URL document was indexed successfully.' },
@@ -1662,13 +1663,13 @@ const swaggerSpec = {
             post: {
                 tags: ['Batch'],
                 summary: 'Batch delete items',
-                description: 'For emails, moves each email to trash and clears all labels.',
+                description: 'For emails, moves each email to trash and clears all labels. For URLs, also returns deleted_ids for incremental list updates.',
                 requestBody: {
                     required: true,
                     content: { 'application/json': { schema: { type: 'object', properties: { type: { type: 'string', enum: ['notes', 'memories', 'urls', 'emails'] }, ids: { type: 'array', items: { type: 'string' } }, all: { type: 'boolean', description: 'When true, delete all items of the given type (ids is ignored)' }, filterProject: { type: 'string', description: 'Filter by project ID when all=true' } }, required: ['type'] } } },
                 },
                 responses: {
-                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { message: { type: 'string' }, deleted: { type: 'integer' } } } } } },
+                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { message: { type: 'string' }, deleted: { type: 'integer' }, deleted_ids: { type: 'array', items: { type: 'string' }, description: 'Successfully deleted URL IDs, when type is urls.' } } } } } },
                 },
             },
         },
@@ -1676,12 +1677,13 @@ const swaggerSpec = {
             post: {
                 tags: ['Batch'],
                 summary: 'Batch move items to a project',
+                description: 'For URLs, also returns urls containing the updated records and rendered list items.',
                 requestBody: {
                     required: true,
                     content: { 'application/json': { schema: { type: 'object', properties: { type: { type: 'string', enum: ['notes', 'memories', 'urls', 'emails'] }, ids: { type: 'array', items: { type: 'string' } }, all: { type: 'boolean', description: 'When true, move all items of the given type (ids is ignored)' }, filterProject: { type: 'string', description: 'Filter by source project ID when all=true' }, project: { type: 'string' } }, required: ['type', 'project'] } } },
                 },
                 responses: {
-                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { message: { type: 'string' }, moved: { type: 'integer' } } } } } },
+                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { message: { type: 'string' }, moved: { type: 'integer' }, urls: { type: 'array', items: { $ref: '#/components/schemas/Url' }, description: 'Successfully moved URLs, when type is urls.' } } } } } },
                 },
             },
         },
@@ -1689,12 +1691,13 @@ const swaggerSpec = {
             post: {
                 tags: ['Batch'],
                 summary: 'Batch copy items to a project',
+                description: 'For URLs, also returns urls containing the new records and rendered list items.',
                 requestBody: {
                     required: true,
                     content: { 'application/json': { schema: { type: 'object', properties: { type: { type: 'string', enum: ['notes', 'memories', 'urls', 'emails'] }, ids: { type: 'array', items: { type: 'string' } }, all: { type: 'boolean', description: 'When true, copy all items of the given type (ids is ignored)' }, filterProject: { type: 'string', description: 'Filter by source project ID when all=true' }, project: { type: 'string' } }, required: ['type', 'project'] } } },
                 },
                 responses: {
-                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { message: { type: 'string' }, copied: { type: 'integer' } } } } } },
+                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { message: { type: 'string' }, copied: { type: 'integer' }, urls: { type: 'array', items: { $ref: '#/components/schemas/Url' }, description: 'Newly copied URLs, when type is urls.' } } } } } },
                 },
             },
         },

@@ -2,9 +2,32 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { Url } from '../model/url.js';
-import { listUrls, saveUrl } from '../services/url_service.js';
+import { attachScreenshotUrl, getUrl, listUrls, saveUrl } from '../services/url_service.js';
 
 describe('URL service listing', () => {
+	it('returns the saved record markup without needing a list query and escapes user text', () => {
+		const doc = { _id: 'url-one', title: '<script>bad()</script>', description: '<img onerror="bad()">', url: 'https://example.com', crawl_enabled: true };
+		const result = attachScreenshotUrl(doc);
+		assert.match(result.html, /data-id="url-one"/);
+		assert.match(result.html, /&lt;script&gt;/);
+		assert.doesNotMatch(result.html, /<script>|<img onerror/);
+		assert.equal(doc.html, undefined);
+	});
+	it('reconciles one URL against acknowledged state with tenant scope and lean results', async () => {
+		const originalFindOne = Url.findOne;
+		const calls = [];
+		try {
+			Url.findOne = (filter) => {
+				calls.push(filter);
+				return { read(value) { calls.push(value); return this; }, lean() { calls.push('lean'); return { _id: 'url-one' }; } };
+			};
+			const result = await getUrl('tenant-one', 'url-one');
+			assert.deepEqual(calls, [{ _id: 'url-one', host_id: 'tenant-one' }, 'primary', 'lean']);
+			assert.match(result.html, /data-id="url-one"/);
+		} finally {
+			Url.findOne = originalFindOne;
+		}
+	});
 	it('sorts newest saved URLs first with deterministic pagination and lean results', async () => {
 		const originalFind = Url.find;
 		const calls = [];
@@ -33,7 +56,8 @@ describe('URL service listing', () => {
 				['limit', 25],
 				['lean'],
 			]);
-			assert.deepEqual(result, docs);
+			assert.deepEqual(result.map(({ html, ...doc }) => doc), docs);
+			assert.match(result[0].html, /data-id="url-2"/);
 		} finally {
 			Url.find = originalFind;
 		}

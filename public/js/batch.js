@@ -172,7 +172,8 @@
 	async function onDelete() {
 		var count = getActionCount();
 		if (!count) return;
-		await api('POST', '/batch/delete', buildBatchBody());
+		var result = await api('POST', '/batch/delete', buildBatchBody());
+		(result.deleted_ids || []).forEach(function (id) { window.dispatchEvent(new CustomEvent('url:deleted', { detail: { _id: id } })); });
 		showSuccess(count + ' moved to trash');
 		resetBatch();
 		window.dispatchEvent(new CustomEvent('batch-done'));
@@ -217,6 +218,7 @@
 				setProjectPickerBusy(form, true);
 				try {
 					var result = await api('POST', '/batch/' + action, buildBatchBody({ project: project }));
+					(result.urls || []).forEach(function (url) { window.dispatchEvent(new CustomEvent('url:' + (action === 'move' ? 'updated' : 'created'), { detail: url })); });
 					var processed = action === 'move' ? result.moved : result.copied;
 					setProjectPickerBusy(form, false);
 					modalEl.addEventListener('hidden.bs.modal', function () {
