@@ -45,12 +45,12 @@ async (page) => {
 		await paletteResults;
 		await page.waitForFunction(() => document.querySelector('#search-total')?.textContent === '12 matching records');
 		if (await page.locator('.search-result').count() !== 10) throw new Error('First page should contain 10 records');
-		await page.getByRole('button', { name: 'Select page', exact: true }).click();
+		await page.locator('.search-select').first().check();
 		if (!(await page.locator('#search-clear').isVisible())) throw new Error('Clear selection missing after selecting records');
 		await page.getByRole('button', { name: 'Next', exact: true }).click();
 		await page.waitForFunction(() => document.querySelector('#search-page-number')?.textContent === 'Page 2 of 2');
-		if (await page.locator('#search-selected').textContent() !== '10 selected') throw new Error('Selection lost across pagination');
-		await page.getByRole('button', { name: 'Select all 12 matching records', exact: true }).click();
+		if (await page.locator('#search-selected').textContent() !== '1 selected') throw new Error('Selection lost across pagination');
+		await page.getByRole('checkbox', { name: 'Select all', exact: true }).check();
 		await page.waitForFunction(() => document.querySelector('#search-selected')?.textContent === '12 selected');
 		mutation = true;
 		await page.getByRole('button', { name: 'Add tags', exact: true }).click();
@@ -67,10 +67,10 @@ async (page) => {
 			const note = (await call('GET', '/notes/' + id)).note;
 			if (!note.tags.includes('bulk-regression') || !note.tags.includes(tag) || !note.tags.includes('api')) throw new Error('Tag action lost or missed tags');
 		}
-		await page.getByRole('button', { name: 'Select all 12 matching records', exact: true }).click();
+		await page.getByRole('checkbox', { name: 'Select all', exact: true }).check();
 		await page.waitForFunction(() => document.querySelector('#search-selected')?.textContent === '12 selected');
 		mutation = true;
-		await page.getByRole('button', { name: 'Move project', exact: true }).click();
+		await page.locator('[data-search-action="move"]').click();
 		await page.locator('#batch-project-select').selectOption(projects[1]);
 		await page.locator('#batch-project-form').getByRole('button', { name: 'Move', exact: true }).click();
 		await page.waitForFunction(() => document.querySelector('#search-total')?.textContent === '0 matching records');
@@ -86,7 +86,7 @@ async (page) => {
 		await page.locator('#search-project').selectOption(projects[1]);
 		await page.locator('#search-submit').click();
 		await page.waitForFunction(() => document.querySelector('#search-total')?.textContent === '13 matching records');
-		await page.getByRole('button', { name: 'Select all 13 matching records', exact: true }).click();
+		await page.getByRole('checkbox', { name: 'Select all', exact: true }).check();
 		await page.waitForFunction(() => document.querySelector('#search-selected')?.textContent === '13 selected');
 		mutation = true;
 		await page.getByRole('button', { name: 'Remove tags', exact: true }).click();
@@ -100,7 +100,7 @@ async (page) => {
 		await page.waitForFunction(() => document.querySelector('#search-total')?.textContent === '13 matching records');
 		await page.locator('.search-select').first().check();
 		mutation = true;
-		await page.getByRole('button', { name: 'Move to trash', exact: true }).click();
+		await page.locator('[data-search-action="trash"]').click();
 		await page.getByRole('button', { name: 'Yes, do it', exact: true }).click();
 		await page.waitForFunction(() => document.querySelector('#search-total')?.textContent === '12 matching records');
 		if (forbidden.length) throw new Error('Mutation reloaded search/page: ' + forbidden.join(', '));

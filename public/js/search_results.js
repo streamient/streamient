@@ -7,6 +7,8 @@
 	let total = 0;
 	let generation = 0;
 	let busy = false;
+	let selectingAll = false;
+	let selectionRequest = 0;
 	let tagPicker;
 	let listeners = [];
 	const rows = new Map();
@@ -35,14 +37,18 @@
 	const updateSelection = () => {
 		if (!root) return;
 		root.querySelector('#search-selected').textContent = selected.size + ' selected';
-		root.querySelector('#search-clear').classList.toggle('d-none', !selected.size);
+		root.querySelector('#search-actions').classList.toggle('d-none', !selected.size);
 		root.querySelector('#search-total').textContent = total + ' matching records';
-		root.querySelector('#search-select-all').textContent = 'Select all ' + total + ' matching records';
+		const selectAll = root.querySelector('#search-select-all');
+		selectAll.checked = selectingAll || (selected.size > 0 && selected.size >= total);
+		selectAll.indeterminate = !selectingAll && selected.size > 0 && selected.size < total;
+		selectAll.disabled = busy || !total;
+		selectAll.setAttribute('aria-busy', String(selectingAll));
 		root.querySelector('#search-page-number').textContent = 'Page ' + page + ' of ' + pages;
 		root.querySelector('#search-prev').disabled = page <= 1;
 		root.querySelector('#search-next').disabled = page >= pages;
 		root.querySelector('#search-empty').classList.toggle('d-none', rows.size > 0);
-		root.querySelectorAll('[data-search-action]').forEach((button) => { button.disabled = busy || !selected.size; });
+		root.querySelectorAll('[data-search-action]').forEach((button) => { button.disabled = busy || selectingAll || !selected.size; });
 		root.querySelectorAll('.search-result').forEach((row) => { row.querySelector('.search-select').checked = selected.has(row.dataset.searchKey); });
 	};
 	const applyItem = (outcome, { sequence, epoch = generation, mutation = false } = {}) => {
@@ -115,6 +121,9 @@
 	};
 	const load = async (button) => {
 		if (!root || busy) return;
+		selectionRequest++;
+		selectingAll = false;
+		updateSelection();
 		const epoch = ++generation;
 		setButtonLoading(button, true);
 		try {
@@ -241,6 +250,8 @@
 			on(root.querySelector('#search-project'), 'change', () => { loadTags().catch((error) => showError(error.message)); });
 			on(root.querySelector('#search-list'), 'change', (event) => {
 				if (busy || !event.target.matches('.search-select')) return;
+				selectionRequest++;
+				selectingAll = false;
 				const key = event.target.closest('.search-result').dataset.searchKey;
 				if (event.target.checked) selected.set(key, rows.get(key));
 				else selected.delete(key);
@@ -252,20 +263,39 @@
 				if (item.type === 'vault_files') window.open('/api/v1/obsidian/files/' + encodeURIComponent(item.id) + '/content', '_blank', 'noopener');
 				else openResultModal(item);
 			});
-			on(root.querySelector('#search-select-page'), 'click', () => { if (!busy) { rows.forEach((item, key) => selected.set(key, item)); updateSelection(); } });
-			on(root.querySelector('#search-clear'), 'click', () => { if (!busy) { selected.clear(); updateSelection(); } });
-			on(root.querySelector('#search-select-all'), 'click', async (event) => {
+			on(root.querySelector('#search-clear'), 'click', () => {
 				if (busy) return;
+				selectionRequest++;
+				selectingAll = false;
+				selected.clear();
+				updateSelection();
+			});
+			on(root.querySelector('#search-select-all'), 'change', async (event) => {
+				if (busy) return;
+				const request = ++selectionRequest;
+				if (!event.currentTarget.checked) {
+					selectingAll = false;
+					selected.clear();
+					updateSelection();
+					return;
+				}
 				const epoch = generation;
-				setButtonLoading(event.currentTarget, true);
+				selectingAll = true;
+				rows.forEach((item, key) => selected.set(key, item));
+				updateSelection();
 				try {
 					const data = await api('POST', '/search/selection', filters);
-					if (epoch !== generation) return;
+					if (epoch !== generation || request !== selectionRequest) return;
 					selected.clear();
 					data.items.forEach((item) => selected.set(keyOf(item), item));
 					updateSelection();
-				} catch (error) { showError(error.message); }
-				finally { setButtonLoading(root?.querySelector('#search-select-all'), false); }
+				} catch (error) {
+					if (epoch === generation && request === selectionRequest) showError(error.message);
+				}
+				finally {
+					if (request === selectionRequest) selectingAll = false;
+					updateSelection();
+				}
 			});
 			for (const [id, delta] of [['search-prev', -1], ['search-next', 1]]) on(root.querySelector('#' + id), 'click', (event) => { if (!busy) { page += delta; load(event.currentTarget); } });
 			root.querySelectorAll('[data-search-action]').forEach((button) => on(button, 'click', () => actionDialog(button.dataset.searchAction, button).catch((error) => showError(error.message))));
@@ -276,6 +306,8 @@
 		},
 		unmount() {
 			generation++;
+			selectionRequest++;
+			selectingAll = false;
 			tagPicker?.destroy();
 			tagPicker = null;
 			listeners.forEach(([target, event, handler]) => target?.removeEventListener(event, handler));

@@ -16,17 +16,28 @@
 		.d-flex.align-items-center.justify-content-between.gap-3.mt-2
 			.form-text.mt-0#search-tag-help Select tags or use tag:typerelay. All selected tags must match.
 			button.btn.btn-primary.btn-sm.cursor-pointer#search-submit(type="submit") Search
-	.d-flex.flex-wrap.align-items-center.gap-3.mb-3
-		span#search-total(role="status")
-		span#search-selected(role="status")
-		button.btn.btn-outline-secondary.btn-sm.cursor-pointer#search-select-page(type="button") Select page
-		button.btn.btn-outline-secondary.btn-sm.cursor-pointer#search-select-all(type="button") Select all matching
-		button.btn.btn-link.btn-sm.cursor-pointer.d-none#search-clear(type="button") Clear selection
-	.d-flex.flex-wrap.align-items-center.gap-3.mb-3
-		button.btn.btn-outline-primary.btn-sm.cursor-pointer(data-search-action="move" type="button" disabled) Move project
-		button.btn.btn-outline-primary.btn-sm.cursor-pointer(data-search-action="add_tags" type="button" disabled) Add tags
-		button.btn.btn-outline-primary.btn-sm.cursor-pointer(data-search-action="remove_tags" type="button" disabled) Remove tags
-		button.btn.btn-outline-danger.btn-sm.cursor-pointer(data-search-action="trash" type="button" disabled) Move to trash
+	.st-list-toolbar.mb-3
+		#batch-toolbar
+			.d-flex.align-items-center.justify-content-between.gap-3
+				.form-check.mb-2
+					input.form-check-input.cursor-pointer#search-select-all(type="checkbox" disabled title="Select all matching records, including other pages")
+					label.form-check-label.small.cursor-pointer(for="search-select-all") Select all
+				span.small.text-muted#search-total(role="status")
+			#search-actions.batch-floating-bar.d-none(role="toolbar" aria-label="Selected search records")
+				.batch-floating-inner
+					.d-flex.align-items-center.gap-3
+						span.batch-floating-count#search-selected(role="status") 0 selected
+						.d-flex.align-items-center.gap-2
+							button.btn.btn-sm.cursor-pointer(data-search-action="trash" type="button" disabled)
+								!= icon('delete', 'me-1')
+								span Delete
+							button.btn.btn-sm.cursor-pointer(data-search-action="move" type="button" disabled)
+								!= icon('drive_file_move', 'me-1')
+								span Move
+							button.btn.btn-sm.cursor-pointer(data-search-action="add_tags" type="button" disabled) Add tags
+							button.btn.btn-sm.cursor-pointer(data-search-action="remove_tags" type="button" disabled) Remove tags
+					button.btn.btn-sm.batch-floating-close.cursor-pointer#search-clear(type="button" aria-label="Clear selection" title="Clear selection")
+						!= icon('close')
 	#search-action-status.small.mb-3(role="status")
 	#search-list
 	#search-empty.text-muted.mb-3.d-none No matching records.
