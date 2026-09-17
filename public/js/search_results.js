@@ -9,6 +9,7 @@
 	let busy = false;
 	let selectingAll = false;
 	let selectionRequest = 0;
+	let selectionAnchor = null;
 	let tagPicker;
 	let listeners = [];
 	const rows = new Map();
@@ -121,6 +122,7 @@
 	};
 	const load = async (button) => {
 		if (!root || busy) return;
+		selectionAnchor = null;
 		selectionRequest++;
 		selectingAll = false;
 		updateSelection();
@@ -248,13 +250,20 @@
 				load(root.querySelector('#search-submit'));
 			});
 			on(root.querySelector('#search-project'), 'change', () => { loadTags().catch((error) => showError(error.message)); });
-			on(root.querySelector('#search-list'), 'change', (event) => {
+			on(root.querySelector('#search-list'), 'click', (event) => {
 				if (busy || !event.target.matches('.search-select')) return;
 				selectionRequest++;
 				selectingAll = false;
 				const key = event.target.closest('.search-result').dataset.searchKey;
-				if (event.target.checked) selected.set(key, rows.get(key));
-				else selected.delete(key);
+				const keys = Array.from(root.querySelectorAll('.search-result'), (row) => row.dataset.searchKey);
+				const start = keys.indexOf(selectionAnchor);
+				const end = keys.indexOf(key);
+				const range = event.shiftKey && start !== -1 ? keys.slice(Math.min(start, end), Math.max(start, end) + 1) : [key];
+				for (const recordKey of range) {
+					if (event.target.checked) selected.set(recordKey, rows.get(recordKey));
+					else selected.delete(recordKey);
+				}
+				selectionAnchor = key;
 				updateSelection();
 			});
 			on(root.querySelector('#search-list'), 'click', (event) => {
@@ -265,6 +274,7 @@
 			});
 			on(root.querySelector('#search-clear'), 'click', () => {
 				if (busy) return;
+				selectionAnchor = null;
 				selectionRequest++;
 				selectingAll = false;
 				selected.clear();
@@ -272,6 +282,7 @@
 			});
 			on(root.querySelector('#search-select-all'), 'change', async (event) => {
 				if (busy) return;
+				selectionAnchor = null;
 				const request = ++selectionRequest;
 				if (!event.currentTarget.checked) {
 					selectingAll = false;
@@ -306,6 +317,7 @@
 		},
 		unmount() {
 			generation++;
+			selectionAnchor = null;
 			selectionRequest++;
 			selectingAll = false;
 			tagPicker?.destroy();

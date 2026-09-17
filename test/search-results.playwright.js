@@ -46,6 +46,10 @@ async (page) => {
 		await page.waitForFunction(() => document.querySelector('#search-total')?.textContent === '12 matching records');
 		if (await page.locator('.search-result').count() !== 10) throw new Error('First page should contain 10 records');
 		await page.locator('.search-select').first().check();
+		await page.locator('.search-select').nth(4).click({ modifiers: ['Shift'] });
+		if (await page.locator('#search-selected').textContent() !== '5 selected') throw new Error('Shift-click failed to select a range');
+		await page.locator('.search-select').nth(1).click({ modifiers: ['Shift'] });
+		if (await page.locator('#search-selected').textContent() !== '1 selected') throw new Error('Reverse Shift-click failed to deselect a range');
 		if (!(await page.locator('#search-clear').isVisible())) throw new Error('Clear selection missing after selecting records');
 		await page.getByRole('button', { name: 'Next', exact: true }).click();
 		await page.waitForFunction(() => document.querySelector('#search-page-number')?.textContent === 'Page 2 of 2');

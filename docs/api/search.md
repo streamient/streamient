@@ -47,7 +47,7 @@ This endpoint searches notes, memories, URLs, emails, crawled pages, and vault f
 
 ## Selectable Results and Bulk Actions
 
-The search modal's **View all results** opens the same results page used by AI search. Select individual records or use the single **Select all** checkbox for every matching record, including other pages. The standard floating action bar appears only while records are selected; its close button clears the selection. Selection persists across pagination and clears when applying different filters.
+The search modal's **View all results** opens the same results page used by AI search. Select individual records, Shift-click checkboxes to select or deselect a range on the current page, or use the single **Select all** checkbox for every matching record, including other pages. The standard floating action bar appears only while records are selected; its close button clears the selection. Selection persists across pagination and clears when applying different filters.
 
 - `POST /api/v1/search/results`: filters, paginated records, counts, and server-rendered row fragments.
 - `GET /api/v1/search/tags?project_id=...`: available tags for the project.
