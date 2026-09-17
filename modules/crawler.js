@@ -1,5 +1,6 @@
 import { acquireTenantWork } from './tenancy.js';
-import { CheerioCrawler } from 'crawlee';
+import { CheerioCrawler, Configuration } from 'crawlee';
+import { randomUUID } from 'node:crypto';
 import { ensureCollections, importDocuments, removeDocumentsBySourceIds, toIndexDocs } from '../modules/typesense.js';
 import { Url } from '../model/url.js';
 import { CrawlState } from '../model/crawl_state.js';
@@ -534,7 +535,11 @@ export async function crawlSite(urlDoc, deps = {}) {
 			failedInRun.set(normalized, failureEntryForError(request.url, error));
 			log.warn({ url: request.url }, 'Crawl failed');
 		},
-	});
+	}, new Configuration({
+		// MongoDB owns resumable state; each run needs an isolated transient queue.
+		persistStorage: false,
+		storageClientOptions: { persistStorage: false, localDataDirectory: `storage/crawl-${randomUUID()}` },
+	}));
 
 	await crawler.run(batch);
 
