@@ -1,0 +1,28 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 789bf06f5a4a1e9ffb325b6bb9c3de2da3ea49b2..ad0f5bd0010e50ab1b0c250604c49d3a8b363be1 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -380,7 +380,8 @@ var MongoStore = class MongoStore extends express_session.Store {
+ 				}
+ 				updateFields.expires = computeExpires(session, this.options.ttl);
+ 				const collection = await this.collectionP;
+-				const updateQuery = { $set: updateFields };
++				if (touchAfter > 0) updateFields.lastModified = currentDate;
++				const updateQuery = { $max: updateFields };
+ 				if (this.options.timestamps) updateQuery.$currentDate = { updatedAt: true };
+ 				if ((await collection.updateOne({ _id: this.computeStorageId(sid) }, updateQuery, { writeConcern: this.options.writeOperationOptions })).matchedCount === 0) return callback(/* @__PURE__ */ new Error("Unable to find the session to touch"));
+ 				else {
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 1e039857d07f6bd36a97d4db672bcecb1d671a57..36ad6073f7242541a4d8055660e3f0990008b59d 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -347,7 +347,8 @@ var MongoStore = class MongoStore extends session.Store {
+ 				}
+ 				updateFields.expires = computeExpires(session$1, this.options.ttl);
+ 				const collection = await this.collectionP;
+-				const updateQuery = { $set: updateFields };
++				if (touchAfter > 0) updateFields.lastModified = currentDate;
++				const updateQuery = { $max: updateFields };
+ 				if (this.options.timestamps) updateQuery.$currentDate = { updatedAt: true };
+ 				if ((await collection.updateOne({ _id: this.computeStorageId(sid) }, updateQuery, { writeConcern: this.options.writeOperationOptions })).matchedCount === 0) return callback(/* @__PURE__ */ new Error("Unable to find the session to touch"));
+ 				else {

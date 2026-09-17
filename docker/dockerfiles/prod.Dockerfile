@@ -24,6 +24,7 @@ RUN apt-get update && \
 FROM builder AS deps
 
 COPY --link .npmrc package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY --link patches ./patches
 COPY --link apps/cli/package.json ./apps/cli/
 COPY --link apps/mcp/package.json ./apps/mcp/
 COPY --link docs/package.json ./docs/
@@ -57,6 +58,7 @@ RUN node docs/scripts/export-openapi.js \
 FROM builder AS production
 
 COPY --link .npmrc package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY --link patches ./patches
 COPY --link apps/cli/package.json ./apps/cli/
 COPY --link apps/mcp/package.json ./apps/mcp/
 COPY --link docs/package.json ./docs/

@@ -58,13 +58,15 @@ var _90_days_in_ms = 90 * 24 * 60 * 60 * 1000;
 
 const sessionMiddleware = session({
 	'secret': config.sessionSecret,
-	'resave': true,
+	'resave': false,
 	'saveUninitialized': false,
 	'proxy': process.env.NODE_ENV === 'production' ? true : false,
 	'store': MongoStore.create({
 		'mongoUrl': config.mongoUri,
 		'collectionName': 'sessions',
-		'ttl': _90_days_in_ms,
+		// Store TTL/touchAfter use seconds; cookie maxAge uses milliseconds.
+		'ttl': _90_days_in_ms / 1000,
+		'touchAfter': 60,
 		'createTTLIndex': true,
 	}),
 	'cookie': {

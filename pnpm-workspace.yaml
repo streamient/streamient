@@ -32,3 +32,5 @@ overrides:
 packages:
   - "apps/*"
   - "docs"
+patchedDependencies:
+  connect-mongo@6.0.0: patches/connect-mongo@6.0.0.patch

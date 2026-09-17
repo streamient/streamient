@@ -14,3 +14,13 @@ test('constrains and preinstalls pnpm 12 without Corepack', () => {
 		assert.doesNotMatch(source, /corepack/);
 	}
 });
+
+
+test('production dependency stages include the session-store patch before installation', () => {
+	const source = fs.readFileSync(new URL('../docker/dockerfiles/prod.Dockerfile', import.meta.url), 'utf8');
+	for (const stage of ['deps', 'production']) {
+		const body = source.split(`FROM builder AS ${stage}`)[1].split('FROM ')[0];
+		assert.ok(body.indexOf('COPY --link patches ./patches') >= 0);
+		assert.ok(body.indexOf('COPY --link patches ./patches') < body.indexOf('RUN pnpm install'));
+	}
+});
