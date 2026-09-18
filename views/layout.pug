@@ -103,7 +103,7 @@ html(lang="en")
 								if __productUpdatesEnabled
 									a.btn.btn-link.btn-sm.d-inline-flex.align-items-center.text-nowrap.position-relative.me-2.product-updates-nav-link(href="/news" title="What's new" class={active: page === 'news'} data-product-updates-nav)
 										!= icon('speakerphone', 'me-1')
-										span.fw-semibold.d-none.d-md-inline What's new
+										span.d-none.d-md-inline What's new
 										span.badge.rounded-pill.text-bg-danger.d-none#product-updates-badge 0
 								if !streamient_demo_mode
 									button.btn.btn-link.btn-sm.d-none.d-md-inline-flex.align-items-center.text-nowrap.st-mobile-beta-link.st-mobile-beta-header-link(type="button" data-bs-toggle="modal" data-bs-target="#mobileBetaModal" data-track="mobile_beta_open")
@@ -439,6 +439,18 @@ html(lang="en")
 
 		if __productUpdatesEnabled
 			#product-updates-modal-root
+			#product-updates-drawer.offcanvas.offcanvas-end(tabindex="-1" aria-labelledby="productUpdatesDrawerLabel")
+				.offcanvas-header
+					h2#productUpdatesDrawerLabel.offcanvas-title.h5.mb-0 What's new
+					button.btn-close.cursor-pointer(type="button" data-bs-dismiss="offcanvas" aria-label="Close")
+				.offcanvas-body
+					#product-updates-news-view
+						if page === 'news' && typeof product_updates !== 'undefined'
+							include ajax/section/news
+						else
+							.text-center.py-5.text-muted(data-product-updates-loading)
+								.spinner-border.spinner-border-sm.me-2
+								span Loading product updates...
 
 		if !streamient_demo_mode
 			script(src="/socket.io/socket.io.js")

@@ -7,9 +7,15 @@
 	let modalLoadInFlight = false;
 	let modalQueued = false;
 	let dismissInFlight = false;
+	let statusVersion = 0;
+	let archiveLoadInFlight = false;
+	let archiveStale = false;
+	let newsActive = window.location.pathname === '/news';
+	let workspaceFocus = null;
+	let workspaceTitle = newsActive ? 'Dashboard — Streamient' : '';
 
 	function enabled() {
-		return window.__product_updates_enabled === true && Boolean(document.getElementById('product-updates-modal-root'));
+		return window.__product_updates_enabled === true && Boolean(document.getElementById('product-updates-modal-root')) && Boolean(document.getElementById('product-updates-drawer'));
 	}
 
 	function productFetch(path, options) {
@@ -20,6 +26,7 @@
 		const badge = document.getElementById('product-updates-badge');
 		if (!badge) return;
 		const value = Math.max(Number(count) || 0, 0);
+		archiveStale = value > 0;
 		badge.textContent = value > 99 ? '99+' : String(value);
 		badge.classList.toggle('d-none', value === 0);
 		badge.setAttribute('aria-label', value === 1 ? '1 unseen product update' : `${value} unseen product updates`);
@@ -38,12 +45,19 @@
 		return window.BsModal;
 	}
 
+	async function offcanvasClass() {
+		if (window.BsOffcanvas) return window.BsOffcanvas;
+		const vendor = await import('/static/js/vendor.js');
+		window.BsOffcanvas = vendor.Offcanvas;
+		return window.BsOffcanvas;
+	}
+
 	function anotherModalIsOpen() {
 		return Boolean(document.querySelector('.modal.show:not(#productUpdatesModal)'));
 	}
 
 	async function showQueuedModal() {
-		if (!modalQueued || anotherModalIsOpen()) return;
+		if (!modalQueued || newsActive || anotherModalIsOpen()) return;
 		const modal = document.getElementById('productUpdatesModal');
 		if (!modal) {
 			modalQueued = false;
@@ -55,6 +69,7 @@
 	}
 
 	async function markSeen(updateId) {
+		const version = ++statusVersion;
 		const response = await productFetch('/ajax/product-updates/seen', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
@@ -64,8 +79,10 @@
 			const payload = await response.json().catch(function () { return {}; });
 			throw new Error(payload.error || 'Could not save the product update status');
 		}
-		setBadge(0);
-		return response.json();
+		if (version === statusVersion) setBadge(0);
+		const result = await response.json();
+		if (version === statusVersion) statusVersion++;
+		return result;
 	}
 
 	function setActionBusy(button, busy) {
@@ -152,10 +169,12 @@
 		}
 		checkInFlight = true;
 		lastCheckAt = Date.now();
+		const version = statusVersion;
 		try {
 			const response = await productFetch('/ajax/product-updates/status');
 			if (!response.ok) throw new Error(`Status ${response.status}`);
 			const status = await response.json();
+			if (version !== statusVersion) return;
 			setBadge(status.new_count);
 			if (status.has_modal) await loadModal();
 		} catch (error) {
@@ -178,7 +197,12 @@
 			const fragmentRoot = template.content.querySelector('[data-product-update-items-fragment]');
 			const list = root.querySelector('#product-updates-list');
 			if (!fragmentRoot || !list) throw new Error('Product update response was invalid');
-			while (fragmentRoot.firstChild) list.appendChild(fragmentRoot.firstChild);
+			const ids = new Set(Array.from(list.querySelectorAll('[data-product-update-id]'), function (item) { return item.dataset.productUpdateId; }));
+			Array.from(fragmentRoot.children).forEach(function (item) {
+				if (ids.has(item.dataset.productUpdateId)) return;
+				list.appendChild(item);
+				ids.add(item.dataset.productUpdateId);
+			});
 			root.dataset.nextCursor = fragmentRoot.dataset.nextCursor || '';
 			button.classList.toggle('d-none', !root.dataset.nextCursor);
 		} catch (error) {
@@ -196,10 +220,109 @@
 		button?.addEventListener('click', function () { void appendNextPage(root, button); });
 		const updateId = root.dataset.latestUpdateId || '';
 		if (updateId) markSeen(updateId).catch(function (error) { void showFailure(error.message); });
+		modalQueued = false;
+		document.getElementById('productUpdatesModal')?.remove();
 	}
 
-	window.__sections = window.__sections || {};
-	window.__sections.news = { mount: mountNews, unmount: function () {} };
+	function projectSearch() {
+		if (!window.currentProjectId || typeof window.JSURL === 'undefined') return '';
+		return `?g=${window.JSURL.stringify({ project_id: window.currentProjectId })}`;
+	}
+
+	function setNewsActive(active) {
+		const wasActive = newsActive;
+		if (active && !wasActive) workspaceTitle = document.title;
+		newsActive = active;
+		document.querySelector('[data-product-updates-nav]')?.classList.toggle('active', active);
+		document.querySelector('[data-streamient-projects-nav]')?.classList.toggle('active', !active && window.location.pathname !== '/graph');
+		if (active) document.title = "What's new — Streamient";
+		else if (workspaceTitle) {
+			document.title = workspaceTitle;
+		}
+	}
+
+	async function loadArchive() {
+		if ((document.getElementById('product-updates-news') && !archiveStale) || archiveLoadInFlight) return;
+		archiveLoadInFlight = true;
+		try {
+			const response = await productFetch('/ajax/section/news');
+			if (!response.ok) throw new Error('Could not load product updates');
+			const template = document.createElement('template');
+			template.innerHTML = await response.text();
+			const archive = template.content.querySelector('#product-updates-news');
+			const view = document.getElementById('product-updates-news-view');
+			if (!archive || !view) throw new Error('Product update response was invalid');
+			view.replaceChildren(archive);
+			archiveStale = false;
+			mountNews();
+		} finally {
+			archiveLoadInFlight = false;
+		}
+	}
+
+	function workspaceUrl() {
+		return `/dashboard${projectSearch()}`;
+	}
+
+	function restoreWorkspaceUrl() {
+		if (window.history.state?.productNews) {
+			window.history.back();
+			return;
+		}
+		window.history.replaceState({ spaPath: '/dashboard' }, '', workspaceUrl());
+	}
+
+	async function navigateNews(active, push) {
+		const drawer = document.getElementById('product-updates-drawer');
+		if (!drawer) return;
+		const Offcanvas = await offcanvasClass();
+		if (active) {
+			workspaceFocus = document.activeElement;
+			await loadArchive();
+			if (push && window.location.pathname !== '/news') {
+				window.history.replaceState({ ...(window.history.state || {}), productNewsReturn: true }, '');
+				window.history.pushState({ productNews: true }, '', `/news${projectSearch()}`);
+			}
+			setNewsActive(true);
+			Offcanvas.getOrCreateInstance(drawer).show();
+			mountNews();
+			return;
+		}
+		setNewsActive(false);
+		Offcanvas.getOrCreateInstance(drawer).hide();
+		workspaceFocus?.focus?.({ preventScroll: true });
+	}
+
+	function closeNews() {
+		if (newsActive) {
+			setNewsActive(false);
+			workspaceFocus?.focus?.({ preventScroll: true });
+			if (window.location.pathname === '/news') restoreWorkspaceUrl();
+		}
+		void showQueuedModal();
+	}
+
+	function bindNewsDrawer() {
+		const drawer = document.getElementById('product-updates-drawer');
+		if (!drawer || drawer.dataset.mounted === 'true') return;
+		drawer.dataset.mounted = 'true';
+		drawer.addEventListener('hidden.bs.offcanvas', closeNews);
+		if (window.location.pathname === '/news') void navigateNews(true, false).catch(function (error) { void showFailure(error.message); });
+	}
+
+	document.addEventListener('click', function (event) {
+		if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.shiftKey) return;
+		const newsLink = event.target.closest('[data-product-updates-nav]');
+		const brandLink = newsActive ? event.target.closest('.navbar-brand a[href="/dashboard"]') : null;
+		if (!newsLink && !brandLink) return;
+		event.preventDefault();
+		if (newsLink) void navigateNews(true, true).catch(function (error) { void showFailure(error.message); });
+		else void navigateNews(false, false).then(restoreWorkspaceUrl).catch(function (error) { void showFailure(error.message); });
+	}, true);
+	window.addEventListener('popstate', function () {
+		void navigateNews(window.location.pathname === '/news', false).catch(function (error) { void showFailure(error.message); });
+	});
+
 	document.addEventListener('hidden.bs.modal', function () { void showQueuedModal(); });
 	document.addEventListener('visibilitychange', function () {
 		if (!document.hidden && enabled()) {
@@ -208,6 +331,7 @@
 		}
 	});
 	document.addEventListener('DOMContentLoaded', function () {
+		bindNewsDrawer();
 		mountNews();
 		if (enabled()) void checkStatus();
 	});

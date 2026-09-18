@@ -1849,6 +1849,10 @@ body:not(.swal2-shown) > .swal2-container {
 	white-space: pre-line;
 }
 
+#product-updates-drawer {
+	--bs-offcanvas-width: var(--fw-drawer-width, 37.5rem);
+}
+
 #productUpdatesModal {
 	z-index: 99999;
 }

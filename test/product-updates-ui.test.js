@@ -29,8 +29,14 @@ test('renders escaped server-owned modal and archive fragments', () => {
 	assert.doesNotMatch(modal, /<script>bad\(\)<\/script>/);
 	assert.match(modal, /&lt;script&gt;bad\(\)&lt;\/script&gt;/);
 	assert.match(news, /id="product-updates-news"/);
+	assert.match(news, /data-product-update-id="update-1"/);
 	assert.match(news, /August 31st, 2026/);
 	assert.doesNotMatch(news, /<strong>copy<\/strong>/);
+	const layout = fs.readFileSync(path.join(root, 'views/layout.pug'), 'utf8');
+	assert.match(layout, /#product-updates-drawer\.offcanvas\.offcanvas-end/);
+	assert.doesNotMatch(layout, /span\.fw-semibold\.d-none\.d-md-inline What's new/);
+	assert.match(fs.readFileSync(path.join(root, 'views/news.pug'), 'utf8'), /extends dashboard/);
+	assert.match(fs.readFileSync(path.join(root, 'public/css/app.css'), 'utf8'), /--bs-offcanvas-width: var\(--fw-drawer-width, 37\.5rem\)/);
 });
 
 test('uses incremental server fragments without reloads or client-created cards', () => {
@@ -39,8 +45,19 @@ test('uses incremental server fragments without reloads or client-created cards'
 	assert.match(source, /data-product-update-items-fragment/);
 	assert.match(source, /anotherModalIsOpen/);
 	assert.match(source, /dismissInFlight/);
+	assert.match(source, /Offcanvas\.getOrCreateInstance\(drawer\)\.show\(\)/);
+	assert.match(source, /history\.pushState\(\{ productNews: true \}/);
+	assert.match(source, /hidden\.bs\.offcanvas/);
+	assert.match(source, /archiveStale/);
+	assert.match(source, /version !== statusVersion/);
+	assert.match(source, /ids\.has\(item\.dataset\.productUpdateId\)/);
 	assert.doesNotMatch(source, /location\.reload|window\.location\.href/);
+	assert.doesNotMatch(source, /navigateTo|page-content/);
 	assert.doesNotMatch(source, /createElement\(['"]article['"]\)|createElement\(['"]img['"]\)/);
+	const appSource = fs.readFileSync(path.join(root, 'public/js/app.js'), 'utf8');
+	assert.doesNotMatch(appSource, /['"]\/news['"]:\s*\{[^}]*partial/);
+	assert.match(appSource, /state\.productNewsReturn/);
+	assert.match(appSource, /path === '\/news'[\s\S]*mountCurrent\('\/dashboard'\)/);
 });
 
 test('serves authenticated internal status, modal, and seen routes while rejecting excluded hosts', async () => {
