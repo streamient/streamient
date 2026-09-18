@@ -1,5 +1,5 @@
 mixin productUpdateCard(update)
-	article.card.product-update-card.mb-5
+	article.card.product-update-card.mb-5(data-product-update-id=update._id)
 		if update.feature_image
 			img.card-img-top.product-update-card-image(src=update.feature_image alt=update.title loading="lazy")
 		.card-body

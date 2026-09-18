@@ -350,7 +350,6 @@ var ROUTES = {
 	'/memories': { section: 'memories', title: 'Memories', partial: '/ajax/section/memories', batch: true },
 	'/urls': { section: 'urls', title: 'URLs', partial: '/ajax/section/urls', batch: true },
 	'/emails': { section: 'emails', title: 'Emails', partial: '/ajax/section/emails', batch: true },
-	'/news': { section: 'news', title: "What's new", partial: '/ajax/section/news' },
 	'/trash': { section: 'trash', title: 'Trash', partial: '/ajax/section/trash' },
 	'/settings': { title: 'Profile', partial: '/ajax/section/settings/profile' },
 	'/settings/profile': { title: 'Profile', partial: '/ajax/section/settings/profile' },
@@ -909,6 +908,7 @@ window.navigateTo = navigateTo;
 // Popstate for back/forward
 window.addEventListener('popstate', function (e) {
 	var state = e.state;
+	if (state && state.productNewsReturn) return;
 	if (state && state.spaPath) {
 		// Restore project context from URL
 		var params = new URLSearchParams(window.location.search);
@@ -1045,7 +1045,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 	// Mount initial section for SPA
 	var path = window.location.pathname;
 	syncLayoutForPath(path);
-	if (ROUTES[path]) {
+	if (path === '/news') {
+		history.replaceState({ productNewsDirect: true }, '');
+		mountCurrent('/dashboard');
+	} else if (ROUTES[path]) {
 		history.replaceState({ spaPath: path }, '');
 		mountCurrent(path);
 	}
