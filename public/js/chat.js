@@ -1190,6 +1190,7 @@ function rmPopulate(type, record) {
 	if (type === 'notes') {
 		const panel = document.getElementById('result-modal-note');
 		panel.classList.remove('d-none');
+		rmShowRecordSection(type, 'info');
 		document.getElementById('rm-note-title').value = record.title || '';
 		document.getElementById('rm-note-tags').value = (record.tags || []).join(', ');
 		rmContent = record.content || '';
@@ -1204,6 +1205,7 @@ function rmPopulate(type, record) {
 	} else if (type === 'memory') {
 		const panel = document.getElementById('result-modal-memory');
 		panel.classList.remove('d-none');
+		rmShowRecordSection(type, 'info');
 		document.getElementById('rm-memory-title').value = record.title || '';
 		document.getElementById('rm-memory-tags').value = (record.tags || []).join(', ');
 		document.getElementById('rm-memory-source').value = record.source || '';
@@ -1274,6 +1276,18 @@ function rmRenderPreview(textContent, htmlContent, preferHtml = false) {
 	if (preferHtml && htmlContent) return rmSanitizePreviewHtml(htmlContent);
 	if (textContent && window.marked) return rmSanitizePreviewHtml(window.marked.parse(textContent));
 	return rmSanitizePreviewHtml(htmlContent || `<pre>${escapeHtml(textContent)}</pre>`);
+}
+
+function rmShowRecordSection(type, activeSection) {
+	const prefix = type === 'notes' ? 'note' : type === 'memory' ? 'memory' : '';
+	if (!prefix) return;
+	for (const section of ['info', 'related']) {
+		const active = section === activeSection;
+		const tab = document.getElementById(`rm-${prefix}-section-tab-${section}`);
+		tab?.classList.toggle('active', active);
+		tab?.setAttribute('aria-selected', String(active));
+		document.getElementById(`rm-${prefix}-section-${section}`)?.classList.toggle('d-none', !active);
+	}
 }
 
 function rmCanonicalMarkdownBody() {
@@ -1652,6 +1666,10 @@ function initResultModalHandlers() {
 	if (!modalEl) return;
 
 	// Tab clicks
+	document.getElementById('rm-note-section-tab-info')?.addEventListener('click', () => rmShowRecordSection('notes', 'info'));
+	document.getElementById('rm-note-section-tab-related')?.addEventListener('click', () => rmShowRecordSection('notes', 'related'));
+	document.getElementById('rm-memory-section-tab-info')?.addEventListener('click', () => rmShowRecordSection('memory', 'info'));
+	document.getElementById('rm-memory-section-tab-related')?.addEventListener('click', () => rmShowRecordSection('memory', 'related'));
 	document.getElementById('rm-note-tab-preview')?.addEventListener('click', rmShowNotePreview);
 	document.getElementById('rm-note-tab-edit')?.addEventListener('click', rmShowNoteEdit);
 	document.getElementById('rm-memory-tab-preview')?.addEventListener('click', rmShowMemoryPreview);

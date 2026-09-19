@@ -214,56 +214,71 @@ html(lang="en")
 					.modal-body#result-modal-body
 						//- Note form
 						#result-modal-note.d-none
-							.mb-3
-								.form-text Title
-								input.form-control#rm-note-title(type="text")
-							.mb-3
-								.form-text Tags
-								input.form-control#rm-note-tags(type="text")
 							ul.nav.nav-tabs.mb-3
 								li.nav-item
-									button.nav-link.active#rm-note-tab-preview(type="button") Preview
+									button.nav-link.active#rm-note-section-tab-info(type="button" aria-selected="true") Info
 								li.nav-item
-									button.nav-link#rm-note-tab-edit(type="button") Edit
-							#rm-note-preview.preview-container.border.border-top-0.rounded-bottom.p-3.mb-3(style="min-height:300px")
-							#rm-note-editor.border-0.rounded.p-0.d-none.mb-3
-							#rm-note-markdown-wrap.d-none.mb-3
-								textarea.form-control.form-control-sm#rm-note-markdown(rows="18" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false")
-								.form-text Obsidian-synced content stays canonical Markdown. Edit title and tags in frontmatter.
-							.mb-3.position-relative
-								.form-text Links
-								.source-search-wrap
-									!= icon('search', 'source-search-icon')
-									input.form-control.rm-link-search(type="text" placeholder="Type to search..." autocomplete="off")
-								.rm-link-tags.d-flex.flex-wrap.gap-1.mt-2
+									button.nav-link#rm-note-section-tab-related(type="button" aria-selected="false") Related & Tags
+							#rm-note-section-info
+								.mb-3
+									.form-text Title
+									input.form-control#rm-note-title(type="text")
+								ul.nav.nav-tabs.mb-3
+									li.nav-item
+										button.nav-link.active#rm-note-tab-preview(type="button") Preview
+									li.nav-item
+										button.nav-link#rm-note-tab-edit(type="button") Edit
+								#rm-note-preview.preview-container.border.border-top-0.rounded-bottom.p-3.mb-3(style="min-height:300px")
+								#rm-note-editor.border-0.rounded.p-0.d-none.mb-3
+								#rm-note-markdown-wrap.d-none.mb-3
+									textarea.form-control.form-control-sm#rm-note-markdown(rows="18" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false")
+									.form-text Obsidian-synced content stays canonical Markdown. Edit title and tags in frontmatter.
+								.mb-3
+									.form-text Tags
+									input.form-control#rm-note-tags(type="text")
+							#rm-note-section-related.d-none
+								.mb-3.position-relative
+									.form-text Related to…
+									.source-search-wrap
+										!= icon('search', 'source-search-icon')
+										input.form-control.rm-link-search(type="text" placeholder="Type to search..." autocomplete="off")
+									.rm-link-tags.d-flex.flex-wrap.gap-1.mt-2
 
 						//- Memory form
 						#result-modal-memory.d-none
-							.mb-3
-								.form-text Title
-								input.form-control#rm-memory-title(type="text")
-							.mb-3
-								.form-text Tags
-								input.form-control#rm-memory-tags(type="text")
-							.mb-3
-								.form-text Source
-								input.form-control#rm-memory-source(type="text")
 							ul.nav.nav-tabs.mb-3
 								li.nav-item
-									button.nav-link.active#rm-memory-tab-preview(type="button") Preview
+									button.nav-link.active#rm-memory-section-tab-info(type="button" aria-selected="true") Info
 								li.nav-item
-									button.nav-link#rm-memory-tab-edit(type="button") Edit
-							#rm-memory-preview.preview-container.border.border-top-0.rounded-bottom.p-3.mb-3(style="min-height:300px")
-							#rm-memory-editor.border-0.rounded.p-0.d-none.mb-3
-							#rm-memory-markdown-wrap.d-none.mb-3
-								textarea.form-control.form-control-sm#rm-memory-markdown(rows="18" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false")
-								.form-text Obsidian-synced content stays canonical Markdown. Edit title and tags in frontmatter.
-							.mb-3.position-relative
-								.form-text Links
-								.source-search-wrap
-									!= icon('search', 'source-search-icon')
-									input.form-control.rm-link-search(type="text" placeholder="Type to search..." autocomplete="off")
-								.rm-link-tags.d-flex.flex-wrap.gap-1.mt-2
+									button.nav-link#rm-memory-section-tab-related(type="button" aria-selected="false") Related & Tags
+							#rm-memory-section-info
+								.mb-3
+									.form-text Title
+									input.form-control#rm-memory-title(type="text")
+								ul.nav.nav-tabs.mb-3
+									li.nav-item
+										button.nav-link.active#rm-memory-tab-preview(type="button") Preview
+									li.nav-item
+										button.nav-link#rm-memory-tab-edit(type="button") Edit
+								#rm-memory-preview.preview-container.border.border-top-0.rounded-bottom.p-3.mb-3(style="min-height:300px")
+								#rm-memory-editor.border-0.rounded.p-0.d-none.mb-3
+								#rm-memory-markdown-wrap.d-none.mb-3
+									textarea.form-control.form-control-sm#rm-memory-markdown(rows="18" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false")
+									.form-text Obsidian-synced content stays canonical Markdown. Edit title and tags in frontmatter.
+								.mb-3
+									.form-text Tags
+									input.form-control#rm-memory-tags(type="text")
+								.mb-3
+									.form-text Source
+									input.form-control#rm-memory-source(type="text")
+									.form-text.mt-1 Optional attribution, such as a meeting, document, conversation, or AI session.
+							#rm-memory-section-related.d-none
+								.mb-3.position-relative
+									.form-text Related to…
+									.source-search-wrap
+										!= icon('search', 'source-search-icon')
+										input.form-control.rm-link-search(type="text" placeholder="Type to search..." autocomplete="off")
+									.rm-link-tags.d-flex.flex-wrap.gap-1.mt-2
 
 						//- URL form
 						#result-modal-url.d-none
