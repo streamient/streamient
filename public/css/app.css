@@ -1850,7 +1850,7 @@ body:not(.swal2-shown) > .swal2-container {
 }
 
 #product-updates-drawer {
-	--bs-offcanvas-width: var(--fw-drawer-width, 37.5rem);
+	--bs-offcanvas-width: 40vw;
 }
 
 #productUpdatesModal {

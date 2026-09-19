@@ -36,7 +36,7 @@ test('renders escaped server-owned modal and archive fragments', () => {
 	assert.match(layout, /#product-updates-drawer\.offcanvas\.offcanvas-end/);
 	assert.doesNotMatch(layout, /span\.fw-semibold\.d-none\.d-md-inline What's new/);
 	assert.match(fs.readFileSync(path.join(root, 'views/news.pug'), 'utf8'), /extends dashboard/);
-	assert.match(fs.readFileSync(path.join(root, 'public/css/app.css'), 'utf8'), /--bs-offcanvas-width: var\(--fw-drawer-width, 37\.5rem\)/);
+	assert.match(fs.readFileSync(path.join(root, 'public/css/app.css'), 'utf8'), /--bs-offcanvas-width: 40vw/);
 });
 
 test('uses incremental server fragments without reloads or client-created cards', () => {
