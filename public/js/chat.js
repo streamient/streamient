@@ -1269,8 +1269,9 @@ function rmSanitizePreviewHtml(html) {
 	return template.innerHTML;
 }
 
-function rmRenderPreview(textContent, htmlContent) {
+function rmRenderPreview(textContent, htmlContent, preferHtml = false) {
 	if (!textContent && !htmlContent) return '<p class="text-muted">No content</p>';
+	if (preferHtml && htmlContent) return rmSanitizePreviewHtml(htmlContent);
 	if (textContent && window.marked) return rmSanitizePreviewHtml(window.marked.parse(textContent));
 	return rmSanitizePreviewHtml(htmlContent || `<pre>${escapeHtml(textContent)}</pre>`);
 }
@@ -1321,7 +1322,7 @@ function rmShowNotePreview() {
 	document.getElementById('rm-note-markdown-wrap').classList.add('d-none');
 	const preview = document.getElementById('rm-note-preview');
 	if (rmIsObsidianSynced) void rmRenderObsidianPreview(preview);
-	else preview.innerHTML = rmRenderPreview(rmTextContent, rmContent);
+	else preview.innerHTML = rmRenderPreview(rmTextContent, rmContent, true);
 }
 
 function rmShowNoteEdit() {
