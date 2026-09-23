@@ -50,16 +50,14 @@ x-environment: &environment
   GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
   # Global models: BYOK tenants and self-hosted installs. Managed (platform-key)
   # hosted tenants use the per-plan matrix below instead.
-  CHAT_AI_MODEL: ${CHAT_AI_MODEL:-gemini-3.6-flash}
-  CHAT_AI_MODEL_PROVIDER: ${CHAT_AI_MODEL_PROVIDER:-google}
-  CHAT_AI_THINKING_LEVEL: ${CHAT_AI_THINKING_LEVEL:-minimal}
-  NL_SEARCH_MODEL: ${NL_SEARCH_MODEL:-gemini-3.5-flash-lite}
-  NL_SEARCH_MODEL_PROVIDER: ${NL_SEARCH_MODEL_PROVIDER:-google}
-  NL_SEARCH_THINKING_LEVEL: ${NL_SEARCH_THINKING_LEVEL:-minimal}
-  TS_CONVERSATION_MODEL: ${TS_CONVERSATION_MODEL:-gemini-3.5-flash-lite}
-  TS_CONVERSATION_MODEL_PROVIDER: ${TS_CONVERSATION_MODEL_PROVIDER:-google}
-  # Managed per-plan AI (optional — config.js defaults: Free = OpenAI nano;
-  # Pro = Gemini 3.6 Flash chat and Gemini 3.5 Flash-Lite search/conversation).
+  CHAT_AI_MODEL: ${CHAT_AI_MODEL:-gpt-6-sol}
+  CHAT_AI_MODEL_PROVIDER: ${CHAT_AI_MODEL_PROVIDER:-openai}
+  NL_SEARCH_MODEL: ${NL_SEARCH_MODEL:-gpt-6-luna}
+  NL_SEARCH_MODEL_PROVIDER: ${NL_SEARCH_MODEL_PROVIDER:-openai}
+  TS_CONVERSATION_MODEL: ${TS_CONVERSATION_MODEL:-gpt-6-luna}
+  TS_CONVERSATION_MODEL_PROVIDER: ${TS_CONVERSATION_MODEL_PROVIDER:-openai}
+  # Managed per-plan AI (optional — config.js defaults: Free = GPT-6 Luna;
+  # Pro = GPT-6 Sol chat and GPT-6 Luna search/conversation).
   FREE_AI_MODEL_PROVIDER: ${FREE_AI_MODEL_PROVIDER:-}
   FREE_CHAT_AI_MODEL_PROVIDER: ${FREE_CHAT_AI_MODEL_PROVIDER:-}
   FREE_NL_SEARCH_MODEL_PROVIDER: ${FREE_NL_SEARCH_MODEL_PROVIDER:-}

@@ -158,12 +158,12 @@ const smtpServers = parseSmtpServersFromEnv();
 const primarySmtp = smtpServers[0] || {};
 const appUrl = process.env.APP_URL || 'http://localhost:3000';
 const mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/streamient?replicaSet=rs0';
-const chatAiProvider = process.env.CHAT_AI_MODEL_PROVIDER || 'google';
-const nlSearchProvider = process.env.NL_SEARCH_MODEL_PROVIDER || 'google';
-const tsConversationProvider = process.env.TS_CONVERSATION_MODEL_PROVIDER || 'google';
+const chatAiProvider = process.env.CHAT_AI_MODEL_PROVIDER || 'openai';
+const nlSearchProvider = process.env.NL_SEARCH_MODEL_PROVIDER || 'openai';
+const tsConversationProvider = process.env.TS_CONVERSATION_MODEL_PROVIDER || 'openai';
 
 function getDefaultLlmModel(provider, purpose) {
-	if (provider === 'openai') return 'gpt-5.4-mini';
+	if (provider === 'openai') return purpose === 'chat' ? 'gpt-6-sol' : 'gpt-6-luna';
 	if (provider !== 'google') return '';
 	return purpose === 'chat' ? 'gemini-3.6-flash' : 'gemini-3.5-flash-lite';
 }
@@ -234,7 +234,7 @@ const config = {
 		// Per-provider default model — the fallback when a purpose-specific model
 		// (chat/nlSearch/tsConversation) is unset, and the model used for BYO key
 		// verification and provider fallback. Override per deployment via env.
-		openaiModel: process.env.OPENAI_MODEL || 'gpt-5.4-mini',
+		openaiModel: process.env.OPENAI_MODEL || 'gpt-6-luna',
 		googleModel: process.env.GOOGLE_MODEL || 'gemini-3.6-flash',
 		// Managed (platform-key) model matrix per plan — applies to hosted
 		// tenants without a BYO key. BYOK tenants and self-hosted installs keep
@@ -245,20 +245,20 @@ const config = {
 				chatProvider: process.env.FREE_CHAT_AI_MODEL_PROVIDER || process.env.FREE_AI_MODEL_PROVIDER || 'openai',
 				nlSearchProvider: process.env.FREE_NL_SEARCH_MODEL_PROVIDER || process.env.FREE_AI_MODEL_PROVIDER || 'openai',
 				conversationProvider: process.env.FREE_TS_CONVERSATION_MODEL_PROVIDER || process.env.FREE_AI_MODEL_PROVIDER || 'openai',
-				chat: process.env.FREE_CHAT_AI_MODEL || 'gpt-5.4-nano',
-				nlSearch: process.env.FREE_NL_SEARCH_MODEL || 'gpt-5.4-nano',
-				conversation: process.env.FREE_TS_CONVERSATION_MODEL || 'gpt-5.4-nano',
+				chat: process.env.FREE_CHAT_AI_MODEL || 'gpt-6-luna',
+				nlSearch: process.env.FREE_NL_SEARCH_MODEL || 'gpt-6-luna',
+				conversation: process.env.FREE_TS_CONVERSATION_MODEL || 'gpt-6-luna',
 			},
 			pro: {
-				provider: process.env.PRO_AI_MODEL_PROVIDER || 'google',
-				chatProvider: process.env.PRO_CHAT_AI_MODEL_PROVIDER || process.env.PRO_AI_MODEL_PROVIDER || 'google',
-				nlSearchProvider: process.env.PRO_NL_SEARCH_MODEL_PROVIDER || process.env.PRO_AI_MODEL_PROVIDER || 'google',
-				conversationProvider: process.env.PRO_TS_CONVERSATION_MODEL_PROVIDER || process.env.PRO_AI_MODEL_PROVIDER || 'google',
-				chat: process.env.PRO_CHAT_AI_MODEL || 'gemini-3.6-flash',
-				nlSearch: process.env.PRO_NL_SEARCH_MODEL || 'gemini-3.5-flash-lite',
-				conversation: process.env.PRO_TS_CONVERSATION_MODEL || 'gemini-3.5-flash-lite',
-				chatThinkingLevel: process.env.PRO_CHAT_AI_THINKING_LEVEL || 'minimal',
-				nlSearchThinkingLevel: process.env.PRO_NL_SEARCH_THINKING_LEVEL || 'minimal',
+				provider: process.env.PRO_AI_MODEL_PROVIDER || 'openai',
+				chatProvider: process.env.PRO_CHAT_AI_MODEL_PROVIDER || process.env.PRO_AI_MODEL_PROVIDER || 'openai',
+				nlSearchProvider: process.env.PRO_NL_SEARCH_MODEL_PROVIDER || process.env.PRO_AI_MODEL_PROVIDER || 'openai',
+				conversationProvider: process.env.PRO_TS_CONVERSATION_MODEL_PROVIDER || process.env.PRO_AI_MODEL_PROVIDER || 'openai',
+				chat: process.env.PRO_CHAT_AI_MODEL || 'gpt-6-sol',
+				nlSearch: process.env.PRO_NL_SEARCH_MODEL || 'gpt-6-luna',
+				conversation: process.env.PRO_TS_CONVERSATION_MODEL || 'gpt-6-luna',
+				chatThinkingLevel: process.env.PRO_CHAT_AI_THINKING_LEVEL || '',
+				nlSearchThinkingLevel: process.env.PRO_NL_SEARCH_THINKING_LEVEL || '',
 			},
 		},
 	},

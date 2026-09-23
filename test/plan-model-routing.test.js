@@ -29,26 +29,24 @@ describe('per-plan managed model routing', () => {
 		// Production-style global config points at OpenAI. Managed tenants must
 		// land on their plan's model matrix, not the global model.
 		config.llm.chatProvider = 'openai';
-		config.llm.chatModel = 'gpt-5.4-mini';
+		config.llm.chatModel = 'gpt-6-sol';
 		config.llm.planModels.free = {
-			provider: 'google',
+			provider: 'openai',
 			chatProvider: 'openai',
 			nlSearchProvider: 'openai',
 			conversationProvider: 'openai',
-			chat: 'gpt-5.4-nano',
-			nlSearch: 'gpt-5.4-nano',
-			conversation: 'gpt-5.4-nano',
+			chat: 'gpt-6-luna',
+			nlSearch: 'gpt-6-luna',
+			conversation: 'gpt-6-luna',
 		};
 		config.llm.planModels.pro = {
 			provider: 'openai',
-			chatProvider: 'google',
-			nlSearchProvider: 'google',
-			conversationProvider: 'google',
-			chat: 'gemini-3.6-flash',
-			nlSearch: 'gemini-3.5-flash-lite',
-			conversation: 'gemini-3.5-flash-lite',
-			chatThinkingLevel: 'minimal',
-			nlSearchThinkingLevel: 'minimal',
+			chatProvider: 'openai',
+			nlSearchProvider: 'openai',
+			conversationProvider: 'openai',
+			chat: 'gpt-6-sol',
+			nlSearch: 'gpt-6-luna',
+			conversation: 'gpt-6-luna',
 		};
 		tenant = {
 			host_id: 'host-1',
@@ -81,7 +79,7 @@ describe('per-plan managed model routing', () => {
 		Tenant.findOne = originalTenantFindOne;
 	});
 
-	it('keeps managed Free tenants on the nano model through the chat provider slot', async () => {
+	it('routes managed Free chat to GPT-6 Luna', async () => {
 		const content = await chatCompletion({
 			hostId: 'host-1',
 			provider: config.llm.chatProvider,
@@ -91,11 +89,12 @@ describe('per-plan managed model routing', () => {
 
 		assert.equal(content, 'ok');
 		assert.match(requests[0].url, /api\.openai\.com/);
-		assert.equal(requests[0].body.model, 'gpt-5.4-nano');
+		assert.equal(requests[0].body.model, 'gpt-6-luna');
+		assert.equal(requests[0].body.reasoning_effort, 'none');
 		assert.equal(requests[0].options.headers.Authorization, 'Bearer env-openai');
 	});
 
-	it('routes managed Pro chat to Gemini 3.6 with minimal thinking', async () => {
+	it('routes managed Pro chat to GPT-6 Sol', async () => {
 		tenant.plan = 'pro';
 
 		await chatCompletion({
@@ -105,37 +104,37 @@ describe('per-plan managed model routing', () => {
 			messages: [{ role: 'user', content: 'hi' }],
 		});
 
-		assert.match(requests[0].url, /generativelanguage\.googleapis\.com/);
-		assert.match(requests[0].url, /models\/gemini-3\.6-flash:/);
-		assert.match(requests[0].url, /key=env-gemini/);
-		assert.equal(requests[0].body.generationConfig.thinkingConfig.thinkingLevel, 'minimal');
+		assert.match(requests[0].url, /api\.openai\.com/);
+		assert.equal(requests[0].body.model, 'gpt-6-sol');
+		assert.equal(requests[0].body.reasoning_effort, 'none');
 	});
 
-	it('keeps Free intent classification on nano', async () => {
+	it('routes Free intent classification to GPT-6 Luna', async () => {
 		await nlSearchCompletion({ hostId: 'host-1', messages: [{ role: 'user', content: 'hi' }] });
 
 		assert.match(requests[0].url, /api\.openai\.com/);
-		assert.equal(requests[0].body.model, 'gpt-5.4-nano');
+		assert.equal(requests[0].body.model, 'gpt-6-luna');
 	});
 
-	it('routes Pro intent classification to Gemini 3.5 Flash-Lite', async () => {
+	it('routes Pro intent classification to GPT-6 Luna', async () => {
 		tenant.plan = 'pro';
 
 		await nlSearchCompletion({ hostId: 'host-1', messages: [{ role: 'user', content: 'hi' }] });
 
-		assert.match(requests[0].url, /models\/gemini-3\.5-flash-lite:/);
-		assert.equal(requests[0].body.generationConfig.thinkingConfig.thinkingLevel, 'minimal');
+		assert.match(requests[0].url, /api\.openai\.com/);
+		assert.equal(requests[0].body.model, 'gpt-6-luna');
 	});
 
-	it('routes Pro Typesense conversations to Gemini 3.5 Flash-Lite', () => {
+	it('routes Pro Typesense conversations to GPT-6 Luna', () => {
 		assert.deepEqual(getPlanLlmConfig('pro', 'conversation'), {
-			provider: 'google',
-			model: 'gemini-3.5-flash-lite',
+			provider: 'openai',
+			model: 'gpt-6-luna',
 			thinkingLevel: '',
 		});
 	});
 
 	it('falls back to the legacy plan provider when a slot provider is unset', async () => {
+		config.llm.planModels.free.provider = 'google';
 		delete config.llm.planModels.free.chatProvider;
 		config.llm.planModels.free.chat = 'gemini-3.5-flash-lite';
 
@@ -155,7 +154,7 @@ describe('per-plan managed model routing', () => {
 		});
 
 		assert.match(requests[0].url, /api\.openai\.com/);
-		assert.equal(requests[0].body.model, 'gpt-5.4-mini');
+		assert.equal(requests[0].body.model, 'gpt-6-sol');
 		assert.equal(requests[0].options.headers.Authorization, 'Bearer tenant-openai');
 	});
 
@@ -170,7 +169,7 @@ describe('per-plan managed model routing', () => {
 		});
 
 		assert.match(requests[0].url, /api\.openai\.com/);
-		assert.equal(requests[0].body.model, 'gpt-5.4-mini');
+		assert.equal(requests[0].body.model, 'gpt-6-sol');
 		assert.equal(requests[0].options.headers.Authorization, 'Bearer env-openai');
 	});
 
