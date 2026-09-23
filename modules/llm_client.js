@@ -23,7 +23,11 @@ const PROVIDERS = {
 
 function usesMaxCompletionTokens(providerName, model = '') {
 	if (providerName !== 'openai') return false;
-	return /^(gpt-5|gpt-4\.1|o[134]|o\d)/i.test(String(model || ''));
+	return /^(gpt-[56]|gpt-4\.1|o[134]|o\d)/i.test(String(model || ''));
+}
+
+function usesOpenAiReasoningEffort(providerName, model = '') {
+	return providerName === 'openai' && /^gpt-6(?:[-.]|$)/i.test(String(model || ''));
 }
 
 function applyTokenLimit(body, providerName, model, maxTokens) {
@@ -146,6 +150,7 @@ export async function chatCompletion({ messages, stream = false, provider: provi
 			messages,
 			stream,
 		}, name, model, maxTokens);
+		if (usesOpenAiReasoningEffort(name, model)) body.reasoning_effort = 'none';
 		const response = await fetch(`${provider.baseUrl}/chat/completions`, {
 			method: 'POST',
 			headers: {
