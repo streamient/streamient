@@ -5,7 +5,7 @@ description: "Reference all Streamient MCP tools for projects, notes, memories, 
 
 # MCP Tools Reference
 
-All 44 tools available in the Streamient MCP server. Use `search_knowledge` first when you want the fastest path to relevant context across notes, memories, URLs, emails, and pages. Search tools default `per_page` to `1`; increase it only when the first result is insufficient. Successful tool results are returned once in `structuredContent.data`; text `content` is empty. Parameters marked with `*` are required.
+All 44 tools available in the Streamient MCP server. Use `search_knowledge` first when you want the fastest path to relevant context across notes, memories, URLs, emails, and pages. Search tools default `per_page` to `5` per collection; read relevant full records and refine weak results. Successful tool results are returned once in `structuredContent.data`; text `content` is empty. Parameters marked with `*` are required.
 
 ## Notes
 
@@ -121,7 +121,7 @@ Delete a memory by ID.
 Get suggested tags based on existing memory tags. No parameters.
 
 ### `search_knowledge`
-Search across ALL data types (notes, memories, URLs, pages). **Default first retrieval tool.** Use a specific query; `per_page` defaults to `1`. Broaden or raise it only if results are weak.
+Search across ALL data types (notes, memories, URLs, pages). **Default first retrieval tool.** Use a specific query; `per_page` defaults to `5` per collection. Read relevant full records, refine weak results, and paginate for additional context.
 Returns lean hits with metadata and bounded `excerpt` fields where searchable body text exists; use the matching read tool for full content.
 
 | Parameter    | Type   | Required |

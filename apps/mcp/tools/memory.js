@@ -48,7 +48,7 @@ export function memoryTools(api, defaultProjectId) {
     },
 
     recall_memory: {
-      description: 'Search memories semantically for prior decisions, debugging history, user preferences, task outcomes, or agent-scoped learnings. per_page defaults to 1; increase it only when needed. Omit project_id to search across all projects.',
+      description: 'Search memories semantically for prior decisions, debugging history, user preferences, task outcomes, or agent-scoped learnings. per_page defaults to 5; read relevant records and refine weak results. Omit project_id to search across all projects.',
       annotations: READ_ONLY,
       outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
@@ -74,7 +74,7 @@ export function memoryTools(api, defaultProjectId) {
     },
 
     search_memory: {
-      description: 'Alias for recall_memory — search memories semantically for prior decisions, debugging history, user preferences, task outcomes, or agent-scoped learnings. per_page defaults to 1; increase it only when needed. Omit project_id to search across all projects.',
+      description: 'Alias for recall_memory — search memories semantically for prior decisions, debugging history, user preferences, task outcomes, or agent-scoped learnings. per_page defaults to 5; read relevant records and refine weak results. Omit project_id to search across all projects.',
       annotations: READ_ONLY,
       outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
@@ -166,7 +166,7 @@ export function memoryTools(api, defaultProjectId) {
     },
 
     search_knowledge: {
-      description: 'Search across ALL data types (notes, memories, URLs, crawled pages) — default first retrieval tool. per_page defaults to 1; broaden the query or increase it only when results are weak.',
+      description: 'Search across ALL data types (notes, memories, URLs, crawled pages) — default first retrieval tool. per_page defaults to 5 per collection; read relevant records and refine weak results.',
       annotations: READ_ONLY,
       outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {

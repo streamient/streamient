@@ -12,6 +12,7 @@ import { MCP_TOOL_PROFILES } from '../../../apps/mcp/tools/profile.js';
 import { getRequiredScopesForTool } from '../../../modules/oauth.js';
 
 import { FIXTURES } from './fixtures.js';
+import { MCP_SERVER_INSTRUCTIONS } from '../../../apps/mcp/instructions.js';
 
 function buildToolMeta(name, tool) {
     return {
@@ -30,6 +31,8 @@ export function buildMcpServer(api, { toolProfile = MCP_TOOL_PROFILES.FULL } = {
     const server = new McpServer({
         name: 'streamient-test',
         version: '0.0.1',
+    }, {
+        instructions: MCP_SERVER_INSTRUCTIONS,
     });
 
     const allTools = createMcpToolCatalog(api, { defaultProjectId, toolProfile });

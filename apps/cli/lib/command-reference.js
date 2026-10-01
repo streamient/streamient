@@ -26,6 +26,8 @@ Run \`streamient-cli <group> <command> --help\` with \`STREAMIENT_CLI_ACCESS_TOK
 | --- | --- | --- | --- | --- |
 ${rows.join('\n')}
 
+Search commands default to five results per collection on updated servers. Use \`--per-page\` to override and \`--page\` where supported to paginate. Read relevant full records before deciding; see [Agent Configuration](../mcp/agents).
+
 ## Generic tool access
 
 New MCP tools remain usable before a CLI alias release:

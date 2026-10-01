@@ -56,6 +56,8 @@ Run `streamient-cli <group> <command> --help` with `STREAMIENT_CLI_ACCESS_TOKEN`
 | `git` | `sync` | `trigger_git_sync` | `streamient-cli git sync <id>` | Trigger Git synchronization |
 | `git` | `status` | `git_sync_status` | `streamient-cli git status <id>` | Read Git synchronization status |
 
+Search commands default to five results per collection on updated servers. Use `--per-page` to override and `--page` where supported to paginate. Read relevant full records before deciding; see [Agent Configuration](../mcp/agents).
+
 ## Generic tool access
 
 New MCP tools remain usable before a CLI alias release:

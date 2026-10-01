@@ -125,6 +125,7 @@ async function createServer(apiAuth, { projectId, oauthClientId, cacheKey, toolP
   const server = new McpServer({
     name: 'streamient',
     version: '0.1.0',
+  }, {
     instructions: MCP_SERVER_INSTRUCTIONS,
   });
 

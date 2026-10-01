@@ -168,3 +168,7 @@ For Bash or Zsh, generate the corresponding script and source it from that shell
 | `3` | Missing or rejected access token |
 | `4` | Network or timeout failure |
 | `5` | MCP tool unavailable or tool execution failed |
+
+## Search context
+
+Search commands use the connected MCP server defaults: five results per collection on updated servers. Use `--per-page` for an explicit limit and `--page` where supported for pagination. Read relevant full records and linked decisions; refine weak results before choosing an implementation. See [Agent Configuration](../mcp/agents).

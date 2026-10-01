@@ -119,7 +119,7 @@ describe('MCP Tools — Notes', () => {
         assert.equal(api.lastCall.method, 'POST');
         assert.equal(api.lastCall.path, '/notes/search');
         assert.equal(api.lastCall.body.query, 'hello');
-        assert.equal(api.lastCall.body.options.perPage, 1);
+        assert.equal(api.lastCall.body.options.perPage, 5);
         const parsed = result.structuredContent.data;
         assert.ok(Array.isArray(parsed));
     });
