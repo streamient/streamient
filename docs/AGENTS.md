@@ -8,8 +8,7 @@ Streamient is not a note taking or second brain app. Refer to it as a "memory la
 
 ## Documentation
 - For **Cursor** + Streamient MCP (global User Rules, project rules): maintain [MCP → Cursor (IDE)](/mcp/cursor-ide) from `docs/mcp/cursor-ide.md`.
-- IMPORTANT: BEFORE EXECUTING A REGEX SEARCH THROUGH OUR CODE BASE ALWAYS CHECK THE RAZUNA-MEMORY MCP SERVER FIRST
-- IMPORTANT: For each fix, change, update, etc., create a new documentation note in the RAZUNA-MEMORY MCP server. You can create markdown notes or store and recall memory. Use both as needed.
+- Follow the repository's Streamient MCP bootstrap and current server usage guidance for retrieval and persistence; do not maintain a separate workflow here.
 - DO NOT store documentation files in the root of the project.
 - Notes and memory should be tagged with "streamient-docs" for easy retrieval by agents.
 
