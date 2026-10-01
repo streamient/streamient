@@ -8,6 +8,7 @@ import { formidable } from 'formidable';
 
 import * as projectService from '../services/project_service.js';
 import * as noteService from '../services/note_service.js';
+import { getMarkdownContent } from '../services/obsidian_sync_service.js';
 import { extractText } from '../services/import_service.js';
 import { detectFileType } from '../modules/file_detect.js';
 import * as memoryService from '../services/memory_service.js';
@@ -354,13 +355,22 @@ router.post('/notes', async (req, res) => {
 router.get('/notes/:id', async (req, res) => {
 	const note = await noteService.getNote(req.host_id, req.params.id);
 	if (!note) return res.status(404).json({ error: 'Note not found' });
+	if (req.query.include_markdown === 'true' && note.obsidian_source?.file_id) {
+		const markdown_content = await getMarkdownContent(req.host_id, note.obsidian_source.file_id);
+		return res.json({ note: { ...note, markdown_content } });
+	}
 	res.json({ note });
 });
 
 router.put('/notes/:id', async (req, res) => {
-	const note = await noteService.updateNote(req.host_id, req.params.id, req.body, auditCtx(req));
-	if (!note) return res.status(404).json({ error: 'Note not found' });
-	res.json({ note });
+	try {
+		const note = await noteService.updateNote(req.host_id, req.params.id, req.body, auditCtx(req));
+		if (!note) return res.status(404).json({ error: 'Note not found' });
+		res.json({ note });
+	} catch (error) {
+		if (error.code === 'markdown_required') return res.status(409).json({ error: error.message, code: error.code });
+		throw error;
+	}
 });
 
 router.delete('/notes/:id', async (req, res) => {

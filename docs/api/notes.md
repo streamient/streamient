@@ -35,6 +35,8 @@ POST /api/v1/notes
 GET /api/v1/notes/:id
 ```
 
+For synced notes, `GET /api/v1/notes/:id?include_markdown=true` also returns `note.markdown_content`, including original frontmatter.
+
 ## Update Note
 
 ```
@@ -48,6 +50,8 @@ PUT /api/v1/notes/:id
     "tags": ["updated-tag"]
 }
 ```
+
+For Obsidian-synced content, send `markdown_content` with the full Markdown read above, preserving unrelated frontmatter. Title/tag edits belong in the frontmatter when this field is supplied. HTML-only content updates return HTTP 409 with `code: "markdown_required"`. Metadata-only updates remain supported.
 
 ## Delete Note
 

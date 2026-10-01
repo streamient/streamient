@@ -749,6 +749,11 @@
           "content": {
             "type": "string"
           },
+          "markdown_content": {
+            "type": "string",
+            "readOnly": true,
+            "description": "Original Markdown, including frontmatter, when include_markdown=true for an Obsidian-synced note."
+          },
           "project": {
             "type": "string"
           },
@@ -4018,6 +4023,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "include_markdown",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "description": "Include original Markdown for Obsidian-synced notes."
           }
         ],
         "responses": {
@@ -4074,7 +4088,21 @@
                     "type": "string"
                   },
                   "content": {
+                    "type": "string",
+                    "description": "HTML for notes not synced with Obsidian."
+                  },
+                  "markdown_content": {
+                    "type": "string",
+                    "description": "Full Markdown for an Obsidian-synced note, preserving existing frontmatter. Title and tags come from this frontmatter when supplied."
+                  },
+                  "text_content": {
                     "type": "string"
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   },
                   "project": {
                     "type": "string"
@@ -4106,6 +4134,24 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Obsidian-synced content requires markdown_content; returns code markdown_required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  }
                 }
               }
             }

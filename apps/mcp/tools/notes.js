@@ -33,26 +33,28 @@ export function noteTools(api, defaultProjectId) {
     },
 
     read_note: {
-      description: 'Read a note by ID',
+      description: 'Read a note by ID, including original Markdown for Obsidian-synced notes by default. Preserve that Markdown and its frontmatter when editing.',
       annotations: READ_ONLY,
       outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
         id: z.string().describe('Note ID'),
+        include_markdown: z.boolean().default(true).describe('Include original Markdown for an Obsidian-synced note'),
       },
       handler: async (args) => {
-        const { note } = await api.get(`/notes/${args.id}`);
+        const { note } = await api.get(`/notes/${args.id}${args.include_markdown === false ? '' : '?include_markdown=true'}`);
         return mcpJson(note);
       },
     },
 
     update_note: {
-      description: 'Update a note',
+      description: 'Update a note. For Obsidian-synced content, read_note first and send the full markdown_content, preserving frontmatter; HTML content alone is rejected. Metadata-only updates remain supported.',
       annotations: OVERWRITE_INTERNAL,
       outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
         id: z.string().describe('Note ID'),
         title: z.string().optional(),
-        content: z.string().optional(),
+        content: z.string().optional().describe('HTML content for notes not synced with Obsidian'),
+        markdown_content: z.string().optional().describe('Full Markdown for an Obsidian-synced note, including preserved frontmatter. Put title/tag changes in frontmatter when editing Markdown.'),
         text_content: z.string().optional(),
         tags: z.array(z.string()).optional(),
       },

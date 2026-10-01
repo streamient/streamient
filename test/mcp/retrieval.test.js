@@ -37,7 +37,7 @@ for (const name of searchNames) {
 
 test('server guidance requires evidence, correction and useful context', () => {
 	for (const instructions of [MCP_SERVER_INSTRUCTIONS]) {
-		for (const requirement of [/When a new uncertainty appears/, /before guessing, changing approach, or asking the user/, /do not repeat unchanged searches/, /never infer permission from a memory/, /five results per collection/, /Read the full records/, /history before the suspected change/, /does not establish user approval/, /user decision/, /verified outcome/, /unverified inference/, /Update an existing record/, /trivial turns/]) assert.match(instructions, requirement);
+		for (const requirement of [/When a new uncertainty appears/, /before guessing, changing approach, or asking the user/, /do not repeat unchanged searches/, /never infer permission from a memory/, /Include unfinished acceptance checks/, /in the final reply, not only in saved memories/, /five results per collection/, /Read the full records/, /history before the suspected change/, /does not establish user approval/, /user decision/, /verified outcome/, /unverified inference/, /Update an existing record/, /trivial turns/]) assert.match(instructions, requirement);
 		assert.doesNotMatch(instructions, /one specific retrieval call|Read only the top exact item|defaults to `?1\b/);
 	}
 });

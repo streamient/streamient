@@ -19,6 +19,9 @@ Correctness and useful context take priority over retrieval token savings.
 - Preserve the session's completion-memory requirement, including concise records for trivial turns. Do not invent a durable convention merely to satisfy it. If a new completion record is required after a correction, link to the corrected record instead of duplicating it.
 - Before creating tags, call \`suggest_memory_tags\` to reuse existing tags. Pass the selected \`project_id\` explicitly when creating records.
 
+## Completion reporting
+- Include unfinished acceptance checks, failed or skipped tests, and unverified deployment or user-facing behavior in the final reply, not only in saved memories. Distinguish implementation completed from acceptance still pending; do not claim full completion while an agreed check remains unverified.
+
 ## Data Types
 - **Notes**: Rich text documents organized by project
 - **Memory**: Facts, decisions, context — your personal knowledge base

@@ -63,3 +63,7 @@ See **[Cursor (IDE)](./cursor-ide)** for:
 ## Evaluation
 
 Use the [retrieval evaluation](./retrieval-evaluation) to check whether an agent applies evidence, not merely whether it calls search. Instructions guide behavior; hooks cannot guarantee understanding.
+
+## Final acceptance status
+
+The server workflow requires final replies to include unfinished acceptance checks, failed or skipped tests, and unverified deployment or user-facing behavior. Saving these limitations in memory alone is insufficient. Distinguish completed implementation from acceptance still pending.
