@@ -67,7 +67,7 @@ export function emailTools(api, defaultProjectId) {
 		},
 
 		search_emails: {
-			description: 'Search emails using semantic/text search. per_page defaults to 1; increase it only when needed.',
+			description: 'Search emails using semantic/text search. per_page defaults to 5; read relevant records and refine weak results.',
 			annotations: READ_ONLY,
 			outputSchema: MCP_JSON_OUTPUT_SCHEMA,
 			inputSchema: {

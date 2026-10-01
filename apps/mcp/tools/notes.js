@@ -96,7 +96,7 @@ export function noteTools(api, defaultProjectId) {
     },
 
     search_notes: {
-      description: 'Search notes using semantic/text search. Use only for specs, docs, ADRs, structured write-ups, or when search_knowledge results point to notes. per_page defaults to 1; increase it only when needed. Omit project_id to search across all projects.',
+      description: 'Search notes using semantic/text search. Use only for specs, docs, ADRs, structured write-ups, or when search_knowledge results point to notes. per_page defaults to 5; read relevant records and refine weak results. Omit project_id to search across all projects.',
       annotations: READ_ONLY,
       outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {

@@ -61,7 +61,7 @@ describe('MCP Tools — Emails', () => {
 		const result = await tools.search_emails.handler({ query: 'hello' });
 		assert.equal(api.lastCall.method, 'POST');
 		assert.equal(api.lastCall.path, '/emails/search');
-		assert.equal(api.lastCall.body.options.perPage, 1);
+		assert.equal(api.lastCall.body.options.perPage, 5);
 		const parsed = result.structuredContent.data;
 		assert.equal(parsed[0].id, EMAIL_FIXTURE._id);
 		assert.equal(parsed[0].message_id, undefined);

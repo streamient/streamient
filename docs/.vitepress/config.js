@@ -167,6 +167,7 @@ export default defineConfig({
                         { text: 'Setup', link: '/mcp/setup' },
                         { text: 'Tools', link: '/mcp/tools' },
                         { text: 'Agent Configuration', link: '/mcp/agents' },
+                        { text: 'Retrieval Evaluation', link: '/mcp/retrieval-evaluation' },
                         { text: 'Claude Code', link: '/mcp/claude-code' },
                         { text: 'Cursor (IDE)', link: '/mcp/cursor-ide' },
                     ],

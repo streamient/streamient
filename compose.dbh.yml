@@ -16,7 +16,9 @@ services:
 
   mcp:
     ports: !override []
-    environment: *dbh-ca-environment
+    environment:
+      <<: *dbh-ca-environment
+      API_BASE_URL: "http://${DBH_PROFILE}-streamient-app:3000"
     volumes: *dbh-ca-volumes
     networks:
       dbh_proxy:

@@ -36,6 +36,12 @@ describe('MCP Server — Streamable HTTP transport', () => {
             const caps = client.getServerCapabilities();
             assert.ok(caps.tools, 'tools capability should be present');
         });
+
+        it('delivers evidence guidance in the initialization handshake', () => {
+            assert.match(client.getInstructions(), /Read the full records/);
+            assert.match(client.getInstructions(), /history before the suspected change/);
+            assert.match(appClient.getInstructions(), /does not establish user approval/);
+        });
     });
 
     describe('tools/list', () => {
@@ -116,11 +122,11 @@ describe('MCP Server — Streamable HTTP transport', () => {
             }
         });
 
-        it('retrieval tools should advertise per_page default 1', async () => {
+        it('retrieval tools should advertise per_page default 5', async () => {
             const { tools } = await client.listTools();
             const names = new Map(tools.map((tool) => [tool.name, tool]));
             for (const name of ['search_knowledge', 'search_notes', 'recall_memory', 'search_memory', 'search_urls', 'search_emails']) {
-                assert.equal(names.get(name)?.inputSchema?.properties?.per_page?.default, 1, `${name} missing per_page default`);
+                assert.equal(names.get(name)?.inputSchema?.properties?.per_page?.default, 5, `${name} missing per_page default`);
             }
         });
 

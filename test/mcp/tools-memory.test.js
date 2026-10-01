@@ -61,7 +61,7 @@ describe('MCP Tools — Memory', () => {
         assert.equal(api.lastCall.method, 'POST');
         assert.equal(api.lastCall.path, '/memories/search');
         assert.equal(api.lastCall.body.query, 'important');
-        assert.equal(api.lastCall.body.options.perPage, 1);
+        assert.equal(api.lastCall.body.options.perPage, 5);
         const parsed = result.structuredContent.data;
         assert.ok(Array.isArray(parsed));
     });
@@ -80,7 +80,7 @@ describe('MCP Tools — Memory', () => {
     it('search_memory — same behaviour as recall_memory', async () => {
         const result = await tools.search_memory.handler({ query: 'facts' });
         assert.equal(api.lastCall.path, '/memories/search');
-        assert.equal(api.lastCall.body.options.perPage, 1);
+        assert.equal(api.lastCall.body.options.perPage, 5);
         const parsed = result.structuredContent.data;
         assert.ok(Array.isArray(parsed));
     });
@@ -144,7 +144,7 @@ describe('MCP Tools — Memory', () => {
         assert.equal(api.lastCall.method, 'POST');
         assert.equal(api.lastCall.path, '/search/knowledge');
         assert.equal(api.lastCall.body.query, 'everything');
-        assert.equal(api.lastCall.body.per_page, 1);
+        assert.equal(api.lastCall.body.per_page, 5);
         const parsed = result.structuredContent.data;
         assert.ok(parsed.notes);
         assert.ok(parsed.memories);
