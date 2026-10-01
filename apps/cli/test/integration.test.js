@@ -25,6 +25,7 @@ describe('Streamient CLI over Streamable HTTP MCP', () => {
 		api = createMockApi({
 			get: async (path) => {
 				if (path === '/notes/note-1') return { note: FIXTURES.note };
+				if (path === '/notes/note-1?include_markdown=true') return { note: { ...FIXTURES.note, markdown_content: '---\ntitle: Original\n---\nBody' } };
 				if (path === '/git-repos/repo-1/status') return { status: 'idle', id: 'repo-1' };
 				if (path.startsWith('/graph?')) return { nodes: [], edges: [] };
 				return {};
@@ -36,6 +37,7 @@ describe('Streamient CLI over Streamable HTTP MCP', () => {
 				return {};
 			},
 			delete: async () => ({}),
+			put: async (_path, body) => ({ note: { ...FIXTURES.note, ...body } }),
 		});
 		server = await startTestServer(api, { authorize: (req) => req.headers.authorization === 'Token valid-cli-token' });
 	});
@@ -106,4 +108,15 @@ describe('Streamient CLI over Streamable HTTP MCP', () => {
 		assert.match(stderr.value, /AUTHENTICATION_FAILED/);
 		assert.doesNotMatch(stderr.value, /rejected-cli-token/);
 	});
+
+	it('reads original Markdown and sends Markdown updates through discovered schemas', async () => {
+		const read = await run(['notes', 'read', 'note-1']);
+		assert.equal(read.code, EXIT_CODES.SUCCESS, read.stderr);
+		assert.match(JSON.parse(read.stdout).markdown_content, /title: Original/);
+		const markdown = '---\ntitle: Original\n---\nCorrected body';
+		const update = await run(['notes', 'update', 'note-1', `--markdown-content=${markdown}`, '--yes']);
+		assert.equal(update.code, EXIT_CODES.SUCCESS, update.stderr);
+		assert.deepEqual(api.lastCall.body, { markdown_content: markdown });
+	});
+
 });

@@ -172,3 +172,13 @@ For Bash or Zsh, generate the corresponding script and source it from that shell
 ## Search context
 
 Search commands use the connected MCP server defaults: five results per collection on updated servers. Use `--per-page` for an explicit limit and `--page` where supported for pagination. Read relevant full records and linked decisions; refine weak results before choosing an implementation. See [Agent Configuration](../mcp/agents).
+
+## Editing Obsidian-synced notes
+
+`streamient-cli notes read NOTE_ID` includes the original `markdown_content` for synced notes. Preserve its frontmatter and unrelated content when editing, then submit the complete Markdown file:
+
+```fish
+streamient-cli notes update NOTE_ID --file markdown_content=/absolute/path/note.md --yes
+```
+
+Use `--markdown-content=VALUE` for inline Markdown starting with `---`; file input avoids shell quoting and option parsing. Ordinary notes still accept HTML `content`. These fields are discovered from the connected MCP server, so reconnect to an updated server before using them.

@@ -21,20 +21,22 @@ Create a new note in a project.
 | `project_id`   | string | no       | Project ID (default: auto) |
 
 ### `read_note`
-Read a note by ID.
+Read a note by ID. Original Markdown and frontmatter are included as `markdown_content` for Obsidian-synced notes by default; use that source when editing.
 
 | Parameter | Type   | Required |
 | --------- | ------ | -------- |
 | `id`      | string | yes      |
+| `include_markdown` | boolean | no (default: true) |
 
 ### `update_note`
-Update a note.
+Update a note. For synced content, send the full `markdown_content` from `read_note` with your edits. Preserve unrelated frontmatter. Put title/tag changes in that frontmatter when editing Markdown; separate metadata-only updates remain supported. HTML-only edits to synced notes return `409 markdown_required`. Ordinary notes continue to use `content` (HTML).
 
 | Parameter      | Type   | Required |
 | -------------- | ------ | -------- |
 | `id`           | string | yes      |
 | `title`        | string | no       |
 | `content`      | string | no       |
+| `markdown_content` | string | no |
 | `text_content` | string | no       |
 | `tags`         | array  | no       |
 

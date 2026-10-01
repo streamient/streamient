@@ -292,6 +292,7 @@ const swaggerSpec = {
                     _id: { type: 'string' },
                     title: { type: 'string' },
                     content: { type: 'string' },
+                    markdown_content: { type: 'string', readOnly: true, description: 'Original Markdown, including frontmatter, when include_markdown=true for an Obsidian-synced note.' },
                     project: { type: 'string' },
                     host_id: { type: 'string' },
                     createdAt: { type: 'string', format: 'date-time' },
@@ -1249,7 +1250,7 @@ const swaggerSpec = {
             get: {
                 tags: ['Notes'],
                 summary: 'Get a note',
-                parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+                parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }, { name: 'include_markdown', in: 'query', schema: { type: 'boolean', default: false }, description: 'Include original Markdown for Obsidian-synced notes.' }],
                 responses: {
                     200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { note: { $ref: '#/components/schemas/Note' } } } } } },
                     404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
@@ -1261,10 +1262,11 @@ const swaggerSpec = {
                 parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
                 requestBody: {
                     required: true,
-                    content: { 'application/json': { schema: { type: 'object', properties: { title: { type: 'string' }, content: { type: 'string' }, project: { type: 'string' } } } } },
+                    content: { 'application/json': { schema: { type: 'object', properties: { title: { type: 'string' }, content: { type: 'string', description: 'HTML for notes not synced with Obsidian.' }, markdown_content: { type: 'string', description: 'Full Markdown for an Obsidian-synced note, preserving existing frontmatter. Title and tags come from this frontmatter when supplied.' }, text_content: { type: 'string' }, tags: { type: 'array', items: { type: 'string' } }, project: { type: 'string' } } } } },
                 },
                 responses: {
                     200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { note: { $ref: '#/components/schemas/Note' } } } } } },
+                    409: { description: 'Obsidian-synced content requires markdown_content; returns code markdown_required.', content: { 'application/json': { schema: { type: 'object', properties: { error: { type: 'string' }, code: { type: 'string' } } } } } },
                     404: { description: 'Not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
                 },
             },

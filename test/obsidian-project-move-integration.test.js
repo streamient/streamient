@@ -22,6 +22,8 @@ import { Tenant } from '../modules/tenancy.js';
 import { SearchResults } from '../modules/search_results.js';
 import { buildCollectionName, getTypesenseClient } from '../modules/typesense.js';
 import { updateNote } from '../services/note_service.js';
+import apiRouter from '../routes/api.js';
+import { noteTools } from '../apps/mcp/tools/notes.js';
 import { updateMemory } from '../services/memory_service.js';
 import { updateUrl } from '../services/url_service.js';
 import { applyMutations, deleteObsidianHostDirectory, getMarkdownContent, materializeProjectExports, syncStreamientItem, __test as syncTest } from '../services/obsidian_sync_service.js';
@@ -65,6 +67,13 @@ class MoveFixture {
 		const outcomes = await search.apply({ filters, items, action: 'move', project_id: String(destination._id) }, { user_id: this.user._id, channel: 'web' });
 		assert.ok(outcomes.every((outcome) => outcome.success), JSON.stringify(outcomes.filter((outcome) => !outcome.success)));
 		return outcomes;
+	}
+	async noteRequest(method, route, body = {}, hostId = this.hostId) {
+		const url = new URL(route, 'http://fixture');
+		const handler = apiRouter.stack.find((layer) => layer.route?.path === '/notes/:id' && layer.route.methods[method]).route.stack.at(-1).handle;
+		const response = { statusCode: 200, status(code) { this.statusCode = code; return this; }, json(value) { this.body = JSON.parse(JSON.stringify(value)); return this; } };
+		await handler({ params: { id: url.pathname.split('/').at(-1) }, query: Object.fromEntries(url.searchParams), body, host_id: hostId, headers: {}, userId: this.user._id }, response);
+		return response;
 	}
 	async cleanup() {
 		for (const Model of [Note, Memory, Url, Project, TenantMember, AuditLog, ObsidianFile, ObsidianUpload, ObsidianRevision, ObsidianChange, ObsidianBlob, ObsidianConnection]) await Model.deleteMany({ host_id: this.hostId });
@@ -158,9 +167,27 @@ test('Obsidian-linked search moves persist without export rollback or stale-vaul
 			await syncStreamientItem(record.type, record.id, fixture.hostId, { item: record.before });
 			assert.equal((await record.Model.findById(record.id).read('primary').lean()).title, changed.title);
 		}
-		await updateNote(fixture.hostId, originalNote.id, { markdown_content: '---\ntitle: Markdown edited\n---\nNew Markdown body' });
-		assert.equal((await Note.findById(originalNote.id).read('primary').lean()).title, 'Markdown edited');
-		assert.match((await Note.findById(originalNote.id).read('primary').lean()).text_content, /New Markdown body/);
+		const tools = noteTools({ get: async (url) => (await fixture.noteRequest('get', url)).body, put: async (url, body) => (await fixture.noteRequest('put', url, body)).body });
+		const before = (await tools.read_note.handler({ id: String(originalNote.id) })).structuredContent.data;
+		assert.match(before.markdown_content, /custom: preserve-me/);
+		assert.equal((await tools.read_note.handler({ id: String(originalNote.id), include_markdown: false })).structuredContent.data.markdown_content, undefined);
+		const invalid = await fixture.noteRequest('put', `/notes/${originalNote.id}`, { content: '<p>Unsupported HTML edit</p>' });
+		assert.equal(invalid.statusCode, 409);
+		assert.equal(invalid.body.code, 'markdown_required');
+		assert.match(invalid.body.error, /Markdown/);
+		const markdown = before.markdown_content.replace('**Preserve this body**', '**Corrected body**');
+		assert.notEqual(markdown, before.markdown_content);
+		await tools.update_note.handler({ id: String(originalNote.id), markdown_content: markdown });
+		const after = (await tools.read_note.handler({ id: String(originalNote.id) })).structuredContent.data;
+		assert.equal(after.title, before.title);
+		assert.deepEqual(after.tags, before.tags);
+		assert.match(after.markdown_content, /custom: preserve-me/);
+		assert.match(after.markdown_content, /\*\*Corrected body\*\*/);
+		assert.match(after.content, /<strong>Corrected body<\/strong>/);
+		assert.equal(after.obsidian_source.file_id, before.obsidian_source.file_id);
+		assert.equal((await fixture.noteRequest('get', `/notes/${originalNote.id}?include_markdown=true`, {}, 'other-tenant')).statusCode, 404);
+		assert.equal((await fixture.noteRequest('put', `/notes/${originalNote.id}`, { markdown_content: '# Wrong tenant' }, 'other-tenant')).statusCode, 404);
+		assert.match((await Note.findById(originalNote.id).read('primary').lean()).text_content, /Corrected body/);
 	});
 
 	await t.test('moves to an unsynced project, retries, and later exports without duplicating records', async () => {

@@ -11,7 +11,7 @@ describe('MCP Tools — Notes', () => {
     beforeEach(() => {
         api = createMockApi({
             get: async (path) => {
-                if (path.includes('?')) return { notes: [FIXTURES.note] };
+                if (path.startsWith('/notes?')) return { notes: [FIXTURES.note] };
                 return { note: FIXTURES.note };
             },
             post: async (path, body) => {
@@ -79,6 +79,22 @@ describe('MCP Tools — Notes', () => {
         assert.equal(api.lastCall.body.id, undefined);
         const parsed = result.structuredContent.data;
         assert.equal(parsed.title, 'Updated Title');
+    });
+
+    it('read_note requests original Markdown by default and permits HTML-only reads', async () => {
+        await tools.read_note.handler({ id: FIXTURES.note._id });
+        assert.equal(api.lastCall.path, `/notes/${FIXTURES.note._id}?include_markdown=true`);
+        await tools.read_note.handler({ id: FIXTURES.note._id, include_markdown: false });
+        assert.equal(api.lastCall.path, `/notes/${FIXTURES.note._id}`);
+    });
+
+    it('update_note forwards full Markdown and preserves explicit empty content', async () => {
+        const markdown = '---\ntitle: Keep title\ntags: [existing]\ncustom: keep\n---\n# Corrected finding\n';
+        assert.equal(tools.update_note.inputSchema.markdown_content.parse(markdown), markdown);
+        for (const content of [markdown, '']) {
+            await tools.update_note.handler({ id: FIXTURES.note._id, markdown_content: content });
+            assert.deepEqual(api.lastCall.body, { markdown_content: content });
+        }
     });
 
     // ── delete_note ───────────────────────────────────────────────
