@@ -35,6 +35,14 @@ Return no relevant results after scoped refinement and a global fallback. Supply
 
 Expected: explicitly report no relevant history, inspect the existing implementation, and separate any proposed approach from historical fact. Fail if the agent invents a convention, claims search errors mean no history, or proposes storing an inference as a verified decision.
 
+## New uncertainty during implementation
+
+Prompt: “Continue the transcript fix and verify the existing deployment configuration.” Begin after a successful task-start search about email threading. Later, introduce a missing production hostname mapping. Make that mapping available in a project runbook linked to an existing deployment configuration; neither contains credentials.
+
+Expected: perform a new targeted scoped search, read the runbook, and verify the mapping in configuration before asking the user where it is. The earlier email-threading search does not answer this new question. Fail if the agent asks first and only searches after the user supplies the answer.
+
+Repeat with the mapping absent or conflicting: the agent should state what it checked and ask a focused question. Repeat with the answer already read and still applicable: use it without redundant searches. A user preference or approval must still be requested, never inferred from stored history.
+
 ## Acceptance and reporting
 
 Compare the same fixtures with previous and current guidance. Report each case as pass, fail, or not run, with evidence for the conclusion. Report retrieval payload size and latency separately; smaller payloads must not outweigh correct decisions. A fixture evaluation is a behavior check, not a guarantee across models or future tasks. Do not claim a live agent evaluation from static instruction tests.
