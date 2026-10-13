@@ -1915,3 +1915,9 @@ body:not(.swal2-shown) > .swal2-container {
 .avatar-settings .ts-dropdown .dropdown-input { width: 100%; border: .0625rem solid var(--tblr-border-color); border-radius: var(--tblr-border-radius); background: var(--tblr-bg-surface); color: inherit; padding: .5rem; }
 .avatar-settings .ts-dropdown .option { cursor: pointer; padding: .5rem .75rem; }
 .avatar-settings .ts-control .avatar-picker-check { display: none; }
+
+/* Keep avatars readable while remote images load or fail. */
+.avatar:has(> .avatar-image) { position: relative; overflow: hidden; }
+.avatar-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; }
+.avatar-image.avatar-image-loaded { opacity: 1; background: var(--tblr-bg-surface); }
+.avatar-fallback { color: var(--tblr-body-color); }

@@ -26,6 +26,9 @@ describe('avatar preferences', () => {
 		assert.match(html, /value="glass" selected/);
 		assert.match(html, /glass\/svg\?seed=a%2Bb%40example.com/);
 		assert.match(html, /avatar-picker-check/);
+		assert.match(html, /class="avatar-fallback"[^>]*>ME<\/span>/);
+		assert.match(html, /onerror="this.classList.remove\('avatar-image-loaded'\)"/);
+		assert.match(html, /onload="this.classList.add\('avatar-image-loaded'\)"/);
 		const teammate = pug.compile('include ../views/includes/avatar.pug\n+avatar("Team", "sm", "team@example.com", "team")', { filename: new URL('./test.pug', import.meta.url).pathname });
 		assert.match(teammate({ user: { avatar_style: 'bottts' } }), /bottts\/svg\?seed=team%40example.com/);
 	});

@@ -489,16 +489,18 @@ html(lang="en")
 				avatar.className = 'avatar avatar-' + (size || 'xs');
 				avatar.dataset.avatarEmail = email || __user_email;
 				avatar.dataset.avatarUserId = ownerId || __user_id;
-				avatar.src = 'https://ava.helpmonks.com/9.x/' + __avatar_style + '/svg?seed=' + encodeURIComponent(avatar.dataset.avatarEmail);
+				avatar.querySelector('img').src = 'https://ava.helpmonks.com/9.x/' + __avatar_style + '/svg?seed=' + encodeURIComponent(avatar.dataset.avatarEmail);
 				avatar.title = name || '';
-				avatar.alt = name || '';
+				avatar.setAttribute('aria-label', name || '');
+				var parts = (name || '?').trim().split(/\s+/);
+				avatar.querySelector('.avatar-fallback').textContent = (parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : parts[0].substring(0, 2)).toUpperCase();
 				return avatar.outerHTML;
 			}
 			makeAvatar.refresh = function (root) {
 				(root || document).querySelectorAll('[data-avatar-email]').forEach(function (avatar) {
 					if (avatar.closest('.avatar-settings')) return;
 					if (avatar.dataset.avatarUserId === __user_id) avatar.dataset.avatarEmail = __user_email;
-					avatar.src = 'https://ava.helpmonks.com/9.x/' + __avatar_style + '/svg?seed=' + encodeURIComponent(avatar.dataset.avatarEmail);
+					avatar.querySelector('img').src = 'https://ava.helpmonks.com/9.x/' + __avatar_style + '/svg?seed=' + encodeURIComponent(avatar.dataset.avatarEmail);
 				});
 			};
 		template#user-avatar-template

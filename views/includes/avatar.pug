@@ -1,4 +1,8 @@
-mixin avatar(name, size, email, ownerId)
+mixin avatar(name, size, email, ownerId, selectedStyle, thumbnail)
 	- var seed = email || (user && user.email) || ''
-	- var style = (user && user.avatar_style) || 'initials'
-	img.avatar(class=`avatar-${size || 'sm'}` src=`https://ava.helpmonks.com/9.x/${style}/svg?seed=${encodeURIComponent(seed)}` alt=name title=name data-avatar-email=seed data-avatar-user-id=(ownerId || (user && user._id)) )
+	- var style = selectedStyle || (user && user.avatar_style) || 'initials'
+	- var parts = (name || '?').trim().split(/\s+/)
+	- var initials = (parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : parts[0].substring(0, 2)).toUpperCase()
+	span.avatar(class=`avatar-${size || 'sm'}` title=name role="img" aria-label=name data-avatar-email=(thumbnail ? undefined : seed) data-avatar-user-id=(thumbnail ? undefined : (ownerId || (user && user._id))))
+		span.avatar-fallback(aria-hidden="true")= initials
+		img.avatar-image(src=`https://ava.helpmonks.com/9.x/${style}/svg?seed=${encodeURIComponent(seed)}` alt="" onload="this.classList.add('avatar-image-loaded')" onerror="this.classList.remove('avatar-image-loaded')")

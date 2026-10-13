@@ -16,7 +16,8 @@ form#profile-form
 				each entry in avatarStyles
 					template(data-avatar-option=entry[0])
 						div.avatar-picker-option.d-flex.align-items-center
-							img.avatar.avatar-sm.me-3(src=avatarUrl(entry[0], user.email) alt="")
+							div.me-3
+								+avatar(user.name, 'sm', user.email, user._id, entry[0], true)
 							span= entry[1]
 							span.avatar-picker-check.ms-auto(aria-hidden="true") ✓
 	.mb-3

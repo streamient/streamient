@@ -3,7 +3,7 @@
 	document.querySelectorAll('#profile-form').forEach(function (profileForm) {
 		if (profileForm.dataset.profileSettingsBound) return;
 		var avatarSelect = profileForm.querySelector('#profile-avatar-style');
-		var preview = profileForm.querySelector('.avatar-settings [data-avatar-email]');
+		var preview = profileForm.querySelector('.avatar-settings img.avatar-image');
 		var emailInput = profileForm.querySelector('#profile-email');
 		var timezoneSelect = profileForm.querySelector('[data-timezone-select]');
 		var timeFormatSelect = profileForm.querySelector('#profile-time-format');
