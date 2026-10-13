@@ -1,3 +1,4 @@
+import { avatarStyleValues } from '../modules/avatar.js';
 import { beforeEach as beforeAccountWork, afterEach as afterAccountWork } from 'node:test';
 import { mockTenantWork } from './helpers/tenant-work.js';
 let restoreAccountWork;
@@ -101,6 +102,26 @@ describe('profile API', () => {
 		TenantMember.findOneAndUpdate = originalTenantMemberFindOneAndUpdate;
 	});
 
+
+	it('validates, saves and preserves the viewer avatar preference', async () => {
+		const server = await createServer();
+		try {
+			for (const invalid of ['unknown', null, 17, '']) {
+				const response = await request(server, 'PUT', '/profile', { name: 'Do not save', avatar_style: invalid });
+				assert.equal(response.status, 400);
+				assert.equal(profileUser.name, 'Test User');
+			}
+			for (const style of avatarStyleValues) {
+				assert.equal((await request(server, 'PUT', '/profile', { avatar_style: style })).status, 200);
+				assert.equal(profileUser.avatar_style, style);
+			}
+			await request(server, 'PUT', '/profile', { name: 'Renamed' });
+			assert.equal(profileUser.avatar_style, 'thumbs');
+			assert.equal(authUser.avatar_style, undefined);
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
 	it('saves supported timezone and clock preferences', async () => {
 		const server = await createServer();
 		try {

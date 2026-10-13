@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { avatarStyleValues } from '../modules/avatar.js';
 import mongoose, { queryForSave } from '../model/mongoose.js';
 import { requireOAuthScopes, generateSocketToken, SOCKET_TOKEN_EXPIRES_IN_SECONDS, SOCKET_TOKEN_REFRESH_AFTER_SECONDS } from '../middleware/auth.js';
 import { createAiDailyLimiter } from '../middleware/rate_limit.js';
@@ -273,7 +274,7 @@ router.get('/chat/conversations/:id/messages', requireOAuthScopes('ai:chat'), as
 });
 
 router.get('/profile', requireOAuthScopes('knowledge:read'), async (req, res) => {
-	const user = await User.findById(req.userId).select('name email timezone time_format').lean();
+	const user = await User.findById(req.userId).select('name email timezone time_format avatar_style').lean();
 	if (!user) return res.status(404).json({ error: 'User not found' });
 	res.json({ user });
 });
@@ -281,6 +282,7 @@ router.get('/profile', requireOAuthScopes('knowledge:read'), async (req, res) =>
 router.put('/profile', requireOAuthScopes('profile:write'), async (req, res) => {
 	try {
 		const body = req.body || {};
+		if (Object.hasOwn(body, 'avatar_style') && !avatarStyleValues.includes(body.avatar_style)) return res.status(400).json({ error: 'Invalid avatar style' });
 		if (Object.hasOwn(body, 'timezone') && !isSupportedTimezone(String(body.timezone || '').trim())) return res.status(400).json({ error: 'Invalid timezone' });
 		if (Object.hasOwn(body, 'time_format') && !['12-hour', '24-hour'].includes(body.time_format)) return res.status(400).json({ error: 'Invalid time format' });
 		const user = await queryForSave(User.findById(req.userId));
@@ -288,8 +290,9 @@ router.put('/profile', requireOAuthScopes('profile:write'), async (req, res) => 
 		if (body.name) user.name = String(body.name).trim().slice(0, 160);
 		if (Object.hasOwn(body, 'timezone')) { user.timezone = String(body.timezone).trim(); user.timezone_configured = true; }
 		if (Object.hasOwn(body, 'time_format')) user.time_format = body.time_format;
+		if (Object.hasOwn(body, 'avatar_style')) user.avatar_style = body.avatar_style;
 		await user.save();
-		res.json({ user: { _id: user._id, name: user.name, email: user.email, timezone: user.timezone, time_format: user.time_format } });
+		res.json({ user: { _id: user._id, name: user.name, email: user.email, timezone: user.timezone, time_format: user.time_format, avatar_style: user.avatar_style || 'initials' } });
 	} catch (err) {
 		sendError(res, err, 'Profile update failed');
 	}

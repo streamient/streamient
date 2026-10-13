@@ -3,7 +3,7 @@
   "info": {
     "title": "Streamient API",
     "version": "1.0.0",
-    "description": "Everything your AI needs to remember — Notes, Memory, URLs, AI Chat"
+    "description": "Everything your AI needs to remember \u2014 Notes, Memory, URLs, AI Chat"
   },
   "servers": [
     {
@@ -534,6 +534,43 @@
               "24-hour"
             ],
             "description": "Saved clock format. Omitted until the user explicitly saves a preference."
+          },
+          "avatar_style": {
+            "type": "string",
+            "enum": [
+              "adventurer",
+              "adventurer-neutral",
+              "avataaars",
+              "avataaars-neutral",
+              "big-ears",
+              "big-ears-neutral",
+              "big-smile",
+              "bottts",
+              "bottts-neutral",
+              "croodles",
+              "croodles-neutral",
+              "dylan",
+              "fun-emoji",
+              "glass",
+              "icons",
+              "identicon",
+              "initials",
+              "lorelei",
+              "lorelei-neutral",
+              "micah",
+              "miniavs",
+              "notionists",
+              "notionists-neutral",
+              "open-peeps",
+              "personas",
+              "pixel-art",
+              "pixel-art-neutral",
+              "rings",
+              "shapes",
+              "thumbs"
+            ],
+            "default": "initials",
+            "description": "Personal viewing preference for your own and team avatars."
           }
         }
       },
@@ -1163,7 +1200,7 @@
           },
           "auth_token": {
             "type": "string",
-            "description": "Masked — never returned in full"
+            "description": "Masked \u2014 never returned in full"
           },
           "sync_interval": {
             "type": "integer"
@@ -3132,7 +3169,7 @@
             }
           },
           "400": {
-            "description": "Cannot delete — project still has notes, memories, URLs, or git repos",
+            "description": "Cannot delete \u2014 project still has notes, memories, URLs, or git repos",
             "content": {
               "application/json": {
                 "schema": {
@@ -3449,6 +3486,43 @@
                       "24-hour"
                     ],
                     "description": "Clock format to use for signed-in date and time displays."
+                  },
+                  "avatar_style": {
+                    "type": "string",
+                    "enum": [
+                      "adventurer",
+                      "adventurer-neutral",
+                      "avataaars",
+                      "avataaars-neutral",
+                      "big-ears",
+                      "big-ears-neutral",
+                      "big-smile",
+                      "bottts",
+                      "bottts-neutral",
+                      "croodles",
+                      "croodles-neutral",
+                      "dylan",
+                      "fun-emoji",
+                      "glass",
+                      "icons",
+                      "identicon",
+                      "initials",
+                      "lorelei",
+                      "lorelei-neutral",
+                      "micah",
+                      "miniavs",
+                      "notionists",
+                      "notionists-neutral",
+                      "open-peeps",
+                      "personas",
+                      "pixel-art",
+                      "pixel-art-neutral",
+                      "rings",
+                      "shapes",
+                      "thumbs"
+                    ],
+                    "default": "initials",
+                    "description": "Personal viewing preference for your own and team avatars."
                   }
                 }
               }
@@ -10235,7 +10309,7 @@
         "tags": [
           "Mobile AI"
         ],
-        "summary": "List the signed-in user’s AI conversation history",
+        "summary": "List the signed-in user\u2019s AI conversation history",
         "security": [
           {
             "MobileOAuth": [
@@ -10390,6 +10464,43 @@
                       "12-hour",
                       "24-hour"
                     ]
+                  },
+                  "avatar_style": {
+                    "type": "string",
+                    "enum": [
+                      "adventurer",
+                      "adventurer-neutral",
+                      "avataaars",
+                      "avataaars-neutral",
+                      "big-ears",
+                      "big-ears-neutral",
+                      "big-smile",
+                      "bottts",
+                      "bottts-neutral",
+                      "croodles",
+                      "croodles-neutral",
+                      "dylan",
+                      "fun-emoji",
+                      "glass",
+                      "icons",
+                      "identicon",
+                      "initials",
+                      "lorelei",
+                      "lorelei-neutral",
+                      "micah",
+                      "miniavs",
+                      "notionists",
+                      "notionists-neutral",
+                      "open-peeps",
+                      "personas",
+                      "pixel-art",
+                      "pixel-art-neutral",
+                      "rings",
+                      "shapes",
+                      "thumbs"
+                    ],
+                    "default": "initials",
+                    "description": "Personal viewing preference for your own and team avatars."
                   }
                 }
               }

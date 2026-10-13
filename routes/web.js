@@ -14,6 +14,7 @@ import config from '../config.js';
 import { createLogger } from '../modules/logger.js';
 import { createDateFormatters } from '../modules/date_format.js';
 import { getTimezoneOptions } from '../modules/timezones.js';
+import { avatarStyles, avatarUrl } from '../modules/avatar.js';
 import { renderMobileAppsModal } from './mobile_apps.js';
 import productUpdatesRouter, { isProductUpdatesEligible } from './product_updates.js';
 import {
@@ -182,6 +183,8 @@ router.use(async (req, res, next) => {
 	res.locals.can_create_project = !is_hosted || !isTenantLimitReached(res.locals.account_limits.limit_projects, projects.length);
 	res.locals.byo_ai_enabled = isByoAiSettingsAccessEnabled(req);
 	res.locals.timezone_options = getTimezoneOptions();
+	res.locals.avatarStyles = avatarStyles;
+	res.locals.avatarUrl = avatarUrl;
 	res.locals.host_id = req.host_id;
 	res.locals.ws_url = config.wsUrl;
 	res.locals.user_id = req.userId;

@@ -1,3 +1,4 @@
+import { avatarStyleValues } from './modules/avatar.js';
 const swaggerSpec = {
     openapi: '3.0.3',
     info: {
@@ -213,7 +214,7 @@ const swaggerSpec = {
                     name: { type: 'string' },
                     email: { type: 'string', format: 'email' },
                     timezone: { type: 'string', example: 'America/New_York' },
-                    time_format: { type: 'string', enum: ['12-hour', '24-hour'], description: 'Saved clock format. Omitted until the user explicitly saves a preference.' },
+                    avatar_style: { type: 'string', enum: avatarStyleValues, default: 'initials', description: 'Personal viewing preference for your own and team avatars.' }, time_format: { type: 'string', enum: ['12-hour', '24-hour'], description: 'Saved clock format. Omitted until the user explicitly saves a preference.' },
                 },
             },
             OAuthClient: {
@@ -1002,7 +1003,7 @@ const swaggerSpec = {
                                     name: { type: 'string' },
                                     email: { type: 'string', format: 'email' },
                                     timezone: { type: 'string', description: 'IANA timezone identifier. UTC is also accepted.', example: 'America/New_York' },
-                                    time_format: { type: 'string', enum: ['12-hour', '24-hour'], description: 'Clock format to use for signed-in date and time displays.' },
+                                    avatar_style: { type: 'string', enum: avatarStyleValues, default: 'initials', description: 'Personal viewing preference for your own and team avatars.' }, time_format: { type: 'string', enum: ['12-hour', '24-hour'], description: 'Clock format to use for signed-in date and time displays.' },
                                 },
                             },
                         },
@@ -2899,7 +2900,7 @@ Object.assign(swaggerSpec.paths, {
 	},
 	'/mobile/profile': {
 		get: { tags: ['Mobile'], summary: 'Get the mobile profile', security: mobileReadSecurity, responses: { ...mobileErrorResponses, 200: { description: 'Profile' } } },
-		put: { tags: ['Mobile'], summary: 'Update name, timezone, or time format', security: [{ MobileOAuth: ['profile:write'] }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { name: { type: 'string' }, timezone: { type: 'string', example: 'America/New_York' }, time_format: { type: 'string', enum: ['12-hour', '24-hour'] } } } } } }, responses: { ...mobileErrorResponses, 200: { description: 'Profile updated' } } },
+		put: { tags: ['Mobile'], summary: 'Update name, timezone, or time format', security: [{ MobileOAuth: ['profile:write'] }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { name: { type: 'string' }, timezone: { type: 'string', example: 'America/New_York' }, avatar_style: { type: 'string', enum: avatarStyleValues, default: 'initials', description: 'Personal viewing preference for your own and team avatars.' }, time_format: { type: 'string', enum: ['12-hour', '24-hour'] } } } } } }, responses: { ...mobileErrorResponses, 200: { description: 'Profile updated' } } },
 	},
 	'/mobile/socket-token': {
 		post: { tags: ['Mobile'], summary: 'Issue a short-lived Socket.IO token', security: mobileReadSecurity, responses: { ...mobileErrorResponses, 200: { description: '15-minute token and refresh interval' } } },

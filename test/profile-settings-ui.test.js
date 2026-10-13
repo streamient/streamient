@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import pug from 'pug';
 import { fileURLToPath } from 'node:url';
 
+import { avatarStyles, avatarUrl } from '../modules/avatar.js';
 import { getTimezoneOptions } from '../modules/timezones.js';
 
 const settingsSource = fs.readFileSync(new URL('../public/js/settings.js', import.meta.url), 'utf8');
@@ -16,6 +17,7 @@ function localPath(url) {
 
 function profileLocals(overrides = {}) {
 	return {
+		avatarStyles, avatarUrl,
 		title: 'Profile',
 		v: 'test',
 		user: {
