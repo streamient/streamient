@@ -8,6 +8,8 @@
 - Keep model selection and subagent configuration in the task prompt. Give agents bounded ownership, the absolute worktree path, and the expected branch. Report missing tools or access as blockers.
 
 ## Git and worktrees
+- Read `.github/CONTRIBUTING.md`. Base contribution work on `develop`; every contribution pull request must target `develop`.
+- Use `gh pr create --base develop` and verify the base after creation and before merging. `main` is release-only and requires explicit release authorization.
 - `develop` is the integration and push destination for product changes. Never substitute `main`, `master`, or a detached HEAD.
 - After plan approval, fetch the latest changes, update `develop` without discarding existing work, and create a uniquely named task branch and worktree from it. Plan approval authorizes this branch/worktree and its completion lifecycle. Respect an explicitly supplied approved feature branch.
 - Implement, review, and test in the task worktree. Verify the path and branch before edits or Git mutations; include both in every subagent brief.
