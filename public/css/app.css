@@ -1667,9 +1667,22 @@ body.backend-admin .navbar-dark .navbar-nav .nav-link:focus {
 }
 
 .avatar-md {
-	width: 40px;
-	height: 40px;
+	width: 2.5rem;
+	height: 2.5rem;
 	font-size: 0.875rem;
+}
+
+.st-user-menu-toggle {
+	padding: 0;
+	border: 0;
+	border-radius: 50%;
+	background: transparent;
+	cursor: pointer;
+}
+
+.st-user-menu-toggle:focus-visible {
+	outline: 0.125rem solid var(--tblr-primary);
+	outline-offset: 0.1875rem;
 }
 
 .avatar-lg {

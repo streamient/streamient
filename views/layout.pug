@@ -139,9 +139,8 @@ html(lang="en")
 															span= tenant.name
 															span.st-account-role-badge= tenant.role
 								.dropdown
-									button.btn.btn-outline-secondary.btn-sm.dropdown-toggle.d-flex.align-items-center.gap-1(type="button" data-bs-toggle="dropdown")
-										+avatar(user.name, 'xs')
-										span= user.name
+									button.st-user-menu-toggle.d-flex.align-items-center(type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Account menu" title=user.name)
+										+avatar(user.name, 'md')
 									ul.dropdown-menu.dropdown-menu-end
 										if !streamient_demo_mode
 											li: a.dropdown-item(href="/settings/profile") Profile & Settings
