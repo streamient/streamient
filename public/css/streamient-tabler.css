@@ -112,6 +112,11 @@
 	--tblr-link-hover-color-rgb: 230, 237, 243;
 }
 
+/* The app scrolls inside panels, so it does not need a viewport scrollbar gutter. */
+html:has(> body.st-template1) {
+	scrollbar-gutter: auto;
+}
+
 html,
 body.st-template1 {
 	height: 100%;
