@@ -140,7 +140,7 @@ html(lang="en")
 															span.st-account-role-badge= tenant.role
 								.dropdown
 									button.st-user-menu-toggle.d-flex.align-items-center(type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Account menu" title=user.name)
-										+avatar(user.name, 'md')
+										+avatar(user.name, 'sm')
 									ul.dropdown-menu.dropdown-menu-end
 										if !streamient_demo_mode
 											li: a.dropdown-item(href="/settings/profile") Profile & Settings
