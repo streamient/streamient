@@ -139,9 +139,8 @@ html(lang="en")
 															span= tenant.name
 															span.st-account-role-badge= tenant.role
 								.dropdown
-									button.btn.btn-outline-secondary.btn-sm.dropdown-toggle.d-flex.align-items-center.gap-1(type="button" data-bs-toggle="dropdown")
-										+avatar(user.name, 'xs')
-										span= user.name
+									button.st-user-menu-toggle.d-flex.align-items-center(type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Account menu" title=user.name)
+										+avatar(user.name, 'sm')
 									ul.dropdown-menu.dropdown-menu-end
 										if !streamient_demo_mode
 											li: a.dropdown-item(href="/settings/profile") Profile & Settings
@@ -482,16 +481,29 @@ html(lang="en")
 			var __user_name = "#{user ? user.name : ''}";
 			var __static_base = "/static/v-#{v}";
 			window.STREAMIENTDateSettings = !{dateSettingsJson};
-			var __avatar_colors = ['#6366f1','#8b5cf6','#ec4899','#f43f5e','#f97316','#eab308','#22c55e','#14b8a6','#06b6d4','#3b82f6'];
-			function makeAvatar(name, size) {
-				size = size || 'xs';
-				var parts = (name || '?').trim().split(' ');
-				var initials = parts.length > 1 ? (parts[0][0] + parts[parts.length - 1][0]) : parts[0].substring(0, 2);
-				var hash = 0;
-				for (var i = 0; i < (name || '').length; i++) hash = (name || '').charCodeAt(i) + ((hash << 5) - hash);
-				var bg = __avatar_colors[Math.abs(hash) % __avatar_colors.length];
-				return '<span class="avatar avatar-' + size + '" style="background:' + bg + '" title="' + (name || '') + '">' + initials.toUpperCase() + '</span>';
+			var __user_email = !{JSON.stringify(user ? user.email : '').replace(/</g, '\\u003c')};
+			var __avatar_style = !{JSON.stringify(user ? (user.avatar_style || 'initials') : 'initials')};
+			function makeAvatar(name, size, email, ownerId) {
+				var avatar = document.getElementById('user-avatar-template').content.firstElementChild.cloneNode(true);
+				avatar.className = 'avatar avatar-' + (size || 'xs');
+				avatar.dataset.avatarEmail = email || __user_email;
+				avatar.dataset.avatarUserId = ownerId || __user_id;
+				avatar.querySelector('img').src = 'https://ava.helpmonks.com/9.x/' + __avatar_style + '/svg?seed=' + encodeURIComponent(avatar.dataset.avatarEmail);
+				avatar.title = name || '';
+				avatar.setAttribute('aria-label', name || '');
+				var parts = (name || '?').trim().split(/\s+/);
+				avatar.querySelector('.avatar-fallback').textContent = (parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : parts[0].substring(0, 2)).toUpperCase();
+				return avatar.outerHTML;
 			}
+			makeAvatar.refresh = function (root) {
+				(root || document).querySelectorAll('[data-avatar-email]').forEach(function (avatar) {
+					if (avatar.closest('.avatar-settings')) return;
+					if (avatar.dataset.avatarUserId === __user_id) avatar.dataset.avatarEmail = __user_email;
+					avatar.querySelector('img').src = 'https://ava.helpmonks.com/9.x/' + __avatar_style + '/svg?seed=' + encodeURIComponent(avatar.dataset.avatarEmail);
+				});
+			};
+		template#user-avatar-template
+			+avatar(user.name, 'xs', user.email, user._id)
 		script(src=`/static/v-${v}/js/vendor.js` type="module")
 		script(src=`/static/v-${v}/js/editor.js` type="module")
 		script(src=`/static/v-${v}/js/iframe_resizer_parent.js`)

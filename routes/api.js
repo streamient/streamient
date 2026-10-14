@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { avatarStyleValues } from '../modules/avatar.js';
 import { requireAuth } from '../middleware/auth.js';
 import { initializeSessionTenant, requireTenant, Tenant } from '../modules/tenancy.js';
 import fs from 'node:fs';
@@ -1485,6 +1486,7 @@ router.delete('/team/members/:id', requireTeamManager, async (req, res) => {
 router.put('/profile', async (req, res) => {
 	try {
 		const body = req.body || {};
+		if (Object.hasOwn(body, 'avatar_style') && !avatarStyleValues.includes(body.avatar_style)) return res.status(400).json({ error: 'Invalid avatar style' });
 		const { name, email, timezone, time_format } = body;
 		const hasTimezone = Object.hasOwn(body, 'timezone');
 		const hasTimeFormat = Object.hasOwn(body, 'time_format');
@@ -1502,6 +1504,7 @@ router.put('/profile', async (req, res) => {
 			user.timezone_configured = true;
 		}
 		if (hasTimeFormat) user.time_format = time_format;
+		if (Object.hasOwn(body, 'avatar_style')) user.avatar_style = body.avatar_style;
 		await user.save();
 
 		res.json({ user: user.toSafe() });

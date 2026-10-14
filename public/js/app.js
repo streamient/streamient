@@ -485,6 +485,7 @@ async function loadProjectSettingsBody(projectId, tab) {
 		var html = await res.text();
 		if (!res.ok) throw new Error(html || 'Failed to load project settings');
 		bodyEl.innerHTML = html;
+		makeAvatar.refresh(bodyEl);
 		executeScripts(bodyEl);
 		bindProjectSettingsModal(projectId, tab || __currentProjectSettingsTab || 'details');
 	} catch (err) {
@@ -842,6 +843,7 @@ async function openSettingsModal(path) {
 
 		var html = await res.text();
 		bodyEl.innerHTML = html;
+		makeAvatar.refresh(bodyEl);
 		executeScripts(bodyEl);
 	} catch (err) {
 		console.error('Settings modal error:', err);
@@ -881,6 +883,7 @@ async function navigateTo(path, opts) {
 
 		var html = await res.text();
 		pageContent.innerHTML = html;
+		makeAvatar.refresh(pageContent);
 		pageContent.style.opacity = '';
 
 		executeScripts(pageContent);

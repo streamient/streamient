@@ -1,5 +1,6 @@
 import mongoose from './mongoose.js';
 import bcrypt from 'bcryptjs';
+import { avatarStyleValues } from '../modules/avatar.js';
 
 function safeAccessTokens(access_tokens = []) {
 	return access_tokens.map((access_token) => ({
@@ -16,6 +17,7 @@ export async function compareUserPassword(user, candidate) {
 
 export function toSafeUser(user) {
 	const obj = typeof user?.toObject === 'function' ? user.toObject() : { ...(user || {}) };
+	obj.avatar_style = avatarStyleValues.includes(obj.avatar_style) ? obj.avatar_style : 'initials';
 	delete obj.password;
 	delete obj.totp_secret;
 	delete obj.verification_token;
@@ -35,6 +37,7 @@ const userSchema = new mongoose.Schema(
 		email: { type: String, required: true, unique: true, lowercase: true, trim: true },
 		password: { type: String, required: true, select: false },
 		name: { type: String, required: true, trim: true },
+		avatar_style: { type: String, enum: avatarStyleValues, default: 'initials' },
 		timezone: { type: String, default: 'UTC' },
 		timezone_configured: { type: Boolean, default: false },
 		time_format: { type: String, enum: ['12-hour', '24-hour'] },

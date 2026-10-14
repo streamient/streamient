@@ -1,10 +1,8 @@
-//- Initials avatar mixin
-//- Usage: +avatar(user.name, 'sm')  — sizes: xs, sm, md, lg, xl
-mixin avatar(name, size)
-	- var s = size || 'sm'
-	- var parts = (name || '?').trim().split(' ')
-	- var initials = parts.length > 1 ? (parts[0][0] + parts[parts.length - 1][0]) : parts[0].substring(0, 2)
-	- var hash = 0; for (var i = 0; i < (name || '').length; i++) { hash = (name || '').charCodeAt(i) + ((hash << 5) - hash); }
-	- var colors = ['#6366f1','#8b5cf6','#ec4899','#f43f5e','#f97316','#eab308','#22c55e','#14b8a6','#06b6d4','#3b82f6']
-	- var bg = colors[Math.abs(hash) % colors.length]
-	span.avatar(class=`avatar-${s}` style=`background:${bg}` title=name)= initials
+mixin avatar(name, size, email, ownerId, selectedStyle, thumbnail)
+	- var seed = email || (user && user.email) || ''
+	- var style = selectedStyle || (user && user.avatar_style) || 'initials'
+	- var parts = (name || '?').trim().split(/\s+/)
+	- var initials = (parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : parts[0].substring(0, 2)).toUpperCase()
+	span.avatar(class=`avatar-${size || 'sm'}` title=name role="img" aria-label=name data-avatar-email=(thumbnail ? undefined : seed) data-avatar-user-id=(thumbnail ? undefined : (ownerId || (user && user._id))))
+		span.avatar-fallback(aria-hidden="true")= initials
+		img.avatar-image(src=`https://ava.helpmonks.com/9.x/${style}/svg?seed=${encodeURIComponent(seed)}` alt="" onload="this.classList.add('avatar-image-loaded')" onerror="this.classList.remove('avatar-image-loaded')")

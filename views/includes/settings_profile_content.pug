@@ -1,10 +1,25 @@
 h2.h4.mb-4 Profile Settings
 
-.text-center.mb-4
-	+avatar(user.name, 'xl')
-	p.text-muted.mt-2.mb-0= user.email
-
 form#profile-form
+	.row.align-items-center.mb-5.avatar-settings
+		.col-lg-2.mb-3
+			label.form-label(for="profile-avatar-style") Avatar
+		.col-lg-2.mb-3
+			+avatar(user.name, 'xl', user.email, user._id)
+		.col-lg-8.mb-3
+			h3.h6 No boring avatars
+			div.text-muted.small.mb-3 Choose your avatar style from over 30 styles and shapes, and break free from avatar boredom. You and your team will all appear in this style, but only for you.
+			select.form-select.form-select-sm#profile-avatar-style
+				each entry in avatarStyles
+					option(value=entry[0] selected=(entry[0] === (user.avatar_style || 'initials')))= entry[1]
+			.avatar-picker-templates.d-none
+				each entry in avatarStyles
+					template(data-avatar-option=entry[0])
+						div.avatar-picker-option.d-flex.align-items-center
+							div.me-3
+								+avatar(user.name, 'sm', user.email, user._id, entry[0], true)
+							span= entry[1]
+							span.avatar-picker-check.ms-auto(aria-hidden="true") ✓
 	.mb-3
 		label.form-label.small(for="profile-name") Name
 		input.form-control.form-control-sm#profile-name(type="text" value=user.name)

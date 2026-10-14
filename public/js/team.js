@@ -58,6 +58,7 @@
 				var lastLogin = user.last_login ? '<small class="text-muted">Last login ' + escapeHtml(window.StreamientDateFormat?.formatLocale(user.last_login) || '') + '</small>' : '<small class="text-muted">No recent login recorded</small>';
 
 				return '<div class="list-group-item d-flex justify-content-between align-items-start gap-3 mb-3">'
+					+ makeAvatar(user.name, 'sm', user.email, user._id)
 					+ '<div class="flex-grow-1">'
 						+ '<div class="fw-semibold">' + escapeHtml(user.name || 'Unknown user') + (isCurrentUser ? ' <span class="badge text-bg-light ms-2">You</span>' : '') + '</div>'
 						+ '<div class="text-muted small">' + escapeHtml(user.email || '') + '</div>'
