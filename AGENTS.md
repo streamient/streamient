@@ -8,6 +8,8 @@
 - Keep model selection and subagent configuration in the task prompt. Give agents bounded ownership, the absolute worktree path, and the expected branch. Report missing tools or access as blockers.
 
 ## Git and worktrees
+- Never stage or commit worktree directories or Git worktree metadata into a repository. Keep worktree directories inside a repository ignored, and inspect staged paths before committing. Intended source changes made within a worktree may still be committed normally.
+- Never push a branch whose name starts with `codex/` or `claude/` to any remote unless the user explicitly instructs you to push that branch. Permission to create a worktree, implement a task, or commit locally does not authorize pushing these branches. This restriction applies to all agents and takes precedence over general push instructions.
 - Read `.github/CONTRIBUTING.md`. Base contribution work on `develop`; every contribution pull request must target `develop`.
 - Use `gh pr create --base develop` and verify the base after creation and before merging. `main` is release-only and requires explicit release authorization.
 - `develop` is the integration and push destination for product changes. Never substitute `main`, `master`, or a detached HEAD.
@@ -29,7 +31,7 @@
 - Whole-view rendering is limited to initial navigation, explicit refresh, or a documented unrecoverable reconciliation case. Add relevant regression coverage for immediate item updates without page/section reloads.
 
 ## Development and testing
-- Development uses Docker Compose (`compose.yml`); use OrbStack on local macOS hosts. Avoid new environment variables; if required, update production Swarm files under `/Users/nitai/repos/helpmonks-install-script/docker/` and the relevant development secrets.
+- Development uses Docker Compose (`compose.yml`); Avoid new environment variables; if required, update production Swarm files under `/Users/nitai/repos/helpmonks-install-script/docker/` and the relevant development secrets.
 - On `NadaMini`, projects/worktrees under `/Users/nitai/repos` and `/Users/nitai/repos-denise` use remote Docker through `dbh-run`; never local Docker or hand-written SSH sync. Other development hosts use local Docker per project instructions. Non-Docker unit tests stay on `NadaMini`.
 - Use `dbh-run compose -- <args>`, `dbh-run test`, and `dbh-run exec -- <command>`. Use `status` and `logs` for diagnosis. Run `dbh-run urls` before starting/testing a stack; repository metadata and its named URLs are authoritative.
 - `dbh-run` syncs the exact current worktree. Sync requires neither committing nor pushing. Verify the source worktree/revision being tested; do not assume an existing server serves the task branch.
@@ -39,6 +41,8 @@
 - Agents perform frontend testing on `NadaMini` against the named dbh URLs, superseding earlier user-only testing rules. Exercise affected flows, relevant UI states, responsive layout, and console/network failures. Fix findings and repeat affected checks. Report unavailable browser/host access and untested flows.
 - Run relevant automated checks and independent review before integration. Refresh and verify the integrated `develop` stack before final completion.
 - `dbh-run` is development/test only: never production Compose, Swarm, production builds, or install-script deployments.
+- Do not run docker on the local machine; use `dbh-run` for all Docker commands. Do not run `docker-compose` or `docker` directly on the host unless instructed.
+
 
 ## Production context
 - Deployments use Docker Swarm behind Cloudflare → Caddy → Swarm.
