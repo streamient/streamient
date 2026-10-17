@@ -1357,7 +1357,7 @@ function rmShowMemoryPreview() {
 	document.getElementById('rm-memory-markdown-wrap').classList.add('d-none');
 	const preview = document.getElementById('rm-memory-preview');
 	if (rmIsObsidianSynced) void rmRenderObsidianPreview(preview);
-	else preview.innerHTML = rmRenderPreview(rmTextContent, rmContent);
+	else preview.innerHTML = rmRenderPreview(rmTextContent, rmContent, Boolean(rmEditor));
 }
 
 function rmShowMemoryEdit() {
@@ -1416,7 +1416,7 @@ function rmInitEditor(containerId, content) {
 	container.innerHTML = '';
 	if (rmEditor) { rmEditor.destroy(); rmEditor = null; }
 	if (window.StreamientEditor) {
-		rmEditor = window.StreamientEditor.createEditor(container, { content });
+		rmEditor = window.StreamientEditor.createEditor(container, { content, onUpdate: (editor) => { rmContent = editor.getHTML(); rmTextContent = editor.getText(); } });
 	} else {
 		container.innerHTML = content || '';
 		container.setAttribute('contenteditable', 'true');

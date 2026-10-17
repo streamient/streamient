@@ -73,7 +73,7 @@
 			rows.delete(key);
 		} else {
 			revisions.set(key, revision);
-			if (existing || page === 1) {
+			if (existing || (!mutation && page === 1)) {
 				const template = document.createElement('template');
 				template.innerHTML = outcome.html;
 				const next = template.content.firstElementChild;

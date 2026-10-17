@@ -20,6 +20,25 @@ const layout = read('views/layout.pug');
 const chat = read('public/js/chat.js');
 
 describe('Note and Memory modal sections', () => {
+	it('previews current unsaved rich text for notes and memories', () => {
+		const elements = {};
+		let update;
+		const editor = { getHTML: () => '<p><strong>Unsaved</strong> body</p>', getText: () => 'Unsaved body' };
+		const context = vm.createContext({
+			window: { StreamientEditor: { createEditor(_container, options) { update = options.onUpdate; return editor; } } },
+			document: { getElementById(id) { return elements[id] ||= { innerHTML: '', classList: { add() {}, remove() {} } }; } },
+			rmRenderPreview: (text, html, preferHtml) => preferHtml ? html : text,
+		});
+		vm.runInContext("let rmEditor = null; let rmContent = ''; let rmTextContent = ''; let rmIsObsidianSynced = false;", context);
+		for (const [name, next] of [['rmInitEditor', 'rmGetEditorContent'], ['rmShowNotePreview', 'rmShowNoteEdit'], ['rmShowMemoryPreview', 'rmShowMemoryEdit']]) vm.runInContext(chat.slice(chat.indexOf(`function ${name}(`), chat.indexOf(`function ${next}(`)), context);
+		vm.runInContext("rmInitEditor('rm-note-editor', '')", context);
+		update(editor);
+		vm.runInContext('rmShowNotePreview(); rmShowMemoryPreview();', context);
+		assert.equal(elements['rm-note-preview'].innerHTML, editor.getHTML());
+		assert.equal(elements['rm-memory-preview'].innerHTML, editor.getHTML());
+		assert.equal(vm.runInContext('rmTextContent', context), editor.getText());
+	});
+
 	it('renders the requested Info field order and Related & Tags content', () => {
 		const note = layout.slice(layout.indexOf('#result-modal-note'), layout.indexOf('//- Memory form'));
 		const memory = layout.slice(layout.indexOf('#result-modal-memory'), layout.indexOf('//- URL form'));

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { attachItemHtml } from '../modules/item_html.js';
+import { load } from 'cheerio';
 
 it('applies only authoritative successful outcomes, keeps failed selection including unloaded rows, and reports exact counts', () => {
 	const checkboxes = [{ value: 'one', checked: true }, { value: 'two', checked: true }];
@@ -38,6 +39,15 @@ it('renders escaped server fragments for each record type without executable use
 		assert.match(item.html, /data-id="one"/);
 		assert.doesNotMatch(item.html, /<script>|<img src=x|<b>sender/);
 	}
+});
+
+it('renders memory excerpts as decoded plain text without changing rich content', () => {
+	const content = '<p>First &amp; second</p><p>&lt;code&gt;<br>Next <strong>line</strong></p><script>unsafe()</script>';
+	const item = attachItemHtml('memory', { _id: 'memory', title: 'Rich memory', content });
+	const $ = load(item.html);
+	assert.equal($('p').text(), 'First & second <code> Next line');
+	assert.equal($('p code, p strong, script').length, 0);
+	assert.equal(item.content, content);
 });
 
 it('reports complete failure counts and truncated retry details honestly', () => {
