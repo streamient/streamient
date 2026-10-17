@@ -131,7 +131,7 @@ async (page) => {
 			try { await call('DELETE', '/notes/' + id); await call('DELETE', '/trash/notes/' + id); } catch (error) { failures.push(error.message); }
 		}
 		for (const id of memories) {
-			try { await call('DELETE', '/memories/' + id); await call('DELETE', '/trash/memory/' + id); } catch (error) { failures.push(error.message); }
+			try { await call('DELETE', '/memories/' + id); await call('DELETE', '/trash/memories/' + id); } catch (error) { failures.push(error.message); }
 		}
 		for (const id of projects) {
 			try { await call('DELETE', '/projects/' + id); } catch (error) { failures.push(error.message); }
