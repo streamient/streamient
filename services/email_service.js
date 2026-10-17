@@ -84,7 +84,7 @@ async function resolveTemplate(templateKey) {
 function renderTemplate(template, variables) {
 	let result = template;
 	for (const [key, value] of Object.entries(variables)) {
-		result = result.replaceAll(`{{${key}}}`, value);
+		result = result.replaceAll(`{{${key}}}`, () => value);
 	}
 	return result;
 }
@@ -96,10 +96,11 @@ function buildUrl(baseUrl, path) {
 export async function sendVerificationEmail(email, token, name, baseUrl = null) {
 	const url = buildUrl(baseUrl, `/verify?token=${encodeURIComponent(token)}`);
 	const { subject, html } = await resolveTemplate('verification');
+	const htmlName = String(name || '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
 	return sendMail({
 		to: email,
 		subject: renderTemplate(subject, { url, name: name || '' }),
-		html: renderTemplate(html, { url, name: name || '' }),
+		html: renderTemplate(html, { url, name: htmlName }),
 	});
 }
 

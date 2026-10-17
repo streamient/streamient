@@ -148,7 +148,7 @@ router.post('/signup', async (req, res) => {
 			expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000),
 		});
 
-		await sendVerificationEmail(email, verificationToken);
+		await sendVerificationEmail(email, verificationToken, name);
 
 		res.status(200).json({
 			message: 'We sent a confirmation link to your email. Please verify to activate your account.',
