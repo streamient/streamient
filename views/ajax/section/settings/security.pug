@@ -22,31 +22,7 @@
 								|  Copy
 						button.btn.btn-primary.mt-2#password-copied-btn I copied the password
 
-		.card.mb-4
-			.card-body
-				h5.card-title
-					!= icon('shieldCheck', 'me-2')
-					| Two-Factor Authentication
-				if user.totp_enabled
-					p.text-success
-						!= icon('checkCircle', 'me-1')
-						| 2FA is enabled
-					button.btn.btn-outline-danger#disable-2fa Disable 2FA
-				else
-					p.text-muted 2FA is not enabled
-					.text-end
-						button.btn.btn-outline-secondary#setup-2fa Enable 2FA
-					#2fa-setup-area.d-none.mt-3
-						.card.bg-light
-							.card-body
-								p Scan this QR code with your authenticator app:
-								img.d-none.mb-3#2fa-qr(alt="QR Code")
-								p.small
-									| Or enter this secret manually:
-									code.ms-2#2fa-secret
-								.input-group.mt-3
-									input.form-control#2fa-code(type="text" placeholder="Enter 6-digit code" maxlength="6")
-									button.btn.btn-primary#confirm-2fa-btn Verify
+		include ../../two_factor_settings
 
 		.card
 			.card-body

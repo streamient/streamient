@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { verifySync } from 'otplib';
 import { avatarStyleValues } from '../modules/avatar.js';
 import { requireAuth } from '../middleware/auth.js';
 import { initializeSessionTenant, requireTenant, Tenant } from '../modules/tenancy.js';
@@ -1655,6 +1656,10 @@ router.post('/2fa/disable', async (req, res) => {
 	try {
 		const user = await queryForSave(User.findById(req.userId).select('+totp_secret'));
 		if (!user) return res.status(404).json({ error: 'User not found' });
+
+		if (!user.totp_enabled) return res.json({ message: '2FA disabled' });
+		const code = typeof req.body?.code === 'string' ? req.body.code.trim() : '';
+		if (!/^\d{6}$/.test(code) || !user.totp_secret || !verifySync({ token: code, secret: user.totp_secret }).valid) return res.status(400).json({ error: 'Enter a valid authenticator code' });
 
 		user.totp_enabled = false;
 		user.totp_secret = undefined;

@@ -141,7 +141,7 @@
 				process: {
 					url: '/api/v1/notes/import',
 					method: 'POST',
-					headers: {},
+					headers: { 'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || '' },
 					ondata: function (formData) {
 						if (currentProjectId) formData.append('project', currentProjectId);
 						return formData;

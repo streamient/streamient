@@ -4,6 +4,8 @@ doctype html
 - const __productUpdatesEnabled = typeof product_updates_enabled !== 'undefined' && product_updates_enabled
 html(lang="en")
 	head
+		meta(name="csrf-token" content=csrf_token)
+		script(src=`/static/v-${v}/js/csrf.js`)
 		meta(charset="UTF-8")
 		meta(name="viewport" content="width=device-width, initial-scale=1")
 		- const __wlFavicon = typeof white_label !== 'undefined' && white_label && white_label.favicon_url ? white_label.favicon_url : '/static/images/favicon.ico'
@@ -118,6 +120,7 @@ html(lang="en")
 										span= trial_ends_text || 'Trial'
 								else if trial_available
 									form.me-3.mb-0(action="/billing/trial" method="post")
+										input(type="hidden" name="_csrf" value=csrf_token)
 										button.btn.btn-warning.btn-sm(type="submit")
 											!= icon('creditCard', 'me-1')
 											span Start 7-day Pro trial
