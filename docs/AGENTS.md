@@ -1,5 +1,10 @@
 # Streamient Docs Instructions
 
+## Worktree and branch safety
+
+- Never stage or commit worktree directories or Git worktree metadata into a repository. Keep worktree directories inside a repository ignored, and inspect staged paths before committing. Intended source changes made within a worktree may still be committed normally.
+- Never push a branch whose name starts with `codex/` or `claude/` to any remote unless the user explicitly instructs you to push that branch. Permission to create a worktree, implement a task, or commit locally does not authorize pushing these branches. This restriction applies to all agents and takes precedence over general push instructions.
+
 - When reporting information, be extremely concise and sacrifice grammar for the sake of concision.
 
 # Context
