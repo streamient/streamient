@@ -4,10 +4,11 @@ import fs from 'node:fs';
 
 import { authenticateClientForToken, parseAuthorizationRequest, validateAuthorizationRequest } from '../services/oauth_service.js';
 import { getApiResourceUrl, MOBILE_ALL_SCOPES, MOBILE_CLIENT_ID, MOBILE_REDIRECT_URI, signMcpAccessToken, verifyApiAccessToken } from '../modules/oauth.js';
-import { getRecord, listRecords, normalizeMobileTimestamp, normalizeSearchReference } from '../services/mobile_service.js';
+import { getRecord, listRecords, normalizeMobileTimestamp, normalizeRecord, normalizeSearchReference } from '../services/mobile_service.js';
 import { OAuthAuthorizationCode } from '../model/oauth_authorization_code.js';
 import { OAuthConsent } from '../model/oauth_consent.js';
 import { OAuthRefreshToken } from '../model/oauth_refresh_token.js';
+import { Memory } from '../model/memory.js';
 import { AuditLog } from '../model/audit_log.js';
 
 function read(relativePath) {
@@ -81,6 +82,29 @@ describe('Streamient Mobile OAuth and API contracts', () => {
 		assert.equal(page.type, 'urls');
 		assert.equal(page.metadata.domain, 'example.com');
 		assert.equal(normalizeMobileTimestamp(1_750_000_100), '2025-06-15T15:08:20.000Z');
+	});
+
+	it('decodes rich-text entities in feed and search excerpts without changing content', () => {
+		const content = '<p>Fish &amp; chips</p><p>&lt;code&gt;&nbsp;&#x1F600;</p>';
+		const memory = { _id: '507f1f77bcf86cd799439011', title: 'Rich memory', content };
+		assert.equal(normalizeRecord('memories', memory).excerpt, 'Fish & chips <code> 😀');
+		assert.equal(normalizeSearchReference({ type: 'memory', id: memory._id, content }).excerpt, 'Fish & chips <code> 😀');
+		assert.equal(normalizeRecord('notes', { ...memory, text_content: '<code>literal</code> &amp;' }).excerpt, '<code>literal</code> &amp;');
+		assert.equal(normalizeRecord('memories', { ...memory, content: 'literal &amp; entity' }).excerpt, 'literal &amp; entity');
+		assert.equal(normalizeSearchReference({ type: 'memory', id: memory._id, excerpt: content }).excerpt, 'Fish & chips <code> 😀');
+		assert.equal(normalizeSearchReference({ type: 'note', id: memory._id, excerpt: '<code>literal</code> &amp;' }).excerpt, '<code>literal</code> &amp;');
+		assert.equal(memory.content, content);
+	});
+
+	it('keeps full memory detail text while compacting its feed excerpt', async (t) => {
+		const text = 'Long memory & content '.repeat(30).trim();
+		const content = `<p>${text.replaceAll('&', '&amp;')}</p>`;
+		const memory = { _id: '507f1f77bcf86cd799439011', content };
+		t.mock.method(Memory, 'findOne', () => ({ lean: async () => memory }));
+		const record = await getRecord('host-1', 'memory', memory._id);
+		assert.equal(record.text_content, text);
+		assert.equal(record.content, content);
+		assert.equal(record.excerpt.length, 261);
 	});
 
 	it('rejects invalid ObjectIDs before mixed-feed queries', async () => {
