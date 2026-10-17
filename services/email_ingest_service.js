@@ -653,15 +653,17 @@ export async function applyProjectEmailFilterToInbox(host_id, projectId, ctx = {
 	};
 }
 
-export async function listEmails(host_id, projectId, { page = 1, limit = 50, mailbox, label } = {}) {
+export async function listEmails(host_id, projectId, { page = 1, limit = 50, mailbox, label, offset } = {}) {
 	const safePage = Math.max(1, parseInt(page, 10) || 1);
 	const safeLimit = Math.max(1, parseInt(limit, 10) || 50);
+	const start = offset === undefined ? (safePage - 1) * safeLimit : Number(offset);
+	if (!Number.isSafeInteger(start) || start < 0) throw Object.assign(new Error('offset must be a nonnegative integer'), { status: 400 });
 	const emails = await Email.find(buildEmailListQuery(host_id, projectId, { mailbox, label }))
 		.sort(EMAIL_DATE_SORT)
 		.lean();
 	const collapsed = collapseEmailsByThread(emails);
 	const withLatest = await attachLatestThreadEmails(host_id, projectId, collapsed);
-	return withLatest.slice((safePage - 1) * safeLimit, safePage * safeLimit);
+	return withLatest.slice(start, start + safeLimit);
 }
 
 export async function listEmailIds(host_id, projectId, { mailbox, label } = {}) {

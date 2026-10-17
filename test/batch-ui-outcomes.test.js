@@ -39,3 +39,13 @@ it('renders escaped server fragments for each record type without executable use
 		assert.doesNotMatch(item.html, /<script>|<img src=x|<b>sender/);
 	}
 });
+
+it('reports complete failure counts and truncated retry details honestly', () => {
+	const errors = [];
+	const context = vm.createContext({ window: { dispatchEvent() {} }, document: { querySelectorAll: () => [] }, CustomEvent: class {}, showSuccess() {}, showError: (message) => errors.push(message) });
+	const source = readFileSync(new URL('../public/js/batch.js', import.meta.url), 'utf8').replace('window.__sections.batch = { mount: mount, unmount: unmount };', 'window.testBatch = { applyBatchResult };');
+	vm.runInContext(source, context);
+	assert.equal(context.window.testBatch.applyBatchResult({ moved: 50, success_ids: [], outcomes: [], failed: [], failed_count: 1400, failures_truncated: true, warning_count: 2 }, 'move'), false);
+	assert.match(errors[0], /1400 item\(s\) failed.*narrow the selection/);
+	assert.match(errors[1], /2 saved item\(s\) have Obsidian sync pending/);
+});

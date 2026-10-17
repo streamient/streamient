@@ -346,6 +346,7 @@ router.get('/notes', async (req, res) => {
 	const notes = await noteService.listNotes(req.host_id, req.query.project, {
 		page: parseInt(req.query.page, 10) || 1,
 		limit: parseInt(req.query.limit, 10) || 50,
+		offset: req.query.offset,
 	});
 	res.json({ notes });
 });
@@ -400,6 +401,7 @@ router.get('/memories', async (req, res) => {
 	const memories = await memoryService.listMemories(req.host_id, req.query.project, {
 		page: parseInt(req.query.page, 10) || 1,
 		limit: parseInt(req.query.limit, 10) || 50,
+		offset: req.query.offset,
 	});
 	res.json({ memories });
 });
@@ -456,6 +458,7 @@ router.get('/emails', async (req, res) => {
 	const emails = await emailIngestService.listEmails(req.host_id, req.query.project, {
 		page: parseInt(req.query.page, 10) || 1,
 		limit: parseInt(req.query.limit, 10) || 50,
+		offset: req.query.offset,
 		mailbox: req.query.mailbox,
 		label: req.query.label,
 		useTypesense: true,
@@ -515,6 +518,7 @@ router.get('/urls', async (req, res) => {
 	const urls = await urlService.listUrls(req.host_id, req.query.project, {
 		page: parseInt(req.query.page, 10) || 1,
 		limit: parseInt(req.query.limit, 10) || 50,
+		offset: req.query.offset,
 	});
 	res.json({ urls });
 });
@@ -665,14 +669,14 @@ router.post('/urls/search', async (req, res) => {
 const BATCH_TYPES = ['notes', 'memories', 'urls', 'emails'];
 const TS_TYPE_MAP = { notes: 'notes', memories: 'memory', urls: 'urls', emails: 'emails' };
 
-export async function* resolveBatchIds(host_id, type, body) {
+export async function* resolveBatchIds(host_id, type, body, selectedAt = new Date()) {
 	const Model = { notes: Note, memories: Memory, urls: Url, emails: Email }[type];
 	if (!body.all) {
 		const ids = [...new Set(Array.isArray(body.ids) ? body.ids.map(String) : [])];
 		for (let offset = 0; offset < ids.length; offset += 100) yield ids.slice(offset, offset + 100);
 		return;
 	}
-	const query = { host_id, in_trash: { $ne: true }, createdAt: { $lt: new Date() }, ...(body.filterProject ? { project: body.filterProject } : {}) };
+	const query = { host_id, in_trash: { $ne: true }, createdAt: { $lt: selectedAt }, ...(body.filterProject ? { project: body.filterProject } : {}) };
 	const ceiling = await Model.findOne(query).select('_id').sort({ _id: -1 }).read('primary').lean();
 	if (!ceiling) return;
 	let after;
@@ -685,21 +689,48 @@ export async function* resolveBatchIds(host_id, type, body) {
 }
 
 export async function processBatch(hostId, type, body, operation) {
+	const selectedAt = new Date();
+	const visible = body.visible_ids === undefined ? null : new Set(Array.isArray(body.visible_ids) ? body.visible_ids.map(String) : []);
+	if (body.visible_ids !== undefined && (!Array.isArray(body.visible_ids) || visible.size > 1000)) throw Object.assign(new Error('visible_ids must contain at most 1000 unique IDs'), { status: 400 });
+	let selection = body;
+	if (!visible) {
+		const selected = [];
+		for await (const ids of resolveBatchIds(hostId, type, body, selectedAt)) {
+			selected.push(...ids);
+			if (selected.length > 1000) throw Object.assign(new Error('Batch limit is 1000 items; use pagination or visible_ids for a bounded select-all response'), { status: 400 });
+		}
+		selection = { ids: selected };
+	}
 	const outcomes = [];
 	const failed = [];
-	for await (const ids of resolveBatchIds(hostId, type, body)) {
+	const warnings = [];
+	let success_count = 0;
+	let failed_count = 0;
+	let warning_count = 0;
+	let hiddenFailures = 0;
+	for await (const ids of resolveBatchIds(hostId, type, selection, selectedAt)) {
 		for (let offset = 0; offset < ids.length; offset += 5) {
 			await Promise.all(ids.slice(offset, offset + 5).map(async (id) => {
 				try {
 					const item = await operation(id);
 					if (!item) throw new Error('Item not found or changed');
-					const decorated = type === 'urls' ? urlService.attachScreenshotUrl(item) : attachItemHtml({ notes: 'note', memories: 'memory', emails: 'email' }[type], item);
-					outcomes.push({ id, item: decorated });
-				} catch (err) { failed.push({ id, error: err.message || 'Item failed' }); }
+					if (item.sync_warning) { warning_count++; if (warnings.length < 1000) warnings.push({ id, message: item.sync_warning }); }
+					success_count++;
+					if (!visible || visible.has(id)) {
+						const decorated = type === 'urls' ? urlService.attachScreenshotUrl(item) : attachItemHtml({ notes: 'note', memories: 'memory', emails: 'email' }[type], item);
+						outcomes.push({ id, item: decorated });
+					}
+				} catch (err) {
+					failed_count++;
+					if (!visible || visible.has(id) || hiddenFailures < 1000 - visible.size) {
+						failed.push({ id, error: err.message || 'Item failed' });
+						if (visible && !visible.has(id)) hiddenFailures++;
+					}
+				}
 			}));
 		}
 	}
-	return { outcomes, failed, success_ids: outcomes.map(({ id }) => id) };
+	return { outcomes, failed, success_ids: outcomes.map(({ id }) => id), success_count, failed_count, failures_truncated: failed_count > failed.length, warnings, warning_count };
 }
 
 export async function copyBatchItem(type, userId, hostId, id, project, ctx) {
@@ -738,11 +769,11 @@ router.post('/batch/delete', async (req, res) => {
 		const deleteFn = { notes: noteService.deleteNote, memories: memoryService.deleteMemory, urls: urlService.deleteUrl, emails: emailIngestService.deleteEmail }[type];
 		const result = await processBatch(req.host_id, type, req.body, (id) => deleteFn(req.host_id, id, auditCtx(req)));
 		for (const outcome of result.outcomes) outcome.event = `${{ notes: 'note', memories: 'memory', urls: 'url', emails: 'email' }[type]}:deleted`;
-		const deleted = result.outcomes.length;
+		const deleted = result.success_count;
 		res.json({ message: `${deleted} items deleted`, deleted, ...result, deleted_ids: result.success_ids });
 	} catch (err) {
 		log.error({ err }, 'Batch delete error');
-		res.status(500).json({ error: 'Batch delete failed' });
+		res.status(err.status || 500).json({ error: err.status ? err.message : 'Batch delete failed' });
 	}
 });
 
@@ -759,7 +790,7 @@ router.post('/batch/move', async (req, res) => {
 		const updateFn = { notes: noteService.updateNote, memories: memoryService.updateMemory, urls: urlService.updateUrl, emails: emailIngestService.updateEmail }[type];
 		const result = await processBatch(req.host_id, type, req.body, (id) => updateFn(req.host_id, id, { project }, auditCtx(req)));
 		for (const outcome of result.outcomes) outcome.event = `${{ notes: 'note', memories: 'memory', urls: 'url', emails: 'email' }[type]}:updated`;
-		const moved = result.outcomes.length;
+		const moved = result.success_count;
 		if (moved) emitToTenant(req.host_id, 'counts:refresh');
 		res.json({ message: `${moved} items moved`, moved, ...result, ...(type === 'urls' ? { urls: result.outcomes.map(({ item }) => urlService.attachScreenshotUrl(item)) } : {}) });
 	} catch (err) {
@@ -780,7 +811,7 @@ router.post('/batch/copy', async (req, res) => {
 		await projectService.requireActiveProject(req.host_id, project);
 		const result = await processBatch(req.host_id, type, req.body, (id) => copyBatchItem(type, req.userId, req.host_id, id, project, auditCtx(req)));
 		for (const outcome of result.outcomes) outcome.event = `${{ notes: 'note', memories: 'memory', urls: 'url', emails: 'email' }[type]}:created`;
-		const copied = result.outcomes.length;
+		const copied = result.success_count;
 		if (copied) emitToTenant(req.host_id, 'counts:refresh');
 		res.json({ message: `${copied} items copied`, copied, ...result, ...(type === 'urls' ? { urls: result.outcomes.map(({ item }) => urlService.attachScreenshotUrl(item)) } : {}) });
 	} catch (err) {
@@ -1405,7 +1436,7 @@ router.post('/trash/batch/delete', async (req, res) => {
 		res.json({ message: `${deleted.length} items permanently deleted`, deleted: deleted.length });
 	} catch (err) {
 		log.error({ err }, 'Batch permanent delete error');
-		res.status(500).json({ error: 'Batch delete failed' });
+		res.status(err.status || 500).json({ error: err.status ? err.message : 'Batch delete failed' });
 	}
 });
 

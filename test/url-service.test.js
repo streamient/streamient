@@ -112,3 +112,18 @@ describe('URL service duplicate handling', () => {
 		}
 	});
 });
+
+it('saves an omitted-project URL into the resolved default project', async (t) => {
+	const { default: axios } = await import('axios');
+	const { mockTenantWork } = await import('./helpers/tenant-work.js');
+	const { AuditLog } = await import('../model/audit_log.js');
+	const restore = mockTenantWork(); t.after(restore);
+	t.mock.method(Url, 'findOne', async () => null);
+	t.mock.method(AuditLog, 'create', async () => ({}));
+	t.mock.method(axios, 'get', async () => ({ data: '<html><title>Default URL</title><body>Content</body></html>' }));
+	let payload;
+	t.mock.method(Url, 'create', async (data) => { payload = data; return { _id: 'url-default', ...data }; });
+	const result = await saveUrl('user', 'host', { url: 'https://example.com' });
+	assert.equal(payload.project, 'project-1');
+	assert.equal(result.project, 'project-1');
+});

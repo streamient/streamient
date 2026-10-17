@@ -60,7 +60,7 @@
 	}
 
 	function buildBatchBody(extra) {
-		var body = Object.assign({ type: batchType }, extra || {});
+		var body = Object.assign({ type: batchType, visible_ids: Array.from(getAllCheckboxes()).map(function (cb) { return cb.value; }).slice(0, 1000) }, extra || {});
 		if (selectAllRecords) {
 			body.all = true;
 			if (currentProjectId) body.filterProject = currentProjectId;
@@ -184,8 +184,10 @@
 		window.dispatchEvent(new CustomEvent('batch-done'));
 		var processed = result[action === 'delete' ? 'deleted' : action === 'move' ? 'moved' : 'copied'] || 0;
 		if (processed) showSuccess(processed + ' ' + (action === 'delete' ? 'moved to trash' : action === 'move' ? 'moved' : 'copied'));
-		if (result.failed?.length) showError(result.failed.length + ' item(s) failed: ' + result.failed[0].error);
-		return !result.failed?.length;
+		var failedCount = result.failed_count ?? result.failed?.length ?? 0;
+		if (failedCount) showError(failedCount + ' item(s) failed' + (result.failed?.[0]?.error ? ': ' + result.failed[0].error : '') + (result.failures_truncated ? '. Only part of the failure list is shown; narrow the selection to retry the remaining items.' : ''));
+		if (result.warning_count) showError(result.warning_count + ' saved item(s) have Obsidian sync pending.');
+		return !failedCount;
 	}
 
 	async function onDelete() {

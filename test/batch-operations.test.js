@@ -76,3 +76,21 @@ test('copies keep content with fresh identities and pending indexing', async (t)
 		} finally { Model.findOne = findOne; Model.create = create; }
 	}
 });
+
+test('large batches retain exact counts and bounded visible outcomes and failure details', async () => {
+	const ids = Array.from({ length: 2300 }, (_, n) => String(n));
+	let operations = 0;
+	await assert.rejects(processBatch('host', 'notes', { ids }, async () => { operations++; }), /Batch limit is 1000/);
+	assert.equal(operations, 0);
+	const result = await processBatch('host', 'notes', { ids, visible_ids: ['0', '2299', '0'] }, async (id) => {
+		if (Number(id) >= 1100) throw new Error('retry');
+		return { _id: id, title: id };
+	});
+	assert.equal(result.success_count, 1100);
+	assert.equal(result.failed_count, 1200);
+	assert.equal(result.failures_truncated, true);
+	assert.ok(result.failed.length <= 1000);
+	assert.ok(result.failed.some(({ id }) => id === '2299'));
+	assert.deepEqual(result.success_ids, ['0']);
+	assert.equal(result.outcomes.length, 1);
+});

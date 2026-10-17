@@ -49,7 +49,9 @@ export async function storeMemory(userId, host_id, data, ctx = {}) {
 	return attachItemHtml('memory', mem);
 }
 
-export async function listMemories(host_id, projectId, { page = 1, limit = 50 } = {}) {
+export async function listMemories(host_id, projectId, { page = 1, limit = 50, offset } = {}) {
+	const start = offset === undefined ? (page - 1) * limit : Number(offset);
+	if (!Number.isSafeInteger(start) || start < 0) throw Object.assign(new Error('offset must be a nonnegative integer'), { status: 400 });
 	const query = { host_id, in_trash: { $ne: true } };
 	if (projectId) query.project = maybeObjectId(projectId);
 
@@ -57,7 +59,7 @@ export async function listMemories(host_id, projectId, { page = 1, limit = 50 } 
 		{ $match: query },
 		{ $addFields: { list_date: { $ifNull: ['$git_commit.committed_at', '$updatedAt'] } } },
 		{ $sort: { list_date: -1, updatedAt: -1 } },
-		{ $skip: (page - 1) * limit },
+		{ $skip: start },
 		{ $limit: limit },
 		{ $project: { list_date: 0 } },
 	]);
@@ -92,6 +94,7 @@ export async function updateMemory(host_id, memoryId, data, ctx = {}) {
 		{ returnDocument: 'after' },
 	);
 
+	let syncWarning;
 	if (mem) {
 		removeDocument(host_id, 'memory', memoryId).catch((err) => log.error({ err }, 'Typesense remove error'));
 		emitToTenant(host_id, 'memory:updated', attachItemHtml('memory', mem));
@@ -100,10 +103,12 @@ export async function updateMemory(host_id, memoryId, data, ctx = {}) {
 			const details = audit.diffSnapshot(before, mem);
 			audit.log({ action: 'update', resource: 'memory', resource_id: memoryId, host_id, details, ...ctx });
 		}
-		await syncStreamientItem('memory', memoryId, host_id, { item: mem });
+		await syncStreamientItem('memory', memoryId, host_id, { item: mem }).catch((err) => { log.error({ err, item_id: mem._id }, 'Obsidian export deferred after saved update'); syncWarning = 'The item was saved; Obsidian sync is pending.'; });
 	}
 
-	return attachItemHtml('memory', mem);
+	const result = attachItemHtml('memory', mem);
+	if (syncWarning && result) result.sync_warning = syncWarning;
+	return result;
 }
 
 export async function deleteMemory(host_id, memoryId, ctx = {}) {
@@ -112,15 +117,18 @@ export async function deleteMemory(host_id, memoryId, ctx = {}) {
 		{ $set: { in_trash: true, trashed_at: new Date(), is_indexed: false } },
 		{ returnDocument: 'after' },
 	);
+	let syncWarning;
 	if (mem) {
 		indexDocument(host_id, 'memory', mem).catch((err) => log.error({ err }, 'Typesense trash index error'));
 		removeLinksForItem(host_id, memoryId).catch((err) => log.error({ err }, 'Remove links error'));
 		emitToTenant(host_id, 'memory:deleted', { _id: mem._id, project: mem.project, updatedAt: mem.updatedAt, in_trash: true });
 		invalidateGraphCache(host_id).catch(() => {});
 		if (ctx.user_id) audit.log({ action: 'delete', resource: 'memory', resource_id: memoryId, host_id, ...ctx });
-		await syncStreamientItem('memory', memoryId, host_id, { item: mem });
+		await syncStreamientItem('memory', memoryId, host_id, { item: mem }).catch((err) => { log.error({ err, item_id: mem._id }, 'Obsidian trash export deferred after saved deletion'); syncWarning = 'The item was moved to trash; Obsidian sync is pending.'; });
 	}
-	return attachItemHtml('memory', mem);
+	const result = attachItemHtml('memory', mem);
+	if (syncWarning && result) result.sync_warning = syncWarning;
+	return result;
 }
 
 export async function recallMemory(host_id, query, options = {}) {

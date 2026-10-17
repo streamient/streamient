@@ -83,7 +83,7 @@ export async function saveUrl(userId, host_id, data, ctx = {}) {
 		screenshot: screenshot || '',
 		text_content: extracted.text_content || '',
 		crawl_enabled: data.crawl_enabled || false,
-		project: data.project,
+		project,
 		owner: userId,
 		host_id,
 	}, ctx);
@@ -139,14 +139,16 @@ async function saveClientScreenshot(rawUrl, dataUrl) {
 	}
 }
 
-export async function listUrls(host_id, projectId, { page = 1, limit = 50 } = {}) {
+export async function listUrls(host_id, projectId, { page = 1, limit = 50, offset } = {}) {
+	const start = offset === undefined ? (page - 1) * limit : Number(offset);
+	if (!Number.isSafeInteger(start) || start < 0) throw Object.assign(new Error('offset must be a nonnegative integer'), { status: 400 });
 	const query = { host_id, in_trash: { $ne: true } };
 	if (projectId) query.project = projectId;
 
 	const docs = await Url.find(query)
 		.select('-text_content')
 		.sort({ createdAt: -1, _id: -1 })
-		.skip((page - 1) * limit)
+		.skip(start)
 		.limit(limit)
 		.lean();
 	return attachScreenshotUrls(docs);
@@ -182,6 +184,7 @@ export async function updateUrl(host_id, urlId, data, ctx = {}) {
 		{ returnDocument: 'after' },
 	);
 
+	let syncWarning;
 	if (urlDoc) {
 		removeDocument(host_id, 'urls', urlId).catch((err) => log.error({ err }, 'Typesense remove error'));
 		emitToTenant(host_id, 'url:updated', attachScreenshotUrl(urlDoc));
@@ -190,10 +193,12 @@ export async function updateUrl(host_id, urlId, data, ctx = {}) {
 			const details = audit.diffSnapshot(before, urlDoc);
 			audit.log({ action: 'update', resource: 'url', resource_id: urlId, host_id, details, ...ctx });
 		}
-		await syncStreamientItem('url', urlId, host_id, { item: urlDoc });
+		await syncStreamientItem('url', urlId, host_id, { item: urlDoc }).catch((err) => { log.error({ err, item_id: urlDoc._id }, 'Obsidian export deferred after saved update'); syncWarning = 'The item was saved; Obsidian sync is pending.'; });
 	}
 
-	return urlDoc;
+	const result = attachScreenshotUrl(urlDoc);
+	if (syncWarning && result) result.sync_warning = syncWarning;
+	return result;
 }
 
 export async function deleteUrl(host_id, urlId, ctx = {}) {
@@ -202,15 +207,18 @@ export async function deleteUrl(host_id, urlId, ctx = {}) {
 		{ $set: { in_trash: true, trashed_at: new Date(), is_indexed: false } },
 		{ returnDocument: 'after' },
 	);
+	let syncWarning;
 	if (urlDoc) {
 		indexDocument(host_id, 'urls', urlDoc).catch((err) => log.error({ err }, 'Typesense trash index error'));
 		removeLinksForItem(host_id, urlId).catch((err) => log.error({ err }, 'Remove links error'));
 		emitToTenant(host_id, 'url:deleted', { _id: urlDoc._id, project: urlDoc.project, updatedAt: urlDoc.updatedAt, in_trash: true });
 		invalidateGraphCache(host_id).catch(() => {});
 		if (ctx.user_id) audit.log({ action: 'delete', resource: 'url', resource_id: urlId, host_id, ...ctx });
-		await syncStreamientItem('url', urlId, host_id, { item: urlDoc });
+		await syncStreamientItem('url', urlId, host_id, { item: urlDoc }).catch((err) => { log.error({ err, item_id: urlDoc._id }, 'Obsidian trash export deferred after saved deletion'); syncWarning = 'The item was moved to trash; Obsidian sync is pending.'; });
 	}
-	return urlDoc;
+	const result = attachScreenshotUrl(urlDoc);
+	if (syncWarning && result) result.sync_warning = syncWarning;
+	return result;
 }
 
 export async function searchUrls(host_id, query, options = {}) {
