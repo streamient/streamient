@@ -1,5 +1,6 @@
 import mongoose from '../model/mongoose.js';
 import striptags from 'striptags';
+import { load } from 'cheerio';
 import { Project } from '../model/project.js';
 import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
@@ -14,8 +15,9 @@ const ALL_TYPES = Object.keys(MODEL_BY_TYPE);
 const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 100;
 
-function compact(value, limit = 260) {
-	const text = striptags(String(value || ''), [], ' ').replace(/\s+/g, ' ').trim();
+function compact(value, limit = 260, richText = false) {
+	const source = String(value || '');
+	const text = (richText && /<\/?[a-z][^>]*>/i.test(source) ? load(striptags(source, [], ' '), {}, false).text() : source).replace(/\s+/g, ' ').trim();
 	return text.length > limit ? `${text.slice(0, limit).trimEnd()}…` : text;
 }
 
@@ -104,7 +106,7 @@ export function normalizeRecord(type, doc) {
 		id,
 		project_id: String(doc.project),
 		title,
-		excerpt: compact(excerptSource),
+		excerpt: compact(excerptSource, 260, type === 'memories' || (type === 'notes' && !doc.text_content)),
 		created_at: dateValue(doc.createdAt),
 		updated_at: dateValue(doc.updatedAt),
 		metadata: metadata(type, doc),
@@ -118,7 +120,7 @@ export function normalizeSearchReference(item = {}) {
 	const id = String(sourceType === 'pages' ? item.parent_url_id || '' : item.source_id || item.id || '');
 	if (!id) return null;
 	const title = type === 'emails' ? item.subject || item.title || '(No subject)' : item.title || item.url || 'Untitled';
-	const excerpt = compact(item.excerpt || item.text_content || item.content || item.description);
+	const excerpt = compact(item.excerpt || item.text_content || item.content || item.description, 260, (type === 'memories' && Boolean(item.excerpt || !item.text_content)) || (!item.excerpt && !item.text_content && Boolean(item.content)));
 	return {
 		key: `${type}:${id}`,
 		type,
@@ -196,7 +198,7 @@ export async function getRecord(host_id, typeInput, id, { includeEmails = true }
 	return {
 		...summary,
 		content: type === 'notes' ? doc.content : type === 'memories' ? doc.content : type === 'urls' ? doc.text_content : doc.html_content || doc.text_content,
-		text_content: type === 'notes' ? doc.text_content : type === 'urls' ? doc.text_content : type === 'emails' ? doc.text_content : compact(doc.content, 100_000),
+		text_content: type === 'notes' ? doc.text_content : type === 'urls' ? doc.text_content : type === 'emails' ? doc.text_content : compact(doc.content, 100_000, true),
 		metadata: { ...summary.metadata, ...(type === 'urls' ? { description: doc.description || '', og_image: doc.og_image || '' } : {}), ...(type === 'emails' ? { cc: doc.cc || [], labels: doc.labels || [] } : {}) },
 	};
 }
