@@ -7,7 +7,9 @@ x-dbh-ca-volumes: &dbh-ca-volumes
 services:
   app:
     ports: !override []
-    environment: *dbh-ca-environment
+    environment:
+      <<: *dbh-ca-environment
+      STREAMIENT_MOBILE_WEB_ORIGINS: "https://mobile.s.${DBH_PROFILE}.lan"
     volumes: *dbh-ca-volumes
     networks:
       dbh_proxy:

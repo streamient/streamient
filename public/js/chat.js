@@ -35,6 +35,7 @@ function initChat() {
 	const historyBtn = document.getElementById('chat-history-btn');
 	const projectFilter = document.getElementById('chat-project-filter');
 	const resultsPanel = document.getElementById('chat-results-panel');
+	const pageContent = document.getElementById('page-content');
 	const resultsList = document.getElementById('chat-results-list');
 	const closeResultsBtn = document.getElementById('close-chat-results');
 	const assistantAvatarTemplate = document.getElementById('chat-assistant-avatar-template');

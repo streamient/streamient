@@ -35,6 +35,20 @@ describe('Streamient Mobile OAuth and API contracts', () => {
 		assert.throws(() => parseAuthorizationRequest({ ...authorizationInput(MOBILE_REDIRECT_URI), scope: 'mcp:write' }), (err) => err.oauthError === 'invalid_scope');
 	});
 
+	it('registers only the configured DBH mobile origin', async () => {
+		const previous = process.env.STREAMIENT_MOBILE_WEB_ORIGINS;
+		process.env.STREAMIENT_MOBILE_WEB_ORIGINS = 'https://mobile.s.n.lan';
+		try {
+			const result = await validateAuthorizationRequest(authorizationInput('https://mobile.s.n.lan/oauth/callback'), { host_id: 'host-1' });
+			assert.equal(result.client.client_id, MOBILE_CLIENT_ID);
+			await assert.rejects(validateAuthorizationRequest(authorizationInput('https://mobile.s.d.lan/oauth/callback'), { host_id: 'host-1' }), /redirect_uri is not registered/);
+			assert.match(read('compose.dbh.yml'), /STREAMIENT_MOBILE_WEB_ORIGINS: "https:\/\/mobile\.s\.\$\{DBH_PROFILE\}\.lan"/);
+		} finally {
+			if (previous === undefined) delete process.env.STREAMIENT_MOBILE_WEB_ORIGINS;
+			else process.env.STREAMIENT_MOBILE_WEB_ORIGINS = previous;
+		}
+	});
+
 	it('authenticates the public first-party client and verifies API audience tokens', async () => {
 		const client = await authenticateClientForToken({ clientId: MOBILE_CLIENT_ID, host_id: 'host-1' });
 		assert.equal(client.client_id, MOBILE_CLIENT_ID);
