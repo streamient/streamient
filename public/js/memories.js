@@ -6,17 +6,12 @@
 	var pageNum = 1;
 	var loadingMore = false;
 	var hasMore = false;
+	var itemUpdater;
 	var loadSeq = 0;
 
 	function addWindowListener(event, handler) {
 		window.addEventListener(event, handler);
 		windowListeners.push([event, handler]);
-	}
-
-	function escapeHtml(str) {
-		var div = document.createElement('div');
-		div.textContent = str || '';
-		return div.innerHTML;
 	}
 
 	function memoriesPath(page) {
@@ -25,60 +20,24 @@
 		return '/memories?' + params.join('&');
 	}
 
-	function renderMemoryItemHtml(m) {
-		var excerpt = m.content?.slice(0, 200) || '';
-		var dateValue = m.git_commit?.committed_at || m.updatedAt;
-		var date = dateValue ? window.StreamientDateFormat?.formatLocale(dateValue) || '' : '';
-		var tags = (m.tags || []).map(function (t) {
-			return '<span class="badge text-bg-secondary tag-badge rounded-pill me-1">' + escapeHtml(t) + '</span>';
-		}).join('');
-
-		return '<div class="list-group-item list-group-item-action memory-item" data-id="' + escapeHtml(m._id) + '">'
-			+ '<div class="d-flex align-items-start gap-2">'
-			+ '<div class="batch-cb-wrap"><input type="checkbox" class="form-check-input batch-cb" value="' + escapeHtml(m._id) + '"></div>'
-			+ '<div class="flex-grow-1 overflow-hidden">'
-			+ '<div class="d-flex justify-content-between align-items-center gap-2">'
-			+ '<strong class="text-truncate">' + escapeHtml(m.title) + '</strong>'
-			+ '<small class="text-muted text-nowrap flex-shrink-0" data-date-value="' + escapeHtml(dateValue || '') + '" data-date-format="locale">' + escapeHtml(date) + '</small>'
-			+ '</div>'
-			+ (excerpt ? '<p class="mb-0 text-muted small text-truncate">' + escapeHtml(excerpt) + '</p>' : '')
-			+ '<div class="text-muted small">' + tags + '</div>'
-			+ '</div></div></div>';
-	}
-
 	function bindMemoryItem(el) {
+		el.addEventListener('keydown', function (event) { if (event.target === el && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); el.click(); } });
 		el.addEventListener('click', function (e) {
 			if (e.target.closest('.batch-cb-wrap')) return;
 			window.openItemModal('memory', el.dataset.id);
 		});
 	}
 
-	function renderMemories(memories, append) {
+	function renderMemories(items, append) {
 		if (!listEl) return;
-		if (!append && !memories.length) {
-			listEl.innerHTML = '<p class="text-muted p-3 memory-empty">No memories yet. Create one!</p>';
-			return;
-		}
-		if (!memories.length) return;
-
-		if (!append) {
-			listEl.innerHTML = memories.map(renderMemoryItemHtml).join('');
-			listEl.querySelectorAll('.memory-item').forEach(bindMemoryItem);
-			return;
-		}
-
-		listEl.querySelector('.memory-empty')?.remove();
-		var wrapper = document.createElement('div');
-		wrapper.innerHTML = memories.map(renderMemoryItemHtml).join('');
-		Array.prototype.slice.call(wrapper.children).forEach(function (item) {
-			bindMemoryItem(item);
-			listEl.appendChild(item);
-		});
+		items.forEach(itemUpdater.apply);
+		itemUpdater.empty();
 	}
 
 	async function loadMemories() {
 		if (!listEl) return;
 		var seq = ++loadSeq;
+		itemUpdater.reset();
 		pageNum = 1;
 		loadingMore = false;
 		hasMore = false;
@@ -126,16 +85,19 @@
 		});
 	}
 
-	function onModalSaved(e) { if (e.detail?.type === 'memory') loadMemories(); }
-	function onModalDeleted(e) { if (e.detail?.type === 'memory') loadMemories(); }
+	function onModalSaved(e) { if (e.detail?.type === 'memory') itemUpdater.update(e); }
+	function onModalDeleted(e) { if (e.detail?.type === 'memory') itemUpdater.remove(e); }
 
 	function mount() {
 		listEl = document.getElementById('memories-list');
+		itemUpdater = window.StreamientListItems.create({ list: listEl, type: 'memory', endpoint: 'memories', bind: bindMemoryItem });
 		newBtn = document.getElementById('new-memory-btn');
 		newBtn?.addEventListener('click', function () { window.openItemModal('memory'); });
 
 		addWindowListener('project-changed', loadMemories);
-		addWindowListener('batch-done', loadMemories);
+		addWindowListener('memory:created', itemUpdater.update);
+		addWindowListener('memory:updated', itemUpdater.update);
+		addWindowListener('memory:deleted', itemUpdater.remove);
 		addWindowListener('item-modal-saved', onModalSaved);
 		addWindowListener('item-modal-deleted', onModalDeleted);
 
@@ -147,6 +109,8 @@
 	}
 
 	function unmount() {
+		loadSeq++;
+		itemUpdater?.destroy();
 		for (var i = 0; i < windowListeners.length; i++) {
 			window.removeEventListener(windowListeners[i][0], windowListeners[i][1]);
 		}

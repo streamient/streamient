@@ -1,0 +1,15 @@
+- const date = type === 'memory' ? item.git_commit?.committed_at || item.updatedAt : item.updatedAt;
+- const excerpt = String(type === 'memory' ? item.content || '' : item.text_content || '').slice(0, 200);
+.list-group-item.list-group-item-action(data-id=String(item._id) class=`${type}-item` role="button" tabindex="0" style="cursor:pointer")
+	.d-flex.align-items-start.gap-2
+		.batch-cb-wrap
+			input.form-check-input.batch-cb.h-20px.w-30px(type="checkbox" value=String(item._id) aria-label=`Select ${item.title || type}`)
+		.flex-grow-1.overflow-hidden
+			.d-flex.justify-content-between.align-items-center.gap-2
+				strong.text-truncate= item.title
+				small.text-muted.text-nowrap.flex-shrink-0(data-date-value=date || '' data-date-format="locale")= date || ''
+			if excerpt
+				p.mb-0.text-muted.small.text-truncate= excerpt
+			.text-muted.small
+				each tag in item.tags || []
+					span.badge.text-bg-secondary.tag-badge.rounded-pill.me-1= tag

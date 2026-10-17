@@ -51,7 +51,7 @@ describe('record infinite scroll wiring', () => {
 				source: read('public/js/urls.js'),
 				sentinel: 'urls-scroll-sentinel',
 				loadMore: 'loadMoreUrls',
-				appendCall: 'renderUrls(urls, true)',
+				appendCall: 'urls.forEach(applyUrlItem)',
 			},
 		];
 

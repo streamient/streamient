@@ -3,6 +3,7 @@
 	var toolbar, batchType, batchActions, selectAllCb, batchCount;
 	var batchDeleteBtn, batchMoveBtn, batchCopyBtn, selectAllBanner, batchDismissBtn;
 	var selectAllRecords = false;
+	var failedSelection = new Set();
 	var totalRecordCount = 0;
 	var lastChecked = null;
 	var docListeners = [];
@@ -14,7 +15,7 @@
 	}
 
 	function getSelected() {
-		return Array.from(document.querySelectorAll('.batch-cb:checked')).map(function (cb) { return cb.value; });
+		return Array.from(new Set([...failedSelection, ...Array.from(document.querySelectorAll('.batch-cb:checked')).map(function (cb) { return cb.value; })]));
 	}
 
 	function getAllCheckboxes() {
@@ -50,6 +51,7 @@
 	}
 
 	function resetBatch() {
+		failedSelection.clear();
 		if (!selectAllCb) return;
 		selectAllCb.checked = false;
 		selectAllCb.indeterminate = false;
@@ -86,7 +88,7 @@
 
 	function setProjectPickerBusy(form, busy) {
 		form.dataset.busy = busy ? 'true' : 'false';
-		form.querySelectorAll('button, select').forEach(function (control) { control.disabled = busy; });
+		form.querySelector('[data-batch-project-submit]').disabled = busy;
 		var submit = form.querySelector('[data-batch-project-submit]');
 		if (busy) submit?.setAttribute('aria-busy', 'true');
 		else submit?.removeAttribute('aria-busy');
@@ -97,7 +99,7 @@
 		var checked = selectAllCb.checked;
 		getAllCheckboxes().forEach(function (cb) { cb.checked = checked; });
 
-		if (!checked) clearSelectAllRecords();
+		if (!checked) { clearSelectAllRecords(); failedSelection.clear(); }
 		updateBatchBar();
 
 		if (checked && selectAllBanner) {
@@ -126,6 +128,7 @@
 			selectAllBanner.innerHTML = 'All ' + totalRecordCount + ' items are selected. <a href="#" id="clear-all-records-link">Clear selection</a>';
 		} else if (e.target.id === 'clear-all-records-link') {
 			e.preventDefault();
+			failedSelection.clear();
 			selectAllCb.checked = false;
 			getAllCheckboxes().forEach(function (cb) { cb.checked = false; });
 			clearSelectAllRecords();
@@ -135,6 +138,7 @@
 
 	function onDocChange(e) {
 		if (e.target.classList.contains('batch-cb')) {
+			if (!e.target.checked) failedSelection.delete(e.target.value);
 			if (selectAllRecords && !e.target.checked) clearSelectAllRecords();
 			updateBatchBar();
 		}
@@ -169,14 +173,30 @@
 		lastChecked = cb;
 	}
 
-	async function onDelete() {
-		var count = getActionCount();
-		if (!count) return;
-		var result = await api('POST', '/batch/delete', buildBatchBody());
-		(result.deleted_ids || []).forEach(function (id) { window.dispatchEvent(new CustomEvent('url:deleted', { detail: { _id: id } })); });
-		showSuccess(count + ' moved to trash');
-		resetBatch();
+	function applyBatchResult(result, action) {
+		(result.outcomes || []).forEach(function (outcome) { window.dispatchEvent(new CustomEvent(outcome.event, { detail: outcome.item })); });
+		var successful = new Set((result.success_ids || []).map(String));
+		successful.forEach(function (id) { failedSelection.delete(id); });
+		(result.failed || []).forEach(function (failure) { failedSelection.add(String(failure.id)); });
+		getAllCheckboxes().forEach(function (cb) { if (successful.has(cb.value)) cb.checked = false; });
+		clearSelectAllRecords();
+		updateBatchBar();
 		window.dispatchEvent(new CustomEvent('batch-done'));
+		var processed = result[action === 'delete' ? 'deleted' : action === 'move' ? 'moved' : 'copied'] || 0;
+		if (processed) showSuccess(processed + ' ' + (action === 'delete' ? 'moved to trash' : action === 'move' ? 'moved' : 'copied'));
+		if (result.failed?.length) showError(result.failed.length + ' item(s) failed: ' + result.failed[0].error);
+		return !result.failed?.length;
+	}
+
+	async function onDelete() {
+		if (!getActionCount() || batchDeleteBtn.disabled) return;
+		batchDeleteBtn.disabled = true;
+		batchDeleteBtn.setAttribute('aria-busy', 'true');
+		try {
+			var result = await api('POST', '/batch/delete', buildBatchBody());
+			applyBatchResult(result, 'delete');
+		} catch (err) { showError(err.message || 'Batch deletion failed'); }
+		finally { batchDeleteBtn.disabled = false; batchDeleteBtn.removeAttribute('aria-busy'); }
 	}
 
 	async function pickProject(action) {
@@ -207,6 +227,7 @@
 			select.addEventListener('change', function () { select.classList.remove('is-invalid'); });
 			form.addEventListener('submit', async function (event) {
 				event.preventDefault();
+				if (form.dataset.busy === 'true') return;
 				var project = select.value;
 				if (!project) {
 					select.classList.add('is-invalid');
@@ -218,15 +239,9 @@
 				setProjectPickerBusy(form, true);
 				try {
 					var result = await api('POST', '/batch/' + action, buildBatchBody({ project: project }));
-					(result.urls || []).forEach(function (url) { window.dispatchEvent(new CustomEvent('url:' + (action === 'move' ? 'updated' : 'created'), { detail: url })); });
-					var processed = action === 'move' ? result.moved : result.copied;
 					setProjectPickerBusy(form, false);
-					modalEl.addEventListener('hidden.bs.modal', function () {
-						showSuccess((processed || count) + ' ' + (action === 'move' ? 'moved' : 'copied'));
-					}, { once: true });
-					modal.hide();
-					resetBatch();
-					window.dispatchEvent(new CustomEvent('batch-done'));
+					if (applyBatchResult(result, action)) modal.hide();
+					else select.focus();
 				} catch (err) {
 					setProjectPickerBusy(form, false);
 					showError(err.message || 'Batch action failed');
@@ -273,6 +288,7 @@
 	}
 
 	function unmount() {
+		failedSelection.clear();
 		for (var i = 0; i < docListeners.length; i++) {
 			document.removeEventListener(docListeners[i][0], docListeners[i][1], docListeners[i][2]);
 		}
