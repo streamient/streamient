@@ -35,6 +35,7 @@ function initChat() {
 	const historyBtn = document.getElementById('chat-history-btn');
 	const projectFilter = document.getElementById('chat-project-filter');
 	const resultsPanel = document.getElementById('chat-results-panel');
+	const pageContent = document.getElementById('page-content');
 	const resultsList = document.getElementById('chat-results-list');
 	const closeResultsBtn = document.getElementById('close-chat-results');
 	const assistantAvatarTemplate = document.getElementById('chat-assistant-avatar-template');
@@ -1357,7 +1358,7 @@ function rmShowMemoryPreview() {
 	document.getElementById('rm-memory-markdown-wrap').classList.add('d-none');
 	const preview = document.getElementById('rm-memory-preview');
 	if (rmIsObsidianSynced) void rmRenderObsidianPreview(preview);
-	else preview.innerHTML = rmRenderPreview(rmTextContent, rmContent);
+	else preview.innerHTML = rmRenderPreview(rmTextContent, rmContent, Boolean(rmEditor));
 }
 
 function rmShowMemoryEdit() {
@@ -1416,7 +1417,7 @@ function rmInitEditor(containerId, content) {
 	container.innerHTML = '';
 	if (rmEditor) { rmEditor.destroy(); rmEditor = null; }
 	if (window.StreamientEditor) {
-		rmEditor = window.StreamientEditor.createEditor(container, { content });
+		rmEditor = window.StreamientEditor.createEditor(container, { content, onUpdate: (editor) => { rmContent = editor.getHTML(); rmTextContent = editor.getText(); } });
 	} else {
 		container.innerHTML = content || '';
 		container.setAttribute('contenteditable', 'true');

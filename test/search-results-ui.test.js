@@ -3,8 +3,38 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import pug from 'pug';
 import swagger from '../swagger.js';
+import vm from 'node:vm';
 
 describe('shared search UI contract', () => {
+	it('updates visible bulk rows without inserting off-page outcomes or blocking mixed-type creation', () => {
+		const script = fs.readFileSync(new URL('../public/js/search_results.js', import.meta.url), 'utf8');
+		const source = script.slice(script.indexOf('const applyItem ='), script.indexOf('const refreshItem ='));
+		const items = Array.from({ length: 12 }, (_, index) => ({ type: 'notes', id: String(index), version: '1' }));
+		const keyOf = (item) => item.type + ':' + item.id;
+		const rows = new Map(items.slice(0, 10).map((item) => [keyOf(item), item]));
+		const selected = new Map(items.map((item) => [keyOf(item), item]));
+		let appended = 0;
+		let replaced = 0;
+		const context = vm.createContext({
+			root: { querySelector: () => ({ appendChild() { appended++; } }) },
+			filters: { per_page: 10 }, page: 1, total: 12, generation: 1, rows, selected, keyOf,
+			revisions: new Map(), refreshes: new Map(), tombstones: new Set(), updateSelection() {},
+			element: (key) => items.slice(0, 10).some((item) => keyOf(item) === key) ? { contains: () => false, replaceWith() { replaced++; } } : null,
+			document: { createElement: () => ({ content: { firstElementChild: {} } }) },
+		});
+		vm.runInContext(source + '\nglobalThis.applyItem = applyItem;', context);
+		for (const item of items) context.applyItem({ ...item, success: true, item, html: '<div></div>' }, { mutation: true });
+		assert.equal(replaced, 10);
+		assert.equal(appended, 0);
+		assert.equal(rows.size, 10);
+		assert.equal(selected.size, 0);
+		assert.equal(context.total, 12);
+		const memory = { type: 'memory', id: 'new-memory', version: '1' };
+		context.applyItem({ ...memory, success: true, item: memory, html: '<div></div>' });
+		assert.equal(appended, 1);
+		assert.equal(rows.size, 11);
+	});
+
 	it('renders accessible filters, selection and all four actions without placeholders', () => {
 		const html = pug.renderFile(new URL('../views/ajax/section/search.pug', import.meta.url).pathname, { projects: [{ _id: 'source', name: 'Source' }], icon: () => '' });
 		assert.doesNotMatch(html, /<h1/);
