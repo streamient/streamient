@@ -3,7 +3,6 @@
 	var PAGE_SIZE = 50;
 	var listEl, newBtn, pond, infiniteScroll;
 	var windowListeners = [];
-	var pageNum = 1;
 	var loadingMore = false;
 	var hasMore = false;
 	var itemUpdater;
@@ -14,8 +13,8 @@
 		windowListeners.push([event, handler]);
 	}
 
-	function notesPath(page) {
-		var params = ['page=' + page, 'limit=' + PAGE_SIZE];
+	function notesPath(offset) {
+		var params = ['offset=' + offset, 'limit=' + PAGE_SIZE];
 		if (currentProjectId) params.push('project=' + encodeURIComponent(currentProjectId));
 		return '/notes?' + params.join('&');
 	}
@@ -38,10 +37,9 @@
 		if (!listEl) return;
 		var seq = ++loadSeq;
 		itemUpdater.reset();
-		pageNum = 1;
 		loadingMore = false;
 		hasMore = false;
-		var data = await api('GET', notesPath(pageNum));
+		var data = await api('GET', notesPath(0));
 		if (!listEl || seq !== loadSeq) return;
 		var notes = data.notes || [];
 		hasMore = notes.length === PAGE_SIZE;
@@ -53,13 +51,11 @@
 		if (!listEl || loadingMore || !hasMore) return;
 		loadingMore = true;
 		var seq = loadSeq;
-		var page = pageNum + 1;
 		var appended = false;
 		try {
-			var data = await api('GET', notesPath(page));
+			var data = await api('GET', notesPath(listEl.querySelectorAll('.note-item').length));
 			if (!listEl || seq !== loadSeq) return;
 			var notes = data.notes || [];
-			pageNum = page;
 			hasMore = notes.length === PAGE_SIZE;
 			renderNotes(notes, true);
 			appended = notes.length > 0;

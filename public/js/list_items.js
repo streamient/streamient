@@ -47,7 +47,7 @@
 						list.insertBefore(row, next || null);
 					}
 					window.StreamientDateFormat?.refresh(row);
-					if (focused) (focused.matches('.batch-cb') ? row.querySelector('.batch-cb') : row).focus({ preventScroll: true });
+					if (focused) (focused.matches('.batch-cb') ? row.querySelector('.batch-cb') : focused.matches('.url-link') ? row.querySelector('.url-link') : row)?.focus({ preventScroll: true });
 				}
 				empty();
 				if (root) root.scrollTop = scrollTop;
@@ -57,7 +57,8 @@
 				apply: apply,
 				empty: empty,
 				update: async function (event) {
-					var item = event.detail?.[options.type] || event.detail || {};
+					var nested = event.detail?.[options.type];
+					var item = nested && typeof nested === 'object' ? nested : event.detail || {};
 					var id = String(item._id || item.id || '');
 					if (!active || !id || (deleted.has(id) && version(item) <= deleted.get(id))) return;
 					if (item.html) return apply(item);

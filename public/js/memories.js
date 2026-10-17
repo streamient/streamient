@@ -3,7 +3,6 @@
 	var PAGE_SIZE = 50;
 	var listEl, newBtn, infiniteScroll;
 	var windowListeners = [];
-	var pageNum = 1;
 	var loadingMore = false;
 	var hasMore = false;
 	var itemUpdater;
@@ -14,8 +13,8 @@
 		windowListeners.push([event, handler]);
 	}
 
-	function memoriesPath(page) {
-		var params = ['page=' + page, 'limit=' + PAGE_SIZE];
+	function memoriesPath(offset) {
+		var params = ['offset=' + offset, 'limit=' + PAGE_SIZE];
 		if (currentProjectId) params.push('project=' + encodeURIComponent(currentProjectId));
 		return '/memories?' + params.join('&');
 	}
@@ -38,10 +37,9 @@
 		if (!listEl) return;
 		var seq = ++loadSeq;
 		itemUpdater.reset();
-		pageNum = 1;
 		loadingMore = false;
 		hasMore = false;
-		var data = await api('GET', memoriesPath(pageNum));
+		var data = await api('GET', memoriesPath(0));
 		if (!listEl || seq !== loadSeq) return;
 		var memories = data.memories || [];
 		hasMore = memories.length === PAGE_SIZE;
@@ -53,13 +51,11 @@
 		if (!listEl || loadingMore || !hasMore) return;
 		loadingMore = true;
 		var seq = loadSeq;
-		var page = pageNum + 1;
 		var appended = false;
 		try {
-			var data = await api('GET', memoriesPath(page));
+			var data = await api('GET', memoriesPath(listEl.querySelectorAll('.memory-item').length));
 			if (!listEl || seq !== loadSeq) return;
 			var memories = data.memories || [];
-			pageNum = page;
 			hasMore = memories.length === PAGE_SIZE;
 			renderMemories(memories, true);
 			appended = memories.length > 0;

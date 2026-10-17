@@ -3,7 +3,6 @@
 	var PAGE_SIZE = 50;
 	var listEl;
 	var windowListeners = [];
-	var pageNum = 1;
 	var loadingMore = false;
 	var hasMore = false;
 	var itemUpdater;
@@ -43,8 +42,8 @@
 		itemUpdater.empty();
 	}
 
-	function emailsPath(page) {
-		var params = ['page=' + page, 'limit=' + PAGE_SIZE];
+	function emailsPath(offset) {
+		var params = ['offset=' + offset, 'limit=' + PAGE_SIZE];
 		if (currentProjectId) params.push('project=' + currentProjectId);
 		return '/emails?' + params.join('&');
 	}
@@ -53,10 +52,9 @@
 		if (!listEl) return;
 		var seq = ++loadSeq;
 		itemUpdater.reset();
-		pageNum = 1;
 		loadingMore = false;
 		hasMore = false;
-		var data = await api('GET', emailsPath(pageNum));
+		var data = await api('GET', emailsPath(0));
 		if (!listEl || seq !== loadSeq) return;
 		var emails = data.emails || [];
 		hasMore = emails.length === PAGE_SIZE;
@@ -69,13 +67,11 @@
 		if (!listEl || loadingMore || !hasMore) return;
 		loadingMore = true;
 		var seq = loadSeq;
-		var page = pageNum + 1;
 		var appended = false;
 		try {
-			var data = await api('GET', emailsPath(page));
+			var data = await api('GET', emailsPath(listEl.querySelectorAll('.email-item').length));
 			if (!listEl || seq !== loadSeq) return;
 			var emails = data.emails || [];
-			pageNum = page;
 			hasMore = emails.length === PAGE_SIZE;
 			renderEmails(emails);
 			appended = emails.length > 0;

@@ -3,7 +3,6 @@
 	var PAGE_SIZE = 50;
 	var listEl, newBtn, infiniteScroll;
 	var windowListeners = [];
-	var pageNum = 1;
 	var loadingMore = false;
 	var hasMore = false;
 	var loadSeq = 0;
@@ -14,8 +13,8 @@
 		windowListeners.push([event, handler]);
 	}
 
-	function urlsPath(page) {
-		var params = ['page=' + page, 'limit=' + PAGE_SIZE];
+	function urlsPath(offset) {
+		var params = ['offset=' + offset, 'limit=' + PAGE_SIZE];
 		if (currentProjectId) params.push('project=' + encodeURIComponent(currentProjectId));
 		return '/urls?' + params.join('&');
 	}
@@ -36,10 +35,9 @@
 		if (!listEl) return;
 		var seq = ++loadSeq;
 		itemUpdater.reset();
-		pageNum = 1;
 		loadingMore = false;
 		hasMore = false;
-		var data = await api('GET', urlsPath(pageNum));
+		var data = await api('GET', urlsPath(0));
 		if (!listEl || seq !== loadSeq) return;
 		var urls = data.urls || [];
 		hasMore = urls.length === PAGE_SIZE;
@@ -52,13 +50,11 @@
 		if (!listEl || loadingMore || !hasMore) return;
 		loadingMore = true;
 		var seq = loadSeq;
-		var page = pageNum + 1;
 		var appended = false;
 		try {
-			var data = await api('GET', urlsPath(page));
+			var data = await api('GET', urlsPath(listEl.querySelectorAll('.url-item').length));
 			if (!listEl || seq !== loadSeq) return;
 			var urls = data.urls || [];
-			pageNum = page;
 			hasMore = urls.length === PAGE_SIZE;
 			urls.forEach(applyUrlItem);
 			appended = urls.length > 0;

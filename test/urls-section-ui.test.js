@@ -48,12 +48,13 @@ class UrlListHarness {
 		}
 	}
 	row(html) {
-		const checkbox = { checked: false, focused: false, focus() { this.focused = true; }, matches: () => true };
+		const checkbox = { checked: false, focused: false, focus() { this.focused = true; }, matches: (selector) => selector === '.batch-cb' };
+		const link = { focused: false, focus() { this.focused = true; }, matches: (selector) => selector === '.url-link' };
 		const row = {
-			dataset: { id: html.match(/data-id="([^"]+)"/)[1] }, html, checkbox,
-			querySelector: () => checkbox,
+			dataset: { id: html.match(/data-id="([^"]+)"/)[1] }, html, checkbox, link,
+			querySelector: (selector) => selector === '.url-link' ? link : checkbox,
 			addEventListener() {},
-			contains: (element) => element === checkbox,
+			contains: (element) => element === checkbox || element === link,
 			replaceWith: (next) => this.rows.splice(this.rows.indexOf(row), 1, next),
 			remove: () => this.rows.splice(this.rows.indexOf(row), 1),
 		};
@@ -92,6 +93,16 @@ describe('URLs section UI', () => {
 		assert.equal(harness.root.scrollTop, 240);
 		assert.deepEqual(harness.requests, []);
 	});
+	it('restores the focused URL link when its row is replaced', async () => {
+		const harness = new UrlListHarness();
+		await harness.handlers.onUrlUpdated({ detail: harness.url('one') });
+		harness.context.document.activeElement = harness.rows[0].link;
+		await harness.handlers.onUrlUpdated({ detail: harness.url('one', '2026-09-17T06:00:00Z') });
+		assert.equal(harness.rows[0].link.focused, true);
+		assert.equal(harness.rows[0].checkbox.focused, false);
+		assert.equal(harness.root.scrollTop, 240);
+	});
+
 	it('rejects stale updates, removes moved records, and never resurrects deleted records from delayed responses', async () => {
 		const harness = new UrlListHarness();
 		await harness.handlers.onUrlUpdated({ detail: harness.url('one', '2026-09-17T06:00:00Z') });
