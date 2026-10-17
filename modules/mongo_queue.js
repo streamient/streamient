@@ -1,5 +1,6 @@
 import { acquireTenantWork } from './tenancy.js';
 import mongoose from '../model/mongoose.js';
+import { randomUUID } from 'node:crypto';
 import { createLogger } from './logger.js';
 
 const log = createLogger('queue');
@@ -122,6 +123,7 @@ export class MongoWorker {
 		this.retryDelayMs = Number.isFinite(Number(options.retryDelayMs)) && Number(options.retryDelayMs) >= 0 ? Number(options.retryDelayMs) : 0;
 		this.activeCount = 0;
 		this.running = false;
+		this.stopping = false;
 		this.changeStream = null;
 		this.sweepInterval = null;
 		this.stalledInterval = null;
@@ -129,11 +131,13 @@ export class MongoWorker {
 		this.sweepRequested = false;
 		this.sweepRetryAt = 0;
 		this.recoveryPromise = null;
+		this.activeJobs = new Map();
 	}
 
 	async start() {
 		if (this.running) return;
 		this.running = true;
+		this.stopping = false;
 		await ensureIndexes();
 		await this.recoverStalledJobs();
 		await this.sweepPendingJobs();
@@ -146,9 +150,12 @@ export class MongoWorker {
 
 	async stop() {
 		this.running = false;
+		this.stopping = true;
 		if (this.changeStream) await this.changeStream.close().catch(() => {});
 		if (this.sweepInterval) clearInterval(this.sweepInterval);
 		if (this.stalledInterval) clearInterval(this.stalledInterval);
+		for (const controller of this.activeJobs.values()) controller.abort(new Error('Worker stopped'));
+		while (this.activeCount) await new Promise((resolve) => setTimeout(resolve, 10));
 	}
 
 	openChangeStream() {
@@ -189,38 +196,53 @@ export class MongoWorker {
 		this.activeCount++;
 		let claimed;
 		let claimFinished = false;
+		let heartbeat;
+		let timeoutHandle;
+		const owner = randomUUID();
+		const controller = new AbortController();
 		try {
 			const col = getCollection();
 			const result = await col.findOneAndUpdate(
 				namespaced({ _id: doc._id, queue: this.queueName, status: STATUS.PENDING, scheduled_at: { $lte: new Date() } }, this.appInstance),
-				{ $set: { status: STATUS.PROCESSING, updated_at: new Date() }, $inc: { attempts: 1 } },
+				{ $set: { status: STATUS.PROCESSING, claim_owner: owner, lease_expires_at: new Date(Date.now() + this.stalledThresholdMs), updated_at: new Date() }, $inc: { attempts: 1 } },
 				{ returnDocument: 'after' },
 			);
 			claimFinished = true;
 			claimed = result?.value || result;
 			if (!claimed?._id) return;
 			const jobId = String(claimed._id);
+			const claimFilter = namespaced({ _id: claimed._id, status: STATUS.PROCESSING, claim_owner: owner }, this.appInstance);
+			this.activeJobs.set(owner, controller);
+			const isOwner = async () => !!await col.findOne({ ...claimFilter, lease_expires_at: { $gt: new Date() } }, { projection: { _id: 1 } });
+			const assertOwnership = async () => {
+				controller.signal.throwIfAborted();
+				if (!await isOwner()) { controller.abort(new Error('Job claim lost')); controller.signal.throwIfAborted(); }
+			};
+			heartbeat = setInterval(async () => {
+				try {
+					const result = await col.updateOne({ ...claimFilter, lease_expires_at: { $gt: new Date() } }, { $set: { lease_expires_at: new Date(Date.now() + this.stalledThresholdMs) } });
+					if (!result.matchedCount && result.matchedCount !== undefined) controller.abort(new Error('Job claim lost'));
+				} catch (error) { controller.abort(error); }
+			}, Math.max(10, Math.min(30000, Math.floor(this.stalledThresholdMs / 3))));
 			const startedAt = Date.now();
 			try {
 				const hostId = this.queueName === 'account_deletion' ? '' : await resolveJobHost(claimed.data);
 				if (hostId) {
-					await col.updateOne({ _id: claimed._id }, { $set: { 'data.host_id': hostId } });
+					await col.updateOne(claimFilter, { $set: { 'data.host_id': hostId } });
 					const tenant = await mongoose.connection.db.collection('tenants').findOne({ host_id: hostId, is_active: { $ne: false }, 'deletion.requested_at': null }, { projection: { _id: 1 }, readPreference: 'primary' });
-					if (!tenant) { await col.deleteOne({ _id: claimed._id }); return; }
+					if (!tenant) { await col.deleteOne(claimFilter); return; }
 				}
-				const controller = new AbortController();
-				let timeoutHandle;
-				const timeout = new Promise((_, reject) => {
-					timeoutHandle = setTimeout(() => { const error = new Error('Job handler timed out'); controller.abort(error); reject(error); }, this.handlerTimeoutMs);
-				});
+				if (this.stopping) controller.abort(new Error('Worker stopped'));
+				controller.signal.throwIfAborted();
+				timeoutHandle = setTimeout(() => controller.abort(new Error('Job handler timed out')), this.handlerTimeoutMs);
+				const release = hostId ? await acquireTenantWork(hostId) : null;
 				try {
-					const release = hostId ? await acquireTenantWork(hostId) : null;
-					const running = Promise.resolve().then(() => this.handler({ id: claimed._id, data: claimed.data, attempts: claimed.attempts, signal: controller.signal })).finally(async () => { if (release) await release(); });
-					await Promise.race([running, timeout]);
-				} finally {
-					clearTimeout(timeoutHandle);
-				}
-				await col.updateOne(namespaced({ _id: claimed._id }, this.appInstance), { $set: { status: STATUS.COMPLETED, updated_at: new Date(), completed_at: new Date() } });
+					// Cancellation must settle the handler before capacity, tenant protection, or retries are released.
+					await this.handler({ id: claimed._id, data: claimed.data, attempts: claimed.attempts, maxAttempts: claimed.max_attempts, signal: controller.signal, assertOwnership, isOwner });
+					controller.signal.throwIfAborted();
+				} finally { if (release) await release(); }
+				const completion = await col.updateOne(claimFilter, { $set: { status: STATUS.COMPLETED, updated_at: new Date(), completed_at: new Date() }, $unset: { claim_owner: '', lease_expires_at: '' } });
+				if (completion?.matchedCount === 0) throw new Error('Job claim lost');
 				log.debug({ queue: this.queueName, job_id: jobId, attempts: claimed.attempts, duration_ms: Date.now() - startedAt }, 'Job completed');
 			} catch (err) {
 				const error = err?.message || String(err);
@@ -229,7 +251,7 @@ export class MongoWorker {
 				const failedAt = new Date();
 				const update = { status: nextStatus, error, updated_at: failedAt };
 				if (willRetry) update.scheduled_at = new Date(failedAt.getTime() + this.retryDelayMs);
-				await col.updateOne(namespaced({ _id: claimed._id }, this.appInstance), { $set: update });
+				await col.updateOne(claimFilter, { $set: update, $unset: { claim_owner: '', lease_expires_at: '' } });
 				log[willRetry ? 'warn' : 'error']({ err, queue: this.queueName, job_id: jobId, attempts: claimed.attempts, max_attempts: claimed.max_attempts, will_retry: willRetry, duration_ms: Date.now() - startedAt }, willRetry ? 'Job failed; will retry' : 'Job failed permanently');
 				throw err;
 			}
@@ -237,6 +259,9 @@ export class MongoWorker {
 			if (!claimed?._id) this.sweepRetryAt = Date.now() + 30000;
 			throw err;
 		} finally {
+			clearInterval(heartbeat);
+			clearTimeout(timeoutHandle);
+			this.activeJobs.delete(owner);
 			this.activeCount--;
 			if (claimFinished && this.running) this.sweepPendingJobs().catch((err) => log.error({ err, queue: this.queueName }, 'MongoWorker refill error'));
 		}
@@ -275,11 +300,9 @@ export class MongoWorker {
 		this.recoveryPromise = (async () => {
 			const col = getCollection();
 			const staleBefore = new Date(Date.now() - this.stalledThresholdMs);
-			const result = await col.updateMany(namespaced({
-				queue: this.queueName,
-				status: STATUS.PROCESSING,
-				updated_at: { $lt: staleBefore },
-			}, this.appInstance), { $set: { status: STATUS.PENDING, updated_at: new Date(), error: 'Recovered stalled job' } });
+			const stale = namespaced({ queue: this.queueName, status: STATUS.PROCESSING, $or: [{ lease_expires_at: { $lt: new Date() } }, { lease_expires_at: { $exists: false }, updated_at: { $lt: staleBefore } }] }, this.appInstance);
+			await col.updateMany({ ...stale, $expr: { $gte: ['$attempts', '$max_attempts'] } }, { $set: { status: STATUS.FAILED, updated_at: new Date(), error: 'Stalled job exhausted retries' }, $unset: { claim_owner: '', lease_expires_at: '' } });
+			const result = await col.updateMany({ ...stale, $expr: { $lt: ['$attempts', '$max_attempts'] } }, { $set: { status: STATUS.PENDING, updated_at: new Date(), scheduled_at: new Date(Date.now() + this.retryDelayMs), error: 'Recovered stalled job' }, $unset: { claim_owner: '', lease_expires_at: '' } });
 			if (result.modifiedCount) log.warn({ queue: this.queueName, recovered: result.modifiedCount }, 'MongoWorker recovered stalled jobs');
 		})();
 		try { await this.recoveryPromise; } finally { this.recoveryPromise = null; }

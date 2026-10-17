@@ -10,12 +10,13 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
 
+import { Note } from '../model/note.js';
 import { NoteImportUpload } from '../model/note_import_upload.js';
 import { Project } from '../model/project.js';
 import { NOTE_IMPORT_ACTIVE_LIMIT, NOTE_IMPORT_CHUNK_SIZE, NoteImportError, appendChunk, completeUpload, createUpload, ensureStorageAvailable, getUpload, processUpload } from '../services/note_import_service.js';
 
 function queryResult(value) {
-	return { select() { return this; }, lean: async () => structuredClone(value) };
+	return { select() { return this; }, read() { return this; }, lean: async () => structuredClone(value) };
 }
 
 function checksum(buffer, encoding = 'base64') {
@@ -45,6 +46,8 @@ describe('mobile resumable note imports', () => {
 		originals.create = NoteImportUpload.create;
 		originals.updateOne = NoteImportUpload.updateOne;
 		originals.projectFindOne = Project.findOne;
+		originals.noteFindOne = Note.findOne;
+		Note.findOne = () => queryResult(null);
 
 		const matches = (filter) => String(filter._id) === uploadId && String(filter.user) === userId && filter.host_id === hostId && (!filter.state || (typeof filter.state === 'string' ? filter.state === upload.state : filter.state.$in.includes(upload.state))) && (filter.received_bytes === undefined || filter.received_bytes === upload.received_bytes);
 		NoteImportUpload.findOne = (filter) => queryResult(matches(filter) ? upload : null);
@@ -66,6 +69,7 @@ describe('mobile resumable note imports', () => {
 		NoteImportUpload.create = originals.create;
 		NoteImportUpload.updateOne = originals.updateOne;
 		Project.findOne = originals.projectFindOne;
+		Note.findOne = originals.noteFindOne;
 		await rm(path.resolve('assets', 'import', 'mobile', uploadId), { recursive: true, force: true });
 	});
 

@@ -4,8 +4,10 @@ import path from 'node:path';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { link, mkdir, readdir, rm, stat, statfs, unlink } from 'node:fs/promises';
 import { once } from 'node:events';
+import { pipeline } from 'node:stream/promises';
 import { NoteImportUpload } from '../model/note_import_upload.js';
-import { Project } from '../model/project.js';
+import { requireActiveProject } from './project_service.js';
+import { Note } from '../model/note.js';
 import { MongoQueue, MongoWorker } from '../modules/mongo_queue.js';
 import { detectFileType } from '../modules/file_detect.js';
 import { emitToTenant } from '../modules/socket.js';
@@ -173,7 +175,7 @@ export async function createUpload(userId, host_id, data = {}) {
 	if (!projectId) throw new NoteImportError('project_id is required');
 	if (!originalName) throw new NoteImportError('file_name is required');
 	const [project, activeCount] = await Promise.all([
-		Project.findOne({ _id: projectId, host_id, is_active: true }).select('_id').lean(),
+		requireActiveProject(host_id, projectId),
 		NoteImportUpload.countDocuments({ user: userId, host_id, state: { $in: ACTIVE_STATES } }),
 	]);
 	if (!project) throw new NoteImportError('Project not found', 404, 'project_not_found');
@@ -299,7 +301,8 @@ export async function cancelUpload(userId, host_id, id) {
 	return publicUpload(upload);
 }
 
-async function assembleUpload(upload) {
+async function assembleUpload(upload, signal) {
+	signal?.throwIfAborted();
 	const chunks = [...upload.chunks].sort((a, b) => a.offset - b.offset);
 	let expectedOffset = 0;
 	for (const chunk of chunks) {
@@ -309,43 +312,54 @@ async function assembleUpload(upload) {
 	if (expectedOffset !== upload.total_bytes) throw new Error(`Assembled length ${expectedOffset} does not match ${upload.total_bytes}`);
 	const destinationPath = sourcePath(upload);
 	await rm(destinationPath, { force: true });
-	const output = createWriteStream(destinationPath, { flags: 'wx' });
-	try {
+	async function* parts() {
 		for (const chunk of chunks) {
-			for await (const data of createReadStream(chunkPath(upload._id, chunk.offset))) {
-				if (!output.write(data)) await once(output, 'drain');
-			}
+			signal?.throwIfAborted();
+			yield* createReadStream(chunkPath(upload._id, chunk.offset), { signal });
 		}
-		output.end();
-		await once(output, 'finish');
-	} catch (err) {
-		output.destroy();
-		await rm(destinationPath, { force: true });
-		throw err;
 	}
+	try { await pipeline(parts(), createWriteStream(destinationPath, { flags: 'wx' }), { signal }); }
+	catch (err) { await rm(destinationPath, { force: true }); throw err; }
 	if ((await stat(destinationPath)).size !== upload.total_bytes) throw new Error('Assembled file size mismatch');
 	return destinationPath;
 }
 
-export async function processUpload(uploadId) {
+export async function processUpload(uploadId, { signal, assertOwnership, isOwner } = {}) {
+	signal?.throwIfAborted();
 	const upload = await NoteImportUpload.findOne({ _id: uploadId, state: { $in: ['processing', 'failed'] } }).lean();
 	if (!upload) return;
+	await requireActiveProject(upload.host_id, upload.project);
 	const releaseAccountWork = await acquireTenantWork(upload.host_id);
 	try {
 	await NoteImportUpload.updateOne({ _id: upload._id }, { $set: { state: 'processing', error: '', last_activity_at: new Date(), expires_at: expiryDate() } });
 	try {
-		const filePath = await assembleUpload(upload);
+		const existing = await Note.findOne({ _id: upload._id, host_id: upload.host_id }).lean();
+		if (existing) {
+			await noteService.createNote(upload.user, upload.host_id, existing, { channel: 'mobile', user_id: upload.user, idempotency_id: upload._id, signal, assertOwnership });
+			await assertOwnership?.();
+			signal?.throwIfAborted();
+			const completed = await NoteImportUpload.findOneAndUpdate({ _id: upload._id }, { $set: { state: 'complete', note: existing._id, error: '', expires_at: expiryDate() } }, { returnDocument: 'after' }).lean();
+			emitToTenant(upload.host_id, 'note-import:complete', publicUpload(completed));
+			await rm(uploadDir(upload._id), { recursive: true, force: true });
+			return;
+		}
+		const filePath = await assembleUpload(upload, signal);
 		const detected = await detectFileType(filePath);
-		const { text, html } = await extractText(filePath, detected.mimeType, upload.original_name);
+		const { text, html } = await extractText(filePath, detected.mimeType, upload.original_name, { signal });
+		signal?.throwIfAborted();
+		await assertOwnership?.();
 		if (!text && !html) throw new Error('No text content could be extracted from this file');
 		const extension = path.extname(upload.original_name).toLowerCase();
 		const title = upload.title || path.basename(upload.original_name, extension) || 'Untitled';
-		const note = await noteService.createNote(upload.user, upload.host_id, { title, content: html, text_content: text, tags: upload.tags?.length ? upload.tags : ['imported'], project: upload.project }, { channel: 'mobile', user_id: upload.user });
+		const note = await noteService.createNote(upload.user, upload.host_id, { title, content: html, text_content: text, tags: upload.tags?.length ? upload.tags : ['imported'], project: upload.project }, { channel: 'mobile', user_id: upload.user, idempotency_id: upload._id, signal, assertOwnership });
+		signal?.throwIfAborted();
+		await assertOwnership?.();
 		const completed = await NoteImportUpload.findOneAndUpdate({ _id: upload._id }, { $set: { state: 'complete', note: note._id, mime_type: detected.mimeType, error: '', last_activity_at: new Date(), expires_at: expiryDate() } }, { returnDocument: 'after' }).lean();
 		emitToTenant(upload.host_id, 'note-import:complete', publicUpload(completed));
 		emitToTenant(upload.host_id, 'counts:refresh', { project: String(upload.project) });
 		await rm(uploadDir(upload._id), { recursive: true, force: true });
 	} catch (err) {
+		if (isOwner && !await isOwner()) throw err;
 		const failed = await NoteImportUpload.findOneAndUpdate({ _id: upload._id }, { $set: { state: 'failed', error: cleanString(err?.message || err, 1000), last_activity_at: new Date(), expires_at: expiryDate() } }, { returnDocument: 'after' }).lean();
 		emitToTenant(upload.host_id, 'note-import:failed', publicUpload(failed));
 		throw err;
@@ -354,7 +368,7 @@ export async function processUpload(uploadId) {
 }
 
 export function createNoteImportWorker() {
-	return new MongoWorker({ queue: NOTE_IMPORT_QUEUE, concurrency: 1, stalledThresholdMs: 25 * 60 * 60 * 1000, handlerTimeoutMs: 24 * 60 * 60 * 1000, handler: async (job) => processUpload(job.data.upload_id) });
+	return new MongoWorker({ queue: NOTE_IMPORT_QUEUE, concurrency: 1, stalledThresholdMs: 25 * 60 * 60 * 1000, handlerTimeoutMs: 24 * 60 * 60 * 1000, handler: async (job) => processUpload(job.data.upload_id, job) });
 }
 
 export async function cleanupOrphanedImportFiles() {
