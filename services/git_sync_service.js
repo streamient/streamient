@@ -1,3 +1,4 @@
+import { requireActiveProject } from './project_service.js';
 import { acquireTenantWork } from '../modules/tenancy.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -360,9 +361,10 @@ export async function backfillGitSyncMode() {
 
 export async function createGitRepo(userId, hostId, data, ctx = {}) {
 	validateRepoPaths(data);
+	const project = await requireActiveProject(hostId, data.project);
 	const tokenEncrypted = data.auth_token ? encrypt(data.auth_token) : '';
 	const repo = await GitRepo.create({
-		project: data.project,
+		project,
 		owner: userId,
 		host_id: hostId,
 		name: data.name || '',
@@ -457,6 +459,8 @@ async function prepareSyncRepo(repoId, userId, hostId, ctx = { channel: 'api' })
 	const gitRepoDoc = await queryForSave(GitRepo.findOne({ _id: repoId, host_id: hostId }));
 	if (!gitRepoDoc) throw new Error('Git repo not found');
 	if (!gitRepoDoc.enabled) throw new Error('Git sync is disabled for this repo');
+	validateRepoPaths(gitRepoDoc);
+	await requireActiveProject(hostId, gitRepoDoc.project);
 
 	const lock = ctx.skip_lock ? null : await acquireLock(repoId);
 	if (!ctx.skip_lock && !lock) throw new Error('Sync already in progress');
@@ -506,6 +510,7 @@ async function executeSyncRepo(repoId, userId, hostId, ctx, gitRepoDoc, summary)
 	try {
 	try {
 		validateRepoPaths(gitRepoDoc);
+		await requireActiveProject(hostId, gitRepoDoc.project);
 		const token = gitRepoDoc.auth_token ? decrypt(gitRepoDoc.auth_token) : '';
 		const dir = repoDir(hostId, repoId);
 		const branch = gitRepoDoc.branch || 'main';

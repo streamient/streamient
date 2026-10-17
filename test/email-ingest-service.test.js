@@ -1,3 +1,8 @@
+import { beforeEach as beforeProject, afterEach as afterProject } from 'node:test';
+import { mockActiveProject } from './helpers/active-project.js';
+let restoreProject;
+beforeProject(() => { restoreProject = mockActiveProject(); });
+afterProject(() => { restoreProject(); });
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 

@@ -1,3 +1,8 @@
+import { beforeEach as beforeProject, afterEach as afterProject } from 'node:test';
+import { mockActiveProject } from './helpers/active-project.js';
+let restoreProject;
+beforeProject(() => { restoreProject = mockActiveProject(); });
+afterProject(() => { restoreProject(); });
 import { beforeEach as beforeAccountWork, afterEach as afterAccountWork } from 'node:test';
 import { mockTenantWork } from './helpers/tenant-work.js';
 let restoreAccountWork;

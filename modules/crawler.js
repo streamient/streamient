@@ -1,3 +1,4 @@
+import { requireActiveProject } from '../services/project_service.js';
 import { validatePublicUrl, publicLookup } from './public_url.js';
 import { acquireTenantWork } from './tenancy.js';
 import { CheerioCrawler, Configuration } from 'crawlee';
@@ -429,6 +430,7 @@ function skippedCrawlEntry(rawUrl, scope) {
 * parent Url document never grows toward MongoDB's BSON limit.
 */
 export async function crawlSite(urlDoc, deps = {}) {
+	await requireActiveProject(urlDoc.host_id, urlDoc.project);
 	const releaseAccountWork = await acquireTenantWork(urlDoc.host_id);
 	try {
 	const urlId = idString(urlDoc._id);

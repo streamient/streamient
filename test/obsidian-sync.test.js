@@ -108,7 +108,7 @@ test('registers a device on the connection already loaded by connection creation
 test('returns the newly created connection after registering its first device', async (t) => {
 	const originals = { projectFindOne: Project.findOne, connectionFindOne: ObsidianConnection.findOne, connectionCreate: ObsidianConnection.create, auditCreate: AuditLog.create };
 	const connection = { _id: 'connection-1', project: 'project-1', host_id: 'host-1', name: 'Vault', streamient_folder: 'Streamient/Project', enabled: true, sequence: 0, devices: [], async save() { return this; } };
-	Project.findOne = () => ({ select: () => ({ lean: async () => ({ _id: 'project-1' }) }) });
+	Project.findOne = () => ({ select: () => ({ read() { return this; }, lean: async () => ({ _id: 'project-1' }) }) });
 	ObsidianConnection.findOne = () => mockQuery(null);
 	ObsidianConnection.create = async () => connection;
 	AuditLog.create = async () => ({});
@@ -232,7 +232,7 @@ test('checks Git-parity plan access before Obsidian deployment readiness', async
 	const originalFindOne = Tenant.findOne;
 	const previous = { enabled: config.obsidian.enabled, key: config.obsidian.encryptionKey };
 	let plan = 'free';
-	Tenant.findOne = () => ({ select: () => ({ lean: async () => ({ plan }) }) });
+	Tenant.findOne = () => ({ select: () => ({ read() { return this; }, lean: async () => ({ plan }) }) });
 	t.after(() => {
 		Tenant.findOne = originalFindOne;
 		config.obsidian.enabled = previous.enabled;

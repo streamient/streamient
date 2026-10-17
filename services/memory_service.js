@@ -1,3 +1,5 @@
+import { attachItemHtml } from '../modules/item_html.js';
+import { requireActiveProject } from './project_service.js';
 import { Memory } from '../model/memory.js';
 import mongoose from '../model/mongoose.js';
 import { searchCollection, indexDocument, removeDocument } from '../modules/typesense.js';
@@ -28,28 +30,30 @@ function maybeObjectId(value) {
 }
 
 export async function storeMemory(userId, host_id, data, ctx = {}) {
+	const project = await requireActiveProject(host_id, data.project);
 	const mem = await Memory.create({
 		title: data.title,
 		content: data.content || '',
 		tags: data.tags || [],
 		source: data.source || '',
-		project: data.project,
+		project,
 		owner: userId,
 		host_id,
+		is_indexed: false,
 	});
 
-	emitToTenant(host_id, 'memory:created', mem);
+	emitToTenant(host_id, 'memory:created', attachItemHtml('memory', mem));
 	invalidateGraphCache(host_id).catch(() => {});
 	audit.log({ action: 'create', resource: 'memory', resource_id: mem._id.toString(), user_id: userId, host_id, ...ctx });
 	await syncStreamientItem('memory', mem._id, host_id, { item: mem }).catch((err) => log.error({ err, memory_id: mem._id }, 'Obsidian memory export deferred'));
-	return mem;
+	return attachItemHtml('memory', mem);
 }
 
 export async function listMemories(host_id, projectId, { page = 1, limit = 50 } = {}) {
 	const query = { host_id, in_trash: { $ne: true } };
 	if (projectId) query.project = maybeObjectId(projectId);
 
-	return Memory.aggregate([
+	const docs = await Memory.aggregate([
 		{ $match: query },
 		{ $addFields: { list_date: { $ifNull: ['$git_commit.committed_at', '$updatedAt'] } } },
 		{ $sort: { list_date: -1, updatedAt: -1 } },
@@ -57,14 +61,17 @@ export async function listMemories(host_id, projectId, { page = 1, limit = 50 } 
 		{ $limit: limit },
 		{ $project: { list_date: 0 } },
 	]);
+	return docs.map((doc) => attachItemHtml('memory', doc));
 }
 
 export async function getMemory(host_id, memoryId) {
-	return Memory.findOne({ _id: memoryId, host_id });
+	return attachItemHtml('memory', await Memory.findOne({ _id: memoryId, host_id }));
 }
 
 export async function updateMemory(host_id, memoryId, data, ctx = {}) {
-	const linked = await Memory.findOne({ _id: memoryId, host_id }).select('obsidian_source').lean();
+	const linked = await Memory.findOne({ _id: memoryId, host_id }).select('obsidian_source project').lean();
+	if (!linked) return null;
+	await requireActiveProject(host_id, data.project !== undefined ? data.project : linked.project);
 	if (linked?.obsidian_source?.file_id && data.markdown_content !== undefined) {
 		await syncStreamientItem('memory', memoryId, host_id, { markdown: String(data.markdown_content) });
 		return getMemory(host_id, memoryId);
@@ -87,7 +94,7 @@ export async function updateMemory(host_id, memoryId, data, ctx = {}) {
 
 	if (mem) {
 		removeDocument(host_id, 'memory', memoryId).catch((err) => log.error({ err }, 'Typesense remove error'));
-		emitToTenant(host_id, 'memory:updated', mem);
+		emitToTenant(host_id, 'memory:updated', attachItemHtml('memory', mem));
 		invalidateGraphCache(host_id).catch(() => {});
 		if (ctx.user_id) {
 			const details = audit.diffSnapshot(before, mem);
@@ -96,7 +103,7 @@ export async function updateMemory(host_id, memoryId, data, ctx = {}) {
 		await syncStreamientItem('memory', memoryId, host_id, { item: mem });
 	}
 
-	return mem;
+	return attachItemHtml('memory', mem);
 }
 
 export async function deleteMemory(host_id, memoryId, ctx = {}) {
@@ -108,12 +115,12 @@ export async function deleteMemory(host_id, memoryId, ctx = {}) {
 	if (mem) {
 		indexDocument(host_id, 'memory', mem).catch((err) => log.error({ err }, 'Typesense trash index error'));
 		removeLinksForItem(host_id, memoryId).catch((err) => log.error({ err }, 'Remove links error'));
-		emitToTenant(host_id, 'memory:deleted', { _id: memoryId });
+		emitToTenant(host_id, 'memory:deleted', { _id: mem._id, project: mem.project, updatedAt: mem.updatedAt, in_trash: true });
 		invalidateGraphCache(host_id).catch(() => {});
 		if (ctx.user_id) audit.log({ action: 'delete', resource: 'memory', resource_id: memoryId, host_id, ...ctx });
 		await syncStreamientItem('memory', memoryId, host_id, { item: mem });
 	}
-	return mem;
+	return attachItemHtml('memory', mem);
 }
 
 export async function recallMemory(host_id, query, options = {}) {

@@ -1,3 +1,8 @@
+import { beforeEach as beforeProject, afterEach as afterProject } from 'node:test';
+import { mockActiveProject } from './helpers/active-project.js';
+let restoreProject;
+beforeProject(() => { restoreProject = mockActiveProject(); });
+afterProject(() => { restoreProject(); });
 import { beforeEach as beforeAccountWork, afterEach as afterAccountWork } from 'node:test';
 import { mockTenantWork } from './helpers/tenant-work.js';
 let restoreAccountWork;
@@ -179,7 +184,7 @@ async function createRemoteRepo() {
 function makeRepo(remote, overrides = {}) {
 	return makeDoc({
 		_id: oid(overrides.id || `repo-${Math.random().toString(16).slice(2)}`),
-		project: oid(overrides.project || 'project-1'),
+		project: overrides.project || 'project-1',
 		owner: oid('user-1'),
 		host_id: overrides.hostId || `host-${Math.random().toString(16).slice(2)}`,
 		name: overrides.name || 'Repo',

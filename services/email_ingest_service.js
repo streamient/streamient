@@ -1,3 +1,5 @@
+import { attachItemHtml } from '../modules/item_html.js';
+import { requireActiveProject } from './project_service.js';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -223,7 +225,7 @@ export async function parseEmailInput(data) {
 			subject: String(parsed.subject || '').trim(),
 			text_content: normalizeBodyText(parsed),
 			...normalizeHtmlContent(parsed.html),
-			attachment_text_content: await extractAttachmentTextContent(parsed.attachments || []),
+			attachment_text_content: [String(parsed.attachment_text_content || ''), await extractAttachmentTextContent(parsed.attachments || [])].filter(Boolean).join('\n'),
 			raw_hash: crypto.createHash('sha256').update(data.raw_email).digest('hex'),
 		};
 	}
@@ -244,7 +246,7 @@ export async function parseEmailInput(data) {
 		subject: String(parsed.subject || '').trim(),
 		text_content: normalizeBodyText(parsed),
 		...normalizeHtmlContent(parsed.html || parsed.html_content || parsed.body_html),
-		attachment_text_content: await extractAttachmentTextContent(parsed.attachments || []),
+		attachment_text_content: [String(parsed.attachment_text_content || ''), await extractAttachmentTextContent(parsed.attachments || [])].filter(Boolean).join('\n'),
 		raw_hash: parsed.raw_hash || '',
 	};
 }
@@ -433,10 +435,7 @@ function buildEmailListQuery(host_id, projectId, filters = {}) {
 }
 
 async function resolveProjectId(host_id, data = {}) {
-	if (data.project) return data.project;
-	const project = await Project.findOne({ host_id, is_default: true, is_active: true }).select('_id').lean();
-	if (project?._id) return project._id;
-	throw new Error('project is required');
+	return requireActiveProject(host_id, data.project);
 }
 
 async function createEmailThreadLinks(email, userId, host_id, options = {}) {
@@ -504,11 +503,11 @@ export async function buildEmailRealtimePayload(host_id, email, options = {}) {
 		if (sourceId && !threadSourceIds.includes(sourceId)) threadSourceIds.push(sourceId);
 	}
 
-	return {
+	return attachItemHtml('email', {
 		...payload,
 		thread_identifiers: threadIdentifiers,
 		thread_source_ids: threadSourceIds,
-	};
+	});
 }
 
 export async function emitEmailCreatedOrUpdated(host_id, event, email, options = {}) {
@@ -568,11 +567,13 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 }
 
 export async function ingestEmail(userId, host_id, data, ctx = {}) {
+	await requireActiveProject(host_id, data.project);
 	const normalized = await parseEmailInput(data);
 	return persistEmail(userId, host_id, normalized, data, ctx);
 }
 
 export async function ingestForwardedEmail(userId, host_id, data, ctx = {}) {
+	await requireActiveProject(host_id, data.project);
 	const normalized = parseForwardedEmailInput(data);
 	return persistEmail(userId, host_id, normalized, { ...data, source: 'emailforwarding' }, ctx);
 }
@@ -676,6 +677,9 @@ export async function getEmail(host_id, emailId) {
 }
 
 export async function updateEmail(host_id, emailId, data, ctx = {}) {
+	const current = await Email.findOne({ _id: emailId, host_id }).select('project').lean();
+	if (!current) return null;
+	await requireActiveProject(host_id, data.project !== undefined ? data.project : current.project);
 	const update = {};
 	if (data.subject !== undefined) update.subject = String(data.subject || '').trim();
 	if (data.text_content !== undefined) update.text_content = String(data.text_content || '');
