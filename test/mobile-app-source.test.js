@@ -107,6 +107,19 @@ describe('Streamient Mobile source contracts', () => {
 		assert.match(restoreBlock, /finally \{[\s\S]*setAuthReady\(true\)/);
 	});
 
+	it('re-enables login only when returning from the browser history cache', () => {
+		const app = read('apps/mobile/src/App.tsx');
+		const handler = app.match(/const resumeLogin = \(event: PageTransitionEvent\) => \{ ([^\n]+) \};/)[1];
+		const updates = [];
+		const resumeLogin = new Function('event', 'setLoginLoading', handler);
+		resumeLogin({ persisted: false }, (value) => updates.push(value));
+		assert.deepEqual(updates, []);
+		resumeLogin({ persisted: true }, (value) => updates.push(value));
+		assert.deepEqual(updates, [false]);
+		assert.match(app, /window\.addEventListener\("pageshow", resumeLogin\)/);
+		assert.match(app, /return \(\) => window\.removeEventListener\("pageshow", resumeLogin\)/);
+	});
+
 	it('keeps release icons inside platform mask safe zones and advances native builds', () => {
 		const androidBuild = read('apps/mobile/android/app/build.gradle');
 		const assets = read('apps/mobile/scripts/generate-assets.mjs');

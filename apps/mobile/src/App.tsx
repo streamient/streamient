@@ -149,6 +149,12 @@ export function App() {
 	}, [server]);
 
 	useEffect(() => {
+		const resumeLogin = (event: PageTransitionEvent) => { if (event.persisted) setLoginLoading(false); };
+		window.addEventListener("pageshow", resumeLogin);
+		return () => window.removeEventListener("pageshow", resumeLogin);
+	}, []);
+
+	useEffect(() => {
 		let removeCallback = () => undefined;
 		const finishCallback = async (url: string, selectedServer: ServerOption) => {
 			try {
