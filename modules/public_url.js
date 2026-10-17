@@ -16,9 +16,11 @@ export function isPublicAddress(address) {
 }
 
 export function validatePublicUrl(value) {
-	const url = new URL(value);
+	const invalid = Object.assign(new Error('Only public HTTP(S) URLs are allowed'), { status: 400, code: 'invalid_url' });
+	const url = URL.parse(value);
+	if (!url) throw invalid;
 	const hostname = url.hostname.replace(/^\[|\]$/g, '');
-	if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || !hostname || (isIP(hostname) && !isPublicAddress(hostname))) throw new Error('Only public HTTP(S) URLs are allowed');
+	if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || !hostname || (isIP(hostname) && !isPublicAddress(hostname))) throw invalid;
 	return url;
 }
 

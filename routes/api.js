@@ -1896,4 +1896,11 @@ router.get('/export/download/:token', requireRestrictedSettingsAccess, async (re
 	}
 });
 
+router.use((err, req, res, next) => {
+	if (res.headersSent) return next(err);
+	const status = Number.isInteger(err.status) && err.status >= 400 && err.status < 600 ? err.status : 500;
+	if (status >= 500) log.error({ err }, 'API request failed');
+	res.status(status).json({ error: status < 500 ? err.message : 'Request failed', ...(status < 500 && typeof err.code === 'string' ? { code: err.code } : {}) });
+});
+
 export default router;
