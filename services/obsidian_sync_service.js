@@ -1259,7 +1259,7 @@ export async function cleanupObsidianRetention(now = new Date()) {
 	return { purged_files: trashed.length, deleted_blobs: deletedBlobs };
 }
 
-export async function processObsidianExtraction(fileId, hostId, { signal, assertOwnership, isOwner } = {}) {
+export async function processObsidianExtraction(fileId, hostId, { signal, assertOwnership, isOwner, withOwnership = (callback) => callback(undefined) } = {}) {
 	signal?.throwIfAborted();
 	const releaseAccountWork = await acquireTenantWork(hostId);
 	try {
@@ -1268,7 +1268,7 @@ export async function processObsidianExtraction(fileId, hostId, { signal, assert
 	await requireActiveProject(hostId, file.project);
 	file.extraction_status = 'processing';
 	file.extraction_error = '';
-	await file.save();
+	await withOwnership((session) => ObsidianFile.updateOne({ _id: file._id, host_id: hostId, blob: file.blob }, { $set: { extraction_status: file.extraction_status, extraction_error: file.extraction_error } }, { session }));
 	try {
 		const blob = await ObsidianBlob.findOne({ _id: file.blob, host_id: hostId }).lean();
 		if (!blob) throw new Error('Synchronized blob not found');
@@ -1278,14 +1278,14 @@ export async function processObsidianExtraction(fileId, hostId, { signal, assert
 		file.extraction_status = 'complete';
 		file.extraction_error = '';
 		file.is_indexed = false;
-		await file.save();
+		await withOwnership((session) => ObsidianFile.updateOne({ _id: file._id, host_id: hostId, blob: file.blob }, { $set: { text_content: file.text_content, extraction_status: file.extraction_status, extraction_error: file.extraction_error, is_indexed: false } }, { session }));
 		return file;
 	} catch (err) {
 		if (isOwner && !await isOwner()) throw err;
 		file.extraction_status = 'failed';
 		file.extraction_error = String(err?.message || err).slice(0, 1000);
 		file.is_indexed = false;
-		await file.save();
+		await withOwnership((session) => ObsidianFile.updateOne({ _id: file._id, host_id: hostId, blob: file.blob }, { $set: { extraction_status: file.extraction_status, extraction_error: file.extraction_error, is_indexed: false } }, { session }), { allowAborted: true });
 		throw err;
 	}
 	} finally { await releaseAccountWork(); }

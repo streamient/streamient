@@ -86,38 +86,47 @@ export async function writeExportArchive(filePath, hostId, signal) {
 	finally { signal?.removeEventListener('abort', abort); }
 }
 
-export async function processExport(exportId, hostId, { signal, assertOwnership, isOwner, attempts = 1, maxAttempts = 3 } = {}) {
+export async function processExport(exportId, hostId, { signal, assertOwnership, isOwner, withOwnership = (callback) => callback(undefined), attempts = 1, maxAttempts = 3 } = {}) {
 	signal?.throwIfAborted();
 	const doc = await Export.findOne({ _id: exportId, host_id: hostId }).read('primary').lean();
 	if (!doc || (!ACTIVE_STATUSES.includes(doc.status) && doc.status !== 'ready')) return;
-	const filePath = path.join(EXPORT_DIR, `export-${hostId}-${doc.token}.zip`);
-	const temporaryPath = `${filePath}.${crypto.randomUUID()}.part`;
+	const filePath = doc.file_path || path.join(EXPORT_DIR, `export-${hostId}-${doc.token}.${crypto.randomUUID()}.zip`);
+	const temporaryPath = `${filePath}.part`;
+	let published = doc.status === 'ready';
+	let created = false;
 	try {
 		if (doc.status !== 'ready') {
 			await assertOwnership?.();
-			await Export.updateOne({ _id: doc._id, status: { $in: ACTIVE_STATUSES } }, { $set: { status: 'processing', error: '' } });
-			// The canonical file is renamed only after a fully closed archive; reuse it after a crash.
+			await withOwnership((session) => Export.updateOne({ _id: doc._id, status: { $in: ACTIVE_STATUSES } }, { $set: { status: 'processing', error: '' } }, { session }));
+			// Each attempt owns an immutable file; only its fenced metadata transaction can publish it.
 			if (!await fs.promises.stat(filePath).then(() => true, (err) => { if (err.code === 'ENOENT') return false; throw err; })) {
 				await writeExportArchive(temporaryPath, hostId, signal);
 				signal?.throwIfAborted();
 				await assertOwnership?.();
 				await fs.promises.rename(temporaryPath, filePath);
+				created = true;
 			}
 			signal?.throwIfAborted();
 			await assertOwnership?.();
-			await Export.updateOne({ _id: doc._id, status: { $in: ACTIVE_STATUSES } }, { $set: { file_path: filePath, status: 'ready', expires_at: new Date(Date.now() + EXPIRY_MS), error: '' } });
+			const result = await withOwnership((session) => Export.updateOne({ _id: doc._id, status: { $in: ACTIVE_STATUSES } }, { $set: { file_path: filePath, status: 'ready', expires_at: new Date(Date.now() + EXPIRY_MS), error: '' } }, { session }));
+			if (!result.matchedCount) throw new Error('Export publication changed');
+			published = true;
 		}
 		if (!doc.email_sent_at) {
 			const user = doc.user_email ? null : await User.findById(doc.owner).select('email name').read('primary').lean();
 			signal?.throwIfAborted();
 			await assertOwnership?.();
-			try { await sendExportReadyEmail(doc.user_email || user?.email, doc.user_name || user?.name, doc.token); await Export.updateOne({ _id: doc._id }, { $set: { email_sent_at: new Date() } }); }
+			try { await sendExportReadyEmail(doc.user_email || user?.email, doc.user_name || user?.name, doc.token); await withOwnership((session) => Export.updateOne({ _id: doc._id }, { $set: { email_sent_at: new Date() } }, { session })); }
 			catch (err) { log.warn({ err, export_id: doc._id }, 'Export email failed'); }
 		}
 	} catch (err) {
-		if (!isOwner || await isOwner()) await Export.updateOne({ _id: doc._id, status: { $in: ACTIVE_STATUSES } }, { $set: { status: attempts < maxAttempts ? 'pending' : 'failed', error: String(err.message || err).slice(0, 1000) } });
+		if (!isOwner || await isOwner()) await withOwnership((session) => Export.updateOne({ _id: doc._id, status: { $in: ACTIVE_STATUSES } }, { $set: { status: attempts < maxAttempts ? 'pending' : 'failed', error: String(err.message || err).slice(0, 1000) } }, { session }), { allowAborted: true });
 		throw err;
-	} finally { await fs.promises.rm(temporaryPath, { force: true }); }
+	} finally {
+		await fs.promises.rm(temporaryPath, { force: true });
+		// Preserve files when commit acknowledgement is uncertain; orphan cleanup can retry later.
+		if (created && !published && !await Export.exists({ file_path: filePath }).read('primary').catch(() => true)) await fs.promises.rm(filePath, { force: true });
+	}
 }
 
 export function createExportWorker() {
@@ -150,11 +159,10 @@ export async function cleanupExpiredExports() {
 	}
 	const entries = await fs.promises.readdir(EXPORT_DIR, { withFileTypes: true }).catch((err) => { if (err.code === 'ENOENT') return []; throw err; });
 	for (const entry of entries) {
-		if (!entry.isFile() || !/^export-.+-(?:[a-f0-9]{64}|[0-9]{13})\.zip(?:\.[a-f0-9-]{36}\.part)?$/.test(entry.name)) continue;
+		if (!entry.isFile() || !/^export-.+-(?:[a-f0-9]{64}(?:\.[a-f0-9-]{36})?|[0-9]{13})\.zip(?:\.[a-f0-9-]{36})?(?:\.part)?$/.test(entry.name)) continue;
 		const filePath = path.join(EXPORT_DIR, entry.name);
-		const token = entry.name.match(/-([a-f0-9]{64})\.zip/)?.[1];
-		const hostId = entry.name.replace(/^export-/, '').replace(/-(?:[a-f0-9]{64}|[0-9]{13})\.zip.*$/, '');
-		if (await Export.exists({ $or: [...(token ? [{ token }] : []), { file_path: filePath }, { host_id: hostId, status: { $in: ACTIVE_STATUSES } }, { host_id: hostId, expires_at: { $gte: now } }] }).read('primary')) continue;
+		const hostId = entry.name.replace(/^export-/, '').replace(/-(?:[a-f0-9]{64}(?:\.[a-f0-9-]{36})?|[0-9]{13})\.zip.*$/, '');
+		if (await Export.exists({ $or: [{ file_path: filePath }, { host_id: hostId, status: { $in: ACTIVE_STATUSES } }, { host_id: hostId, expires_at: { $gte: now } }] }).read('primary')) continue;
 		try { if ((await fs.promises.stat(filePath)).mtimeMs < now.getTime() - EXPIRY_MS) await fs.promises.unlink(filePath); }
 		catch (err) { if (err.code !== 'ENOENT') log.warn({ err, file_path: filePath }, 'Orphan export cleanup failed'); }
 	}

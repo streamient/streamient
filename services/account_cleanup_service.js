@@ -332,7 +332,7 @@ export async function cleanupAccountResources(tenant, options = {}) {
 	await deleteObsidianHostDirectory(hostId);
 	const exportRoot = path.resolve('assets/export');
 	const files = await fs.promises.readdir(exportRoot).catch((error) => { if (error.code === 'ENOENT') return []; throw error; });
-	for (const file of files) if (file.startsWith(`export-${hostId}-`) && /\.zip(?:\.[a-f0-9-]{36}\.part)?$/.test(file)) await fs.promises.rm(path.join(exportRoot, file), { force: true });
+	for (const file of files) if (file.startsWith(`export-${hostId}-`) && /\.zip(?:\.[a-f0-9-]{36})?(?:\.part)?$/.test(file)) await fs.promises.rm(path.join(exportRoot, file), { force: true });
 	await fs.promises.rm(path.join(getWhiteLabelAssetsDir(), hostId), { recursive: true, force: true });
 	if (tenant.settings?.white_label?.cloudflare_custom_hostname_id) await deleteHostname(tenant.settings.white_label.cloudflare_custom_hostname_id);
 	const history = await deleteConversationDataForHost(hostId, options.userIds || [], options);

@@ -147,7 +147,7 @@ describe('mobile resumable note imports', () => {
 		await writeFile(path.join(chunksPath, '0.part'), binary);
 		NoteImportUpload.findOne = () => queryResult(upload);
 		NoteImportUpload.updateOne = async (_filter, update) => Object.assign(upload, update.$set || {});
-		NoteImportUpload.findOneAndUpdate = (_filter, update) => ({ lean: async () => { Object.assign(upload, update.$set || {}); return structuredClone(upload); } });
+		NoteImportUpload.findOneAndUpdate = (_filter, update) => ({ read() { return this; }, lean: async () => { Object.assign(upload, update.$set || {}); return structuredClone(upload); } });
 
 		await assert.rejects(processUpload(uploadId), /binary and cannot be imported/);
 		assert.equal(upload.state, 'failed');

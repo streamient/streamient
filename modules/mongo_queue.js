@@ -218,6 +218,20 @@ export class MongoWorker {
 				controller.signal.throwIfAborted();
 				if (!await isOwner()) { controller.abort(new Error('Job claim lost')); controller.signal.throwIfAborted(); }
 			};
+			const withOwnership = async (callback, { allowAborted = false } = {}) => {
+				const session = await mongoose.connection.startSession();
+				try {
+					return await session.withTransaction(async () => {
+						if (!allowAborted) controller.signal.throwIfAborted();
+						// Writing the claim makes recovery conflict with publication, including a paused old owner.
+						const result = await col.updateOne({ ...claimFilter, lease_expires_at: { $gt: new Date() } }, { $inc: { claim_revision: 1 }, $set: { lease_expires_at: new Date(Date.now() + this.stalledThresholdMs) } }, { session });
+						if (!result.matchedCount) throw new Error('Job claim lost');
+						const value = await callback(session);
+						if (!allowAborted) controller.signal.throwIfAborted();
+						return value;
+					}, { readPreference: 'primary' });
+				} finally { await session.endSession(); }
+			};
 			heartbeat = setInterval(async () => {
 				try {
 					const result = await col.updateOne({ ...claimFilter, lease_expires_at: { $gt: new Date() } }, { $set: { lease_expires_at: new Date(Date.now() + this.stalledThresholdMs) } });
@@ -238,7 +252,7 @@ export class MongoWorker {
 				const release = hostId ? await acquireTenantWork(hostId) : null;
 				try {
 					// Cancellation must settle the handler before capacity, tenant protection, or retries are released.
-					await this.handler({ id: claimed._id, data: claimed.data, attempts: claimed.attempts, maxAttempts: claimed.max_attempts, signal: controller.signal, assertOwnership, isOwner });
+					await this.handler({ id: claimed._id, data: claimed.data, attempts: claimed.attempts, maxAttempts: claimed.max_attempts, signal: controller.signal, assertOwnership, isOwner, withOwnership });
 					controller.signal.throwIfAborted();
 				} finally { if (release) await release(); }
 				const completion = await col.updateOne(claimFilter, { $set: { status: STATUS.COMPLETED, updated_at: new Date(), completed_at: new Date() }, $unset: { claim_owner: '', lease_expires_at: '' } });
