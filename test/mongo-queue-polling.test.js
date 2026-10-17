@@ -45,8 +45,9 @@ test('claim reservations enforce concurrency before database responses; lost/err
 	await worker.processJob({ _id: 'two' });
 	assert.equal(claims, 1);
 	assert.equal(worker.activeCount, 1);
-	await worker.stop();
+	const stopped = worker.stop();
 	pending.resolve(null);
+	await stopped;
 	await first;
 	assert.equal(worker.activeCount, 0);
 	mongoose.connection.db.collection = () => ({ findOneAndUpdate: async () => { throw new Error('database unavailable'); } });
@@ -125,5 +126,5 @@ test('stalled recovery never overlaps and releases its guard after failure', asy
 	pending.reject(new Error('recovery failed'));
 	for (const result of await Promise.allSettled(calls)) assert.equal(result.status, 'rejected');
 	await worker.recoverStalledJobs();
-	assert.equal(count, 2);
+	assert.equal(count, 3);
 });

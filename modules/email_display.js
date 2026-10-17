@@ -1,3 +1,4 @@
+import { attachItemHtml } from './item_html.js';
 import * as cheerio from 'cheerio';
 import striptags from 'striptags';
 
@@ -109,5 +110,5 @@ export function decorateEmailForClient(email = {}) {
 		latest.display_date = emailDisplayDate(latest);
 		doc.thread_latest = latest;
 	}
-	return doc;
+	return attachItemHtml('email', doc);
 }

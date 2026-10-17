@@ -1,6 +1,7 @@
 import { holdTenantRequest } from '../modules/tenancy.js';
 import jwt from 'jsonwebtoken';
 import config from '../config.js';
+import csrfProtection from './csrf.js';
 import { User } from '../model/user.js';
 import { buildBearerChallenge, getApiProtectedResourceMetadataUrl, hasRequiredScopes, verifyApiAccessToken, verifyMcpBridgeToken } from '../modules/oauth.js';
 import { applyTenantContextToSession, ensureOwnerMembershipForUser, initializeSessionTenant, resolveActiveTenantContext } from '../modules/tenancy.js';
@@ -27,6 +28,11 @@ async function applyTenantContext(req, userId, preferredTenantId = null, preferr
 
 export async function requireAuth(req, res, next) {
 	if (req.session?.userId && !/^(Bearer|Token) /.test(req.headers.authorization || '')) {
+		if (req.csrfDeferred) {
+			let verified = false;
+			csrfProtection(req, res, () => { verified = true; });
+			if (!verified) return;
+		}
 		req.userId = req.session.userId;
 		req.authMethod = 'session';
 		const preferredTenantId = req.whiteLabelHostId ? null : req.session.tenantId;

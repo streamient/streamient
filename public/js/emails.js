@@ -3,9 +3,9 @@
 	var PAGE_SIZE = 50;
 	var listEl;
 	var windowListeners = [];
-	var pageNum = 1;
 	var loadingMore = false;
 	var hasMore = false;
+	var itemUpdater;
 	var loadSeq = 0;
 	var infiniteScroll = null;
 
@@ -14,75 +14,8 @@
 		windowListeners.push([event, handler]);
 	}
 
-	function formatDateTime(value) {
-		if (!value) return '';
-		return window.StreamientDateFormat?.formatLocale(value, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) || '';
-	}
-
-	function cleanEmailExcerpt(value) {
-		var lines = [];
-		var rawLines = String(value || '')
-			.split(/\r?\n/g)
-			.map(function (line) {
-				return line.trim();
-			});
-		for (var i = 0; i < rawLines.length; i++) {
-			var line = rawLines[i];
-			if (!line || line === '--') continue;
-			if (/^-*\s*hmstopparser\s*-*$/i.test(line)
-				|| /^on .{1,300}\b(wrote|replied):$/i.test(line)
-				|| /^(from|sent|date|to|cc|subject)\s*:/i.test(line)) break;
-			if (/^-+\s*please reply above this line\s*-+$/i.test(line)) continue;
-			lines.push(line);
-		}
-		return lines
-			.join(' ')
-			.replace(/\s+/g, ' ')
-			.replace(/^--\s*/, '')
-			.trim();
-	}
-
-	function emailId(email) {
-		return String(email?._id || email?.id || '');
-	}
-
-	function emailProjectId(email) {
-		return String(email?.project?._id || email?.project || '');
-	}
-
-	function emailMatchesCurrentList(email) {
-		if (!email || email.in_trash === true) return false;
-		if (!currentProjectId) return true;
-		return emailProjectId(email) === String(currentProjectId);
-	}
-
-	function emptyEmailHtml() {
-		return '<p class="text-muted p-3 email-empty">No emails indexed yet. Send parsed/raw emails to the ingestion API to populate this project.</p>';
-	}
-
-	function renderEmailItemHtml(e) {
-		var id = emailId(e);
-		var subject = e.subject || '(No subject)';
-		var senders = (e.from || []).slice(0, 3).join(', ');
-		var senderSummary = senders || '';
-		var hasMoreSenders = (e.from || []).length > 3 ? ' +' + ((e.from || []).length - 3) : '';
-		var date = formatDateTime(e.updatedAt);
-		var dateOptions = JSON.stringify({ year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-		var excerpt = e.excerpt || cleanEmailExcerpt(e.text_content || e.attachment_text_content || '').slice(0, 220);
-		return '<div class="list-group-item list-group-item-action email-item" data-id="' + escapeHtml(id) + '">'
-			+ '<div class="d-flex align-items-start gap-2">'
-			+ '<div class="batch-cb-wrap"><input type="checkbox" class="form-check-input batch-cb" value="' + escapeHtml(id) + '"></div>'
-			+ '<div class="flex-grow-1 overflow-hidden">'
-			+ '<div class="d-flex justify-content-between align-items-center gap-2">'
-			+ (senderSummary ? '<span class="email-item-sender text-muted text-truncate">' + escapeHtml(senderSummary + hasMoreSenders) + '</span>' : '<span class="email-item-sender text-muted text-truncate"></span>')
-			+ '<time class="email-item-date text-muted text-nowrap flex-shrink-0" datetime="' + escapeHtml(e.updatedAt || '') + '" data-date-value="' + escapeHtml(e.updatedAt || '') + '" data-date-format="locale" data-date-options="' + escapeHtml(dateOptions) + '">' + escapeHtml(date) + '</time>'
-			+ '</div>'
-			+ '<strong class="email-item-subject text-truncate d-block">' + escapeHtml(subject) + '</strong>'
-			+ (excerpt ? '<p class="email-item-excerpt mb-0 text-muted text-truncate">' + escapeHtml(excerpt) + '</p>' : '')
-			+ '</div></div></div>';
-	}
-
 	function bindEmailItem(el) {
+		el.addEventListener('keydown', function (event) { if (event.target === el && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); el.click(); } });
 		el.addEventListener('click', function (ev) {
 			if (ev.target.closest('.batch-cb-wrap')) return;
 			api('GET', '/emails/' + el.dataset.id)
@@ -105,50 +38,12 @@
 	}
 
 	function renderEmails(emails) {
-		listEl.innerHTML = emails.length
-			? emails.map(renderEmailItemHtml).join('')
-			: emptyEmailHtml();
-
-		listEl.querySelectorAll('.email-item').forEach(bindEmailItem);
+		emails.forEach(itemUpdater.apply);
+		itemUpdater.empty();
 	}
 
-	function showEmptyEmailsIfNeeded() {
-		if (!listEl || listEl.querySelector('.email-item')) return;
-		listEl.innerHTML = emptyEmailHtml();
-	}
-
-	function removeEmailFromList(id) {
-		if (!listEl || !id) return;
-		listEl.querySelector('.email-item[data-id="' + CSS.escape(id) + '"]')?.remove();
-		showEmptyEmailsIfNeeded();
-	}
-
-	function applyEmailSocketUpdate(email) {
-		if (!listEl || !email) return;
-		var id = emailId(email);
-		if (!id) return;
-		var existing = listEl.querySelector('.email-item[data-id="' + CSS.escape(id) + '"]');
-		if (!emailMatchesCurrentList(email)) {
-			removeEmailFromList(id);
-			return;
-		}
-
-		var wrapper = document.createElement('div');
-		wrapper.innerHTML = renderEmailItemHtml(email);
-		var item = wrapper.firstElementChild;
-		if (!item) return;
-		bindEmailItem(item);
-
-		if (existing) {
-			existing.replaceWith(item);
-		} else {
-			listEl.querySelector('.email-empty')?.remove();
-			listEl.prepend(item);
-		}
-	}
-
-	function emailsPath(page) {
-		var params = ['page=' + page, 'limit=' + PAGE_SIZE];
+	function emailsPath(offset) {
+		var params = ['offset=' + offset, 'limit=' + PAGE_SIZE];
 		if (currentProjectId) params.push('project=' + currentProjectId);
 		return '/emails?' + params.join('&');
 	}
@@ -156,10 +51,10 @@
 	async function loadEmails() {
 		if (!listEl) return;
 		var seq = ++loadSeq;
-		pageNum = 1;
+		itemUpdater.reset();
 		loadingMore = false;
 		hasMore = false;
-		var data = await api('GET', emailsPath(pageNum));
+		var data = await api('GET', emailsPath(0));
 		if (!listEl || seq !== loadSeq) return;
 		var emails = data.emails || [];
 		hasMore = emails.length === PAGE_SIZE;
@@ -168,31 +63,17 @@
 		infiniteScroll?.kick();
 	}
 
-	function appendEmailItems(emails) {
-		if (!listEl || !emails.length) return;
-		listEl.querySelector('.email-empty')?.remove();
-		var wrapper = document.createElement('div');
-		wrapper.innerHTML = emails.map(renderEmailItemHtml).join('');
-		var items = Array.prototype.slice.call(wrapper.children);
-		items.forEach(function (item) {
-			bindEmailItem(item);
-			listEl.appendChild(item);
-		});
-	}
-
 	async function loadMore() {
 		if (!listEl || loadingMore || !hasMore) return;
 		loadingMore = true;
 		var seq = loadSeq;
-		var page = pageNum + 1;
 		var appended = false;
 		try {
-			var data = await api('GET', emailsPath(page));
+			var data = await api('GET', emailsPath(listEl.querySelectorAll('.email-item').length));
 			if (!listEl || seq !== loadSeq) return;
 			var emails = data.emails || [];
-			pageNum = page;
 			hasMore = emails.length === PAGE_SIZE;
-			appendEmailItems(emails);
+			renderEmails(emails);
 			appended = emails.length > 0;
 		} catch (err) {
 			showError('Failed to load more emails: ' + (err.message || 'Unknown error'));
@@ -204,15 +85,7 @@
 		}
 	}
 
-	function onModalDeleted(e) { if (e.detail?.type === 'emails') loadEmails(); }
-	function onEmailSocketEvent(e) { applyEmailSocketUpdate(e.detail || {}); }
-	function onEmailDeleted(e) { removeEmailFromList(emailId(e.detail || {})); }
-
-	function escapeHtml(str) {
-		var div = document.createElement('div');
-		div.textContent = str || '';
-		return div.innerHTML;
-	}
+	function onModalDeleted(e) { if (e.detail?.type === 'emails') itemUpdater.remove(e); }
 
 	function setupInfiniteScroll() {
 		var root = document.getElementById('main-content');
@@ -229,19 +102,21 @@
 	function mount() {
 		listEl = document.getElementById('emails-list');
 		if (!listEl) return;
+		itemUpdater = window.StreamientListItems.create({ list: listEl, type: 'email', endpoint: 'emails', bind: bindEmailItem, sortField: 'createdAt' });
 
 		addWindowListener('project-changed', loadEmails);
-		addWindowListener('batch-done', loadEmails);
 		addWindowListener('item-modal-deleted', onModalDeleted);
-		addWindowListener('email:created', onEmailSocketEvent);
-		addWindowListener('email:updated', onEmailSocketEvent);
-		addWindowListener('email:deleted', onEmailDeleted);
+		addWindowListener('email:created', itemUpdater.update);
+		addWindowListener('email:updated', itemUpdater.update);
+		addWindowListener('email:deleted', itemUpdater.remove);
 
 		setupInfiniteScroll();
 		loadEmails();
 	}
 
 	function unmount() {
+		loadSeq++;
+		itemUpdater?.destroy();
 		for (var i = 0; i < windowListeners.length; i++) {
 			window.removeEventListener(windowListeners[i][0], windowListeners[i][1]);
 		}

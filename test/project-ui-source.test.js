@@ -104,7 +104,8 @@ describe('project dashboard UI source', () => {
 		assert.match(picker, /form\.dataset\.busy === 'true'\) event\.preventDefault\(\)/);
 		assert.match(picker, /setProjectPickerBusy\(form, true\)/);
 		assert.match(picker, /root\.replaceChildren\(\)/);
-		assert.match(picker, /window\.dispatchEvent\(new CustomEvent\('batch-done'\)\)/);
+		assert.match(picker, /applyBatchResult\(result, action\)/);
+		assert.match(source, /window\.dispatchEvent\(new CustomEvent\('batch-done'\)\)/);
 		assert.doesNotMatch(picker, /Swal|showLoaderOnConfirm|setBatchProgress/);
 	});
 

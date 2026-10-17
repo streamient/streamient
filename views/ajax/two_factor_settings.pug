@@ -1,0 +1,36 @@
+.card.mb-5
+	.card-body
+		h3.card-title Two-Factor Authentication
+		p#two-factor-status(class=user.totp_enabled ? 'text-success' : 'text-muted')= user.totp_enabled ? '2FA is enabled' : '2FA is not enabled'
+		.text-end
+			button.btn.btn-outline-danger.btn-sm#disable-2fa(type="button" class=user.totp_enabled ? '' : 'd-none') Disable 2FA
+			button.btn.btn-outline-secondary.btn-sm#setup-2fa(type="button" class=user.totp_enabled ? 'd-none' : '') Enable 2FA
+		#2fa-setup-area.d-none.mt-3
+			.card.bg-light
+				.card-body
+					p Scan this QR code with your authenticator app:
+					img.d-none.mb-3#2fa-qr(alt="Authenticator QR Code")
+					p.small
+						span Or enter this secret manually:
+						code.ms-2#2fa-secret
+					.mb-3
+						label.form-label(for="2fa-code") Authenticator code
+						input.form-control.form-control-sm#2fa-code(type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6")
+					.d-flex.justify-content-end
+						button.btn.btn-outline-secondary.btn-sm.me-3#cancel-2fa-btn(type="button") Cancel
+						button.btn.btn-primary.btn-sm#confirm-2fa-btn(type="button") Verify
+.modal.fade#disableTwoFactorModal(tabindex="-1" aria-labelledby="disableTwoFactorTitle" aria-hidden="true")
+	.modal-dialog.modal-dialog-centered
+		.modal-content
+			form#disable-two-factor-form
+				.modal-header
+					h3.modal-title#disableTwoFactorTitle Disable two-factor authentication
+					button.btn-close(type="button" data-bs-dismiss="modal" aria-label="Close")
+				.modal-body
+					p Confirm with your current authenticator code.
+					.mb-3
+						label.form-label(for="disable-two-factor-code") Authenticator code
+						input.form-control.form-control-sm#disable-two-factor-code(type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required)
+				.modal-footer
+					button.btn.btn-outline-secondary.btn-sm.me-3(type="button" data-bs-dismiss="modal") Cancel
+					button.btn.btn-danger.btn-sm(type="submit") Disable 2FA

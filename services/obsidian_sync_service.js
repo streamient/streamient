@@ -1,3 +1,4 @@
+import { requireActiveProject } from './project_service.js';
 import { acquireTenantWork } from '../modules/tenancy.js';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -9,7 +10,6 @@ import sanitizeHtml from 'sanitize-html';
 
 import config from '../config.js';
 import { queryForSave } from '../model/mongoose.js';
-import { Project } from '../model/project.js';
 import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
 import { Url } from '../model/url.js';
@@ -275,6 +275,7 @@ async function connectionForWrite(hostId, connectionId) {
 	const connection = await queryForSave(ObsidianConnection.findOne({ _id: connectionId, host_id: hostId }));
 	if (!connection) throw new ObsidianSyncError('Obsidian connection not found', 404, 'connection_not_found');
 	if (!connection.enabled) throw new ObsidianSyncError('Obsidian connection is disabled', 409, 'connection_disabled');
+	await requireActiveProject(hostId, connection.project);
 	return connection;
 }
 
@@ -335,6 +336,7 @@ async function removeOtherMarkdownProjections(file, retainedType) {
 }
 
 async function projectMarkdownFile(file, raw, ownerId) {
+	await requireActiveProject(file.host_id, file.project);
 	if (file.projection_detached) return null;
 	const parsed = parsedMarkdown(raw, file.path);
 	const now = file.modified_at || new Date();
@@ -383,7 +385,8 @@ function canvasText(raw) {
 	}
 }
 
-async function extractFileText(file, blob) {
+async function extractFileText(file, blob, signal) {
+	signal?.throwIfAborted();
 	const name = path.posix.basename(file.path);
 	if (file.kind === 'canvas') return canvasText((await readBlobBuffer(blob, file.host_id)).toString('utf8'));
 	if (file.kind === 'base') return (await readBlobBuffer(blob, file.host_id)).toString('utf8');
@@ -391,9 +394,10 @@ async function extractFileText(file, blob) {
 	const materialized = await materializeBlob(blob, file.host_id);
 	try {
 		const detected = await detectFileType(materialized.filePath, name);
-		const extracted = await extractText(materialized.filePath, detected.mimeType || file.mime_type, name);
+		const extracted = await extractText(materialized.filePath, detected.mimeType || file.mime_type, name, { signal });
 		return extracted.text || `${name}\n${file.path}`;
 	} catch (err) {
+		signal?.throwIfAborted();
 		log.info({ err, file_id: file._id, path: file.path }, 'Obsidian attachment text extraction skipped');
 		return `${name}\n${file.path}\n${file.mime_type}`;
 	} finally {
@@ -859,8 +863,7 @@ export async function listConnections(hostId, projectId = null) {
 }
 
 export async function createConnection(userId, hostId, data, ctx = {}) {
-	const project = await Project.findOne({ _id: data.project_id, host_id: hostId, is_active: true }).select('_id').lean();
-	if (!project) throw new ObsidianSyncError('Project not found', 404, 'project_not_found');
+	const project = { _id: await requireActiveProject(hostId, data.project_id) };
 	let connection = await queryForSave(ObsidianConnection.findOne({ host_id: hostId, project: project._id }));
 	if (!connection) {
 		try {
@@ -1180,6 +1183,7 @@ export async function syncStreamientItem(type, itemId, hostId, options = {}) {
 	if (!Model) return null;
 	const item = options.item || await Model.findOne({ _id: itemId, host_id: hostId }).read('primary').lean();
 	if (!item || String(item._id) !== String(itemId) || item.host_id !== hostId) return null;
+	await requireActiveProject(hostId, item.project);
 	if (options.item && !(await Model.exists({ _id: itemId, host_id: hostId, project: item.project, updatedAt: item.updatedAt }).read('primary'))) return null;
 	const connection = await ObsidianConnection.findOne({ project: item.project, host_id: hostId, enabled: true }).read('primary').lean();
 	let file = item.obsidian_source?.file_id ? await queryForSave(ObsidianFile.findOne({ _id: item.obsidian_source.file_id, host_id: hostId }).read('primary')) : null;
@@ -1255,35 +1259,40 @@ export async function cleanupObsidianRetention(now = new Date()) {
 	return { purged_files: trashed.length, deleted_blobs: deletedBlobs };
 }
 
-export async function processObsidianExtraction(fileId, hostId) {
+export async function processObsidianExtraction(fileId, hostId, { signal, assertOwnership, isOwner, withOwnership = (callback) => callback(undefined) } = {}) {
+	signal?.throwIfAborted();
 	const releaseAccountWork = await acquireTenantWork(hostId);
 	try {
 	const file = await queryForSave(ObsidianFile.findOne({ _id: fileId, host_id: hostId, in_trash: false }));
 	if (!file || !file.blob || !['canvas', 'base', 'document'].includes(file.kind)) return null;
+	await requireActiveProject(hostId, file.project);
 	file.extraction_status = 'processing';
 	file.extraction_error = '';
-	await file.save();
+	await withOwnership((session) => ObsidianFile.updateOne({ _id: file._id, host_id: hostId, blob: file.blob }, { $set: { extraction_status: file.extraction_status, extraction_error: file.extraction_error } }, { session }));
 	try {
-		const blob = await ObsidianBlob.findOne({ _id: file.blob, host_id }).lean();
+		const blob = await ObsidianBlob.findOne({ _id: file.blob, host_id: hostId }).lean();
 		if (!blob) throw new Error('Synchronized blob not found');
-		file.text_content = await extractFileText(file, blob);
+		file.text_content = await extractFileText(file, blob, signal);
+		signal?.throwIfAborted();
+		await assertOwnership?.();
 		file.extraction_status = 'complete';
 		file.extraction_error = '';
 		file.is_indexed = false;
-		await file.save();
+		await withOwnership((session) => ObsidianFile.updateOne({ _id: file._id, host_id: hostId, blob: file.blob }, { $set: { text_content: file.text_content, extraction_status: file.extraction_status, extraction_error: file.extraction_error, is_indexed: false } }, { session }));
 		return file;
 	} catch (err) {
+		if (isOwner && !await isOwner()) throw err;
 		file.extraction_status = 'failed';
 		file.extraction_error = String(err?.message || err).slice(0, 1000);
 		file.is_indexed = false;
-		await file.save();
+		await withOwnership((session) => ObsidianFile.updateOne({ _id: file._id, host_id: hostId, blob: file.blob }, { $set: { extraction_status: file.extraction_status, extraction_error: file.extraction_error, is_indexed: false } }, { session }), { allowAborted: true });
 		throw err;
 	}
 	} finally { await releaseAccountWork(); }
 }
 
 export function createObsidianExtractionWorker() {
-	return new MongoWorker({ queue: OBSIDIAN_EXTRACTION_QUEUE, concurrency: 1, stalledThresholdMs: 60 * 60 * 1000, handlerTimeoutMs: 60 * 60 * 1000, handler: async (job) => processObsidianExtraction(job.data.file_id, job.data.host_id) });
+	return new MongoWorker({ queue: OBSIDIAN_EXTRACTION_QUEUE, concurrency: 1, stalledThresholdMs: 60 * 60 * 1000, handlerTimeoutMs: 60 * 60 * 1000, handler: async (job) => processObsidianExtraction(job.data.file_id, job.data.host_id, job) });
 }
 
 export async function deleteObsidianHostDirectory(hostId) {

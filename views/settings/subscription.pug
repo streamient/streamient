@@ -68,6 +68,7 @@ block settings
 				.d-flex.flex-wrap.gap-2.align-items-center
 					if trial_available
 						form.mb-0(action="/billing/trial" method="post")
+							input(type="hidden" name="_csrf" value=csrf_token)
 							button.btn.btn-outline-primary(type="submit")
 								!= icon('clock')
 								span.ms-2 Start 7-day Pro trial

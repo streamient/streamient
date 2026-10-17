@@ -3,7 +3,7 @@
   "info": {
     "title": "Streamient API",
     "version": "1.0.0",
-    "description": "Everything your AI needs to remember \u2014 Notes, Memory, URLs, AI Chat"
+    "description": "Everything your AI needs to remember — Notes, Memory, URLs, AI Chat"
   },
   "servers": [
     {
@@ -527,14 +527,6 @@
             "type": "string",
             "example": "America/New_York"
           },
-          "time_format": {
-            "type": "string",
-            "enum": [
-              "12-hour",
-              "24-hour"
-            ],
-            "description": "Saved clock format. Omitted until the user explicitly saves a preference."
-          },
           "avatar_style": {
             "type": "string",
             "enum": [
@@ -571,6 +563,14 @@
             ],
             "default": "initials",
             "description": "Personal viewing preference for your own and team avatars."
+          },
+          "time_format": {
+            "type": "string",
+            "enum": [
+              "12-hour",
+              "24-hour"
+            ],
+            "description": "Saved clock format. Omitted until the user explicitly saves a preference."
           }
         }
       },
@@ -1200,7 +1200,7 @@
           },
           "auth_token": {
             "type": "string",
-            "description": "Masked \u2014 never returned in full"
+            "description": "Masked — never returned in full"
           },
           "sync_interval": {
             "type": "integer"
@@ -3169,7 +3169,7 @@
             }
           },
           "400": {
-            "description": "Cannot delete \u2014 project still has notes, memories, URLs, or git repos",
+            "description": "Cannot delete — project still has notes, memories, URLs, or git repos",
             "content": {
               "application/json": {
                 "schema": {
@@ -3479,14 +3479,6 @@
                     "description": "IANA timezone identifier. UTC is also accepted.",
                     "example": "America/New_York"
                   },
-                  "time_format": {
-                    "type": "string",
-                    "enum": [
-                      "12-hour",
-                      "24-hour"
-                    ],
-                    "description": "Clock format to use for signed-in date and time displays."
-                  },
                   "avatar_style": {
                     "type": "string",
                     "enum": [
@@ -3523,6 +3515,14 @@
                     ],
                     "default": "initials",
                     "description": "Personal viewing preference for your own and team avatars."
+                  },
+                  "time_format": {
+                    "type": "string",
+                    "enum": [
+                      "12-hour",
+                      "24-hour"
+                    ],
+                    "description": "Clock format to use for signed-in date and time displays."
                   }
                 }
               }
@@ -4008,6 +4008,15 @@
             "$ref": "#/components/parameters/page"
           },
           {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "Explicit number of current matching records to skip; overrides page and keeps incremental lists aligned after insertions/removals"
+          },
+          {
             "$ref": "#/components/parameters/limit"
           },
           {
@@ -4371,6 +4380,15 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/page"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "Explicit number of current matching records to skip; overrides page and keeps incremental lists aligned after insertions/removals"
           },
           {
             "$ref": "#/components/parameters/limit"
@@ -4768,6 +4786,15 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/page"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "Explicit number of current matching records to skip; overrides page and keeps incremental lists aligned after insertions/removals"
           },
           {
             "$ref": "#/components/parameters/limit"
@@ -5241,6 +5268,15 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/page"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "Explicit number of current matching records to skip; overrides page and keeps incremental lists aligned after insertions/removals"
           },
           {
             "$ref": "#/components/parameters/limit"
@@ -5948,7 +5984,7 @@
           "Batch"
         ],
         "summary": "Batch delete items",
-        "description": "For emails, moves each email to trash and clears all labels. For URLs, also returns deleted_ids for incremental list updates.",
+        "description": "Moves items to trash. Legacy responses are limited to 1000 items before any mutation. Supply visible_ids (at most 1000 unique IDs, including an empty array) for larger selections: exact counts cover all items, but outcomes/success_ids/deleted_ids include only requested visible IDs. failed_count is exact; failed details are capped at 1000 and failures_truncated identifies omitted failures. Saved items with deferred Obsidian synchronization are counted as successes and reported in warning_count/warnings.",
         "requestBody": {
           "required": true,
           "content": {
@@ -5970,6 +6006,15 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "visible_ids": {
+                    "type": "array",
+                    "maxItems": 1000,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Opt into bounded response payloads for large batches; include IDs currently displayed, or an empty array for counts only"
                   },
                   "all": {
                     "type": "boolean",
@@ -6022,7 +6067,7 @@
           "Batch"
         ],
         "summary": "Batch move items to a project",
-        "description": "For URLs, also returns urls containing the updated records and rendered list items.",
+        "description": "Legacy responses are limited to 1000 items before any mutation. Supply visible_ids (at most 1000 unique IDs, including an empty array) for larger selections: exact counts cover all items, while outcomes/success_ids/urls include only requested visible IDs. failed_count is exact; failed details are capped at 1000 with failures_truncated. Saved items with deferred Obsidian synchronization remain successes and appear in warning_count/warnings.",
         "requestBody": {
           "required": true,
           "content": {
@@ -6044,6 +6089,15 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "visible_ids": {
+                    "type": "array",
+                    "maxItems": 1000,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Opt into bounded response payloads for large batches; include IDs currently displayed, or an empty array for counts only"
                   },
                   "all": {
                     "type": "boolean",
@@ -6100,7 +6154,7 @@
           "Batch"
         ],
         "summary": "Batch copy items to a project",
-        "description": "For URLs, also returns urls containing the new records and rendered list items.",
+        "description": "Legacy responses are limited to 1000 items before any mutation. Supply visible_ids (at most 1000 unique IDs, including an empty array) for larger selections: exact counts cover all items, while outcomes/success_ids/urls include only requested visible IDs. failed_count is exact; failed details are capped at 1000 with failures_truncated. Saved items with deferred Obsidian synchronization remain successes and appear in warning_count/warnings.",
         "requestBody": {
           "required": true,
           "content": {
@@ -6122,6 +6176,15 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "visible_ids": {
+                    "type": "array",
+                    "maxItems": 1000,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Opt into bounded response payloads for large batches; include IDs currently displayed, or an empty array for counts only"
                   },
                   "all": {
                     "type": "boolean",
@@ -10309,7 +10372,7 @@
         "tags": [
           "Mobile AI"
         ],
-        "summary": "List the signed-in user\u2019s AI conversation history",
+        "summary": "List the signed-in user’s AI conversation history",
         "security": [
           {
             "MobileOAuth": [
@@ -10458,13 +10521,6 @@
                     "type": "string",
                     "example": "America/New_York"
                   },
-                  "time_format": {
-                    "type": "string",
-                    "enum": [
-                      "12-hour",
-                      "24-hour"
-                    ]
-                  },
                   "avatar_style": {
                     "type": "string",
                     "enum": [
@@ -10501,6 +10557,13 @@
                     ],
                     "default": "initials",
                     "description": "Personal viewing preference for your own and team avatars."
+                  },
+                  "time_format": {
+                    "type": "string",
+                    "enum": [
+                      "12-hour",
+                      "24-hour"
+                    ]
                   }
                 }
               }

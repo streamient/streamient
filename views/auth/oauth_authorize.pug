@@ -56,6 +56,7 @@ block body
 							code.small= oauth_request.resource
 
 			form(method="POST" action="/oauth/authorize")
+				input(type="hidden" name="_csrf" value=csrf_token)
 				input(type="hidden" name="client_id" value=oauth_request.client_id)
 				input(type="hidden" name="redirect_uri" value=oauth_request.redirect_uri)
 				input(type="hidden" name="response_type" value=oauth_request.response_type)

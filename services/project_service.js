@@ -9,6 +9,18 @@ import { ObsidianConnection } from '../model/obsidian_connection.js';
 import { emitToTenant } from '../modules/socket.js';
 import * as audit from './audit_service.js';
 
+export async function requireActiveProject(hostId, projectId) {
+	if (projectId !== undefined && (projectId === null || (typeof projectId !== 'string' && !(projectId instanceof mongoose.Types.ObjectId)))) throw Object.assign(new Error('Active project not found'), { status: 404, code: 'project_not_found' });
+	let project;
+	try {
+		project = await Project.findOne({ host_id: hostId, is_active: true, ...(projectId === undefined ? { is_default: true } : { _id: projectId }) }).select('_id').read('primary').lean();
+	} catch (err) {
+		if (err.name !== 'CastError') throw err;
+	}
+	if (!project) throw Object.assign(new Error('Active project not found'), { status: 404, code: 'project_not_found' });
+	return project._id;
+}
+
 export async function createDefaultProject(userId, host_id, options = {}) {
 	const payload = {
 		name: 'Default',

@@ -60,17 +60,36 @@
 		}
 	});
 
+	var disableModal = document.getElementById('disableTwoFactorModal');
+	var disableForm = document.getElementById('disable-two-factor-form');
+	var disableCode = document.getElementById('disable-two-factor-code');
 	disable2faBtn?.addEventListener('click', async () => {
-		const confirmed = await confirmAction('Disable 2FA', 'This will remove two-factor authentication from your account.');
-		if (!confirmed) return;
-
+		disableForm.reset();
+		const Modal = await ensureBootstrapModal();
+		Modal.getOrCreateInstance(disableModal).show();
+	});
+	disableModal?.addEventListener('shown.bs.modal', () => disableCode.focus());
+	disableModal?.addEventListener('hidden.bs.modal', () => { if (!disable2faBtn.classList.contains('d-none')) disable2faBtn.focus(); });
+	disableForm?.addEventListener('submit', async (event) => {
+		event.preventDefault();
+		const button = disableForm.querySelector('[type="submit"]');
+		button.disabled = true;
 		try {
-			await api('POST', '/2fa/disable');
+			await api('POST', '/2fa/disable', { code: disableCode.value.trim() });
+			const Modal = await ensureBootstrapModal();
+			Modal.getOrCreateInstance(disableModal).hide();
+			disable2faBtn.classList.add('d-none');
+			setup2faBtn.classList.remove('d-none');
+			const status = document.getElementById('two-factor-status');
+			status.textContent = '2FA is not enabled';
+			status.className = 'text-muted';
+			disableModal.addEventListener('hidden.bs.modal', () => setup2faBtn.focus(), { once: true });
 			showSuccess('2FA disabled');
-			setTimeout(function () { window.navigateTo ? window.navigateTo('/settings/security') : location.reload(); }, 1200);
 		} catch (err) {
-			showError(err.message);
-		}
+			await showError(err.message);
+			disableCode.focus();
+			disableCode.select();
+		} finally { button.disabled = false; }
 	});
 
 	// ---- Passkeys ----

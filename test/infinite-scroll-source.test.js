@@ -51,13 +51,13 @@ describe('record infinite scroll wiring', () => {
 				source: read('public/js/urls.js'),
 				sentinel: 'urls-scroll-sentinel',
 				loadMore: 'loadMoreUrls',
-				appendCall: 'renderUrls(urls, true)',
+				appendCall: 'urls.forEach(applyUrlItem)',
 			},
 		];
 
 		sections.forEach(({ source, sentinel, loadMore, appendCall }) => {
 			assert.ok(source.includes('var PAGE_SIZE = 50;'));
-			assert.ok(source.includes("'page=' + page"));
+			assert.ok(source.includes("'offset=' + offset"));
 			assert.ok(source.includes("'limit=' + PAGE_SIZE"));
 			assert.ok(source.includes('window.kkInfiniteScroll?.create'));
 			assert.ok(source.includes("sentinelClass: '" + sentinel + "'"));

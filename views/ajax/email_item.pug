@@ -1,0 +1,12 @@
+- const senders = (item.from || []).slice(0, 3).join(', ') + ((item.from || []).length > 3 ? ` +${item.from.length - 3}` : '');
+.list-group-item.list-group-item-action.email-item(data-id=String(item._id) role="button" tabindex="0" style="cursor:pointer")
+	.d-flex.align-items-start.gap-2
+		.batch-cb-wrap
+			input.form-check-input.batch-cb.h-20px.w-30px(type="checkbox" value=String(item._id) aria-label=`Select ${item.subject || 'email'}`)
+		.flex-grow-1.overflow-hidden
+			.d-flex.justify-content-between.align-items-center.gap-2
+				span.email-item-sender.text-muted.text-truncate= senders
+				time.email-item-date.text-muted.text-nowrap.flex-shrink-0(datetime=item.updatedAt || '' data-date-value=item.updatedAt || '' data-date-format="locale" data-date-options=JSON.stringify({ year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))= item.updatedAt || ''
+			strong.email-item-subject.text-truncate.d-block= item.subject || '(No subject)'
+			if excerpt
+				p.email-item-excerpt.mb-0.text-muted.text-truncate= excerpt
