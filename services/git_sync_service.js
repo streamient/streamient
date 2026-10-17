@@ -415,6 +415,16 @@ export async function listSyncLogs(hostId, repoId, limit = 200) {
 
 export async function updateGitRepo(hostId, repoId, data, ctx = {}) {
 	validateRepoPaths(data);
+	if (['sync_path', 'notes_path', 'memories_path'].some((field) => data[field] !== undefined)) {
+		const existing = await GitRepo.findOne({ _id: repoId, host_id: hostId }).lean();
+		if (!existing) return null;
+		const config = { ...existing, ...data };
+		const dir = repoDir(hostId, repoId);
+		const base = cleanSyncBase(config.sync_path);
+		containedRepoPath(dir, base);
+		containedRepoPath(dir, base, cleanRepoPath(config.notes_path, 'notes'));
+		containedRepoPath(dir, base, cleanRepoPath(config.memories_path, 'memories'));
+	}
 	const update = {};
 	if (data.name !== undefined) update.name = data.name;
 	if (data.repo_url !== undefined) update.repo_url = data.repo_url;

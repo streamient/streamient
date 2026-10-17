@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import test from 'node:test';
@@ -512,4 +513,19 @@ test('rejects traversal in stored export identities without writing or trashing'
 	await assert.rejects(syncRepo(repo._id.toString(), 'user-1', repo.host_id, { skip_lock: true, skip_audit: true }), /Unsafe Git repository path/);
 	assert.equal(note.in_trash, undefined);
 	assert.equal(fs.existsSync(path.join(process.cwd(), 'assets', 'git-repos', 'outside.md')), false);
+});
+
+test('configuration updates reject existing checkout symlink directories before saving', async (t) => {
+	const host = `host-config-${crypto.randomUUID()}`;
+	const clone = path.join(process.cwd(), 'assets', 'git-repos', host, 'repo');
+	fs.mkdirSync(clone, { recursive: true });
+	fs.symlinkSync(os.tmpdir(), path.join(clone, 'unsafe'));
+	t.after(() => cleanupClone(host));
+	const find = GitRepo.findOne;
+	const update = GitRepo.findOneAndUpdate;
+	t.after(() => { GitRepo.findOne = find; GitRepo.findOneAndUpdate = update; });
+	GitRepo.findOne = () => ({ lean: async () => ({ sync_path: '/', notes_path: 'notes', memories_path: 'memories' }) });
+	GitRepo.findOneAndUpdate = () => { throw new Error('unsafe configuration must not save'); };
+	await assert.rejects(updateGitRepo(host, 'repo', { notes_path: 'unsafe/notes' }), /Unsafe Git repository symlink/);
+	await assert.rejects(updateGitRepo(host, 'repo', { sync_path: 'unsafe' }), /Unsafe Git repository symlink/);
 });
