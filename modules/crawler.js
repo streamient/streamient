@@ -1,3 +1,4 @@
+import { validatePublicUrl, publicLookup } from './public_url.js';
 import { acquireTenantWork } from './tenancy.js';
 import { CheerioCrawler, Configuration } from 'crawlee';
 import { randomUUID } from 'node:crypto';
@@ -479,6 +480,14 @@ export async function crawlSite(urlDoc, deps = {}) {
 		maxRequestRetries: 0,
 		maxConcurrency: 3,
 		requestHandlerTimeoutSecs: 30,
+		ignoreSslErrors: false,
+		preNavigationHooks: [async ({ request }, options) => {
+			validatePublicUrl(request.url);
+			options.http2 = false;
+			options.dnsLookup = publicLookup;
+			options.dnsCache = false;
+			options.hooks = { beforeRedirect: [(redirect) => validatePublicUrl(redirect.url)] };
+		}],
 
 		async requestHandler({ request, $, enqueueLinks, response }) {
 			const currentUrl = request.loadedUrl || request.url;

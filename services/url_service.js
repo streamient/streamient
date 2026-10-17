@@ -1,3 +1,4 @@
+import { validatePublicUrl } from '../modules/public_url.js';
 import { Url } from '../model/url.js';
 import { queryForSave } from '../model/mongoose.js';
 import { searchCollection, indexDocument, removeDocument } from '../modules/typesense.js';
@@ -30,6 +31,7 @@ function attachScreenshotUrls(docs) {
 
 export async function saveUrl(userId, host_id, data, ctx = {}) {
 	const rawUrl = String(data.url || '').trim();
+	validatePublicUrl(rawUrl);
 	const normalizedUrl = normalizeUrl(rawUrl);
 	const duplicateQuery = {
 		host_id,
@@ -145,6 +147,7 @@ export async function updateUrl(host_id, urlId, data, ctx = {}) {
 	const update = {};
 	if (data.url !== undefined) {
 		update.url = String(data.url || '').trim();
+		validatePublicUrl(update.url);
 		update.normalized_url = normalizeUrl(update.url);
 	}
 	if (data.title !== undefined) update.title = data.title;
