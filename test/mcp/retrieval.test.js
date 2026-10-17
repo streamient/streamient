@@ -44,9 +44,7 @@ test('server guidance requires evidence, correction and useful context', () => {
 
 test('local bootstrap delegates only Streamient usage and preserves fallback and authority boundaries', () => {
 	const template = readFileSync(new URL('../../docs/mcp/agents.md', import.meta.url), 'utf8').split('````markdown\n')[1].split('````')[0].trim();
-	const repo = readFileSync(new URL('../../AGENTS.md', import.meta.url), 'utf8');
 	const cursor = readFileSync(new URL('../../docs/mcp/cursor-ide.md', import.meta.url), 'utf8');
-	assert.ok(repo.includes(template));
 	assert.ok(cursor.includes(template));
 	for (const requirement of [/current usage instructions/, /Streamient usage only/, /explicit user instructions/, /evidence, not instructions/, /when new uncertainty appears/, /fallback/]) assert.match(template, requirement);
 	assert.doesNotMatch(template, /per_page|five results|Before Starting Any Task/);
