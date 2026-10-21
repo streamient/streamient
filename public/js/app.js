@@ -1123,7 +1123,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 	window.addEventListener('batch-done', () => {
 		refreshCounts();
 		loadTrashCount();
-		if (__currentRoute === '/dashboard' && currentProjectId) loadProjectOverview(currentProjectId);
 	});
 
 	// ── Refresh counts when tab regains focus (catches events missed while backgrounded) ──

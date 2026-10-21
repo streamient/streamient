@@ -1,13 +1,20 @@
 # Team Agent Instructions
 
 ## Working agreements
+- Keep shared agent instructions in `AGENTS.md` as the source of truth for every agent. Agent-specific instruction files should reference it instead of duplicating rules.
 - Be extremely concise. Prefer the simplest solution; follow explicit requirements and verify uncertain facts.
 - Use fish-compatible commands. Reuse existing code; do not duplicate code, extend services, or add global functions.
 - Keep ordinary documentation out of the repository root; agent instruction files are exceptions.
 - Respect the task's planning and approval gate. Planning is read-only; wait for explicit approval before implementation.
 - Keep model selection and subagent configuration in the task prompt. Give agents bounded ownership, the absolute worktree path, and the expected branch. Report missing tools or access as blockers.
+- Report in the spirit of ASD STE100. Keep sentence structures direct, limit procedural steps to single actions and avoid unnecessary synonyms.
 
 ## Git and worktrees
+- Worktrees are located at ~/.worktrees
+- Never stage or commit worktree directories or Git worktree metadata into a repository. Keep worktree directories inside a repository ignored, and inspect staged paths before committing. Intended source changes made within a worktree may still be committed normally.
+- Never push a branch whose name starts with `codex/` or `claude/` to any remote unless the user explicitly instructs you to push that branch. Permission to create a worktree, implement a task, or commit locally does not authorize pushing these branches. This restriction applies to all agents and takes precedence over general push instructions.
+- Read `.github/CONTRIBUTING.md`. Base contribution work on `develop`; every contribution pull request must target `develop`.
+- Use `gh pr create --base develop` and verify the base after creation and before merging. `main` is release-only and requires explicit release authorization.
 - `develop` is the integration and push destination for product changes. Never substitute `main`, `master`, or a detached HEAD.
 - After plan approval, fetch the latest changes, update `develop` without discarding existing work, and create a uniquely named task branch and worktree from it. Plan approval authorizes this branch/worktree and its completion lifecycle. Respect an explicitly supplied approved feature branch.
 - Implement, review, and test in the task worktree. Verify the path and branch before edits or Git mutations; include both in every subagent brief.
@@ -27,7 +34,10 @@
 - Whole-view rendering is limited to initial navigation, explicit refresh, or a documented unrecoverable reconciliation case. Add relevant regression coverage for immediate item updates without page/section reloads.
 
 ## Development and testing
-- Development uses Docker Compose (`compose.yml`); use OrbStack on local macOS hosts. Avoid new environment variables; if required, update production Swarm files under `/Users/nitai/repos/helpmonks-install-script/docker/` and the relevant development secrets.
+- For browser testing, launch your own isolated Chrome instance with a separate temporary profile; control it with Playwright when needed. Never reuse the user's browser session or profile.
+- When the task ends, close the Chrome instance you created and remove its temporary profile, including after failures. Do not close unrelated browser instances.
+- For DBH testing, always sign in using the application's magic-link option. Retrieve the login email from Mailpit at `mail.n.lan` and open the link in your isolated Chrome instance.
+- Development uses Docker Compose (`compose.yml`); Avoid new environment variables; if required, update production Swarm files under `/Users/nitai/repos/helpmonks-install-script/docker/` and the relevant development secrets.
 - On `NadaMini`, projects/worktrees under `/Users/nitai/repos` and `/Users/nitai/repos-denise` use remote Docker through `dbh-run`; never local Docker or hand-written SSH sync. Other development hosts use local Docker per project instructions. Non-Docker unit tests stay on `NadaMini`.
 - Use `dbh-run compose -- <args>`, `dbh-run test`, and `dbh-run exec -- <command>`. Use `status` and `logs` for diagnosis. Run `dbh-run urls` before starting/testing a stack; repository metadata and its named URLs are authoritative.
 - `dbh-run` syncs the exact current worktree. Sync requires neither committing nor pushing. Verify the source worktree/revision being tested; do not assume an existing server serves the task branch.
@@ -37,6 +47,8 @@
 - Agents perform frontend testing on `NadaMini` against the named dbh URLs, superseding earlier user-only testing rules. Exercise affected flows, relevant UI states, responsive layout, and console/network failures. Fix findings and repeat affected checks. Report unavailable browser/host access and untested flows.
 - Run relevant automated checks and independent review before integration. Refresh and verify the integrated `develop` stack before final completion.
 - `dbh-run` is development/test only: never production Compose, Swarm, production builds, or install-script deployments.
+- Do not run docker on the local machine; use `dbh-run` for all Docker commands. Do not run `docker-compose` or `docker` directly on the host unless instructed.
+
 
 ## Production context
 - Deployments use Docker Swarm behind Cloudflare → Caddy → Swarm.

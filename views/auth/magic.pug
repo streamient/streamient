@@ -13,6 +13,7 @@ block body
 		h1.h2.mb-2 Continue login
 		p.text-muted.mb-5 This step confirms it is really you before we sign you in.
 		form(method="POST" action="/magic")
+			input(type="hidden" name="_csrf" value=csrf_token)
 			input(type="hidden" name="token" value=token)
 			button.btn.btn-primary.btn-sm.w-100(type="submit") Continue to dashboard
 

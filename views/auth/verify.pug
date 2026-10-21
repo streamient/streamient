@@ -13,6 +13,7 @@ block body
 		h1.h2.mb-2 Confirm your account
 		p.text-muted.mb-5 Activate your Streamient account.
 		form(method="POST" action="/verify")
+			input(type="hidden" name="_csrf" value=csrf_token)
 			input(type="hidden" name="token" value=token)
 			button.btn.btn-primary.btn-sm.w-100(type="submit") Yes, activate my account
 

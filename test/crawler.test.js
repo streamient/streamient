@@ -1,3 +1,8 @@
+import { beforeEach as beforeProject, afterEach as afterProject } from 'node:test';
+import { mockActiveProject } from './helpers/active-project.js';
+let restoreProject;
+beforeProject(() => { restoreProject = mockActiveProject(); });
+afterProject(() => { restoreProject(); });
 import { beforeEach as beforeAccountWork, afterEach as afterAccountWork } from 'node:test';
 import { mockTenantWork } from './helpers/tenant-work.js';
 let restoreAccountWork;
@@ -158,34 +163,33 @@ describe('crawler indexing and state', () => {
 		assert.equal(updates.at(-1).crawl_partial, false);
 	});
 
-	it('crawls a newly saved URL even when another record already crawled the same address', async () => {
-		const server = createServer((req, res) => {
-			res.setHeader('Content-Type', 'text/html');
-			res.end('<html><title>Saved page</title><body>Indexed content</body></html>');
-		});
-		await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-		const url = `http://127.0.0.1:${server.address().port}/`;
+	it('crawls each saved public URL independently', async () => {
 		const indexed = [];
-		try {
-			for (const ids of [['64f000000000000000000011'], ['64f000000000000000000012'], ['64f000000000000000000011', '64f000000000000000000012']]) {
-				await Promise.all(ids.map(async (id) => {
-					const count = await crawlSite(makeUrlDoc({ _id: id, url }), {
-						CrawlState: makeCrawlStateModel(),
-						Url: { updateOne: async () => {} },
-						ensureCollections: async () => {},
-						bulkIndexCrawledPages: async (host, data) => {
-							indexed.push(data);
-							return { indexedCount: data.pages.length, attemptedCount: data.pages.length };
-						},
-					});
-					assert.equal(count, 1);
-				}));
+		class FakeCrawler {
+			constructor(options) { this.options = options; }
+			async run(batch) {
+				const options = {};
+				await this.options.preNavigationHooks[0]({ request: { url: batch[0] } }, options);
+				assert.equal(typeof options.dnsLookup, 'function');
+				assert.throws(() => options.hooks.beforeRedirect[0]({ url: 'http://127.0.0.1' }), /public HTTP/);
+				await this.options.requestHandler({ request: { url: batch[0] }, response: makeHtmlResponse(), $: makeHtml(), enqueueLinks: async () => {} });
 			}
-			assert.equal(indexed.length, 4);
-			assert.notEqual(indexed[0].urlId, indexed[1].urlId);
-		} finally {
-			await new Promise((resolve) => server.close(resolve));
 		}
+		for (const id of ['64f000000000000000000011', '64f000000000000000000012']) {
+			assert.equal(await crawlSite(makeUrlDoc({ _id: id }), { CheerioCrawler: FakeCrawler, CrawlState: makeCrawlStateModel(), Url: { updateOne: async () => {} }, ensureCollections: async () => {}, bulkIndexCrawledPages: async (_host, data) => { indexed.push(data); return { indexedCount: data.pages.length }; } }), 1);
+		}
+		assert.notEqual(indexed[0].urlId, indexed[1].urlId);
+	});
+
+	it('refuses loopback crawl before opening the local server', async () => {
+		let requests = 0;
+		const server = createServer((_req, res) => { requests++; res.end('private'); });
+		await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+		try {
+			const count = await crawlSite(makeUrlDoc({ url: `http://127.0.0.1:${server.address().port}/` }), { CrawlState: makeCrawlStateModel(), Url: { updateOne: async () => {} }, ensureCollections: async () => {}, bulkIndexCrawledPages: async () => ({ indexedCount: 0 }) });
+			assert.equal(count, 0);
+			assert.equal(requests, 0);
+		} finally { await new Promise((resolve) => server.close(resolve)); }
 	});
 
 	it('limits crawl scope to the saved URL and descendant paths', () => {

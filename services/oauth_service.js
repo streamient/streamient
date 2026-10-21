@@ -5,7 +5,7 @@ import { isIP } from 'node:net';
 import bcrypt from 'bcryptjs';
 import { createLocalJWKSet, createRemoteJWKSet, jwtVerify } from 'jose';
 
-import { queryForSave } from '../model/mongoose.js';
+import mongoose, { queryForSave } from '../model/mongoose.js';
 import { OAuthAuthorizationCode } from '../model/oauth_authorization_code.js';
 import { OAuthClient } from '../model/oauth_client.js';
 import { OAuthConsent } from '../model/oauth_consent.js';
@@ -738,8 +738,8 @@ export async function exchangeAuthorizationCode({ code, clientId, redirectUri, c
 	}
 
 	await assertTenantAvailable(authCode.host_id);
-	authCode.used_at = new Date();
-	await authCode.save();
+	const claimed = await OAuthAuthorizationCode.findOneAndUpdate({ _id: authCode._id, used_at: null, expires_at: { $gt: new Date() } }, { $set: { used_at: new Date() } }, { returnDocument: 'after' });
+	if (!claimed) throw new OAuthError('invalid_grant', 'authorization code is invalid or expired', 400);
 
 	await OAuthConsent.updateOne(
 		{ user: authCode.user, host_id: authCode.host_id, client_id: authCode.client_id, resource: authCode.resource, revoked_at: null },
@@ -750,10 +750,10 @@ export async function exchangeAuthorizationCode({ code, clientId, redirectUri, c
 	return authCode;
 }
 
-async function storeRefreshToken({ userId, tenantId, host_id, client, scopes, resource, replacedByTokenHash = null }) {
+async function storeRefreshToken({ userId, tenantId, host_id, client, scopes, resource, replacedByTokenHash = null, session }) {
 	const refreshToken = randomToken(32);
 	const tokenHash = sha256Hex(refreshToken);
-	await OAuthRefreshToken.create({
+	const payload = {
 		token_hash: tokenHash,
 		user: userId,
 		tenant: tenantId,
@@ -765,11 +765,13 @@ async function storeRefreshToken({ userId, tenantId, host_id, client, scopes, re
 		resource,
 		expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
 		replaced_by_token_hash: replacedByTokenHash || undefined,
-	});
+	};
+	if (session) await OAuthRefreshToken.create([payload], { session });
+	else await OAuthRefreshToken.create(payload);
 	return { refreshToken, tokenHash };
 }
 
-export async function issueTokenPair({ userId, tenantId, host_id, client, scopes, resource }) {
+export async function issueTokenPair({ userId, tenantId, host_id, client, scopes, resource, session }) {
 	const releaseAccountWork = await acquireTenantWork(host_id);
 	try {
 	const normalizedScopes = normalizeScopesForResource(scopes, resource);
@@ -789,13 +791,15 @@ export async function issueTokenPair({ userId, tenantId, host_id, client, scopes
 		client,
 		scopes: normalizedScopes,
 		resource,
+		session,
 	});
 
 	await OAuthConsent.updateOne(
 		{ user: userId, host_id, client_id: client.client_id, resource, revoked_at: null },
 		{ $set: { last_used_at: new Date() } },
+		{ session },
 	);
-	await OAuthClient.updateOne({ client_id: client.client_id }, { $set: { last_used_at: new Date() } });
+	await OAuthClient.updateOne({ client_id: client.client_id }, { $set: { last_used_at: new Date() } }, { session });
 
 	return {
 		access_token: accessToken,
@@ -812,7 +816,10 @@ export async function exchangeRefreshToken({ refreshToken, client, host_id = nul
 		throw new OAuthError('invalid_grant', 'refresh_token is required', 400);
 	}
 
-	const refresh = await queryForSave(OAuthRefreshToken.findOne({ token_hash: sha256Hex(refreshToken) }));
+	let releaseAccountWork;
+	try {
+	return await mongoose.connection.transaction(async (session) => {
+	const refresh = await OAuthRefreshToken.findOne({ token_hash: sha256Hex(refreshToken) }).session(session).read('primary').lean();
 	if (!refresh || refresh.revoked_at || refresh.rotated_at || refresh.expires_at <= new Date()) {
 		throw new OAuthError('invalid_grant', 'refresh_token is invalid or expired', 400);
 	}
@@ -823,7 +830,10 @@ export async function exchangeRefreshToken({ refreshToken, client, host_id = nul
 		throw new OAuthError('invalid_grant', 'refresh_token tenant mismatch', 400);
 	}
 
+	if (!releaseAccountWork) releaseAccountWork = await acquireTenantWork(refresh.host_id);
 	const scopes = normalizeScopeInput(refresh.scope);
+	const claimed = await OAuthRefreshToken.updateOne({ _id: refresh._id, revoked_at: null, rotated_at: null, expires_at: { $gt: new Date() } }, { $set: { rotated_at: new Date() } }, { session });
+	if (claimed.modifiedCount !== 1) throw new OAuthError('invalid_grant', 'refresh_token is invalid or expired', 400);
 	const nextPair = await issueTokenPair({
 		userId: refresh.user,
 		tenantId: refresh.tenant,
@@ -831,13 +841,14 @@ export async function exchangeRefreshToken({ refreshToken, client, host_id = nul
 		client,
 		scopes,
 		resource: refresh.resource,
+		session,
 	});
 
-	refresh.rotated_at = new Date();
-	refresh.replaced_by_token_hash = sha256Hex(nextPair.refresh_token);
-	await refresh.save();
+	await OAuthRefreshToken.updateOne({ _id: refresh._id }, { $set: { replaced_by_token_hash: sha256Hex(nextPair.refresh_token) } }, { session });
 
 	return nextPair;
+	}, { readPreference: 'primary' });
+	} finally { if (releaseAccountWork) await releaseAccountWork(); }
 }
 
 export function buildAuthorizationServerMetadata() {

@@ -107,6 +107,19 @@ describe('Streamient Mobile source contracts', () => {
 		assert.match(restoreBlock, /finally \{[\s\S]*setAuthReady\(true\)/);
 	});
 
+	it('re-enables login only when returning from the browser history cache', () => {
+		const app = read('apps/mobile/src/App.tsx');
+		const handler = app.match(/const resumeLogin = \(event: PageTransitionEvent\) => \{ ([^\n]+) \};/)[1];
+		const updates = [];
+		const resumeLogin = new Function('event', 'setLoginLoading', handler);
+		resumeLogin({ persisted: false }, (value) => updates.push(value));
+		assert.deepEqual(updates, []);
+		resumeLogin({ persisted: true }, (value) => updates.push(value));
+		assert.deepEqual(updates, [false]);
+		assert.match(app, /window\.addEventListener\("pageshow", resumeLogin\)/);
+		assert.match(app, /return \(\) => window\.removeEventListener\("pageshow", resumeLogin\)/);
+	});
+
 	it('keeps release icons inside platform mask safe zones and advances native builds', () => {
 		const androidBuild = read('apps/mobile/android/app/build.gradle');
 		const assets = read('apps/mobile/scripts/generate-assets.mjs');
@@ -121,14 +134,14 @@ describe('Streamient Mobile source contracts', () => {
 		assert.doesNotMatch(assets, /size \* 0\.(?:75|58)/);
 		assert.match(playAssets, /resize\(288, 288/);
 		assert.match(playAssets, /left: 112, top: 112/);
-		assert.match(androidBuild, /versionCode 2/);
+		assert.match(androidBuild, /versionCode 3/);
 		assert.match(androidBuild, /versionName "1\.0"/);
-		assert.equal((iosProject.match(/CURRENT_PROJECT_VERSION = 4;/g) || []).length, 4);
+		assert.equal((iosProject.match(/CURRENT_PROJECT_VERSION = 5;/g) || []).length, 4);
 		assert.equal((iosProject.match(/MARKETING_VERSION = 1\.0;/g) || []).length, 4);
 		assert.equal((iosProject.match(/CODE_SIGN_STYLE = Automatic;/g) || []).length, 4);
 		assert.match(iosExport, /<key>signingStyle<\/key>\s*<string>automatic<\/string>/);
 		assert.match(iosUpload, /<key>signingStyle<\/key>\s*<string>automatic<\/string>/);
-		assert.match(iosRelease, /STREAMIENT_IOS_BUILD_NUMBER:-4/);
+		assert.match(iosRelease, /STREAMIENT_IOS_BUILD_NUMBER:-5/);
 		assert.match(iosRelease, /CODE_SIGNING_ALLOWED=NO/);
 		assert.match(iosRelease, /embedded\.mobileprovision/);
 		assert.match(iosRelease, /plutil -extract Entitlements/);

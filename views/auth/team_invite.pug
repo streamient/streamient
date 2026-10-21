@@ -21,6 +21,7 @@ block body
 				span Signed in as
 				strong.ms-1= currentUser.email
 			form(action="/team-invite" method="POST")
+				input(type="hidden" name="_csrf" value=csrf_token)
 				input(type="hidden" name="token" value=token)
 				button.btn.btn-primary.btn-sm.w-100(type="submit") Accept invitation
 		else if existingUser
@@ -29,6 +30,7 @@ block body
 			p.small.text-muted.mt-3.mb-0 After signing in, open this invitation link again to join the account.
 		else
 			form(action="/team-invite" method="POST")
+				input(type="hidden" name="_csrf" value=csrf_token)
 				input(type="hidden" name="token" value=token)
 				.mb-3
 					label.form-label(for="name") Name

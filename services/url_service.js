@@ -1,3 +1,5 @@
+import { requireActiveProject } from './project_service.js';
+import { validatePublicUrl } from '../modules/public_url.js';
 import { Url } from '../model/url.js';
 import { queryForSave } from '../model/mongoose.js';
 import { searchCollection, indexDocument, removeDocument } from '../modules/typesense.js';
@@ -29,11 +31,13 @@ function attachScreenshotUrls(docs) {
 }
 
 export async function saveUrl(userId, host_id, data, ctx = {}) {
+	const project = await requireActiveProject(host_id, data.project);
 	const rawUrl = String(data.url || '').trim();
+	validatePublicUrl(rawUrl);
 	const normalizedUrl = normalizeUrl(rawUrl);
 	const duplicateQuery = {
 		host_id,
-		project: data.project,
+		project,
 		in_trash: { $ne: true },
 		$or: [
 			{ normalized_url: normalizedUrl },
@@ -69,7 +73,7 @@ export async function saveUrl(userId, host_id, data, ctx = {}) {
 
 	const screenshot = await saveClientScreenshot(rawUrl, data.screenshot_data_url);
 
-	const urlDoc = await Url.create({
+	const urlDoc = await persistUrl(userId, host_id, {
 		url: rawUrl,
 		normalized_url: normalizedUrl,
 		title: data.title || extracted.title || rawUrl,
@@ -79,15 +83,10 @@ export async function saveUrl(userId, host_id, data, ctx = {}) {
 		screenshot: screenshot || '',
 		text_content: extracted.text_content || '',
 		crawl_enabled: data.crawl_enabled || false,
-		project: data.project,
+		project,
 		owner: userId,
 		host_id,
-	});
-
-	emitToTenant(host_id, 'url:created', attachScreenshotUrl(urlDoc));
-	invalidateGraphCache(host_id).catch(() => {});
-	audit.log({ action: 'create', resource: 'url', resource_id: urlDoc._id.toString(), user_id: userId, host_id, ...ctx });
-	await syncStreamientItem('url', urlDoc._id, host_id, { item: urlDoc }).catch((err) => log.error({ err, url_id: urlDoc._id }, 'Obsidian URL export deferred'));
+	}, ctx);
 
 	if (!screenshot) {
 		// Fire-and-forget: capture screenshot in background
@@ -99,6 +98,23 @@ export async function saveUrl(userId, host_id, data, ctx = {}) {
 	}
 
 	return urlDoc;
+}
+
+async function persistUrl(userId, host_id, payload, ctx) {
+	const urlDoc = await Url.create(payload);
+
+	emitToTenant(host_id, 'url:created', attachScreenshotUrl(urlDoc));
+	invalidateGraphCache(host_id).catch(() => {});
+	audit.log({ action: 'create', resource: 'url', resource_id: urlDoc._id.toString(), user_id: userId, host_id, ...ctx });
+	await syncStreamientItem('url', urlDoc._id, host_id, { item: urlDoc }).catch((err) => log.error({ err, url_id: urlDoc._id }, 'Obsidian URL export deferred'));
+
+	return urlDoc;
+}
+
+export async function copyUrl(userId, host_id, source, project, ctx = {}) {
+	await requireActiveProject(host_id, project);
+	validatePublicUrl(source.url);
+	return persistUrl(userId, host_id, { url: source.url, normalized_url: normalizeUrl(source.url), title: source.title, description: source.description, tags: source.tags || [], og_image: source.og_image || '', screenshot: source.screenshot || '', text_content: source.text_content || '', crawl_enabled: false, project, owner: userId, host_id, is_indexed: false }, ctx);
 }
 
 async function attachClientScreenshot(urlDoc, rawUrl, dataUrl) {
@@ -123,14 +139,16 @@ async function saveClientScreenshot(rawUrl, dataUrl) {
 	}
 }
 
-export async function listUrls(host_id, projectId, { page = 1, limit = 50 } = {}) {
+export async function listUrls(host_id, projectId, { page = 1, limit = 50, offset } = {}) {
+	const start = offset === undefined ? (page - 1) * limit : Number(offset);
+	if (!Number.isSafeInteger(start) || start < 0) throw Object.assign(new Error('offset must be a nonnegative integer'), { status: 400 });
 	const query = { host_id, in_trash: { $ne: true } };
 	if (projectId) query.project = projectId;
 
 	const docs = await Url.find(query)
 		.select('-text_content')
 		.sort({ createdAt: -1, _id: -1 })
-		.skip((page - 1) * limit)
+		.skip(start)
 		.limit(limit)
 		.lean();
 	return attachScreenshotUrls(docs);
@@ -142,9 +160,13 @@ export async function getUrl(host_id, urlId) {
 }
 
 export async function updateUrl(host_id, urlId, data, ctx = {}) {
+	const current = await Url.findOne({ _id: urlId, host_id }).select('project').lean();
+	if (!current) return null;
+	await requireActiveProject(host_id, data.project !== undefined ? data.project : current.project);
 	const update = {};
 	if (data.url !== undefined) {
 		update.url = String(data.url || '').trim();
+		validatePublicUrl(update.url);
 		update.normalized_url = normalizeUrl(update.url);
 	}
 	if (data.title !== undefined) update.title = data.title;
@@ -162,6 +184,7 @@ export async function updateUrl(host_id, urlId, data, ctx = {}) {
 		{ returnDocument: 'after' },
 	);
 
+	let syncWarning;
 	if (urlDoc) {
 		removeDocument(host_id, 'urls', urlId).catch((err) => log.error({ err }, 'Typesense remove error'));
 		emitToTenant(host_id, 'url:updated', attachScreenshotUrl(urlDoc));
@@ -170,10 +193,12 @@ export async function updateUrl(host_id, urlId, data, ctx = {}) {
 			const details = audit.diffSnapshot(before, urlDoc);
 			audit.log({ action: 'update', resource: 'url', resource_id: urlId, host_id, details, ...ctx });
 		}
-		await syncStreamientItem('url', urlId, host_id, { item: urlDoc });
+		await syncStreamientItem('url', urlId, host_id, { item: urlDoc }).catch((err) => { log.error({ err, item_id: urlDoc._id }, 'Obsidian export deferred after saved update'); syncWarning = 'The item was saved; Obsidian sync is pending.'; });
 	}
 
-	return urlDoc;
+	const result = attachScreenshotUrl(urlDoc);
+	if (syncWarning && result) result.sync_warning = syncWarning;
+	return result;
 }
 
 export async function deleteUrl(host_id, urlId, ctx = {}) {
@@ -182,15 +207,18 @@ export async function deleteUrl(host_id, urlId, ctx = {}) {
 		{ $set: { in_trash: true, trashed_at: new Date(), is_indexed: false } },
 		{ returnDocument: 'after' },
 	);
+	let syncWarning;
 	if (urlDoc) {
 		indexDocument(host_id, 'urls', urlDoc).catch((err) => log.error({ err }, 'Typesense trash index error'));
 		removeLinksForItem(host_id, urlId).catch((err) => log.error({ err }, 'Remove links error'));
-		emitToTenant(host_id, 'url:deleted', { _id: urlId });
+		emitToTenant(host_id, 'url:deleted', { _id: urlDoc._id, project: urlDoc.project, updatedAt: urlDoc.updatedAt, in_trash: true });
 		invalidateGraphCache(host_id).catch(() => {});
 		if (ctx.user_id) audit.log({ action: 'delete', resource: 'url', resource_id: urlId, host_id, ...ctx });
-		await syncStreamientItem('url', urlId, host_id, { item: urlDoc });
+		await syncStreamientItem('url', urlId, host_id, { item: urlDoc }).catch((err) => { log.error({ err, item_id: urlDoc._id }, 'Obsidian trash export deferred after saved deletion'); syncWarning = 'The item was moved to trash; Obsidian sync is pending.'; });
 	}
-	return urlDoc;
+	const result = attachScreenshotUrl(urlDoc);
+	if (syncWarning && result) result.sync_warning = syncWarning;
+	return result;
 }
 
 export async function searchUrls(host_id, query, options = {}) {

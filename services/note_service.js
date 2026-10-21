@@ -1,3 +1,5 @@
+import { attachItemHtml } from '../modules/item_html.js';
+import { requireActiveProject } from './project_service.js';
 import { Note } from '../model/note.js';
 import { searchCollection, indexDocument, removeDocument } from '../modules/typesense.js';
 import { emitToTenant } from '../modules/socket.js';
@@ -9,40 +11,62 @@ import { syncStreamientItem } from './obsidian_sync_service.js';
 const log = createLogger('note');
 
 export async function createNote(userId, host_id, data, ctx = {}) {
-	const note = await Note.create({
-		title: data.title,
-		content: data.content || '',
-		text_content: data.text_content || '',
-		tags: data.tags || [],
-		project: data.project,
-		owner: userId,
-		host_id,
-	});
+	ctx.signal?.throwIfAborted();
+	await ctx.assertOwnership?.();
+	const project = await requireActiveProject(host_id, data.project);
+	const persist = async (session) => {
+		const lookup = () => {
+			const query = Note.findOne({ _id: ctx.idempotency_id, host_id, project }).read('primary');
+			return (session ? query.session(session) : query).lean();
+		};
+		let note = ctx.idempotency_id ? await lookup() : null;
+		if (note) return note;
+		ctx.signal?.throwIfAborted();
+		await ctx.assertOwnership?.();
+		const payload = { ...(ctx.idempotency_id ? { _id: ctx.idempotency_id } : {}), title: data.title, content: data.content || '', text_content: data.text_content || '', tags: data.tags || [], project, owner: userId, host_id, is_indexed: false };
+		try {
+			if (session) [note] = await Note.create([payload], { session });
+			else note = await Note.create(payload);
+		} catch (err) {
+			if (session || err.code !== 11000 || !ctx.idempotency_id) throw err;
+			note = await lookup();
+			if (!note) throw err;
+		}
+		return note;
+	};
+	const note = ctx.withOwnership ? await ctx.withOwnership(persist) : await persist();
+	ctx.signal?.throwIfAborted();
+	await ctx.assertOwnership?.();
 
-	emitToTenant(host_id, 'note:created', note);
+	emitToTenant(host_id, 'note:created', attachItemHtml('note', note));
 	invalidateGraphCache(host_id).catch(() => {});
 	audit.log({ action: 'create', resource: 'note', resource_id: note._id.toString(), user_id: userId, host_id, ...ctx });
 	await syncStreamientItem('note', note._id, host_id, { item: note }).catch((err) => log.error({ err, note_id: note._id }, 'Obsidian note export deferred'));
-	return note;
+	return attachItemHtml('note', note);
 }
 
-export async function listNotes(host_id, projectId, { page = 1, limit = 50 } = {}) {
+export async function listNotes(host_id, projectId, { page = 1, limit = 50, offset } = {}) {
+	const start = offset === undefined ? (page - 1) * limit : Number(offset);
+	if (!Number.isSafeInteger(start) || start < 0) throw Object.assign(new Error('offset must be a nonnegative integer'), { status: 400 });
 	const query = { host_id, in_trash: { $ne: true } };
 	if (projectId) query.project = projectId;
 
-	return Note.find(query)
+	const docs = await Note.find(query)
 		.select('-content')
 		.sort({ updatedAt: -1 })
-		.skip((page - 1) * limit)
+		.skip(start)
 		.limit(limit);
+	return docs.map((doc) => attachItemHtml('note', doc));
 }
 
 export async function getNote(host_id, noteId) {
-	return Note.findOne({ _id: noteId, host_id });
+	return attachItemHtml('note', await Note.findOne({ _id: noteId, host_id }));
 }
 
 export async function updateNote(host_id, noteId, data, ctx = {}) {
-	const linked = await Note.findOne({ _id: noteId, host_id }).select('obsidian_source').lean();
+	const linked = await Note.findOne({ _id: noteId, host_id }).select('obsidian_source project').lean();
+	if (!linked) return null;
+	await requireActiveProject(host_id, data.project !== undefined ? data.project : linked.project);
 	if (linked?.obsidian_source?.file_id && data.content !== undefined && data.markdown_content === undefined) {
 		const err = new Error('Obsidian-synced notes must be edited as Markdown');
 		err.status = 409;
@@ -69,18 +93,21 @@ export async function updateNote(host_id, noteId, data, ctx = {}) {
 		{ returnDocument: 'after' },
 	);
 
+	let syncWarning;
 	if (note) {
 		removeDocument(host_id, 'notes', noteId).catch((err) => log.error({ err }, 'Typesense remove error'));
-		emitToTenant(host_id, 'note:updated', note);
+		emitToTenant(host_id, 'note:updated', attachItemHtml('note', note));
 		invalidateGraphCache(host_id).catch(() => {});
 		if (ctx.user_id) {
 			const details = audit.diffSnapshot(before, note);
 			audit.log({ action: 'update', resource: 'note', resource_id: noteId, host_id, details, ...ctx });
 		}
-		await syncStreamientItem('note', noteId, host_id, { item: note });
+		await syncStreamientItem('note', noteId, host_id, { item: note }).catch((err) => { log.error({ err, item_id: note._id }, 'Obsidian export deferred after saved update'); syncWarning = 'The item was saved; Obsidian sync is pending.'; });
 	}
 
-	return note;
+	const result = attachItemHtml('note', note);
+	if (syncWarning && result) result.sync_warning = syncWarning;
+	return result;
 }
 
 export async function deleteNote(host_id, noteId, ctx = {}) {
@@ -89,15 +116,18 @@ export async function deleteNote(host_id, noteId, ctx = {}) {
 		{ $set: { in_trash: true, trashed_at: new Date(), is_indexed: false } },
 		{ returnDocument: 'after' },
 	);
+	let syncWarning;
 	if (note) {
 		indexDocument(host_id, 'notes', note).catch((err) => log.error({ err }, 'Typesense trash index error'));
 		removeLinksForItem(host_id, noteId).catch((err) => log.error({ err }, 'Remove links error'));
-		emitToTenant(host_id, 'note:deleted', { _id: noteId });
+		emitToTenant(host_id, 'note:deleted', { _id: note._id, project: note.project, updatedAt: note.updatedAt, in_trash: true });
 		invalidateGraphCache(host_id).catch(() => {});
 		if (ctx.user_id) audit.log({ action: 'delete', resource: 'note', resource_id: noteId, host_id, ...ctx });
-		await syncStreamientItem('note', noteId, host_id, { item: note });
+		await syncStreamientItem('note', noteId, host_id, { item: note }).catch((err) => { log.error({ err, item_id: note._id }, 'Obsidian trash export deferred after saved deletion'); syncWarning = 'The item was moved to trash; Obsidian sync is pending.'; });
 	}
-	return note;
+	const result = attachItemHtml('note', note);
+	if (syncWarning && result) result.sync_warning = syncWarning;
+	return result;
 }
 
 export async function searchNotes(host_id, query, options = {}) {

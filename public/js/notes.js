@@ -3,9 +3,9 @@
 	var PAGE_SIZE = 50;
 	var listEl, newBtn, pond, infiniteScroll;
 	var windowListeners = [];
-	var pageNum = 1;
 	var loadingMore = false;
 	var hasMore = false;
+	var itemUpdater;
 	var loadSeq = 0;
 
 	function addWindowListener(event, handler) {
@@ -13,75 +13,33 @@
 		windowListeners.push([event, handler]);
 	}
 
-	function escapeHtml(str) {
-		var div = document.createElement('div');
-		div.textContent = str || '';
-		return div.innerHTML;
-	}
-
-	function notesPath(page) {
-		var params = ['page=' + page, 'limit=' + PAGE_SIZE];
+	function notesPath(offset) {
+		var params = ['offset=' + offset, 'limit=' + PAGE_SIZE];
 		if (currentProjectId) params.push('project=' + encodeURIComponent(currentProjectId));
 		return '/notes?' + params.join('&');
 	}
 
-	function renderNoteItemHtml(n) {
-		var excerpt = n.text_content?.slice(0, 200) || '';
-		var date = n.updatedAt ? window.StreamientDateFormat?.formatLocale(n.updatedAt) || '' : '';
-		var tags = (n.tags || []).map(function (t) {
-			return '<span class="badge text-bg-secondary tag-badge rounded-pill me-1">' + escapeHtml(t) + '</span>';
-		}).join('');
-
-		return '<div class="list-group-item list-group-item-action note-item" data-id="' + escapeHtml(n._id) + '">'
-			+ '<div class="d-flex align-items-start gap-2">'
-			+ '<div class="batch-cb-wrap"><input type="checkbox" class="form-check-input batch-cb" value="' + escapeHtml(n._id) + '"></div>'
-			+ '<div class="flex-grow-1 overflow-hidden">'
-			+ '<div class="d-flex justify-content-between align-items-center gap-2">'
-			+ '<strong class="text-truncate">' + escapeHtml(n.title) + '</strong>'
-			+ '<small class="text-muted text-nowrap flex-shrink-0" data-date-value="' + escapeHtml(n.updatedAt || '') + '" data-date-format="locale">' + escapeHtml(date) + '</small>'
-			+ '</div>'
-			+ (excerpt ? '<p class="mb-0 text-muted small text-truncate">' + escapeHtml(excerpt) + '</p>' : '')
-			+ '<div class="text-muted small">' + tags + '</div>'
-			+ '</div></div></div>';
-	}
-
 	function bindNoteItem(el) {
+		el.addEventListener('keydown', function (event) { if (event.target === el && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); el.click(); } });
 		el.addEventListener('click', function (e) {
 			if (e.target.closest('.batch-cb-wrap')) return;
 			window.openItemModal('notes', el.dataset.id);
 		});
 	}
 
-	function renderNotes(notes, append) {
+	function renderNotes(items, append) {
 		if (!listEl) return;
-		if (!append && !notes.length) {
-			listEl.innerHTML = '<p class="text-muted p-3 note-empty">No notes yet. Create one!</p>';
-			return;
-		}
-		if (!notes.length) return;
-
-		if (!append) {
-			listEl.innerHTML = notes.map(renderNoteItemHtml).join('');
-			listEl.querySelectorAll('.note-item').forEach(bindNoteItem);
-			return;
-		}
-
-		listEl.querySelector('.note-empty')?.remove();
-		var wrapper = document.createElement('div');
-		wrapper.innerHTML = notes.map(renderNoteItemHtml).join('');
-		Array.prototype.slice.call(wrapper.children).forEach(function (item) {
-			bindNoteItem(item);
-			listEl.appendChild(item);
-		});
+		items.forEach(itemUpdater.apply);
+		itemUpdater.empty();
 	}
 
 	async function loadNotes() {
 		if (!listEl) return;
 		var seq = ++loadSeq;
-		pageNum = 1;
+		itemUpdater.reset();
 		loadingMore = false;
 		hasMore = false;
-		var data = await api('GET', notesPath(pageNum));
+		var data = await api('GET', notesPath(0));
 		if (!listEl || seq !== loadSeq) return;
 		var notes = data.notes || [];
 		hasMore = notes.length === PAGE_SIZE;
@@ -93,13 +51,11 @@
 		if (!listEl || loadingMore || !hasMore) return;
 		loadingMore = true;
 		var seq = loadSeq;
-		var page = pageNum + 1;
 		var appended = false;
 		try {
-			var data = await api('GET', notesPath(page));
+			var data = await api('GET', notesPath(listEl.querySelectorAll('.note-item').length));
 			if (!listEl || seq !== loadSeq) return;
 			var notes = data.notes || [];
-			pageNum = page;
 			hasMore = notes.length === PAGE_SIZE;
 			renderNotes(notes, true);
 			appended = notes.length > 0;
@@ -141,7 +97,7 @@
 				process: {
 					url: '/api/v1/notes/import',
 					method: 'POST',
-					headers: {},
+					headers: { 'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || '' },
 					ondata: function (formData) {
 						if (currentProjectId) formData.append('project', currentProjectId);
 						return formData;
@@ -180,14 +136,13 @@
 
 		pond.on('processfile', function (error, fileItem) {
 			if (error) errorCount++;
-			else successCount++;
+			else { successCount++; itemUpdater.update({ detail: { _id: fileItem.serverId } }); }
 			removePondItem(fileItem);
 		});
 
 		pond.on('processfiles', function () {
 			if (successCount > 0) {
 				showSuccess(successCount + ' file' + (successCount > 1 ? 's' : '') + ' imported as notes');
-				loadNotes();
 			}
 			if (errorCount > 0) {
 				showError(errorCount + ' file' + (errorCount > 1 ? 's' : '') + ' could not be imported');
@@ -221,16 +176,19 @@
 		});
 	}
 
-	function onModalSaved(e) { if (e.detail?.type === 'notes') loadNotes(); }
-	function onModalDeleted(e) { if (e.detail?.type === 'notes') loadNotes(); }
+	function onModalSaved(e) { if (e.detail?.type === 'notes') itemUpdater.update(e); }
+	function onModalDeleted(e) { if (e.detail?.type === 'notes') itemUpdater.remove(e); }
 
 	function mount() {
 		listEl = document.getElementById('notes-list');
+		itemUpdater = window.StreamientListItems.create({ list: listEl, type: 'note', endpoint: 'notes', bind: bindNoteItem });
 		newBtn = document.getElementById('new-note-btn');
 		newBtn?.addEventListener('click', function () { window.openItemModal('notes'); });
 
 		addWindowListener('project-changed', loadNotes);
-		addWindowListener('batch-done', loadNotes);
+		addWindowListener('note:created', itemUpdater.update);
+		addWindowListener('note:updated', itemUpdater.update);
+		addWindowListener('note:deleted', itemUpdater.remove);
 		addWindowListener('item-modal-saved', onModalSaved);
 		addWindowListener('item-modal-deleted', onModalDeleted);
 
@@ -243,6 +201,8 @@
 	}
 
 	function unmount() {
+		loadSeq++;
+		itemUpdater?.destroy();
 		for (var i = 0; i < windowListeners.length; i++) {
 			window.removeEventListener(windowListeners[i][0], windowListeners[i][1]);
 		}

@@ -1228,6 +1228,7 @@ const swaggerSpec = {
                 summary: 'List notes',
                 parameters: [
                     { $ref: '#/components/parameters/page' },
+                    { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0 }, description: 'Explicit number of current matching records to skip; overrides page and keeps incremental lists aligned after insertions/removals' },
                     { $ref: '#/components/parameters/limit' },
                     { $ref: '#/components/parameters/project' },
                 ],
@@ -1302,6 +1303,7 @@ const swaggerSpec = {
                 summary: 'List memories',
                 parameters: [
                     { $ref: '#/components/parameters/page' },
+                    { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0 }, description: 'Explicit number of current matching records to skip; overrides page and keeps incremental lists aligned after insertions/removals' },
                     { $ref: '#/components/parameters/limit' },
                     { $ref: '#/components/parameters/project' },
                 ],
@@ -1392,6 +1394,7 @@ const swaggerSpec = {
                 description: 'Typesense-backed mailbox results grouped by thread_key and ordered by email created date descending. Mongo is used for detail, thread, and write paths only.',
                 parameters: [
                     { $ref: '#/components/parameters/page' },
+                    { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0 }, description: 'Explicit number of current matching records to skip; overrides page and keeps incremental lists aligned after insertions/removals' },
                     { $ref: '#/components/parameters/limit' },
                     { $ref: '#/components/parameters/project' },
 	                    { name: 'mailbox', in: 'query', schema: { type: 'string', enum: ['inbox', 'archived', 'sent', 'spam', 'trash'] } },
@@ -1510,6 +1513,7 @@ const swaggerSpec = {
 				description: 'Returns saved URLs ordered by creation date, newest first.',
                 parameters: [
                     { $ref: '#/components/parameters/page' },
+                    { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0 }, description: 'Explicit number of current matching records to skip; overrides page and keeps incremental lists aligned after insertions/removals' },
                     { $ref: '#/components/parameters/limit' },
                     { $ref: '#/components/parameters/project' },
                 ],
@@ -1666,10 +1670,10 @@ const swaggerSpec = {
             post: {
                 tags: ['Batch'],
                 summary: 'Batch delete items',
-                description: 'For emails, moves each email to trash and clears all labels. For URLs, also returns deleted_ids for incremental list updates.',
+                description: 'Moves items to trash. Legacy responses are limited to 1000 items before any mutation. Supply visible_ids (at most 1000 unique IDs, including an empty array) for larger selections: exact counts cover all items, but outcomes/success_ids/deleted_ids include only requested visible IDs. failed_count is exact; failed details are capped at 1000 and failures_truncated identifies omitted failures. Saved items with deferred Obsidian synchronization are counted as successes and reported in warning_count/warnings.',
                 requestBody: {
                     required: true,
-                    content: { 'application/json': { schema: { type: 'object', properties: { type: { type: 'string', enum: ['notes', 'memories', 'urls', 'emails'] }, ids: { type: 'array', items: { type: 'string' } }, all: { type: 'boolean', description: 'When true, delete all items of the given type (ids is ignored)' }, filterProject: { type: 'string', description: 'Filter by project ID when all=true' } }, required: ['type'] } } },
+                    content: { 'application/json': { schema: { type: 'object', properties: { type: { type: 'string', enum: ['notes', 'memories', 'urls', 'emails'] }, ids: { type: 'array', items: { type: 'string' } }, visible_ids: { type: 'array', maxItems: 1000, uniqueItems: true, items: { type: 'string' }, description: 'Opt into bounded response payloads for large batches; include IDs currently displayed, or an empty array for counts only' }, all: { type: 'boolean', description: 'When true, delete all items of the given type (ids is ignored)' }, filterProject: { type: 'string', description: 'Filter by project ID when all=true' } }, required: ['type'] } } },
                 },
                 responses: {
                     200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { message: { type: 'string' }, deleted: { type: 'integer' }, deleted_ids: { type: 'array', items: { type: 'string' }, description: 'Successfully deleted URL IDs, when type is urls.' } } } } } },
@@ -1680,10 +1684,10 @@ const swaggerSpec = {
             post: {
                 tags: ['Batch'],
                 summary: 'Batch move items to a project',
-                description: 'For URLs, also returns urls containing the updated records and rendered list items.',
+                description: 'Legacy responses are limited to 1000 items before any mutation. Supply visible_ids (at most 1000 unique IDs, including an empty array) for larger selections: exact counts cover all items, while outcomes/success_ids/urls include only requested visible IDs. failed_count is exact; failed details are capped at 1000 with failures_truncated. Saved items with deferred Obsidian synchronization remain successes and appear in warning_count/warnings.',
                 requestBody: {
                     required: true,
-                    content: { 'application/json': { schema: { type: 'object', properties: { type: { type: 'string', enum: ['notes', 'memories', 'urls', 'emails'] }, ids: { type: 'array', items: { type: 'string' } }, all: { type: 'boolean', description: 'When true, move all items of the given type (ids is ignored)' }, filterProject: { type: 'string', description: 'Filter by source project ID when all=true' }, project: { type: 'string' } }, required: ['type', 'project'] } } },
+                    content: { 'application/json': { schema: { type: 'object', properties: { type: { type: 'string', enum: ['notes', 'memories', 'urls', 'emails'] }, ids: { type: 'array', items: { type: 'string' } }, visible_ids: { type: 'array', maxItems: 1000, uniqueItems: true, items: { type: 'string' }, description: 'Opt into bounded response payloads for large batches; include IDs currently displayed, or an empty array for counts only' }, all: { type: 'boolean', description: 'When true, move all items of the given type (ids is ignored)' }, filterProject: { type: 'string', description: 'Filter by source project ID when all=true' }, project: { type: 'string' } }, required: ['type', 'project'] } } },
                 },
                 responses: {
                     200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { message: { type: 'string' }, moved: { type: 'integer' }, urls: { type: 'array', items: { $ref: '#/components/schemas/Url' }, description: 'Successfully moved URLs, when type is urls.' } } } } } },
@@ -1694,10 +1698,10 @@ const swaggerSpec = {
             post: {
                 tags: ['Batch'],
                 summary: 'Batch copy items to a project',
-                description: 'For URLs, also returns urls containing the new records and rendered list items.',
+                description: 'Legacy responses are limited to 1000 items before any mutation. Supply visible_ids (at most 1000 unique IDs, including an empty array) for larger selections: exact counts cover all items, while outcomes/success_ids/urls include only requested visible IDs. failed_count is exact; failed details are capped at 1000 with failures_truncated. Saved items with deferred Obsidian synchronization remain successes and appear in warning_count/warnings.',
                 requestBody: {
                     required: true,
-                    content: { 'application/json': { schema: { type: 'object', properties: { type: { type: 'string', enum: ['notes', 'memories', 'urls', 'emails'] }, ids: { type: 'array', items: { type: 'string' } }, all: { type: 'boolean', description: 'When true, copy all items of the given type (ids is ignored)' }, filterProject: { type: 'string', description: 'Filter by source project ID when all=true' }, project: { type: 'string' } }, required: ['type', 'project'] } } },
+                    content: { 'application/json': { schema: { type: 'object', properties: { type: { type: 'string', enum: ['notes', 'memories', 'urls', 'emails'] }, ids: { type: 'array', items: { type: 'string' } }, visible_ids: { type: 'array', maxItems: 1000, uniqueItems: true, items: { type: 'string' }, description: 'Opt into bounded response payloads for large batches; include IDs currently displayed, or an empty array for counts only' }, all: { type: 'boolean', description: 'When true, copy all items of the given type (ids is ignored)' }, filterProject: { type: 'string', description: 'Filter by source project ID when all=true' }, project: { type: 'string' } }, required: ['type', 'project'] } } },
                 },
                 responses: {
                     200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { message: { type: 'string' }, copied: { type: 'integer' }, urls: { type: 'array', items: { $ref: '#/components/schemas/Url' }, description: 'Newly copied URLs, when type is urls.' } } } } } },

@@ -53,6 +53,7 @@ describe('chat result navigation', () => {
 			isSettingsPath() { return false; },
 			demoFetchOptions() {},
 			handleDemoExpiredResponse() { return false; },
+			makeAvatar: { refresh() {} },
 			mountCurrent() { events.push('mount'); },
 			openSettingsModal() {},
 			redirectToLogin() {},

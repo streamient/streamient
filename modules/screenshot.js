@@ -2,7 +2,6 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import axios from 'axios';
 import sharp from 'sharp';
 import config from '../config.js';
 
@@ -42,13 +41,8 @@ export function urlToFilename(url) {
  * Call the screenshot service and return the image buffer, or null on failure.
  */
 export async function captureScreenshot(url) {
-    if (!config.screenshotUrl) return null;
-
-    const response = await axios.post(config.screenshotUrl, { url }, {
-        responseType: 'arraybuffer',
-        timeout: 30000,
-    });
-    return Buffer.from(response.data);
+	// shortcut: remote browsers cannot enforce our pinned DNS policy; enable only with verified network isolation.
+	return null;
 }
 
 /**

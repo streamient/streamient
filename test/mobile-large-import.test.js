@@ -56,3 +56,11 @@ describe('bounded multi-gigabyte import extraction', () => {
 		}
 	});
 });
+
+it('Word extraction cancellation settles only after its isolated worker exits', async () => {
+	const { extractText } = await import('../services/import_service.js');
+	const controller = new AbortController();
+	const extraction = extractText('/no-such-word-file.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'file.docx', { signal: controller.signal });
+	controller.abort(new Error('Extraction cancelled'));
+	await assert.rejects(extraction, /Extraction cancelled/);
+});

@@ -10,20 +10,21 @@ function localPath(relativePath) {
 }
 
 class UrlListHarness {
-	constructor() {
+	constructor(type = 'url', endpoint = 'urls') {
+		this.type = type;
 		this.rows = [];
 		this.requests = [];
 		this.errors = [];
 		this.root = { scrollTop: 240 };
 		this.list = {
-			querySelector: (selector) => selector === '.url-item' ? this.rows[0] : selector === '.url-empty' ? { remove() {} } : this.rows.find((row) => selector.includes('"' + row.dataset.id + '"')),
+			querySelector: (selector) => selector === '.' + type + '-item' ? this.rows[0] : selector === '.' + type + '-empty' ? { remove() {} } : this.rows.find((row) => selector.includes('"' + row.dataset.id + '"')),
 			querySelectorAll: () => this.rows,
 			insertBefore: (row, next) => this.rows.splice(next ? this.rows.indexOf(next) : this.rows.length, 0, row),
 			replaceChildren: () => { throw new Error('Unexpected list reload'); },
 		};
 		const document = {
 			activeElement: null,
-			getElementById: (id) => id === 'urls-list' ? this.list : this.root,
+			getElementById: (id) => id === endpoint + '-list' ? this.list : this.root,
 			createElement: () => {
 				const template = { content: {} };
 				Object.defineProperty(template, 'innerHTML', { set: (html) => { template.content.firstElementChild = this.row(html); } });
@@ -35,17 +36,25 @@ class UrlListHarness {
 			api: async (method, path) => { this.requests.push([method, path]); return this.response; },
 			showError: (message) => this.errors.push(message),
 		});
+		vm.runInContext(readFileSync(localPath('public/js/list_items.js'), 'utf8'), this.context);
 		const source = readFileSync(localPath('public/js/urls.js'), 'utf8');
-		vm.runInContext(source.replace('window.__sections.urls = { mount: mount, unmount: unmount };', 'listEl = document.getElementById("urls-list"); window.handlers = { onModalSaved, onModalDeleted, onUrlUpdated, onUrlDeleted };'), this.context);
+		vm.runInContext(source.replace('window.__sections.urls = { mount: mount, unmount: unmount };', 'listEl = document.getElementById("urls-list"); itemUpdater = window.StreamientListItems.create({ list: listEl, type: "url", endpoint: "urls", bind: bindUrlItem, sortField: "createdAt" }); window.handlers = { onModalSaved, onModalDeleted, onUrlUpdated, onUrlDeleted };'), this.context);
 		this.handlers = this.context.window.handlers;
+		if (type !== 'url') {
+			this.context.type = type;
+			this.context.endpoint = endpoint;
+			vm.runInContext('const shared = window.StreamientListItems.create({ list: document.getElementById(endpoint + "-list"), type, endpoint, bind() {} }); window.handlers = { onUrlUpdated: shared.update, onUrlDeleted: shared.remove };', this.context);
+			this.handlers = this.context.window.handlers;
+		}
 	}
 	row(html) {
-		const checkbox = { checked: false, focus() {}, matches: () => true };
+		const checkbox = { checked: false, focused: false, focus() { this.focused = true; }, matches: (selector) => selector === '.batch-cb' };
+		const link = { focused: false, focus() { this.focused = true; }, matches: (selector) => selector === '.url-link' };
 		const row = {
-			dataset: { id: html.match(/data-id="([^"]+)"/)[1] }, html, checkbox,
-			querySelector: () => checkbox,
+			dataset: { id: html.match(/data-id="([^"]+)"/)[1] }, html, checkbox, link,
+			querySelector: (selector) => selector === '.url-link' ? link : checkbox,
 			addEventListener() {},
-			contains: (element) => element === checkbox,
+			contains: (element) => element === checkbox || element === link,
 			replaceWith: (next) => this.rows.splice(this.rows.indexOf(row), 1, next),
 			remove: () => this.rows.splice(this.rows.indexOf(row), 1),
 		};
@@ -84,6 +93,16 @@ describe('URLs section UI', () => {
 		assert.equal(harness.root.scrollTop, 240);
 		assert.deepEqual(harness.requests, []);
 	});
+	it('restores the focused URL link when its row is replaced', async () => {
+		const harness = new UrlListHarness();
+		await harness.handlers.onUrlUpdated({ detail: harness.url('one') });
+		harness.context.document.activeElement = harness.rows[0].link;
+		await harness.handlers.onUrlUpdated({ detail: harness.url('one', '2026-09-17T06:00:00Z') });
+		assert.equal(harness.rows[0].link.focused, true);
+		assert.equal(harness.rows[0].checkbox.focused, false);
+		assert.equal(harness.root.scrollTop, 240);
+	});
+
 	it('rejects stale updates, removes moved records, and never resurrects deleted records from delayed responses', async () => {
 		const harness = new UrlListHarness();
 		await harness.handlers.onUrlUpdated({ detail: harness.url('one', '2026-09-17T06:00:00Z') });
@@ -108,6 +127,30 @@ describe('URLs section UI', () => {
 		await harness.handlers.onUrlUpdated({ detail: { _id: 'one' } });
 		assert.equal(harness.rows[0], current);
 		assert.match(harness.errors[0], /Offline/);
+	});
+
+	it('shares stable-ID updates across note, memory and email lists, keeping focus, selection and deletion ordering', async () => {
+		for (const [type, endpoint] of [['note', 'notes'], ['memory', 'memories'], ['email', 'emails']]) {
+			const harness = new UrlListHarness(type, endpoint);
+			await harness.handlers.onUrlUpdated({ detail: harness.url('one') });
+			const first = harness.rows[0];
+			first.checkbox.checked = true;
+			harness.context.document.activeElement = first.checkbox;
+			await harness.handlers.onUrlUpdated({ detail: harness.url('one', '2026-09-17T06:00:00Z') });
+			assert.equal(harness.rows[0].checkbox.checked, true);
+			assert.equal(harness.rows[0].checkbox.focused, true);
+			assert.equal(harness.root.scrollTop, 240);
+			harness.handlers.onUrlDeleted({ detail: { _id: 'one', updatedAt: '2026-09-17T07:00:00Z' } });
+			await harness.handlers.onUrlUpdated({ detail: harness.url('one', '2026-09-17T06:00:00Z') });
+			assert.equal(harness.rows.length, 0);
+			await harness.handlers.onUrlUpdated({ detail: harness.url('one', '2026-09-17T08:00:00Z') });
+			assert.equal(harness.rows.length, 1);
+			harness.handlers.onUrlDeleted({ detail: { _id: 'one', updatedAt: '2026-09-17T07:00:00Z' } });
+			assert.equal(harness.rows.length, 1);
+			const source = readFileSync(localPath('public/js/' + endpoint + '.js'), 'utf8');
+			assert.ok(source.includes("addWindowListener('" + type + ":updated', itemUpdater.update)"));
+			assert.doesNotMatch(source, /addWindowListener\('batch-done'/);
+		}
 	});
 
 	it('reuses the AJAX section from the full-page route', () => {

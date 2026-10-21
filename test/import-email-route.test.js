@@ -40,6 +40,8 @@ describe('Email forwarding import route', () => {
 	beforeEach(() => {
 		config.emailForwardDomain = 'email.streamient.com';
 		Project.findOne = () => ({
+			select() { return this; },
+			read() { return this; },
 			lean: async () => ({
 				_id: projectId,
 				owner: '507f1f77bcf86cd799439012',
@@ -55,12 +57,14 @@ describe('Email forwarding import route', () => {
 		});
 		Email.find = () => ({
 			select: () => ({
+				read() { return this; },
 				lean: async () => [],
 			}),
 		});
 		GraphLink.updateOne = async () => ({ upsertedCount: 0 });
 		Tenant.findOne = () => ({
 			select: () => ({
+				read() { return this; },
 				lean: async () => ({ plan: 'pro' }),
 			}),
 		});
@@ -150,6 +154,8 @@ describe('Email forwarding import route', () => {
 
 	it('moves filtered imported email to trash', async () => {
 		Project.findOne = () => ({
+			select() { return this; },
+			read() { return this; },
 			lean: async () => ({
 				_id: projectId,
 				owner: '507f1f77bcf86cd799439012',

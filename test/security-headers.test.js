@@ -28,7 +28,7 @@ describe('security headers', () => {
 		assert.equal(headers['X-Frame-Options'], 'DENY');
 		assert.equal(headers['X-Content-Type-Options'], 'nosniff');
 		assert.equal(headers['X-XSS-Protection'], '0');
-		assert.equal(headers['Referrer-Policy'], 'no-referrer');
+		assert.equal(headers['Referrer-Policy'], 'same-origin');
 		assert.equal(headers['Permissions-Policy'], 'camera=(), geolocation=(), microphone=()');
 		assert.equal(nextCalled, true);
 	});

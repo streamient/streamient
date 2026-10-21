@@ -1,11 +1,12 @@
-import axios from 'axios';
+import { getPublicUrl } from './public_url.js';
 import * as cheerio from 'cheerio';
 
 /**
 * Extract content + metadata from a URL.
 */
-export async function extractUrlContent(url) {
-	const response = await axios.get(url, {
+export async function extractUrlContent(url, { signal } = {}) {
+	const response = await getPublicUrl(url, {
+		signal,
 		timeout: 15000,
 		maxRedirects: 5,
 		headers: {

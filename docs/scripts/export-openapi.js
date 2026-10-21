@@ -14,7 +14,7 @@ swaggerSpec.servers = [
 ];
 
 for (const pathItem of Object.values(swaggerSpec.paths || {})) {
-    for (const operation of Object.values(pathItem)) {
+    for (const operation of [pathItem, ...Object.values(pathItem)]) {
         if (!operation || typeof operation !== 'object' || !Array.isArray(operation.servers)) continue;
         operation.servers = operation.servers.map(server => ({
             ...server,

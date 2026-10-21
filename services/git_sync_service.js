@@ -1,3 +1,4 @@
+import { requireActiveProject } from './project_service.js';
 import { acquireTenantWork } from '../modules/tenancy.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -151,13 +152,36 @@ function isLocalChangeNewer(doc) {
 	return updatedAt > lastSyncedAt + LOCAL_CHANGE_GRACE_MS;
 }
 
-function cleanRepoPath(value, fallback) {
-	const cleaned = (value || fallback).replace(/^\/|\/$/g, '');
-	return cleaned || fallback;
+function cleanRepoPath(value, fallback = '') {
+	const candidate = value || fallback;
+	if (typeof candidate !== 'string' || candidate.includes('\\') || candidate.includes('\0') || path.posix.isAbsolute(candidate) || /^[a-z]:/i.test(candidate) || candidate.split('/').some((part) => part === '..' || part === '.')) throw new Error('Unsafe Git repository path');
+	return candidate.replace(/\/$/, '');
 }
 
 function cleanSyncBase(value) {
-	return (value || '/').replace(/^\/|\/$/g, '');
+	return value === '/' || !value ? '' : cleanRepoPath(value);
+}
+
+function validateRepoPaths(data) {
+	if (data.sync_path !== undefined) cleanSyncBase(data.sync_path);
+	if (data.notes_path !== undefined) cleanRepoPath(data.notes_path, 'notes');
+	if (data.memories_path !== undefined) cleanRepoPath(data.memories_path, 'memories');
+}
+
+// Reject symlinks, including dangling links and directory components, before any I/O.
+function containedRepoPath(dir, ...parts) {
+	const relative = parts.map((part) => cleanRepoPath(part)).filter(Boolean).join('/');
+	const root = path.resolve(dir);
+	let current = root;
+	for (const component of ['', ...relative.split('/').filter(Boolean)]) {
+		current = path.join(current, component);
+		try {
+			if (fs.lstatSync(current).isSymbolicLink()) throw new Error('Unsafe Git repository symlink');
+		} catch (err) {
+			if (err.code !== 'ENOENT') throw err;
+		}
+	}
+	return path.join(root, relative);
 }
 
 function safeFileName(value) {
@@ -336,9 +360,11 @@ export async function backfillGitSyncMode() {
 }
 
 export async function createGitRepo(userId, hostId, data, ctx = {}) {
+	validateRepoPaths(data);
+	const project = await requireActiveProject(hostId, data.project);
 	const tokenEncrypted = data.auth_token ? encrypt(data.auth_token) : '';
 	const repo = await GitRepo.create({
-		project: data.project,
+		project,
 		owner: userId,
 		host_id: hostId,
 		name: data.name || '',
@@ -388,6 +414,17 @@ export async function listSyncLogs(hostId, repoId, limit = 200) {
 }
 
 export async function updateGitRepo(hostId, repoId, data, ctx = {}) {
+	validateRepoPaths(data);
+	if (['sync_path', 'notes_path', 'memories_path'].some((field) => data[field] !== undefined)) {
+		const existing = await GitRepo.findOne({ _id: repoId, host_id: hostId }).lean();
+		if (!existing) return null;
+		const config = { ...existing, ...data };
+		const dir = repoDir(hostId, repoId);
+		const base = cleanSyncBase(config.sync_path);
+		containedRepoPath(dir, base);
+		containedRepoPath(dir, base, cleanRepoPath(config.notes_path, 'notes'));
+		containedRepoPath(dir, base, cleanRepoPath(config.memories_path, 'memories'));
+	}
 	const update = {};
 	if (data.name !== undefined) update.name = data.name;
 	if (data.repo_url !== undefined) update.repo_url = data.repo_url;
@@ -432,6 +469,8 @@ async function prepareSyncRepo(repoId, userId, hostId, ctx = { channel: 'api' })
 	const gitRepoDoc = await queryForSave(GitRepo.findOne({ _id: repoId, host_id: hostId }));
 	if (!gitRepoDoc) throw new Error('Git repo not found');
 	if (!gitRepoDoc.enabled) throw new Error('Git sync is disabled for this repo');
+	validateRepoPaths(gitRepoDoc);
+	await requireActiveProject(hostId, gitRepoDoc.project);
 
 	const lock = ctx.skip_lock ? null : await acquireLock(repoId);
 	if (!ctx.skip_lock && !lock) throw new Error('Sync already in progress');
@@ -480,6 +519,8 @@ async function executeSyncRepo(repoId, userId, hostId, ctx, gitRepoDoc, summary)
 	const releaseAccountWork = await acquireTenantWork(hostId);
 	try {
 	try {
+		validateRepoPaths(gitRepoDoc);
+		await requireActiveProject(hostId, gitRepoDoc.project);
 		const token = gitRepoDoc.auth_token ? decrypt(gitRepoDoc.auth_token) : '';
 		const dir = repoDir(hostId, repoId);
 		const branch = gitRepoDoc.branch || 'main';
@@ -563,11 +604,17 @@ async function executeSyncRepo(repoId, userId, hostId, ctx, gitRepoDoc, summary)
 
 async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, summary) {
 	const mdFiles = findMarkdownFiles(dir, syncBase);
+	for (const Model of [Note, Memory]) {
+		const linked = await Model.find({ host_id: hostId, 'git_source.repo_id': gitRepo._id });
+		for (const item of linked) if (item.git_source?.file_path) containedRepoPath(dir, syncBase, item.git_source.file_path);
+	}
 	const activeFilePaths = new Set(mdFiles);
 
 	for (const relPath of mdFiles) {
-		const absPath = path.join(dir, syncBase, relPath);
-		const raw = fs.readFileSync(absPath, 'utf8');
+		const absPath = containedRepoPath(dir, syncBase, relPath);
+		const fd = fs.openSync(absPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+		let raw;
+		try { raw = fs.readFileSync(fd, 'utf8'); } finally { fs.closeSync(fd); }
 		const sha = fileSha(raw);
 		const parsed = parseMarkdownFile(raw);
 
@@ -720,14 +767,14 @@ async function trashDeletedGitItems(gitRepo, hostId, activeFilePaths, summary) {
 // already taken (by a pre-existing repo file or another item written this run), pick the
 // next free `name-N.md`. Import runs before push, so the clone reflects the remote here.
 function resolveNonCollidingPath(dir, syncBase, relPath) {
-	if (!fs.existsSync(path.join(dir, syncBase, relPath))) return relPath;
+	if (!fs.existsSync(containedRepoPath(dir, syncBase, relPath))) return relPath;
 	const dirName = path.dirname(relPath);
 	const ext = path.extname(relPath);
 	const base = path.basename(relPath, ext);
 	const join = (name) => path.join(dirName, name).split(path.sep).join('/');
 	for (let i = 2; i < 1000; i++) {
 		const candidate = join(`${base}-${i}${ext}`);
-		if (!fs.existsSync(path.join(dir, syncBase, candidate))) return candidate;
+		if (!fs.existsSync(containedRepoPath(dir, syncBase, candidate))) return candidate;
 	}
 	return join(`${base}-${crypto.randomBytes(4).toString('hex')}${ext}`);
 }
@@ -763,7 +810,7 @@ async function pushToGit(git, dir, syncBase, gitRepo, userId, hostId, token, sum
 			continue;
 		}
 
-		let absPath = path.join(dir, syncBase, relPath);
+		let absPath = containedRepoPath(dir, syncBase, relPath);
 
 		if (note.git_source?.last_sha === sha && fs.existsSync(absPath)) {
 			summary.skipped++;
@@ -772,11 +819,12 @@ async function pushToGit(git, dir, syncBase, gitRepo, userId, hostId, token, sum
 
 		if (isNewPath) {
 			relPath = resolveNonCollidingPath(dir, syncBase, relPath);
-			absPath = path.join(dir, syncBase, relPath);
+			absPath = containedRepoPath(dir, syncBase, relPath);
 		}
 
 		fs.mkdirSync(path.dirname(absPath), { recursive: true });
-		fs.writeFileSync(absPath, md, 'utf8');
+		const fd = fs.openSync(containedRepoPath(dir, syncBase, relPath), fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | fs.constants.O_NOFOLLOW);
+		try { fs.writeFileSync(fd, md, 'utf8'); } finally { fs.closeSync(fd); }
 
 		pendingUpdates.push({ model: 'Note', id: note._id, relPath, sha });
 		hasChanges = true;
@@ -809,7 +857,7 @@ async function pushToGit(git, dir, syncBase, gitRepo, userId, hostId, token, sum
 			continue;
 		}
 
-		let absPath = path.join(dir, syncBase, relPath);
+		let absPath = containedRepoPath(dir, syncBase, relPath);
 
 		if (mem.git_source?.last_sha === sha && fs.existsSync(absPath)) {
 			summary.skipped++;
@@ -818,11 +866,12 @@ async function pushToGit(git, dir, syncBase, gitRepo, userId, hostId, token, sum
 
 		if (isNewPath) {
 			relPath = resolveNonCollidingPath(dir, syncBase, relPath);
-			absPath = path.join(dir, syncBase, relPath);
+			absPath = containedRepoPath(dir, syncBase, relPath);
 		}
 
 		fs.mkdirSync(path.dirname(absPath), { recursive: true });
-		fs.writeFileSync(absPath, md, 'utf8');
+		const fd = fs.openSync(containedRepoPath(dir, syncBase, relPath), fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | fs.constants.O_NOFOLLOW);
+		try { fs.writeFileSync(fd, md, 'utf8'); } finally { fs.closeSync(fd); }
 
 		pendingUpdates.push({ model: 'Memory', id: mem._id, relPath, sha });
 		hasChanges = true;
@@ -1012,14 +1061,15 @@ function commitMemoryContent(commit, message, files, gitRepo) {
 
 function findMarkdownFiles(baseDir, syncBase) {
 	const results = [];
-	const root = path.join(baseDir, syncBase);
+	const root = containedRepoPath(baseDir, syncBase);
 	if (!fs.existsSync(root)) return results;
 
 	function walk(dir, prefix) {
 		const entries = fs.readdirSync(dir, { withFileTypes: true });
 		for (const entry of entries) {
+			if (entry.isSymbolicLink()) throw new Error('Unsafe Git repository symlink');
 			if (entry.name.startsWith('.')) continue;
-			const fullPath = path.join(dir, entry.name);
+			const fullPath = containedRepoPath(baseDir, path.relative(baseDir, path.join(dir, entry.name)));
 			const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
 			if (entry.isDirectory()) {
 				walk(fullPath, relPath);

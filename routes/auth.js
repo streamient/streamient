@@ -1,4 +1,5 @@
 import config from '../config.js';
+import csrfProtection from '../middleware/csrf.js';
 import { Tenant } from '../modules/tenancy.js';
 import { previewAccountDeletion, requestAccountDeletion, pruneDeletedAccountSession } from '../services/account_cleanup_service.js';
 import { Router } from 'express';
@@ -46,7 +47,7 @@ router.get('/api/v1/account/deletion', async (req, res) => {
 	} catch (error) { return res.status(error.status || 503).json({ error: error.status ? error.message : 'Unable to verify account deletion. Please try again.', code: error.code || 'deletion_unavailable' }); }
 });
 
-router.post('/api/v1/account/deletion', async (req, res) => {
+router.post('/api/v1/account/deletion', csrfProtection, async (req, res) => {
 	try {
 		const { tenant, actor } = await deletionActor(req);
 		const confirmation = req.session.accountDeletionConfirmation;
@@ -147,7 +148,7 @@ router.post('/signup', async (req, res) => {
 			expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000),
 		});
 
-		await sendVerificationEmail(email, verificationToken);
+		await sendVerificationEmail(email, verificationToken, name);
 
 		res.status(200).json({
 			message: 'We sent a confirmation link to your email. Please verify to activate your account.',
@@ -682,7 +683,7 @@ router.get('/api/v1/admin/users/search', requireSysadmin, async (req, res) => {
 
 // ---- Sysadmin: impersonate a user ----
 
-router.post('/api/v1/admin/impersonate', requireSysadmin, async (req, res) => {
+router.post('/api/v1/admin/impersonate', csrfProtection, requireSysadmin, async (req, res) => {
 	try {
 		const { userId } = req.body;
 		if (!userId) return res.status(400).json({ error: 'userId required' });
@@ -703,7 +704,7 @@ router.post('/api/v1/admin/impersonate', requireSysadmin, async (req, res) => {
 
 // ---- Sysadmin: exit impersonation ----
 
-router.post('/api/v1/admin/exit-impersonation', requireSysadmin, (req, res) => {
+router.post('/api/v1/admin/exit-impersonation', csrfProtection, requireSysadmin, (req, res) => {
 	delete req.session.userId;
 	delete req.session.tenantId;
 	delete req.session.host_id;

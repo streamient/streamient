@@ -20,6 +20,7 @@ import managani from './modules/managani.js';
 
 import { createApiLimiters } from './middleware/rate_limit.js';
 import securityHeaders from './middleware/security_headers.js';
+import { browserCsrfProtection } from './middleware/csrf.js';
 import { verifyScreenshotSignature, resolveScreenshotPath } from './modules/screenshot.js';
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './swagger.js';
@@ -93,7 +94,7 @@ try {
     app.locals.v = Date.now().toString(36);
 }
 
-// Public import routes parse their own raw payloads before the global JSON middleware.
+// Public email ingest uses its recipient capability, never cookie authentication, and parses raw payloads before JSON.
 app.use('/import', importRoutes);
 
 const mobileOrigins = new Set([
@@ -202,6 +203,7 @@ app.use((req, res, next) => {
 });
 
 app.use(sessionMiddleware);
+app.use(browserCsrfProtection);
 
 app.use(resolveWhiteLabelRequest);
 

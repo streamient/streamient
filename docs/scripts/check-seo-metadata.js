@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import spec from '../.vitepress/data/openapi.json' with { type: 'json' };
 
 const docsRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outputRoot = path.join(docsRoot, '.vitepress', 'dist');
@@ -48,12 +49,19 @@ const pages = findHtmlFiles(outputRoot)
     });
 
 const errors = [];
+for (const definition of [spec, ...Object.values(spec.paths).flatMap(item => [item, ...Object.values(item)])]) {
+    for (const server of definition?.servers || []) {
+        if (!URL.canParse(server.url)) errors.push(`OpenAPI server URL must be absolute: ${server.url}`);
+    }
+}
 for (const page of pages) {
     if (!page.title) errors.push(`${page.file}: missing title`);
     if (!page.description) errors.push(`${page.file}: missing meta description`);
     if (page.description === fallbackDescription) errors.push(`${page.file}: uses the site-wide fallback description`);
     if (page.description.length > 160) errors.push(`${page.file}: meta description exceeds 160 characters`);
     if (page.canonicals.length !== 1) errors.push(`${page.file}: expected one canonical, found ${page.canonicals.length}`);
+    const expectedCanonical = new URL(page.file.replace(/(^|\/)index\.html$/, '$1').replace(/\.html$/, ''), docsOrigin + '/').href;
+    if (page.canonicals[0] !== expectedCanonical) errors.push(`${page.file}: canonical must point to ${expectedCanonical}`);
     if (page.canonicals[0]) {
         try {
             const canonical = new URL(page.canonicals[0]);

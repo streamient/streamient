@@ -1,6 +1,8 @@
 doctype html
 html(lang="en")
 	head
+		meta(name="csrf-token" content=csrf_token)
+		script(src=`/static/v-${v}/js/csrf.js`)
 		meta(charset="UTF-8")
 		meta(name="viewport" content="width=device-width, initial-scale=1")
 		title Admin Login — Streamient
@@ -21,13 +23,14 @@ html(lang="en")
 		link(href=`/static/v-${v}/css/app.css` rel="stylesheet")
 		link(href=`/static/v-${v}/css/streamient-tabler.css` rel="stylesheet")
 	body.backend-admin
-		button.btn.btn-outline-secondary.btn-sm.position-absolute.top-0.end-0.m-3(type="button" data-admin-theme-toggle data-theme-storage-key="st-theme" data-theme-change-event="st-theme-change" aria-label="Toggle color theme" title="Toggle color theme")
-			span.admin-theme-label-dark
-				!= icon('darkMode', 'me-1')
-				span Dark theme
-			span.admin-theme-label-light
-				!= icon('lightMode', 'me-1')
-				span Light theme
+		.d-flex.justify-content-end.p-3
+			button.btn.btn-outline-secondary.btn-sm(type="button" data-admin-theme-toggle data-theme-storage-key="st-theme" data-theme-change-event="st-theme-change" aria-label="Toggle color theme" title="Toggle color theme")
+				span.admin-theme-label-dark
+					!= icon('darkMode', 'me-1')
+					span Dark theme
+				span.admin-theme-label-light
+					!= icon('lightMode', 'me-1')
+					span Light theme
 		.container
 			.row.justify-content-center.mt-5
 				.col-md-4
@@ -39,6 +42,7 @@ html(lang="en")
 								.alert.alert-danger= error
 
 							form(action="/admin/login" method="POST")
+								input(type="hidden" name="_csrf" value=csrf_token)
 								.mb-3
 									label.form-label(for="email") Email
 									input.form-control#email(type="email" name="email" required autofocus)

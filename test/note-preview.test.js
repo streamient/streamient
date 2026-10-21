@@ -34,11 +34,12 @@ describe('note preview rendering', () => {
 		assert.equal(result, '<markdown>## Full note</markdown>');
 	});
 
-	it('keeps Memory and Obsidian preview paths unchanged', () => {
+	it('keeps Markdown and Obsidian previews while preferring live rich text', () => {
 		const { result } = renderPreview('**Memory**', '<p>Memory</p>');
 		assert.equal(result, '<markdown>**Memory**</markdown>');
+		assert.equal(renderPreview('Memory', '<p><strong>Memory</strong></p>', true).result, '<p><strong>Memory</strong></p>');
 		assert.match(source, /else preview\.innerHTML = rmRenderPreview\(rmTextContent, rmContent, true\);/);
-		assert.match(source, /else preview\.innerHTML = rmRenderPreview\(rmTextContent, rmContent\);/);
+		assert.match(source, /else preview\.innerHTML = rmRenderPreview\(rmTextContent, rmContent, Boolean\(rmEditor\)\);/);
 		assert.match(source, /if \(rmIsObsidianSynced\) void rmRenderObsidianPreview\(preview\);/);
 	});
 });

@@ -165,6 +165,8 @@ Default service ports:
 
 ### Local development
 
+Read the [contribution guide](.github/CONTRIBUTING.md) before changing the repository. Base contribution branches and pull requests on `develop`; `main` is reserved for authorized releases.
+
 For repository development, make sure MongoDB, Memcached, and Typesense are available, then run:
 
 ```bash

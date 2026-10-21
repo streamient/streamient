@@ -1,3 +1,8 @@
+import { beforeEach as beforeProject, afterEach as afterProject } from 'node:test';
+import { mockActiveProject } from './helpers/active-project.js';
+let restoreProject;
+beforeProject(() => { restoreProject = mockActiveProject(); });
+afterProject(() => { restoreProject(); });
 import { beforeEach as beforeAccountWork, afterEach as afterAccountWork } from 'node:test';
 import { mockTenantWork } from './helpers/tenant-work.js';
 let restoreAccountWork;
@@ -7,6 +12,7 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import test from 'node:test';
@@ -179,7 +185,7 @@ async function createRemoteRepo() {
 function makeRepo(remote, overrides = {}) {
 	return makeDoc({
 		_id: oid(overrides.id || `repo-${Math.random().toString(16).slice(2)}`),
-		project: oid(overrides.project || 'project-1'),
+		project: overrides.project || 'project-1',
 		owner: oid('user-1'),
 		host_id: overrides.hostId || `host-${Math.random().toString(16).slice(2)}`,
 		name: overrides.name || 'Repo',
@@ -460,4 +466,66 @@ test('backfillGitSyncMode sets read_write only on repos missing sync_mode', asyn
 	} finally {
 		GitRepo.updateMany = original;
 	}
+});
+
+test('rejects unsafe configuration before creating or updating records', async () => {
+	for (const unsafe of ['../outside', 'notes/../../outside', '/tmp/outside', 'notes\\outside', 'C:/outside', 'notes/./outside', 'bad\0path']) {
+		for (const field of ['sync_path', 'notes_path', 'memories_path']) await assert.rejects(updateGitRepo('host-1', 'repo-1', { [field]: unsafe }), /Unsafe Git repository path/);
+	}
+});
+
+test('unsafe existing Git paths fail before scanning or trashing records', async (t) => {
+	const remote = await createRemoteRepo();
+	t.after(() => fs.rmSync(remote.root, { recursive: true, force: true }));
+	const repo = makeRepo(remote, { sync_path: '../outside', commit_sync_enabled: false });
+	const note = makeDoc({ _id: oid('retained'), host_id: repo.host_id, git_source: { repo_id: repo._id, file_path: 'missing.md' } });
+	installModelMocks({ repos: [repo], notes: [note], memories: [] });
+	await assert.rejects(syncRepo(repo._id.toString(), 'user-1', repo.host_id, { skip_lock: true, skip_audit: true }), /Unsafe Git repository path/);
+	assert.equal(note.in_trash, undefined);
+});
+
+test('rejects symlink imports and preserves missing linked records', async (t) => {
+	const remote = await createRemoteRepo();
+	t.after(() => fs.rmSync(remote.root, { recursive: true, force: true }));
+	const secret = path.join(remote.root, 'secret.md');
+	fs.writeFileSync(secret, 'outside secret');
+	fs.symlinkSync(secret, path.join(remote.work, 'escape.md'));
+	await commitAll(remote.work, 'symlink');
+	await git(remote.work, ['push']);
+	const repo = makeRepo(remote, { commit_sync_enabled: false });
+	t.after(() => cleanupClone(repo.host_id));
+	const note = makeDoc({ _id: oid('retained'), host_id: repo.host_id, git_source: { repo_id: repo._id, file_path: 'missing.md' } });
+	const state = { repos: [repo], notes: [note], memories: [] };
+	installModelMocks(state);
+	await assert.rejects(syncRepo(repo._id.toString(), 'user-1', repo.host_id, { skip_lock: true, skip_audit: true }), /Unsafe Git repository symlink/);
+	assert.equal(note.in_trash, undefined);
+	assert.equal(state.notes.length, 1);
+	assert.equal(fs.readFileSync(secret, 'utf8'), 'outside secret');
+});
+
+test('rejects traversal in stored export identities without writing or trashing', async (t) => {
+	const remote = await createRemoteRepo();
+	t.after(() => fs.rmSync(remote.root, { recursive: true, force: true }));
+	const repo = makeRepo(remote, { commit_sync_enabled: false });
+	t.after(() => cleanupClone(repo.host_id));
+	const note = makeDoc({ _id: oid('unsafe'), host_id: repo.host_id, project: repo.project, title: 'Escape', content: '<p>escape</p>', git_source: { repo_id: repo._id, file_path: '../../outside.md' } });
+	installModelMocks({ repos: [repo], notes: [note], memories: [] });
+	await assert.rejects(syncRepo(repo._id.toString(), 'user-1', repo.host_id, { skip_lock: true, skip_audit: true }), /Unsafe Git repository path/);
+	assert.equal(note.in_trash, undefined);
+	assert.equal(fs.existsSync(path.join(process.cwd(), 'assets', 'git-repos', 'outside.md')), false);
+});
+
+test('configuration updates reject existing checkout symlink directories before saving', async (t) => {
+	const host = `host-config-${crypto.randomUUID()}`;
+	const clone = path.join(process.cwd(), 'assets', 'git-repos', host, 'repo');
+	fs.mkdirSync(clone, { recursive: true });
+	fs.symlinkSync(os.tmpdir(), path.join(clone, 'unsafe'));
+	t.after(() => cleanupClone(host));
+	const find = GitRepo.findOne;
+	const update = GitRepo.findOneAndUpdate;
+	t.after(() => { GitRepo.findOne = find; GitRepo.findOneAndUpdate = update; });
+	GitRepo.findOne = () => ({ lean: async () => ({ sync_path: '/', notes_path: 'notes', memories_path: 'memories' }) });
+	GitRepo.findOneAndUpdate = () => { throw new Error('unsafe configuration must not save'); };
+	await assert.rejects(updateGitRepo(host, 'repo', { notes_path: 'unsafe/notes' }), /Unsafe Git repository symlink/);
+	await assert.rejects(updateGitRepo(host, 'repo', { sync_path: 'unsafe' }), /Unsafe Git repository symlink/);
 });
