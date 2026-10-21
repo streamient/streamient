@@ -54,6 +54,8 @@ for (const page of pages) {
     if (page.description === fallbackDescription) errors.push(`${page.file}: uses the site-wide fallback description`);
     if (page.description.length > 160) errors.push(`${page.file}: meta description exceeds 160 characters`);
     if (page.canonicals.length !== 1) errors.push(`${page.file}: expected one canonical, found ${page.canonicals.length}`);
+    const expectedCanonical = new URL(page.file.replace(/(^|\/)index\.html$/, '$1').replace(/\.html$/, ''), docsOrigin + '/').href;
+    if (page.canonicals[0] !== expectedCanonical) errors.push(`${page.file}: canonical must point to ${expectedCanonical}`);
     if (page.canonicals[0]) {
         try {
             const canonical = new URL(page.canonicals[0]);

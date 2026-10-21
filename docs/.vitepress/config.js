@@ -10,16 +10,6 @@ const sidebar = useSidebar({ spec, linkPrefix: '/api/operations/' });
 const docsBase = process.env.STREAMIENT_DOCS_BASE || '/docs/';
 const docsHostname = process.env.STREAMIENT_DOCS_HOSTNAME || 'https://docs.streamient.com';
 
-function canonicalUrlForPage(page, pageData) {
-    const generatedPath = page.replace(/\[operationId\]/g, pageData.params?.operationId || '[operationId]');
-    const relativePath = generatedPath
-        .replace(/(?:^|\/)index\.md$/, '')
-        .replace(/\.md$/, '');
-    const routePath = relativePath ? `/${relativePath}` : '/';
-    const normalizedPath = routePath === '/' || routePath.endsWith('/') ? routePath : `${routePath}/`;
-    return new URL(normalizedPath, docsHostname).href;
-}
-
 export default defineConfig({
     title: 'Streamient Docs',
     description: 'Documentation for Streamient — Notes, Memory, URLs, AI Chat',
@@ -28,15 +18,11 @@ export default defineConfig({
     srcExclude: ['AGENTS.md'],
     sitemap: {
         hostname: docsHostname,
-        transformItems(items) {
-            return items.map(item => ({
-                ...item,
-                url: item.url === '/' || item.url.endsWith('/') ? item.url : `${item.url}/`,
-            }));
-        },
     },
 
     transformPageData(pageData) {
+        const canonical = new URL(pageData.relativePath.replace(/(^|\/)index\.md$/, '$1').replace(/\.md$/, ''), docsHostname + '/').href;
+        pageData.frontmatter.head = [...(pageData.frontmatter.head || []), ['link', { rel: 'canonical', href: canonical }]];
         if (!pageData.params?.seoTitle || !pageData.params?.seoDescription) return;
 
         return {
@@ -44,12 +30,6 @@ export default defineConfig({
             titleTemplate: 'Streamient API',
             description: pageData.params.seoDescription,
         };
-    },
-
-    transformHead({ page, pageData }) {
-        return [
-            ['link', { rel: 'canonical', href: canonicalUrlForPage(page, pageData) }],
-        ];
     },
 
     head: [
