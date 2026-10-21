@@ -12092,7 +12092,7 @@
     "/admin/api/accounts/{tenantId}/deletion": {
       "servers": [
         {
-          "url": "/"
+          "url": "https://your-instance.example.com/"
         }
       ],
       "parameters": [
@@ -12129,7 +12129,7 @@
     "/admin/api/accounts/{tenantId}/deletion/retry": {
       "servers": [
         {
-          "url": "/"
+          "url": "https://your-instance.example.com/"
         }
       ],
       "parameters": [

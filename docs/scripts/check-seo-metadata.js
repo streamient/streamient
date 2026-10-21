@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import spec from '../.vitepress/data/openapi.json' with { type: 'json' };
 
 const docsRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outputRoot = path.join(docsRoot, '.vitepress', 'dist');
@@ -48,6 +49,11 @@ const pages = findHtmlFiles(outputRoot)
     });
 
 const errors = [];
+for (const definition of [spec, ...Object.values(spec.paths).flatMap(item => [item, ...Object.values(item)])]) {
+    for (const server of definition?.servers || []) {
+        if (!URL.canParse(server.url)) errors.push(`OpenAPI server URL must be absolute: ${server.url}`);
+    }
+}
 for (const page of pages) {
     if (!page.title) errors.push(`${page.file}: missing title`);
     if (!page.description) errors.push(`${page.file}: missing meta description`);
