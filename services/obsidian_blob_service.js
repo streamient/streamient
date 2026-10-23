@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, readdir, rename, rm, statfs } from 'node:fs/promises';
+import { link, mkdir, readdir, rename, rm, statfs } from 'node:fs/promises';
 import { once } from 'node:events';
 
 import config from '../config.js';
@@ -279,8 +279,9 @@ export async function completeUpload(userId, hostId, id) {
 		let installed = false;
 		await mkdir(path.dirname(destination), { recursive: true });
 		try {
-			await rename(uploadDir(hostId, upload._id), destination);
+			await mkdir(destination);
 			installed = true;
+			for (const chunk of upload.chunks) await link(path.join(uploadDir(hostId, upload._id), chunk.file_name), path.join(destination, chunk.file_name));
 			blob = await ObsidianBlob.create({
 				host_id: hostId,
 				sha256,
@@ -298,6 +299,7 @@ export async function completeUpload(userId, hostId, id) {
 	} else {
 		await rm(uploadDir(hostId, upload._id), { recursive: true, force: true }).catch(() => {});
 	}
+	await rm(uploadDir(hostId, upload._id), { recursive: true, force: true });
 	upload.state = 'complete';
 	upload.blob = blob._id;
 	upload.error = '';

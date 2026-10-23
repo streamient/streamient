@@ -472,8 +472,8 @@ router.post('/2fa/confirm', async (req, res) => {
 		const result = verifySync({ token: code, secret: user.totp_secret });
 		if (!result.valid) return res.status(400).json({ error: 'Invalid code — try again' });
 
-		user.totp_enabled = true;
-		await user.save();
+		const enabled = await User.updateOne({ _id: req.session.userId, totp_enabled: { $ne: true }, totp_secret: user.totp_secret }, { $set: { totp_enabled: true } });
+		if (!enabled.matchedCount) return res.status(409).json({ error: '2FA setup changed. Please start setup again.' });
 
 		res.json({ message: '2FA enabled successfully' });
 	} catch (err) {

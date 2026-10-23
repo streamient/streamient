@@ -140,3 +140,16 @@ describe('Obsidian blob publication', () => {
 		assert.equal(fixture.rows.size, 1);
 	});
 });
+
+describe('completed upload publication', () => {
+	it('publishes only accepted chunk files, excluding overlapping attempts', async (t) => {
+		const fixture = new BlobFixture(t);
+		const plain = Buffer.from('Accepted final chunk');
+		await fixture.stageUpload(plain, 'overlap');
+		fs.writeFileSync(path.join(fixture.root, 'uploads', 'host', 'overlap', 'unaccepted.part'), 'Unaccepted concurrent bytes');
+		await completeUpload('owner', 'host', 'overlap');
+		const blob = [...fixture.rows.values()][0];
+		assert.deepEqual(fs.readdirSync(path.join(fixture.root, blob.storage_key)).sort(), blob.chunks.map((chunk) => chunk.file_name).sort());
+		assert.deepEqual(await readBlobBuffer(blob, 'host'), plain);
+	});
+});

@@ -8,7 +8,7 @@ import { OAuthRefreshToken } from '../model/oauth_refresh_token.js';
 import { OAuthConsent } from '../model/oauth_consent.js';
 import { OAuthClient } from '../model/oauth_client.js';
 import { AuditLog } from '../model/audit_log.js';
-import { exchangeAuthorizationCode, exchangeRefreshToken, issueAuthorizationCode, issueTokenPair, revokeConsent } from '../services/oauth_service.js';
+import { exchangeAuthorizationCode, exchangeRefreshToken, issueAuthorizationCode, issueTokenPair, revokeConsent, approveConsent } from '../services/oauth_service.js';
 import { getMcpEndpointUrl } from '../modules/oauth.js';
 import { mockTenantWork } from './helpers/tenant-work.js';
 const hash = (value) => crypto.createHash('sha256').update(value).digest('hex');
@@ -69,6 +69,16 @@ test('isolated MongoDB code races and transactional refresh rotation rollback', 
 	await assert.rejects(exchangeRefreshToken({ refreshToken: rotated.find((r) => r.status === 'fulfilled').value.refresh_token, client }), /invalid or expired/);
 	await assert.rejects(issueTokenPair({ userId: row.user, tenantId: row.tenant, host_id: row.host_id, client, scopes: ['mcp:read'], resource: row.resource }), /revoked/);
 	await assert.rejects(issueAuthorizationCode({ userId: row.user, tenantId: row.tenant, host_id: row.host_id, client, redirectUri: row.redirect_uri, scopes: ['mcp:read'], resource: row.resource, codeChallenge: challenge(verifier) }), /revoked/);
+	await OAuthConsent.updateOne({ _id: consent._id }, { $set: { scopes: ['mcp:read', 'mcp:write'] } });
+	const regranted = await approveConsent({ userId: row.user, tenantId: row.tenant, host_id: row.host_id, client, requestedScopes: ['mcp:read'], resource: row.resource, redirectUri: row.redirect_uri, ctx: { channel: 'api' } });
+	assert.equal(String(regranted._id), String(consent._id));
+	assert.deepEqual(regranted.scopes, ['mcp:read']);
+	const extended = await approveConsent({ userId: row.user, tenantId: row.tenant, host_id: row.host_id, client, requestedScopes: ['mcp:write'], resource: row.resource, redirectUri: row.redirect_uri, ctx: { channel: 'api' } });
+	assert.deepEqual(new Set(extended.scopes), new Set(['mcp:read', 'mcp:write']));
+	assert.equal(await OAuthConsent.countDocuments(), 1);
+	const reconnected = await issueAuthorizationCode({ userId: row.user, tenantId: row.tenant, host_id: row.host_id, client, redirectUri: row.redirect_uri, scopes: ['mcp:read'], resource: row.resource, codeChallenge: challenge(verifier) });
+	await exchangeAuthorizationCode({ code: reconnected, clientId: client.client_id, redirectUri: row.redirect_uri, codeVerifier: verifier });
+
 
 });
 

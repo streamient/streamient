@@ -635,10 +635,6 @@ export async function findConsent(options) {
 	return consentLookupQuery(options).lean();
 }
 
-async function findConsentForSave(options) {
-	return queryForSave(consentLookupQuery(options));
-}
-
 export function consentCoversScopes(consent, requestedScopes) {
 	if (!consent) return false;
 	const granted = new Set(normalizeScopeInput(consent.scopes || []));
@@ -646,8 +642,7 @@ export function consentCoversScopes(consent, requestedScopes) {
 }
 
 export async function approveConsent({ userId, tenantId, host_id, client, requestedScopes, resource, redirectUri, ctx = {} }) {
-	const existing = await findConsentForSave({ userId, host_id, clientId: client.client_id, resource });
-	const scopes = normalizeScopesForResource([...(existing?.scopes || []), ...normalizeScopeInput(requestedScopes)], resource);
+	const scopes = normalizeScopesForResource(requestedScopes, resource);
 	const redirectUris = [...new Set([...(client.redirect_uris || []), redirectUri].filter(Boolean))];
 	const snapshot = {
 		client_name: client.client_name,
@@ -658,32 +653,25 @@ export async function approveConsent({ userId, tenantId, host_id, client, reques
 		scopes,
 	};
 
-	const consent = existing || new OAuthConsent({
-		user: userId,
-		tenant: tenantId,
-		host_id,
-		client_id: client.client_id,
-		resource,
-		granted_at: new Date(),
-	});
-
-	consent.client_name = snapshot.client_name;
-	consent.client_uri = snapshot.client_uri;
-	consent.logo_uri = snapshot.logo_uri;
-	consent.redirect_uris = snapshot.redirect_uris;
-	consent.registration_source = snapshot.registration_source;
-	consent.scopes = scopes;
-	consent.revoked_at = undefined;
-	consent.last_used_at = new Date();
-	await consent.save();
+	const now = new Date();
+	const result = await OAuthConsent.findOneAndUpdate({ user: userId, host_id, client_id: client.client_id, resource }, [{ $set: {
+		...Object.fromEntries(Object.entries(snapshot).filter(([key]) => key !== 'scopes').map(([key, value]) => [key, { $literal: value }])),
+		tenant: { $literal: new mongoose.Types.ObjectId(tenantId) },
+		granted_at: { $ifNull: ['$granted_at', now] },
+		createdAt: { $ifNull: ['$createdAt', now] },
+		last_used_at: now,
+		scopes: { $cond: [{ $ne: [{ $ifNull: ['$revoked_at', null] }, null] }, { $literal: scopes }, { $setUnion: [{ $ifNull: ['$scopes', []] }, { $literal: scopes }] }] },
+		revoked_at: null,
+	} }], { upsert: true, returnDocument: 'after', includeResultMetadata: true, updatePipeline: true }).lean();
+	const consent = result.value;
 
 	audit.log({
-		action: existing ? 'update' : 'create',
+		action: result.lastErrorObject.updatedExisting ? 'update' : 'create',
 		resource: 'oauth_consent',
 		resource_id: consent._id.toString(),
 		user_id: userId,
 		host_id,
-		details: { client_id: client.client_id, client_name: client.client_name, scopes },
+		details: { client_id: client.client_id, client_name: client.client_name, scopes: consent.scopes },
 		...ctx,
 	});
 

@@ -88,3 +88,28 @@ test('logout marks the current SID and disconnects its sockets before destroying
 		if (!failure) assert.equal(html ? res.location : res.body.message, html ? '/login' : 'Logged out');
 	}
 });
+
+test('TOTP confirmation only enables the exact secret that was verified', async () => {
+	for (const concurrentSetup of [false, true]) {
+		let currentSecret = 'verified-secret';
+		let enabled = false;
+		const route = handler('auth.js', "router.post('/2fa/confirm'", "router.post('/2fa/disable'", {
+			queryForSave: (value) => value,
+			User: {
+				findById: () => ({ select: async () => ({ totp_secret: 'verified-secret' }) }),
+				updateOne: async (filter) => {
+					assert.equal(filter.totp_enabled.$ne, true);
+					assert.equal(filter.totp_secret, 'verified-secret');
+					if (filter.totp_secret !== currentSecret) return { matchedCount: 0 };
+					enabled = true;
+					return { matchedCount: 1 };
+				},
+			},
+			verifySync: ({ secret }) => { assert.equal(secret, 'verified-secret'); if (concurrentSetup) currentSecret = 'unverified-replacement'; return { valid: true }; }, log,
+		});
+		const res = response();
+		await route({ session: { userId: 'me' }, body: { code: '123456' } }, res);
+		assert.equal(enabled, !concurrentSetup);
+		assert.equal(res.statusCode, concurrentSetup ? 409 : 200);
+	}
+});
