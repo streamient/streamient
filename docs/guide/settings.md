@@ -45,7 +45,7 @@ Register WebAuthn passkeys for passwordless authentication. You can add multiple
 See every browser where you are signed in. Each entry shows the browser and operating system, the IP address, when you signed in, and when the session was last active. Your current browser is marked **This device**.
 
 - Select **Revoke** to sign out one browser.
-- Select **Sign out all other sessions** to sign out every browser except the one you are using.
+- Select **Sign out all other sessions** in the Sessions header to sign out every browser except the one you are using.
 
 Revoking a session signs that browser out on its next request and disconnects its live updates, including connections that were still signing in. Apps connected through OAuth and personal access tokens are not sessions. Manage them under **Settings > Access Tokens**.
 
