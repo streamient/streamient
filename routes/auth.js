@@ -10,6 +10,7 @@ import { User, compareUserPassword, toSafeUser } from '../model/user.js';
 import { applyTenantContextToSession, initializeSessionTenant } from '../modules/tenancy.js';
 import { ensureCollections } from '../modules/typesense.js';
 import { generateToken } from '../middleware/auth.js';
+import { getClientIp } from '../middleware/rate_limit.js';
 import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail, sendSignupNotificationEmail } from '../services/email_service.js';
 import { buildHostedTrialFields } from '../services/billing_service.js';
 import { sendMagicLink, isMagicLinkValid, verifyMagicLink } from '../services/magic_link_service.js';
@@ -93,7 +94,7 @@ async function recordSuccessfulLogin(req, userOrId) {
 	if (req.session) {
 		req.session.lastLoginRecordedAt = timestamp.toISOString();
 		req.session.userAgent = String(req.headers['user-agent'] || '').slice(0, 300);
-		req.session.ip = req.ip;
+		req.session.ip = getClientIp(req);
 	}
 	await User.findByIdAndUpdate(userId, { $set: { last_login: timestamp } });
 	return timestamp;

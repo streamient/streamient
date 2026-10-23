@@ -1,3 +1,4 @@
+- var dateOptions = JSON.stringify({ year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 if !sessions.length
 	div.text-muted No active sessions found.
 else
@@ -15,10 +16,10 @@ else
 						if session.login_at
 							span.me-3
 								span.me-1 Signed in
-								time(datetime=session.login_at data-date-value=session.login_at data-date-format="locale")= session.login_at
+								time(datetime=session.login_at data-date-value=session.login_at data-date-format="locale" data-date-options=dateOptions)= session.login_at
 						if session.last_active_at
 							span
 								span.me-1 Last active
-								time(datetime=new Date(session.last_active_at).toISOString() data-date-value=new Date(session.last_active_at).toISOString() data-date-format="locale")= new Date(session.last_active_at).toISOString()
+								time(datetime=new Date(session.last_active_at).toISOString() data-date-value=new Date(session.last_active_at).toISOString() data-date-format="locale" data-date-options=dateOptions)= new Date(session.last_active_at).toISOString()
 				if !session.current
 					button.btn.btn-outline-danger.btn-sm.revoke-session(type="button" data-session-id=session.id) Revoke
