@@ -62,6 +62,8 @@ describe('browser CSRF protection', () => {
 		assert.equal(check().accepted, true);
 		assert.equal(check({ headers: { host: 's.n.lan', 'content-type': 'multipart/form-data', 'x-csrf-token': token } }).accepted, true);
 		assert.equal(check({ path: '/oauth/authorize', headers: { host: 's.n.lan', origin: 'https://s.n.lan' }, body: { _csrf: token } }).accepted, true);
+		assert.equal(check({ path: '/oauth/authorize', headers: { host: 's.n.lan', origin: 'null', 'sec-fetch-site': 'same-origin' }, body: { _csrf: token } }).accepted, true);
+		assert.equal(check({ path: '/oauth/authorize', headers: { host: 's.n.lan', origin: 'null', 'sec-fetch-site': 'same-origin' }, body: { _csrf: 'b'.repeat(64) } }).accepted, false);
 		assert.equal(check({ path: '/login', session: { csrfToken: token }, headers: { host: 'brand.example', origin: 'https://brand.example' }, body: { _csrf: token } }).accepted, true);
 		assert.equal(check({ headers: { host: 's.n.lan', 'x-forwarded-host': 'evil.test', origin: 'https://evil.test', 'x-csrf-token': token } }).accepted, false);
 	});
