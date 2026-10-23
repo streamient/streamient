@@ -5,7 +5,9 @@ x-dbh-ca-volumes: &dbh-ca-volumes
   - "${DBH_CADDY_CA}:/usr/local/share/ca-certificates/dbh-caddy-root.crt:ro"
 
 services:
+  # Plain node, not nodemon: shared-stack syncs would restart the app mid-request; restart explicitly via dbh-run.
   app:
+    command: ["sh", "-c", "node build.js && exec node --max-old-space-size=4096 --trace-warnings --import ./tracing.js app.js"]
     ports: !override []
     environment:
       <<: *dbh-ca-environment
