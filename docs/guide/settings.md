@@ -47,7 +47,7 @@ See every browser where you are signed in. Each entry shows the browser and oper
 - Select **Revoke** to sign out one browser.
 - Select **Sign out all other sessions** to sign out every browser except the one you are using.
 
-Revoking a session signs that browser out on its next request. Apps connected through OAuth and personal access tokens are not sessions. Manage them under **Settings > Access Tokens**.
+Revoking a session signs that browser out on its next request and disconnects its live updates, including connections that were still signing in. Apps connected through OAuth and personal access tokens are not sessions. Manage them under **Settings > Access Tokens**.
 
 ## Access Tokens
 
