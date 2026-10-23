@@ -93,7 +93,7 @@ test('TOTP confirmation only enables the exact secret that was verified', async 
 	for (const concurrentSetup of [false, true]) {
 		let currentSecret = 'verified-secret';
 		let enabled = false;
-		const route = handler('auth.js', "router.post('/2fa/confirm'", "router.post('/2fa/disable'", {
+		const route = handler('auth.js', "router.post('/2fa/confirm'", "// ---- Magic Link ----", {
 			queryForSave: (value) => value,
 			User: {
 				findById: () => ({ select: async () => ({ totp_secret: 'verified-secret' }) }),

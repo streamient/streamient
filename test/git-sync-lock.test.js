@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from '../model/mongoose.js';
+import crypto from 'node:crypto';
+import cachePackage from '@managani/cache';
+import config from '../config.js';
 import { maintainGitSyncLock } from '../services/git_sync_service.js';
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
@@ -65,4 +68,23 @@ test('each database mutation fences ownership in the same transaction, and refus
 	state.replace();
 	await assert.rejects(state.lease.write(async () => { writes++; }), /lease lost/);
 	assert.equal(writes, 1);
+});
+
+
+test('isolated Mongo lease fences real writes and rejects a released owner', { skip: process.env.STREAMIENT_AUDIT_INTEGRATION !== '1', timeout: 30000 }, async (t) => {
+	await mongoose.connect(config.mongoUri, { ...config.mongoOptions, dbName: `streamient_git_lock_test_${crypto.randomUUID().replaceAll('-', '')}` });
+	t.after(async () => { await mongoose.connection.dropDatabase(); await mongoose.disconnect(); });
+	const coordinator = cachePackage.createMongoCoordinator({ db: mongoose.connection.db, namespace: 'audit' });
+	const lock = await coordinator.acquireLock('git-sync:audit', { ttlMs: 60000 });
+	assert.ok(lock);
+	const lease = maintainGitSyncLock(lock, { coordinator, ttlMs: 60000 });
+	const rows = mongoose.connection.db.collection('guarded_writes');
+	await rows.insertOne({ _id: 'seed' });
+	try {
+		await lease.write((session) => rows.insertOne({ _id: 'accepted' }, { session }));
+		assert.equal((await rows.updateOne({ _id: 'accepted' }, { $set: { checked: true } })).matchedCount, 1);
+		await coordinator.releaseLock(lock);
+		await assert.rejects(lease.write((session) => rows.insertOne({ _id: 'unfenced' }, { session })), /lease lost/);
+		assert.equal((await rows.updateOne({ _id: 'unfenced' }, { $set: { checked: true } })).matchedCount, 0);
+	} finally { await lease.close(); }
 });
