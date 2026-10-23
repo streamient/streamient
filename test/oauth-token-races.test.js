@@ -7,7 +7,7 @@ import { OAuthAuthorizationCode } from '../model/oauth_authorization_code.js';
 import { OAuthRefreshToken } from '../model/oauth_refresh_token.js';
 import { OAuthConsent } from '../model/oauth_consent.js';
 import { OAuthClient } from '../model/oauth_client.js';
-import { exchangeAuthorizationCode, exchangeRefreshToken } from '../services/oauth_service.js';
+import { exchangeAuthorizationCode, exchangeRefreshToken, issueAuthorizationCode, issueTokenPair, revokeConsent } from '../services/oauth_service.js';
 import { getMcpEndpointUrl } from '../modules/oauth.js';
 import { mockTenantWork } from './helpers/tenant-work.js';
 const hash = (value) => crypto.createHash('sha256').update(value).digest('hex');
@@ -25,7 +25,7 @@ test('authorization code conditional consumption admits exactly one concurrent e
 	OAuthAuthorizationCode.findOne = async () => ({ ...row });
 	let consumed = false;
 	OAuthAuthorizationCode.findOneAndUpdate = async (filter) => { assert.equal(filter.used_at, null); assert.ok(filter.expires_at.$gt instanceof Date); if (consumed) return null; consumed = true; return row; };
-	OAuthConsent.updateOne = OAuthClient.updateOne = async () => ({});
+	OAuthConsent.updateOne = OAuthClient.updateOne = async () => ({ matchedCount: 1 });
 	await assert.rejects(exchangeAuthorizationCode({ code: 'test-code', clientId: client.client_id, redirectUri: row.redirect_uri, codeVerifier: 'invalid' }), /PKCE/);
 	assert.equal(consumed, false);
 	const results = await Promise.allSettled([exchange(), exchange()]);
@@ -42,6 +42,7 @@ test('isolated MongoDB code races and transactional refresh rotation rollback', 
 	t.after(async () => { restore(); await mongoose.connection.dropDatabase(); await mongoose.disconnect(); });
 	await Promise.all([OAuthAuthorizationCode.init(), OAuthRefreshToken.init(), OAuthConsent.init(), OAuthClient.init()]);
 	const row = codeRow();
+	const consent = await OAuthConsent.create({ ...row, scopes: ['mcp:read'] });
 	await OAuthAuthorizationCode.create({ ...row, code_hash: hash('test-code') });
 	const results = await Promise.allSettled(Array.from({ length: 8 }, exchange));
 	assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1);
@@ -60,4 +61,25 @@ test('isolated MongoDB code races and transactional refresh rotation rollback', 
 	const previous = await OAuthRefreshToken.findById(refreshRow._id);
 	assert.ok(previous.rotated_at);
 	assert.equal(previous.replaced_by_token_hash, hash(rotated.find((r) => r.status === 'fulfilled').value.refresh_token));
+	const pendingCode = await issueAuthorizationCode({ userId: row.user, tenantId: row.tenant, host_id: row.host_id, client, redirectUri: row.redirect_uri, scopes: ['mcp:read'], resource: row.resource, codeChallenge: challenge(verifier) });
+	await revokeConsent(consent._id, row.user, row.host_id, { channel: 'api' });
+	await assert.rejects(exchangeAuthorizationCode({ code: pendingCode, clientId: client.client_id, redirectUri: row.redirect_uri, codeVerifier: verifier }), /invalid or expired/);
+	await assert.rejects(exchangeRefreshToken({ refreshToken: rotated.find((r) => r.status === 'fulfilled').value.refresh_token, client }), /invalid or expired/);
+	await assert.rejects(issueTokenPair({ userId: row.user, tenantId: row.tenant, host_id: row.host_id, client, scopes: ['mcp:read'], resource: row.resource }), /revoked/);
+	await assert.rejects(issueAuthorizationCode({ userId: row.user, tenantId: row.tenant, host_id: row.host_id, client, redirectUri: row.redirect_uri, scopes: ['mcp:read'], resource: row.resource, codeChallenge: challenge(verifier) }), /revoked/);
+
+});
+
+
+test('revoked consent denies code exchange and token issuance before creating refresh tokens', async (t) => {
+	const restore = mockTenantWork(); t.after(restore);
+	const row = codeRow();
+	t.mock.method(OAuthAuthorizationCode, 'findOne', async () => row);
+	t.mock.method(OAuthAuthorizationCode, 'findOneAndUpdate', async () => row);
+	t.mock.method(OAuthConsent, 'updateOne', async (filter, update) => { assert.equal(filter.revoked_at, null); assert.equal(update.$inc.__v, 1); return { matchedCount: 0 }; });
+	const create = t.mock.method(OAuthRefreshToken, 'create', async () => { throw new Error('Must not create token'); });
+	await assert.rejects(exchange(), /revoked/);
+	await assert.rejects(issueTokenPair({ userId: row.user, tenantId: row.tenant, host_id: row.host_id, client, scopes: ['mcp:read'], resource: row.resource }), /revoked/);
+	await assert.rejects(issueAuthorizationCode({ userId: row.user, tenantId: row.tenant, host_id: row.host_id, client, redirectUri: row.redirect_uri, scopes: ['mcp:read'], resource: row.resource, codeChallenge: challenge(verifier) }), /revoked/);
+	assert.equal(create.mock.callCount(), 0);
 });

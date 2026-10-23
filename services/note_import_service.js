@@ -377,7 +377,8 @@ export async function cleanupOrphanedImportFiles() {
 	let removed = 0;
 	for (const entry of entries) {
 		if (!entry.isDirectory()) continue;
-		const exists = await NoteImportUpload.exists({ _id: entry.name });
+		if (!/^[a-f0-9]{24}$/i.test(entry.name)) continue;
+		const exists = await NoteImportUpload.findOneAndUpdate({ _id: entry.name }, { $inc: { __v: 0 } }, { returnDocument: 'after', timestamps: false }).select('_id').lean();
 		if (exists) continue;
 		await rm(path.join(IMPORT_ROOT, entry.name), { recursive: true, force: true });
 		removed++;

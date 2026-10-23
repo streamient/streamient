@@ -1229,34 +1229,17 @@ export async function syncStreamientItem(type, itemId, hostId, options = {}) {
 
 export async function cleanupObsidianRetention(now = new Date()) {
 	const cutoff = new Date(now.getTime() - OBSIDIAN_REVISION_RETENTION_MS);
-	const trashed = await queryForSave(ObsidianFile.find({ in_trash: true, trashed_at: { $lte: cutoff }, blob: { $ne: null } }));
-	for (const file of trashed) {
-		const size = file.size || 0;
-		file.blob = null;
-		file.sha256 = '';
-		file.size = 0;
-		file.text_content = '';
-		file.extraction_status = 'not_needed';
-		file.extraction_error = '';
-		file.is_indexed = file.kind === 'markdown';
-		await file.save();
-		if (size) await ObsidianConnection.updateOne({ _id: file.connection, host_id: file.host_id }, { $inc: { storage_bytes: -size } });
+	let purgedFiles = 0;
+	for (const markdown of [true, false]) while (true) {
+		const file = await ObsidianFile.findOneAndUpdate({ kind: markdown ? 'markdown' : { $ne: 'markdown' }, in_trash: true, trashed_at: { $lte: cutoff }, blob: { $ne: null } }, { $set: { blob: null, sha256: '', size: 0, text_content: '', extraction_status: 'not_needed', extraction_error: '', is_indexed: markdown } }, { returnDocument: 'before', timestamps: false }).lean();
+		if (!file) break;
+		if (file.size) await ObsidianConnection.updateOne({ _id: file.connection, host_id: file.host_id }, { $inc: { storage_bytes: -file.size } });
+		purgedFiles++;
 	}
 	await ObsidianRevision.deleteMany({ expires_at: { $lte: now } });
-	const blobs = await ObsidianBlob.find({ createdAt: { $lte: cutoff } }).lean();
-	let deletedBlobs = 0;
-	for (const blob of blobs) {
-		const [fileRef, revisionRef, uploadRef] = await Promise.all([
-			ObsidianFile.exists({ blob: blob._id }),
-			ObsidianRevision.exists({ blob: blob._id }),
-			ObsidianUpload.exists({ blob: blob._id, state: 'complete' }),
-		]);
-		if (!fileRef && !revisionRef && !uploadRef) {
-			await deleteBlob(blob);
-			deletedBlobs++;
-		}
-	}
-	return { purged_files: trashed.length, deleted_blobs: deletedBlobs };
+	// shortcut: retain unreferenced blobs until collection-wide reference creation and GC share a write fence.
+
+	return { purged_files: purgedFiles, deleted_blobs: 0 };
 }
 
 export async function processObsidianExtraction(fileId, hostId, { signal, assertOwnership, isOwner, withOwnership = (callback) => callback(undefined) } = {}) {

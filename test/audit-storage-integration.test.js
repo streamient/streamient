@@ -1,0 +1,63 @@
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import { mkdtemp, mkdir, rm, writeFile, access } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { Readable } from 'node:stream';
+import test from 'node:test';
+import mongoose from '../model/mongoose.js';
+import config from '../config.js';
+import { ObsidianUpload } from '../model/obsidian_upload.js';
+import { ObsidianBlob } from '../model/obsidian_blob.js';
+import { ObsidianFile } from '../model/obsidian_file.js';
+import { appendUploadChunk, completeUpload, cleanupOrphanedUploads, readBlobBuffer } from '../services/obsidian_blob_service.js';
+import { cleanupObsidianRetention } from '../services/obsidian_sync_service.js';
+
+test('isolated Mongo storage guards preserve concurrent uploads and restored content', { skip: process.env.STREAMIENT_AUDIT_INTEGRATION !== '1', timeout: 30000 }, async (t) => {
+	const dbName = `streamient_audit_test_${crypto.randomUUID().replaceAll('-', '')}`;
+	await mongoose.connect(config.mongoUri, { ...config.mongoOptions, dbName });
+	const root = await mkdtemp(path.join(os.tmpdir(), 'streamient-audit-storage-'));
+	const old = { dir: config.obsidian.vaultsDir, key: config.obsidian.encryptionKey };
+	config.obsidian.vaultsDir = root;
+	config.obsidian.encryptionKey = 'a'.repeat(64);
+	t.after(async () => { config.obsidian.vaultsDir = old.dir; config.obsidian.encryptionKey = old.key; await mongoose.connection.dropDatabase(); await mongoose.disconnect(); await rm(root, { recursive: true, force: true }); });
+	await ObsidianBlob.createIndexes();
+	const id = new mongoose.Types.ObjectId();
+	const body = Buffer.from('Concurrent identical encrypted chunk');
+	const sha256 = crypto.createHash('sha256').update(body).digest('hex');
+	const upload = await ObsidianUpload.create({ host_id: 'audit', user: id, connection: id, path: 'Test.md', total_bytes: body.length, sha256, expires_at: new Date(Date.now() + 60000) });
+	const original = ObsidianUpload.findOneAndUpdate;
+	let reads = 0;
+	let release;
+	const barrier = new Promise((resolve) => { release = resolve; });
+	const intercepted = t.mock.method(ObsidianUpload, 'findOneAndUpdate', function (filter, update, options) {
+		const result = original.call(this, filter, update, options);
+		if (filter.received_bytes !== undefined || !update.$set?.expires_at) return result;
+		return { lean: async () => { const value = await result.lean(); if (++reads === 2) release(); await barrier; return value; } };
+	});
+	const request = () => Object.assign(Readable.from([body]), { headers: { 'upload-offset': '0', 'upload-length': String(body.length), 'upload-checksum': sha256 } });
+	const attempts = await Promise.all([appendUploadChunk(id, 'audit', upload._id, request()), appendUploadChunk(id, 'audit', upload._id, request())]);
+	intercepted.mock.restore();
+	assert.ok(attempts.every((value) => value.upload_offset === body.length));
+	const stored = await ObsidianUpload.findOneAndUpdate({ _id: upload._id }, { $inc: { __v: 0 } }, { timestamps: false, returnDocument: 'after' }).lean();
+	assert.equal(stored.chunks.length, 1);
+	const completed = await completeUpload(id, 'audit', upload._id);
+	const blob = await ObsidianBlob.findOneAndUpdate({ _id: completed.blob_id }, { $inc: { __v: 0 } }, { timestamps: false, returnDocument: 'after' }).lean();
+	assert.deepEqual(await readBlobBuffer(blob, 'audit'), body);
+
+	const file = await ObsidianFile.create({ host_id: 'audit', connection: id, project: id, path: 'Restored.md', kind: 'markdown', modified_at: new Date(), size: body.length, blob: blob._id, in_trash: true, trashed_at: new Date(0) });
+	await ObsidianFile.updateOne({ _id: file._id }, { $set: { in_trash: false, trashed_at: null } });
+	await cleanupObsidianRetention();
+	const restored = await ObsidianFile.findOneAndUpdate({ _id: file._id }, { $inc: { revision: 0 } }, { timestamps: false, returnDocument: 'after' }).lean();
+	assert.equal(restored.in_trash, false);
+	assert.equal(String(restored.blob), String(blob._id));
+	assert.equal(restored.size, body.length);
+
+	const live = await ObsidianUpload.create({ host_id: 'audit', user: id, connection: id, path: 'Live.md', total_bytes: 1, sha256, expires_at: new Date(0) });
+	const liveDirectory = path.join(root, 'uploads', 'audit', String(live._id));
+	await mkdir(liveDirectory, { recursive: true });
+	await writeFile(path.join(liveDirectory, 'part'), 'live');
+	await ObsidianUpload.updateOne({ _id: live._id }, { $set: { expires_at: new Date(Date.now() + 60000) } });
+	await cleanupOrphanedUploads();
+	await access(path.join(liveDirectory, 'part'));
+});

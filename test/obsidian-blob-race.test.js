@@ -31,6 +31,7 @@ class BlobFixture {
 			return blob;
 		});
 		t.mock.method(ObsidianUpload, 'findOne', (filter) => BlobFixture.query(this.uploads.get(filter._id) || null));
+		t.mock.method(ObsidianUpload, 'findOneAndUpdate', (filter) => BlobFixture.query(this.uploads.get(filter._id) || null));
 		t.after(() => {
 			config.obsidian.vaultsDir = original.dir;
 			config.obsidian.encryptionKey = original.key;
