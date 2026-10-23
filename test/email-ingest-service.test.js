@@ -13,11 +13,13 @@ import { ingestEmail, matchesEmailFilter, parseEmailInput, parseForwardedEmailIn
 describe('Email ingest storage service', () => {
 	const originalEmailFindOne = Email.findOne;
 	const originalEmailCreate = Email.create;
+	const originalEmailUpsert = Email.findOneAndUpdate;
 	const originalEmailFind = Email.find;
 	const originalGraphLinkUpdateOne = GraphLink.updateOne;
 
 	beforeEach(() => {
-		Email.findOne = async () => null;
+		Email.findOne = () => ({ lean: async () => null });
+		Email.findOneAndUpdate = async (_filter, update) => ({ value: await Email.create(update.$set), lastErrorObject: { updatedExisting: false } });
 		Email.find = () => ({
 			select: () => ({
 				lean: async () => [],
@@ -29,6 +31,7 @@ describe('Email ingest storage service', () => {
 	afterEach(() => {
 		Email.findOne = originalEmailFindOne;
 		Email.create = originalEmailCreate;
+		Email.findOneAndUpdate = originalEmailUpsert;
 		Email.find = originalEmailFind;
 		GraphLink.updateOne = originalGraphLinkUpdateOne;
 	});
@@ -102,4 +105,39 @@ describe('Email ingest storage service', () => {
 		assert.equal(createdPayload.mailbox, 'inbox');
 		assert.deepEqual(createdPayload.labels, ['needs-review']);
 	});
+	it('atomically upserts a broadcast independently in each tenant without replica reads', async () => {
+		const docs = new Map();
+		Email.findOne = () => { throw new Error('dedup must not read a replica'); };
+		Email.findOneAndUpdate = async (filter, update, options) => {
+			assert.deepEqual(Object.keys(filter).sort(), ['host_id', 'message_id']);
+			assert.equal(options.upsert, true);
+			assert.equal(options.includeResultMetadata, true);
+			const key = JSON.stringify(filter);
+			const existing = docs.get(key);
+			const value = { _id: existing?._id || `email-${docs.size}`, ...update.$set };
+			docs.set(key, value);
+			return { value, lastErrorObject: { updatedExisting: !!existing } };
+		};
+		const data = { project: '507f1f77bcf86cd799439011', parsed_email: { message_id: '<broadcast@example.com>', text: 'Broadcast' } };
+		const results = await Promise.all(['host-1', 'host-2', 'host-1'].map((host) => ingestEmail('507f1f77bcf86cd799439012', host, data, { skipSideEffects: true })));
+		assert.equal(docs.size, 2);
+		assert.equal(results[0]._id, results[2]._id);
+		assert.notEqual(results[0]._id, results[1]._id);
+	});
+
+	it('recovers only the tenant Message-ID unique race with a non-upsert write', async () => {
+		let calls = 0;
+		Email.findOneAndUpdate = async (filter, update, options) => {
+			assert.equal(filter.host_id, 'host-1');
+			if (++calls === 1) throw Object.assign(new Error('duplicate'), { code: 11000, keyPattern: { host_id: 1, message_id: 1 } });
+			assert.equal(options.upsert, false);
+			return { value: { _id: 'email-1', ...update.$set }, lastErrorObject: { updatedExisting: true } };
+		};
+		const data = { project: '507f1f77bcf86cd799439011', parsed_email: { message_id: 'race@example.com', text: 'Race' } };
+		await ingestEmail('507f1f77bcf86cd799439012', 'host-1', data, { skipSideEffects: true });
+		assert.equal(calls, 2);
+		Email.findOneAndUpdate = async () => { throw Object.assign(new Error('unrelated index'), { code: 11000, keyPattern: { message_id: 1 } }); };
+		await assert.rejects(ingestEmail('507f1f77bcf86cd799439012', 'host-1', data, { skipSideEffects: true }), /unrelated index/);
+	});
+
 });

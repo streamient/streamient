@@ -33,6 +33,7 @@ describe('Email forwarding import route', () => {
 	const originalProjectFindOne = Project.findOneAndUpdate;
 	const originalEmailFindOne = Email.findOne;
 	const originalEmailCreate = Email.create;
+	const originalEmailUpsert = Email.findOneAndUpdate;
 	const originalEmailFind = Email.find;
 	const originalGraphLinkUpdateOne = GraphLink.updateOne;
 	const originalTenantFindOne = Tenant.findOne;
@@ -52,7 +53,8 @@ describe('Email forwarding import route', () => {
 				email_filter: '',
 			}),
 		});
-		Email.findOne = async () => null;
+		Email.findOne = () => ({ lean: async () => null });
+		Email.findOneAndUpdate = async (_filter, update) => ({ value: await Email.create(update.$set), lastErrorObject: { updatedExisting: false } });
 		Email.create = async (payload) => ({
 			_id: { toString: () => '507f1f77bcf86cd799439101' },
 			...payload,
@@ -79,6 +81,7 @@ describe('Email forwarding import route', () => {
 		Project.findOne = originalProjectRead;
 		Email.findOne = originalEmailFindOne;
 		Email.create = originalEmailCreate;
+		Email.findOneAndUpdate = originalEmailUpsert;
 		Email.find = originalEmailFind;
 		GraphLink.updateOne = originalGraphLinkUpdateOne;
 		Tenant.findOne = originalTenantFindOne;

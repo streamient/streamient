@@ -4,6 +4,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
+import http from 'node:http';
+import https from 'node:https';
+import net from 'node:net';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import config from '../config.js';
+import { publicLookup, validatePublicUrl } from '../modules/public_url.js';
 import mongoose, { queryForSave } from '../model/mongoose.js';
 import simpleGit from 'simple-git';
 import matter from 'gray-matter';
@@ -30,6 +36,7 @@ fs.mkdirSync(GIT_REPOS_DIR, { recursive: true });
 const turndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
 const LOCAL_CHANGE_GRACE_MS = 1000;
 const MAX_SYNC_RUNS = 10;
+const syncLease = new AsyncLocalStorage();
 const SYNC_LOG_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
 
 // ── Helpers ──
@@ -42,6 +49,69 @@ export async function deleteGitRepoHostDirectory(hostId) {
 	if (!/^[a-f\d]{24}$/i.test(hostId)) throw new Error('Invalid host storage scope');
 	const dir = path.join(GIT_REPOS_DIR, hostId);
 	await fs.promises.rm(dir, { recursive: true, force: true });
+}
+
+// Git/libcurl does its own DNS. Proxy every HTTP connection through the checked socket lookup,
+// including redirects and dumb-HTTP alternates; Node-only preflight checks cannot constrain Git.
+export async function createGitTransport(repoUrl, signal, { lookup = publicLookup } = {}) {
+	if (!config.isHosted) return { git: (baseDir) => simpleGit({ baseDir, abort: signal }), close: async () => {} };
+	validatePublicUrl(repoUrl);
+	const sockets = new Set();
+	const track = (socket) => {
+		sockets.add(socket);
+		socket.on('close', () => sockets.delete(socket));
+		socket.on('error', () => socket.destroy());
+		return socket;
+	};
+	const server = http.createServer((request, response) => {
+		try {
+			const url = validatePublicUrl(request.url);
+			const headers = { ...request.headers, host: url.host };
+			delete headers['proxy-authorization'];
+			delete headers['proxy-connection'];
+			const upstream = (url.protocol === 'https:' ? https : http).request(url, { method: request.method, headers, lookup, agent: false }, (reply) => {
+				response.writeHead(reply.statusCode, reply.headers);
+				reply.pipe(response);
+			});
+			upstream.on('socket', track);
+			upstream.on('error', () => { if (response.headersSent) response.destroy(); else { response.writeHead(502); response.end(); } });
+			request.on('aborted', () => upstream.destroy());
+			response.on('close', () => upstream.destroy());
+			request.pipe(upstream);
+		} catch {
+			response.writeHead(403);
+			response.end();
+		}
+	});
+	server.on('connection', track);
+	server.on('connect', (request, socket, head) => {
+		try {
+			const url = validatePublicUrl(`https://${request.url}`);
+			if (url.pathname !== '/' || url.search || url.hash) throw new Error('Invalid tunnel destination');
+			const upstream = track(net.connect({ host: url.hostname.replace(/^\[|\]$/g, ''), port: Number(url.port) || 443, lookup }));
+			upstream.once('connect', () => {
+				socket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+				if (head.length) upstream.write(head);
+				socket.pipe(upstream).pipe(socket);
+			});
+			upstream.on('error', () => socket.destroy());
+			socket.on('close', () => upstream.destroy());
+			upstream.on('close', () => socket.destroy());
+		} catch {
+			socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+		}
+	});
+	await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+	const stop = () => { for (const socket of sockets) socket.destroy(); server.close(); };
+	signal?.addEventListener('abort', stop, { once: true });
+	if (signal?.aborted) stop();
+	const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_') && key !== 'PAGER'));
+	Object.assign(env, { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_ALLOW_PROTOCOL: 'http:https', GIT_TERMINAL_PROMPT: '0', NO_PROXY: '', no_proxy: '' });
+	const proxy = `http://127.0.0.1:${server.address()?.port}`;
+	return {
+		git: (baseDir) => simpleGit({ baseDir, abort: signal, unsafe: { allowUnsafeHooksPath: true, allowUnsafeConfigPaths: true }, config: [`http.proxy=${proxy}`, 'remote.origin.proxy=' + proxy, 'core.hooksPath=/dev/null', 'submodule.recurse=false', 'fetch.recurseSubmodules=false', 'http.followRedirects=initial'] }).env(env),
+		close: async () => { signal?.removeEventListener('abort', stop); stop(); },
+	};
 }
 
 function cloneUrl(repoUrl, token) {
@@ -313,7 +383,7 @@ async function normalizeImportedTimestamps(Model, doc, dates, { includeCreatedAt
 	if (includeCreatedAt && createdAt && timestampsDiffer(doc.createdAt, createdAt)) $set.createdAt = createdAt;
 	if (Object.keys($set).length === 0) return;
 
-	await Model.findByIdAndUpdate(doc._id, { $set }, { timestamps: false, overwriteImmutable: includeCreatedAt });
+	await syncMutation((session) => Model.findByIdAndUpdate(doc._id, { $set }, { timestamps: false, overwriteImmutable: includeCreatedAt, session }));
 }
 
 function commitDates(commitDate) {
@@ -336,12 +406,50 @@ function importedContentMatchesGit(doc, type, parsed, title) {
 	return (doc.content || '') === html;
 }
 
-async function acquireLock(repoId, ttlSeconds = 600) {
-	return getMongoCoordinator().acquireLock(`git-sync:${repoId}`, { ttlMs: ttlSeconds * 1000 });
+export function maintainGitSyncLock(lock, { coordinator = getMongoCoordinator(), ttlMs = 600000, heartbeatMs = 20000 } = {}) {
+	const controller = new AbortController();
+	let deadline;
+	let renewing;
+	let closed = false;
+	const lost = () => controller.abort(new Error('Git sync lease lost'));
+	const assert = () => {
+		if (Date.now() >= new Date(lock.expiresAt).getTime()) lost();
+		controller.signal.throwIfAborted();
+	};
+	const armDeadline = () => { clearTimeout(deadline); deadline = setTimeout(lost, Math.max(0, new Date(lock.expiresAt).getTime() - Date.now())); deadline.unref(); };
+	const renew = async (session) => {
+		assert();
+		const now = new Date();
+		const expiresAt = new Date(now.getTime() + ttlMs);
+		try {
+			const result = await coordinator.collection.updateOne({ namespace: coordinator.namespace, kind: 'lock', token: lock.token, expires_at: { $gt: now } }, { $set: { expires_at: expiresAt, updated_at: now } }, { session });
+			assert();
+			if (result.matchedCount !== 1) throw new Error('Git sync lease lost');
+			if (!session) { lock.expiresAt = expiresAt; armDeadline(); }
+		} catch (err) { lost(); throw err; }
+	};
+	armDeadline();
+	const timer = setInterval(() => {
+		if (!renewing && !controller.signal.aborted) renewing = renew().catch(() => {}).finally(() => { renewing = null; });
+	}, heartbeatMs);
+	timer.unref();
+	return {
+		signal: controller.signal,
+		assert,
+		// Updating the lock in the same transaction fences database writes against a replacement owner.
+		write: (callback) => mongoose.connection.transaction(async (session) => {
+			await renew(session);
+			const result = await callback(session);
+			assert();
+			return result;
+		}),
+		close: async () => { if (closed) return; closed = true; lost(); clearInterval(timer); clearTimeout(deadline); await renewing; clearTimeout(deadline); await coordinator.releaseLock(lock); },
+	};
 }
 
-async function releaseLock(lock) {
-	await getMongoCoordinator().releaseLock(lock);
+async function syncMutation(callback) {
+	const lease = syncLease.getStore();
+	return lease ? lease.write(callback) : callback(undefined);
 }
 
 // ── CRUD ──
@@ -361,6 +469,7 @@ export async function backfillGitSyncMode() {
 
 export async function createGitRepo(userId, hostId, data, ctx = {}) {
 	validateRepoPaths(data);
+	if (config.isHosted && data.repo_url !== undefined) validatePublicUrl(data.repo_url);
 	const project = await requireActiveProject(hostId, data.project);
 	const tokenEncrypted = data.auth_token ? encrypt(data.auth_token) : '';
 	const repo = await GitRepo.create({
@@ -415,6 +524,7 @@ export async function listSyncLogs(hostId, repoId, limit = 200) {
 
 export async function updateGitRepo(hostId, repoId, data, ctx = {}) {
 	validateRepoPaths(data);
+	if (config.isHosted && data.repo_url !== undefined) validatePublicUrl(data.repo_url);
 	if (['sync_path', 'notes_path', 'memories_path'].some((field) => data[field] !== undefined)) {
 		const existing = await GitRepo.findOne({ _id: repoId, host_id: hostId }).lean();
 		if (!existing) return null;
@@ -472,20 +582,21 @@ async function prepareSyncRepo(repoId, userId, hostId, ctx = { channel: 'api' })
 	validateRepoPaths(gitRepoDoc);
 	await requireActiveProject(hostId, gitRepoDoc.project);
 
-	const lock = ctx.skip_lock ? null : await acquireLock(repoId);
-	if (!ctx.skip_lock && !lock) throw new Error('Sync already in progress');
+	const lock = ctx.skip_lock ? null : await getMongoCoordinator().acquireLock(`git-sync:${repoId}`, { ttlMs: 600000 });
+	if (!ctx.skip_lock && !lock) throw Object.assign(new Error('Sync already in progress'), { code: 'git_sync_busy' });
+	const lease = lock ? maintainGitSyncLock(lock) : null;
 
 	try {
 		const summary = createSyncSummary();
 		gitRepoDoc.last_sync_status = 'in_progress';
 		gitRepoDoc.last_sync_error = '';
 		gitRepoDoc.last_sync_summary = syncSummaryForStorage(summary);
-		await gitRepoDoc.save();
+		await (lease ? lease.write((session) => gitRepoDoc.save({ session })) : gitRepoDoc.save());
 		await logSyncEvent(gitRepoDoc, 'info', 'Sync started', { channel: ctx.channel || 'api', user_id: userId });
 
-		return { gitRepoDoc, summary, lock };
+		return { gitRepoDoc, summary, lease };
 	} catch (err) {
-		if (lock) await releaseLock(lock);
+		await lease?.close();
 		throw err;
 	}
 }
@@ -495,11 +606,11 @@ export async function startSyncRepo(repoId, userId, hostId, ctx = { channel: 'ap
 
 	setImmediate(async () => {
 		try {
-			await executeSyncRepo(repoId, userId, hostId, ctx, prepared.gitRepoDoc, prepared.summary);
+			await syncLease.run(prepared.lease, () => executeSyncRepo(repoId, userId, hostId, ctx, prepared.gitRepoDoc, prepared.summary, prepared.lease));
 		} catch (err) {
 			log.error({ err, repo_id: repoId }, 'Git sync failed');
 		} finally {
-			if (prepared.lock) await releaseLock(prepared.lock);
+			await prepared.lease?.close();
 		}
 	});
 
@@ -509,38 +620,41 @@ export async function startSyncRepo(repoId, userId, hostId, ctx = { channel: 'ap
 export async function syncRepo(repoId, userId, hostId, ctx = { channel: 'api' }) {
 	const prepared = await prepareSyncRepo(repoId, userId, hostId, ctx);
 	try {
-		return await executeSyncRepo(repoId, userId, hostId, ctx, prepared.gitRepoDoc, prepared.summary);
+		return await syncLease.run(prepared.lease, () => executeSyncRepo(repoId, userId, hostId, ctx, prepared.gitRepoDoc, prepared.summary, prepared.lease));
 	} finally {
-		if (prepared.lock) await releaseLock(prepared.lock);
+		await prepared.lease?.close();
 	}
 }
 
-async function executeSyncRepo(repoId, userId, hostId, ctx, gitRepoDoc, summary) {
+async function executeSyncRepo(repoId, userId, hostId, ctx, gitRepoDoc, summary, lease) {
 	const releaseAccountWork = await acquireTenantWork(hostId);
+	let transport;
+	// Each lease owns its checkout, so a paused former owner cannot corrupt its successor.
+	const dir = lease ? path.join(repoDir(hostId, repoId), crypto.randomUUID()) : repoDir(hostId, repoId);
 	try {
 	try {
 		validateRepoPaths(gitRepoDoc);
 		await requireActiveProject(hostId, gitRepoDoc.project);
 		const token = gitRepoDoc.auth_token ? decrypt(gitRepoDoc.auth_token) : '';
-		const dir = repoDir(hostId, repoId);
 		const branch = gitRepoDoc.branch || 'main';
 
-		const git = simpleGit();
+		transport = await createGitTransport(gitRepoDoc.repo_url, lease?.signal);
+		const git = transport.git();
 		if (!fs.existsSync(path.join(dir, '.git'))) {
 			await logSyncEvent(gitRepoDoc, 'info', 'Cloning repository', { branch });
 			fs.mkdirSync(dir, { recursive: true });
 			await git.clone(repoAuthUrl(gitRepoDoc, token), dir, ['--branch', branch]);
-			const localGit = simpleGit(dir);
+			const localGit = transport.git(dir);
 			await localGit.remote(['set-url', 'origin', stripAuthFromRemote(gitRepoDoc)]);
 		} else {
 			await logSyncEvent(gitRepoDoc, 'info', 'Fetching repository updates', { branch });
-			const localGit = simpleGit(dir);
+			const localGit = transport.git(dir);
 			await localGit.remote(['set-url', 'origin', stripAuthFromRemote(gitRepoDoc)]);
 			await localGit.fetch(repoAuthUrl(gitRepoDoc, token), branch);
 			await localGit.reset(['--hard', 'FETCH_HEAD']);
 		}
 
-		const localGit = simpleGit(dir);
+		const localGit = transport.git(dir);
 		await localGit.checkout(branch).catch(() => {});
 
 		const syncBase = cleanSyncBase(gitRepoDoc.sync_path);
@@ -583,23 +697,24 @@ async function executeSyncRepo(repoId, userId, hostId, ctx, gitRepoDoc, summary)
 		const run = finalizeSummary(summary, 'success', summary.conflicts ? 'Sync complete with conflicts' : 'Sync complete');
 		gitRepoDoc.last_sync_summary = syncSummaryForStorage(summary);
 		gitRepoDoc.sync_runs = [compactRun(run), ...(gitRepoDoc.sync_runs || [])].slice(0, MAX_SYNC_RUNS);
-		await gitRepoDoc.save();
+		await syncMutation((session) => gitRepoDoc.save({ session }));
 		await logSyncEvent(gitRepoDoc, summary.conflicts ? 'warning' : 'success', run.message, syncLogDetails(summary));
 
 		emitToTenant(hostId, 'counts:refresh');
 		if (!ctx.skip_audit) audit.log({ action: 'import', resource: 'git_repo', resource_id: repoId, user_id: userId, host_id: hostId, ...ctx });
 		return { ...syncSummaryForStorage(summary), conflict_details: summary.conflict_details };
 	} catch (err) {
+		lease?.assert();
 		finalizeSummary(summary, 'failed', err.message);
 		gitRepoDoc.last_sync_status = 'failed';
 		gitRepoDoc.last_sync_error = err.message;
 		gitRepoDoc.last_sync_summary = syncSummaryForStorage(summary);
 		gitRepoDoc.sync_runs = [compactRun({ ...summary, status: 'failed' }), ...(gitRepoDoc.sync_runs || [])].slice(0, MAX_SYNC_RUNS);
-		await gitRepoDoc.save();
+		await syncMutation((session) => gitRepoDoc.save({ session }));
 		await logSyncEvent(gitRepoDoc, 'error', `Sync failed: ${err.message}`, syncLogDetails(summary));
 		throw err;
 	}
-	} finally { await releaseAccountWork(); }
+	} finally { await transport?.close(); if (lease) await fs.promises.rm(dir, { recursive: true, force: true }); await releaseAccountWork(); }
 }
 
 async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, summary) {
@@ -657,12 +772,12 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, sum
 				};
 				const overwriteImmutable = existingMemory.git_source?.origin === 'import';
 				if (overwriteImmutable) update.createdAt = fileDates.createdAt;
-				await Memory.findByIdAndUpdate(existingMemory._id, {
+				await syncMutation((session) => Memory.findByIdAndUpdate(existingMemory._id, {
 					$set: update,
-				}, { timestamps: false, overwriteImmutable });
+				}, { timestamps: false, overwriteImmutable, session }));
 				summary.imported_files++;
 			} else {
-				await Memory.create({
+				await syncMutation((session) => Memory.create([{
 					title,
 					content: parsed.body,
 					tags: parsed.tags.length ? parsed.tags : ['git-sync'],
@@ -672,7 +787,7 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, sum
 					git_source: { repo_id: gitRepo._id, file_path: relPath, last_sha: sha, last_synced_at: now, origin: 'import' },
 					createdAt: fileDates.createdAt,
 					updatedAt: fileDates.updatedAt,
-				});
+				}], { session }));
 				summary.imported_files++;
 			}
 		} else {
@@ -692,12 +807,12 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, sum
 				};
 				const overwriteImmutable = existingNote.git_source?.origin === 'import';
 				if (overwriteImmutable) update.createdAt = fileDates.createdAt;
-				await Note.findByIdAndUpdate(existingNote._id, {
+				await syncMutation((session) => Note.findByIdAndUpdate(existingNote._id, {
 					$set: update,
-				}, { timestamps: false, overwriteImmutable });
+				}, { timestamps: false, overwriteImmutable, session }));
 				summary.imported_files++;
 			} else {
-				await Note.create({
+				await syncMutation((session) => Note.create([{
 					title,
 					content: html,
 					text_content: text,
@@ -708,7 +823,7 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, sum
 					git_source: { repo_id: gitRepo._id, file_path: relPath, last_sha: sha, last_synced_at: now, origin: 'import' },
 					createdAt: fileDates.createdAt,
 					updatedAt: fileDates.updatedAt,
-				});
+				}], { session }));
 				summary.imported_files++;
 			}
 		}
@@ -739,9 +854,9 @@ async function trashDeletedGitItems(gitRepo, hostId, activeFilePaths, summary) {
 			summary.skipped++;
 			continue;
 		}
-		await Note.findByIdAndUpdate(note._id, {
+		await syncMutation((session) => Note.findByIdAndUpdate(note._id, {
 			$set: { in_trash: true, trashed_at: new Date(), is_indexed: false },
-		});
+		}, { session }));
 		summary.trashed_items++;
 	}
 
@@ -756,9 +871,9 @@ async function trashDeletedGitItems(gitRepo, hostId, activeFilePaths, summary) {
 			summary.skipped++;
 			continue;
 		}
-		await Memory.findByIdAndUpdate(memory._id, {
+		await syncMutation((session) => Memory.findByIdAndUpdate(memory._id, {
 			$set: { in_trash: true, trashed_at: new Date(), is_indexed: false },
-		});
+		}, { session }));
 		summary.trashed_items++;
 	}
 }
@@ -822,6 +937,7 @@ async function pushToGit(git, dir, syncBase, gitRepo, userId, hostId, token, sum
 			absPath = containedRepoPath(dir, syncBase, relPath);
 		}
 
+		syncLease.getStore()?.assert();
 		fs.mkdirSync(path.dirname(absPath), { recursive: true });
 		const fd = fs.openSync(containedRepoPath(dir, syncBase, relPath), fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | fs.constants.O_NOFOLLOW);
 		try { fs.writeFileSync(fd, md, 'utf8'); } finally { fs.closeSync(fd); }
@@ -869,6 +985,7 @@ async function pushToGit(git, dir, syncBase, gitRepo, userId, hostId, token, sum
 			absPath = containedRepoPath(dir, syncBase, relPath);
 		}
 
+		syncLease.getStore()?.assert();
 		fs.mkdirSync(path.dirname(absPath), { recursive: true });
 		const fd = fs.openSync(containedRepoPath(dir, syncBase, relPath), fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | fs.constants.O_NOFOLLOW);
 		try { fs.writeFileSync(fd, md, 'utf8'); } finally { fs.closeSync(fd); }
@@ -878,20 +995,21 @@ async function pushToGit(git, dir, syncBase, gitRepo, userId, hostId, token, sum
 	}
 
 	if (hasChanges) {
-		const localGit = simpleGit(dir);
+		const localGit = git;
 		await localGit.addConfig('user.email', 'sync@streamient.com');
 		await localGit.addConfig('user.name', 'Streamient Sync');
 		await localGit.add('.');
 		const status = await localGit.status();
 		if (status.files.length > 0) {
 			await localGit.commit(`Streamient sync ${new Date().toISOString()}`);
+			syncLease.getStore()?.assert();
 			await localGit.push(repoAuthUrl(gitRepo, token), gitRepo.branch || 'main');
 		}
 
 		const now = new Date();
 		for (const upd of pendingUpdates) {
 			const Model = upd.model === 'Note' ? Note : Memory;
-			await Model.findByIdAndUpdate(upd.id, {
+			await syncMutation((session) => Model.findByIdAndUpdate(upd.id, {
 				$set: {
 					'git_source.repo_id': gitRepo._id,
 					'git_source.file_path': upd.relPath,
@@ -899,7 +1017,7 @@ async function pushToGit(git, dir, syncBase, gitRepo, userId, hostId, token, sum
 					'git_source.last_synced_at': now,
 					'git_source.origin': 'push',
 				},
-			});
+			}, { session }));
 			summary.exported_files++;
 		}
 	}
@@ -992,7 +1110,7 @@ async function importCommits(git, gitRepo, userId, hostId, summary) {
 		if (repoTag) tags.push(`git-repo-${repoTag}`);
 		if (branchTag) tags.push(`git-branch-${branchTag}`);
 
-		await Memory.create({
+		await syncMutation((session) => Memory.create([{
 			title: `Commit ${commit.short_sha}: ${commit.subject || '(no subject)'}`,
 			content: commitMemoryContent(commit, message, changedFiles, gitRepo),
 			tags,
@@ -1015,7 +1133,7 @@ async function importCommits(git, gitRepo, userId, hostId, summary) {
 				committed_at: commit.committed_at,
 				files: changedFiles,
 			},
-		});
+		}], { session }));
 		latestCommit = commit;
 		summary.imported_commits++;
 	}
@@ -1099,13 +1217,13 @@ export async function runScheduledSync() {
 		const intervalMs = (repo.sync_interval || 10) * 60 * 1000;
 		const lastSync = repo.last_synced_at ? new Date(repo.last_synced_at).getTime() : 0;
 		if (now.getTime() - lastSync < intervalMs) continue;
-		if (repo.last_sync_status === 'in_progress') continue;
 		summary.due++;
 
 		try {
 			await syncRepo(repo._id.toString(), repo.owner.toString(), repo.host_id);
 			summary.synced++;
 		} catch (err) {
+			if (err.code === 'git_sync_busy') continue;
 			summary.failed++;
 			log.error({ err, repo_id: repo._id }, 'Git sync failed');
 		}

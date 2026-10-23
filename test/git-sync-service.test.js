@@ -17,7 +17,9 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import test from 'node:test';
 
-import { syncRepo, backfillGitSyncMode, updateGitRepo } from '../services/git_sync_service.js';
+import { syncRepo, backfillGitSyncMode, updateGitRepo, runScheduledSync } from '../services/git_sync_service.js';
+import mongoose from '../model/mongoose.js';
+import { getMongoCoordinator } from '../modules/cache.js';
 import { AuditLog } from '../model/audit_log.js';
 import { GitRepo } from '../model/git_repo.js';
 import { Note } from '../model/note.js';
@@ -132,6 +134,7 @@ function installModelMocks(state) {
 		Model.find = async (query) => collection.filter((doc) => matches(doc, query));
 		Model.countDocuments = async (query) => collection.filter((doc) => matches(doc, query)).length;
 		Model.create = async (data) => {
+			if (Array.isArray(data)) data = data[0];
 			const doc = makeDoc({ _id: oid(`${Model.modelName.toLowerCase()}-${collection.length + 1}`), ...data });
 			collection.push(doc);
 			return doc;
@@ -528,4 +531,46 @@ test('configuration updates reject existing checkout symlink directories before 
 	GitRepo.findOneAndUpdate = () => { throw new Error('unsafe configuration must not save'); };
 	await assert.rejects(updateGitRepo(host, 'repo', { notes_path: 'unsafe/notes' }), /Unsafe Git repository symlink/);
 	await assert.rejects(updateGitRepo(host, 'repo', { sync_path: 'unsafe' }), /Unsafe Git repository symlink/);
+});
+
+
+test('scheduler recovers crashed in_progress syncs, but leaves a live lock owner alone', async () => {
+	const remote = await createRemoteRepo();
+	const repo = makeRepo(remote, { last_sync_status: 'in_progress', commit_sync_enabled: false });
+	const state = { repos: [repo], notes: [], memories: [] };
+	installModelMocks(state);
+	const find = GitRepo.find;
+	const auditCreate = AuditLog.create;
+	AuditLog.create = async () => ({});
+	const db = mongoose.connection.db;
+	mongoose.connection.db ||= { collection: () => ({}) };
+	const coordinator = getMongoCoordinator();
+	const acquire = coordinator.acquireLock;
+	const release = coordinator.releaseLock;
+	const collection = coordinator.collection;
+	let active = true;
+	let attempts = 0;
+	let releases = 0;
+	coordinator.acquireLock = async () => { attempts++; return active ? null : { key: `git-sync:${repo._id}`, token: 'recovered-owner', expiresAt: new Date(Date.now() + 600000) }; };
+	coordinator.releaseLock = async () => { releases++; };
+	coordinator.collection = { updateOne: async () => ({ matchedCount: 1 }) };
+	GitRepo.find = () => ({ lean: async () => state.repos });
+	try {
+		assert.deepEqual(await runScheduledSync(), { checked: 1, due: 1, synced: 0, failed: 0 });
+		assert.equal(repo.last_sync_status, 'in_progress');
+		active = false;
+		assert.deepEqual(await runScheduledSync(), { checked: 1, due: 1, synced: 1, failed: 0 });
+		assert.equal(repo.last_sync_status, 'success');
+		assert.equal(attempts, 2);
+		assert.equal(releases, 1);
+	} finally {
+		GitRepo.find = find;
+		AuditLog.create = auditCreate;
+		coordinator.acquireLock = acquire;
+		coordinator.releaseLock = release;
+		coordinator.collection = collection;
+		mongoose.connection.db = db;
+		cleanupClone(repo.host_id);
+		fs.rmSync(remote.root, { recursive: true, force: true });
+	}
 });

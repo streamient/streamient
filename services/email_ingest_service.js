@@ -536,22 +536,30 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 		trashed_at: inTrash ? (data.trashed_at || new Date()) : null,
 	};
 
-	let existing = null;
-	if (normalized.message_id) existing = await Email.findOne({ message_id: normalized.message_id });
-	if (!existing && normalized.raw_hash) existing = await Email.findOne({ raw_hash: normalized.raw_hash, host_id });
-	if (existing && existing.host_id !== host_id) throw new Error('Email message already exists');
-
 	let email;
 	let created = false;
-	if (existing) {
-		email = await Email.findOneAndUpdate(
-			{ _id: existing._id, host_id },
-			{ $set: payload },
-			{ returnDocument: 'after' },
-		);
+	if (normalized.message_id) {
+		const filter = { host_id, message_id: normalized.message_id };
+		const options = { upsert: true, returnDocument: 'after', includeResultMetadata: true };
+		let result;
+		try {
+			result = await Email.findOneAndUpdate(filter, { $set: payload }, options);
+		} catch (err) {
+			// A concurrent insert can win the unique index race; update its authoritative result.
+			if (err.code !== 11000 || !err.keyPattern?.host_id || !err.keyPattern?.message_id) throw err;
+			result = await Email.findOneAndUpdate(filter, { $set: payload }, { ...options, upsert: false });
+			if (!result.value) throw err;
+		}
+		email = result.value;
+		created = !result.lastErrorObject.updatedExisting;
 	} else {
-		email = await Email.create(payload);
-		created = true;
+		const existing = normalized.raw_hash ? await Email.findOne({ raw_hash: normalized.raw_hash, host_id }).lean() : null;
+		if (existing) {
+			email = await Email.findOneAndUpdate({ _id: existing._id, host_id }, { $set: payload }, { returnDocument: 'after' });
+		} else {
+			email = await Email.create(payload);
+			created = true;
+		}
 	}
 
 	await createEmailThreadLinks(email, userId, host_id, { skipSideEffects: ctx.skipSideEffects });
