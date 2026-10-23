@@ -50,9 +50,9 @@ test('copies keep content with fresh identities and pending indexing', async (t)
 	const { Email } = await import('../model/email.js');
 	const { mockTenantWork } = await import('./helpers/tenant-work.js');
 	const restoreWork = mockTenantWork(); t.after(restoreWork);
-	const projectFind = Project.findOne;
-	t.after(() => { Project.findOne = projectFind; });
-	Project.findOne = (filter) => ({ select() { return this; }, read() { return this; }, lean: async () => ({ _id: filter._id }) });
+	const projectFind = Project.findOneAndUpdate;
+	t.after(() => { Project.findOneAndUpdate = projectFind; });
+	Project.findOneAndUpdate = (filter) => ({ select() { return this; }, read() { return this; }, lean: async () => ({ _id: filter._id }) });
 	const common = { _id: 'source-id', project: 'source-project', host_id: 'host', owner: 'old-owner', title: 'Copy me', content: '<p>content</p>', text_content: 'content', tags: ['tag'], is_indexed: true, git_source: { repo_id: 'foreign-repo', file_path: 'owned.md' }, git_commit: { sha: 'old' }, obsidian_source: { file_id: 'foreign-file' }, url: 'https://example.com', screenshot: '', subject: 'Mail subject', attachment_text_content: 'attachment text', message_id: 'old-message', references: ['other-message'], raw_hash: 'old-hash' };
 	for (const [type, Model] of [['notes', Note], ['memories', Memory], ['urls', Url], ['emails', Email]]) {
 		const findOne = Model.findOne;

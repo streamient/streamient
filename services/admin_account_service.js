@@ -156,7 +156,7 @@ export async function getAdminAccount(tenantId) {
 
 export async function updateAdminAccount(tenantId, input = {}, options = {}) {
 	if (!mongoose.isValidObjectId(tenantId)) return null;
-	const tenant = await Tenant.findById(tenantId).select('owner deletion').read('primary').lean();
+	const tenant = await Tenant.findById(tenantId).select('owner deletion').lean();
 	if (!tenant) return null;
 	if (tenant.deletion?.requested_at) throw new AdminAccountError('Account deletion is in progress', 409, 'account_deletion_locked');
 
@@ -210,5 +210,6 @@ export async function updateAdminAccount(tenantId, input = {}, options = {}) {
 	}
 
 	const loadAccount = options.getAccount || getAdminAccount;
-	return loadAccount(tenantId);
+	const account = await loadAccount(tenantId);
+	return account ? { ...account, ...tenantUpdate, owner: account.owner ? { ...account.owner, ...ownerUpdate } : account.owner } : account;
 }

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import csrfProtection, { browserCsrfProtection } from '../middleware/csrf.js';
+import { mockTenantWork } from './helpers/tenant-work.js';
 import { requireAuth, generateToken } from '../middleware/auth.js';
 import { User } from '../model/user.js';
 import { TenantMember } from '../model/tenant_member.js';
@@ -29,7 +30,8 @@ describe('browser CSRF protection', () => {
 		assert.equal(check({ headers: { authorization: 'Bearer invalid', host: 's.n.lan' } }).accepted, false);
 	});
 	it('authenticates tokens independently even with incidental cookies and blocks rejected requests before writes', async () => {
-		const original = { find: User.findById, update: User.findByIdAndUpdate, memberships: TenantMember.find, acquire: accountWork.acquire };
+		const restoreWork = mockTenantWork();
+		const original = { membershipUpdate: TenantMember.findOneAndUpdate, find: User.findById, update: User.findByIdAndUpdate, memberships: TenantMember.find, acquire: accountWork.acquire };
 		let holds = 0;
 		let writes = 0;
 		const userId = '507f1f77bcf86cd799439011';
@@ -37,6 +39,7 @@ describe('browser CSRF protection', () => {
 		User.findById = () => ({ select: () => ({ lean: async () => ({ _id: userId, is_active: true }) }) });
 		User.findByIdAndUpdate = async () => { writes++; };
 		TenantMember.find = () => ({ populate: () => ({ lean: async () => [{ _id: 'membership', role: 'owner', tenant: { _id: tenantId, host_id: 'host', name: 'Team' } }] }) });
+		TenantMember.findOneAndUpdate = () => ({ lean: async () => ({ role: 'owner' }) });
 		accountWork.acquire = async () => { holds++; return async () => {}; };
 		async function authenticate(authorization, session = { userId }) {
 			const req = { method: 'POST', path: '/api/v1/notes', originalUrl: '/api/v1/notes', session, headers: { host: 's.n.lan', authorization }, accepts: () => false };
@@ -56,7 +59,7 @@ describe('browser CSRF protection', () => {
 			assert.equal((await authenticate(bearer, {})).accepted, true);
 			assert.equal(holds, 2);
 			assert.equal(writes, 0);
-		} finally { User.findById = original.find; User.findByIdAndUpdate = original.update; TenantMember.find = original.memberships; accountWork.acquire = original.acquire; }
+		} finally { restoreWork(); TenantMember.findOneAndUpdate = original.membershipUpdate; User.findById = original.find; User.findByIdAndUpdate = original.update; TenantMember.find = original.memberships; accountWork.acquire = original.acquire; }
 	});
 	it('accepts AJAX, multipart headers and native forms including OAuth consent', () => {
 		assert.equal(check().accepted, true);

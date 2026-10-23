@@ -14,6 +14,7 @@ function fixture() {
 	let failure = false;
 	const collection = {
 		createIndex: async () => {},
+		findOneAndUpdate: async (filter) => collection.findOne(filter),
 		findOne: async ({ _id }) => {
 			if (failure) throw new Error('database unavailable');
 			const row = rows.get(_id);
@@ -48,7 +49,7 @@ function call(store, method, ...args) {
 	return new Promise((resolve, reject) => store[method](...args, (err, result) => err ? reject(err) : resolve(result)));
 }
 
-test('real HTTP middleware skips unchanged writes, saves changes/explicit saves, preserves cookie policy and logout', async (t) => {
+test('real HTTP middleware skips unchanged payload writes, saves changes/explicit saves, preserves cookie policy and logout', async (t) => {
 	const f = fixture();
 	const app = express();
 	app.use(f.middleware);

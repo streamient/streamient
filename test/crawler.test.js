@@ -82,6 +82,8 @@ function makeCrawlStateModel(initialStates = [], { staleReads = false } = {}) {
 			query.then = function (resolve, reject) { return Promise.resolve(this._results().length).then(resolve, reject); };
 			return query;
 		},
+		async updateMany(filter) { return { matchedCount: store.filter((state) => matchesFilter(state, filter)).length }; },
+		findOneAndUpdate(filter) { return { lean: async () => store.find((state) => matchesFilter(state, filter)) || null }; },
 		async distinct(field, filter) {
 			throw new Error(`Unexpected distinct(${field}) call`);
 		},

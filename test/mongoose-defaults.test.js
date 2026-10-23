@@ -4,6 +4,8 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { describe, it } from 'node:test';
 
+import config from '../config.js';
+import { MongoClient } from 'mongodb';
 import mongoose, { queryForSave } from '../model/mongoose.js';
 import { User } from '../model/user.js';
 
@@ -46,6 +48,20 @@ const productionFiles = [
 const mongooseWrapperPath = path.join(modelDir, 'mongoose.js');
 
 describe('Mongoose defaults', () => {
+	it('uses the Helpmonks replica policy on native clients and schema reads', () => {
+		const client = new MongoClient(config.mongoUri, config.mongoOptions);
+		assert.equal(client.options.readPreference.mode, 'secondaryPreferred');
+		assert.equal(client.options.readPreference.maxStalenessSeconds, 90);
+		assert.equal(client.options.readConcern.level, 'majority');
+		assert.equal(client.options.writeConcern.w, 'majority');
+		assert.equal(User.schema.options.read.maxStalenessSeconds, 90);
+		for (const file of productionFiles) {
+			const source = fs.readFileSync(file, 'utf8');
+			assert.doesNotMatch(source, /\.read\(\s*['"]primary['"]|readPreference\s*:\s*['"]primary['"]|primaryQuery|primaryTenantQuery/, file);
+		}
+		for (const name of ['db.js', 'app.js', 'modules/socket.js']) assert.match(fs.readFileSync(path.join(rootDir, name), 'utf8'), /config\.mongoOptions/, name);
+	});
+
 	it('keeps legacy clock format unset until the user saves it', () => {
 		const user = new User({ email: 'timezone-default@example.com', password: 'password', name: 'Timezone Default' });
 

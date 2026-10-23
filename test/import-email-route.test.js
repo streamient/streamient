@@ -29,7 +29,8 @@ function request(server, body) {
 describe('Email forwarding import route', () => {
 	const projectId = '507f1f77bcf86cd799439011';
 	const originalEmailForwardDomain = config.emailForwardDomain;
-	const originalProjectFindOne = Project.findOne;
+	const originalProjectRead = Project.findOne;
+	const originalProjectFindOne = Project.findOneAndUpdate;
 	const originalEmailFindOne = Email.findOne;
 	const originalEmailCreate = Email.create;
 	const originalEmailFind = Email.find;
@@ -39,7 +40,8 @@ describe('Email forwarding import route', () => {
 
 	beforeEach(() => {
 		config.emailForwardDomain = 'email.streamient.com';
-		Project.findOne = () => ({
+		Project.findOne = (...args) => Project.findOneAndUpdate(...args);
+		Project.findOneAndUpdate = () => ({
 			select() { return this; },
 			read() { return this; },
 			lean: async () => ({
@@ -73,7 +75,8 @@ describe('Email forwarding import route', () => {
 
 	afterEach(() => {
 		config.emailForwardDomain = originalEmailForwardDomain;
-		Project.findOne = originalProjectFindOne;
+		Project.findOneAndUpdate = originalProjectFindOne;
+		Project.findOne = originalProjectRead;
 		Email.findOne = originalEmailFindOne;
 		Email.create = originalEmailCreate;
 		Email.find = originalEmailFind;
@@ -153,7 +156,7 @@ describe('Email forwarding import route', () => {
 	});
 
 	it('moves filtered imported email to trash', async () => {
-		Project.findOne = () => ({
+		Project.findOneAndUpdate = () => ({
 			select() { return this; },
 			read() { return this; },
 			lean: async () => ({

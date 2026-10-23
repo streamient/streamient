@@ -45,7 +45,7 @@ describe('mobile resumable note imports', () => {
 		originals.countDocuments = NoteImportUpload.countDocuments;
 		originals.create = NoteImportUpload.create;
 		originals.updateOne = NoteImportUpload.updateOne;
-		originals.projectFindOne = Project.findOne;
+		originals.projectFindOne = Project.findOneAndUpdate;
 		originals.noteFindOne = Note.findOne;
 		Note.findOne = () => queryResult(null);
 
@@ -59,7 +59,7 @@ describe('mobile resumable note imports', () => {
 			return structuredClone(upload);
 		} });
 		NoteImportUpload.countDocuments = async () => 0;
-		Project.findOne = () => queryResult({ _id: projectId });
+		Project.findOneAndUpdate = () => queryResult({ _id: projectId });
 	});
 
 	afterEach(async () => {
@@ -68,7 +68,7 @@ describe('mobile resumable note imports', () => {
 		NoteImportUpload.countDocuments = originals.countDocuments;
 		NoteImportUpload.create = originals.create;
 		NoteImportUpload.updateOne = originals.updateOne;
-		Project.findOne = originals.projectFindOne;
+		Project.findOneAndUpdate = originals.projectFindOne;
 		Note.findOne = originals.noteFindOne;
 		await rm(path.resolve('assets', 'import', 'mobile', uploadId), { recursive: true, force: true });
 	});

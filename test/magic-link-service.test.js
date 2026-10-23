@@ -30,27 +30,12 @@ describe('magic link flow hardening', () => {
 		});
 	});
 
-	it('reads from primary and returns false when no user exists', async () => {
+	it('uses ordinary replica reads and returns false when no user exists', async () => {
 		const originalFindOne = User.findOne;
-		let readPreference = null;
-
 		try {
-			User.findOne = () => ({
-				select() {
-					return this;
-				},
-				read(preference) {
-					readPreference = preference;
-					return Promise.resolve(null);
-				},
-			});
-
-			const result = await sendMagicLink('missing@example.com');
-			assert.equal(result, false);
-			assert.equal(readPreference, 'primary');
-		} finally {
-			User.findOne = originalFindOne;
-		}
+			User.findOne = () => ({ select: async () => null });
+			assert.equal(await sendMagicLink('missing@example.com'), false);
+		} finally { User.findOne = originalFindOne; }
 	});
 
 	it('returns false when no SMTP delivery occurs', async () => {

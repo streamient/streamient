@@ -326,7 +326,7 @@ async function assembleUpload(upload, signal) {
 
 export async function processUpload(uploadId, { signal, assertOwnership, isOwner, withOwnership = (callback) => callback(undefined) } = {}) {
 	signal?.throwIfAborted();
-	const upload = await NoteImportUpload.findOne({ _id: uploadId, state: { $in: ['processing', 'failed'] } }).lean();
+	const upload = await NoteImportUpload.findOneAndUpdate({ _id: uploadId, state: { $in: ['processing', 'failed'] } }, { $set: { state: 'processing' } }, { returnDocument: 'after' }).lean();
 	if (!upload) return;
 	await requireActiveProject(upload.host_id, upload.project);
 	const releaseAccountWork = await acquireTenantWork(upload.host_id);
@@ -338,7 +338,7 @@ export async function processUpload(uploadId, { signal, assertOwnership, isOwner
 			await noteService.createNote(upload.user, upload.host_id, existing, { channel: 'mobile', user_id: upload.user, idempotency_id: upload._id, signal, assertOwnership, withOwnership });
 			await assertOwnership?.();
 			signal?.throwIfAborted();
-			const completed = await withOwnership((session) => NoteImportUpload.findOneAndUpdate({ _id: upload._id }, { $set: { state: 'complete', note: existing._id, error: '', expires_at: expiryDate() } }, { returnDocument: 'after', session }).read('primary').lean());
+			const completed = await withOwnership((session) => NoteImportUpload.findOneAndUpdate({ _id: upload._id }, { $set: { state: 'complete', note: existing._id, error: '', expires_at: expiryDate() } }, { returnDocument: 'after', session }).lean());
 			emitToTenant(upload.host_id, 'note-import:complete', publicUpload(completed));
 			await rm(uploadDir(upload._id), { recursive: true, force: true });
 			return;
@@ -354,13 +354,13 @@ export async function processUpload(uploadId, { signal, assertOwnership, isOwner
 		const note = await noteService.createNote(upload.user, upload.host_id, { title, content: html, text_content: text, tags: upload.tags?.length ? upload.tags : ['imported'], project: upload.project }, { channel: 'mobile', user_id: upload.user, idempotency_id: upload._id, signal, assertOwnership, withOwnership });
 		signal?.throwIfAborted();
 		await assertOwnership?.();
-		const completed = await withOwnership((session) => NoteImportUpload.findOneAndUpdate({ _id: upload._id }, { $set: { state: 'complete', note: note._id, mime_type: detected.mimeType, error: '', last_activity_at: new Date(), expires_at: expiryDate() } }, { returnDocument: 'after', session }).read('primary').lean());
+		const completed = await withOwnership((session) => NoteImportUpload.findOneAndUpdate({ _id: upload._id }, { $set: { state: 'complete', note: note._id, mime_type: detected.mimeType, error: '', last_activity_at: new Date(), expires_at: expiryDate() } }, { returnDocument: 'after', session }).lean());
 		emitToTenant(upload.host_id, 'note-import:complete', publicUpload(completed));
 		emitToTenant(upload.host_id, 'counts:refresh', { project: String(upload.project) });
 		await rm(uploadDir(upload._id), { recursive: true, force: true });
 	} catch (err) {
 		if (isOwner && !await isOwner()) throw err;
-		const failed = await withOwnership((session) => NoteImportUpload.findOneAndUpdate({ _id: upload._id }, { $set: { state: 'failed', error: cleanString(err?.message || err, 1000), last_activity_at: new Date(), expires_at: expiryDate() } }, { returnDocument: 'after', session }).read('primary').lean(), { allowAborted: true });
+		const failed = await withOwnership((session) => NoteImportUpload.findOneAndUpdate({ _id: upload._id }, { $set: { state: 'failed', error: cleanString(err?.message || err, 1000), last_activity_at: new Date(), expires_at: expiryDate() } }, { returnDocument: 'after', session }).lean(), { allowAborted: true });
 		emitToTenant(upload.host_id, 'note-import:failed', publicUpload(failed));
 		throw err;
 	}
@@ -390,6 +390,6 @@ export function logImportWorkerError(err) {
 }
 
 export async function deleteImportFilesForHost(hostId) {
-	const uploads = await NoteImportUpload.find({ host_id: hostId }).select('_id').read('primary').lean();
+	const uploads = await NoteImportUpload.find({ host_id: hostId }).select('_id').lean();
 	for (const upload of uploads) await rm(uploadDir(upload._id), { recursive: true, force: true });
 }

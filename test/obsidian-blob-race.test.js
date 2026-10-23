@@ -20,6 +20,7 @@ class BlobFixture {
 		config.obsidian.vaultsDir = this.root;
 		config.obsidian.encryptionKey = 'a'.repeat(64);
 		t.mock.method(ObsidianBlob, 'findOne', (filter) => BlobFixture.query(this.rows.get(filter.host_id + ':' + filter.sha256) || null));
+		t.mock.method(ObsidianBlob, 'findOneAndUpdate', (filter) => BlobFixture.query(this.rows.get(filter.host_id + ':' + filter.sha256) || null));
 		t.mock.method(ObsidianBlob, 'create', async (data) => {
 			await this.beforeCreate(data);
 			const key = data.host_id + ':' + data.sha256;

@@ -108,7 +108,7 @@ async function cleanupTenantSettings(db) {
 	return { found, modified: result.modifiedCount || 0 };
 }
 
-await mongoose.connect(config.mongoUri);
+await mongoose.connect(config.mongoUri, config.mongoOptions);
 
 try {
 	const db = mongoose.connection.db;

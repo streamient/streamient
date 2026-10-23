@@ -5,7 +5,7 @@ import { User } from '../model/user.js';
 export async function sendMagicLink(email, baseUrl = null, options = {}) {
 	let userId = options.userId || null;
 	if (!userId) {
-		const user = await User.findOne({ email, is_active: true }).select('_id').read('primary');
+		const user = await User.findOne({ email, is_active: true }).select('_id');
 		if (!user) return false; // silent fail to prevent enumeration
 		userId = user._id;
 	}

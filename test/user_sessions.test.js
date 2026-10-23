@@ -11,12 +11,13 @@ function withSessions(rows, fn) {
 	const store = rows.map((row) => ({ ...row, session: JSON.stringify(row.session) }));
 	const markers = new Map();
 	const sessions = {
-		find: (query) => ({ toArray: async () => store.filter((row) => new RegExp(query.session.$regex).test(row.session)) }),
+		find: () => ({ toArray: async () => [] }),
+		findOneAndUpdate: async (query) => store.find((row) => !query._id.$nin.includes(row._id) && new RegExp(query.session.$regex).test(row.session)) || null,
 		deleteMany: async ({ _id }) => { for (const id of _id.$in) store.splice(store.findIndex((row) => row._id === id), 1); },
 	};
 	const revoked = {
 		createIndex: async () => {},
-		findOne: async ({ _id }) => markers.has(_id) ? { _id } : null,
+		updateOne: async ({ _id }) => ({ matchedCount: Number(markers.has(_id)) }),
 		find: ({ _id }) => ({ toArray: async () => _id.$in.filter((id) => markers.has(id)).map((id) => ({ _id: id })) }),
 		bulkWrite: async (ops) => { for (const { updateOne } of ops) markers.set(updateOne.filter._id, updateOne.update.$set); },
 	};

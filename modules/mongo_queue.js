@@ -58,7 +58,7 @@ export const MongoQueue = {
 		const now = new Date();
 		const hostId = queueName === 'account_deletion' ? '' : await resolveJobHost(data, options);
 		if (hostId) {
-			const tenant = await mongoose.connection.db.collection('tenants').findOne({ host_id: hostId, is_active: { $ne: false }, 'deletion.requested_at': null }, { projection: { _id: 1 }, readPreference: 'primary' });
+			const tenant = await mongoose.connection.db.collection('tenants').findOneAndUpdate({ host_id: hostId, is_active: { $ne: false }, 'deletion.requested_at': null }, { $set: { is_active: true } }, { projection: { _id: 1 }, returnDocument: 'after' });
 			if (!tenant) throw Object.assign(new Error('Account access is unavailable'), { code: 'account_unavailable' });
 			data = { ...data, host_id: hostId };
 		}
@@ -213,7 +213,7 @@ export class MongoWorker {
 			const jobId = String(claimed._id);
 			const claimFilter = namespaced({ _id: claimed._id, status: STATUS.PROCESSING, claim_owner: owner }, this.appInstance);
 			this.activeJobs.set(owner, controller);
-			const isOwner = async () => !!await col.findOne({ ...claimFilter, lease_expires_at: { $gt: new Date() } }, { projection: { _id: 1 } });
+			const isOwner = async () => (await col.updateOne({ ...claimFilter, lease_expires_at: { $gt: new Date() } }, { $set: { claim_owner: owner } })).matchedCount > 0;
 			const assertOwnership = async () => {
 				controller.signal.throwIfAborted();
 				if (!await isOwner()) { controller.abort(new Error('Job claim lost')); controller.signal.throwIfAborted(); }
@@ -229,7 +229,7 @@ export class MongoWorker {
 						const value = await callback(session);
 						if (!allowAborted) controller.signal.throwIfAborted();
 						return value;
-					}, { readPreference: 'primary' });
+					}, {});
 				} finally { await session.endSession(); }
 			};
 			heartbeat = setInterval(async () => {
@@ -243,7 +243,7 @@ export class MongoWorker {
 				const hostId = this.queueName === 'account_deletion' ? '' : await resolveJobHost(claimed.data);
 				if (hostId) {
 					await col.updateOne(claimFilter, { $set: { 'data.host_id': hostId } });
-					const tenant = await mongoose.connection.db.collection('tenants').findOne({ host_id: hostId, is_active: { $ne: false }, 'deletion.requested_at': null }, { projection: { _id: 1 }, readPreference: 'primary' });
+					const tenant = await mongoose.connection.db.collection('tenants').findOneAndUpdate({ host_id: hostId, is_active: { $ne: false }, 'deletion.requested_at': null }, { $set: { is_active: true } }, { projection: { _id: 1 }, returnDocument: 'after' });
 					if (!tenant) { await col.deleteOne(claimFilter); return; }
 				}
 				if (this.stopping) controller.abort(new Error('Worker stopped'));
@@ -330,7 +330,8 @@ export async function resolveJobHost(data, options = {}) {
 	const db = options.db || mongoose.connection.db;
 	for (const [key, name] of Object.entries(JOB_HOST_REFERENCES)) {
 		if (!data?.[key] || !mongoose.isValidObjectId(data[key])) continue;
-		const row = await db.collection(name).findOne({ _id: new mongoose.Types.ObjectId(data[key]) }, { projection: { host_id: 1 }, readPreference: 'primary', ...(options.session ? { session: options.session } : {}) });
+		const id = new mongoose.Types.ObjectId(data[key]);
+		const row = await db.collection(name).findOneAndUpdate({ _id: id }, { $set: { _id: id } }, { returnDocument: 'after', projection: { host_id: 1 }, ...(options.session ? { session: options.session } : {}) });
 		if (row?.host_id) return row.host_id;
 		return '__missing_account__';
 	}

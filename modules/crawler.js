@@ -255,11 +255,11 @@ async function bulkWriteCrawlState(crawlStateModel, ops) {
 async function countCrawlStates(crawlStateModel, urlDoc) {
 	const filter = { host_id: urlDoc.host_id, parent_url_id: urlDoc._id };
 	const [queued, visited, failed] = await Promise.all([
-		crawlStateModel.countDocuments({ ...filter, status: 'queued' }).read('primary'),
-		crawlStateModel.countDocuments({ ...filter, status: 'visited' }).read('primary'),
-		crawlStateModel.countDocuments({ ...filter, status: 'failed' }).read('primary'),
+		crawlStateModel.updateMany({ ...filter, status: 'queued' }, { $set: { status: 'queued' } }, { timestamps: false }),
+		crawlStateModel.updateMany({ ...filter, status: 'visited' }, { $set: { status: 'visited' } }, { timestamps: false }),
+		crawlStateModel.updateMany({ ...filter, status: 'failed' }, { $set: { status: 'failed' } }, { timestamps: false }),
 	]);
-	return { queued, visited, failed };
+	return { queued: queued.matchedCount, visited: visited.matchedCount, failed: failed.matchedCount };
 }
 
 async function updateUrlCrawlSummary(urlModel, crawlStateModel, urlDoc) {
@@ -296,7 +296,7 @@ async function seedInitialCrawlState(urlDoc, crawlStateModel, { reset = false, r
 	if (reset) {
 		await resetCrawlState(urlDoc, crawlStateModel, { resetFailed });
 	} else {
-		const existing = await crawlStateModel.countDocuments(filter).read('primary');
+		const existing = await crawlStateModel.countDocuments(filter);
 		if (existing > 0) return;
 	}
 
@@ -310,7 +310,7 @@ async function getQueuedCrawlStates(urlDoc, crawlStateModel, limit) {
 	return crawlStateModel
 		.find({ host_id: urlDoc.host_id, parent_url_id: urlDoc._id, status: 'queued' })
 		// This queue was just seeded/reset; stale reads must not mark it complete.
-		.read('primary')
+
 		.sort({ updatedAt: 1 })
 		.limit(limit)
 		.lean();
@@ -323,7 +323,7 @@ async function getCrawlStateUrlSet(urlDoc, crawlStateModel, status) {
 			parent_url_id: urlDoc._id,
 			status,
 		}, { normalized_url: 1, _id: 0 })
-		.read('primary')
+
 		.lean()
 		.cursor({ batchSize: CRAWL_STATE_CURSOR_BATCH_SIZE });
 	const urls = new Set();
@@ -452,6 +452,10 @@ export async function crawlSite(urlDoc, deps = {}) {
 
 	const failed = await getFailedUrlSet(urlDoc, crawlStateModel);
 	let queuedStates = await getQueuedCrawlStates(urlDoc, crawlStateModel, stepLimit);
+	if (!queuedStates.length) {
+		const queued = await crawlStateModel.findOneAndUpdate({ host_id: hostId, parent_url_id: urlDoc._id, status: 'queued' }, { $set: { status: 'queued' } }, { timestamps: false, returnDocument: 'after' }).lean();
+		if (queued) queuedStates = [queued];
+	}
 	queuedStates = queuedStates.filter((state) => !failed.has(state.normalized_url));
 	if (!queuedStates.length) {
 		const summary = await updateUrlCrawlSummary(urlModel, crawlStateModel, urlDoc);

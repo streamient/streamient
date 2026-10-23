@@ -103,10 +103,11 @@ export async function requireAuth(req, res, next) {
 
 	if (authHeader?.startsWith('Token ')) {
 		const accessToken = authHeader.slice(6);
-		const user = await User.findOne(
+		const user = await User.findOneAndUpdate(
 			{ 'access_tokens.token': accessToken, is_active: true },
-			'host_id tenant access_tokens',
-		);
+			{ $set: { is_active: true } },
+			{ returnDocument: 'after', timestamps: false },
+		).select('host_id tenant access_tokens').lean();
 		if (user) {
 			await ensureOwnerMembershipForUser(user);
 			req.userId = user._id.toString();

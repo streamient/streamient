@@ -30,7 +30,7 @@ export function isDeletionTrackingSubscription(subscription, tenant, settings = 
 
 export async function checkAccountDeletionBilling(tenant, options = {}) {
 	const settings = options.config || config;
-	const user = options.user || await User.findById(tenant.owner).select('+stripe_customer_id +stripe_subscription_id +stripe_free_subscription_id subscription_status trial_source').read('primary').lean();
+	const user = options.user || await User.findById(tenant.owner).select('+stripe_customer_id +stripe_subscription_id +stripe_free_subscription_id subscription_status trial_source').lean();
 	const knownSubscription = Boolean(user?.stripe_subscription_id || user?.stripe_free_subscription_id || ['active', 'past_due', 'unpaid', 'canceled', 'incomplete_expired', 'paused'].includes(user?.subscription_status) || (user?.subscription_status === 'trialing' && user?.trial_source !== 'no_card'));
 	if (!settings.stripe.secretKey && !options.stripe) {
 		if (user?.stripe_customer_id || knownSubscription) throw Object.assign(new Error('Unable to verify Stripe billing. Please try again later.'), { status: 503, code: 'billing_unavailable' });
@@ -263,7 +263,7 @@ export async function cancelFreeSubscriptionForUser(userId, options = {}) {
 }
 
 export async function applySubscriptionToUser(userId, subscription, stripeCustomerId = undefined) {
-	const owner = await User.findById(userId).select('host_id').read('primary').lean();
+	const owner = await User.findById(userId).select('host_id').lean();
 	if (!owner) return null;
 	await assertTenantAvailable(owner.host_id);
 	const plan = resolvePlanFromSubscription(subscription);
@@ -374,7 +374,7 @@ export async function handleWebhook(rawBody, sig) {
 	const object = event.data.object;
 	const customerId = typeof object.customer === 'string' ? object.customer : object.customer?.id;
 	const subscriptionId = object.object === 'subscription' ? object.id : object.subscription;
-	const user = await User.findOne({ $or: [...(customerId ? [{ stripe_customer_id: customerId }] : []), ...(subscriptionId ? [{ stripe_subscription_id: subscriptionId }] : []), { _id: null }] }).select('host_id').read('primary').lean();
+	const user = await User.findOne({ $or: [...(customerId ? [{ stripe_customer_id: customerId }] : []), ...(subscriptionId ? [{ stripe_subscription_id: subscriptionId }] : []), { _id: null }] }).select('host_id').lean();
 	const hostId = object.metadata?.host_id || user?.host_id;
 	if (!hostId) return;
 	let release;

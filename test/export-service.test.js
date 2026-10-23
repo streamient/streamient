@@ -10,13 +10,13 @@ function cleanupMocks(t, rows) {
 	const find = Export.find;
 	const deleteOne = Export.deleteOne;
 	const listIndexes = Export.collection.listIndexes;
-	const exists = Export.exists;
+	const exists = Export.findOneAndUpdate;
 	const deleted = [];
 	Export.find = () => ({ read() { return this; }, lean: async () => rows });
-	Export.exists = () => ({ read: async () => true });
+	Export.findOneAndUpdate = async () => true;
 	Export.collection.listIndexes = () => ({ toArray: async () => [] });
 	Export.deleteOne = async (query) => { deleted.push(query._id); return { deletedCount: 1 }; };
-	t.after(() => { Export.find = find; Export.deleteOne = deleteOne; Export.collection.listIndexes = listIndexes; Export.exists = exists; });
+	t.after(() => { Export.find = find; Export.deleteOne = deleteOne; Export.collection.listIndexes = listIndexes; Export.findOneAndUpdate = exists; });
 	return deleted;
 }
 

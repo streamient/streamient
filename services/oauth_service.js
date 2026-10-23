@@ -819,7 +819,7 @@ export async function exchangeRefreshToken({ refreshToken, client, host_id = nul
 	let releaseAccountWork;
 	try {
 	return await mongoose.connection.transaction(async (session) => {
-	const refresh = await OAuthRefreshToken.findOne({ token_hash: sha256Hex(refreshToken) }).session(session).read('primary').lean();
+	const refresh = await OAuthRefreshToken.findOneAndUpdate({ token_hash: sha256Hex(refreshToken), revoked_at: null, rotated_at: null, expires_at: { $gt: new Date() } }, { $set: { rotated_at: new Date() } }, { session, returnDocument: 'before' }).lean();
 	if (!refresh || refresh.revoked_at || refresh.rotated_at || refresh.expires_at <= new Date()) {
 		throw new OAuthError('invalid_grant', 'refresh_token is invalid or expired', 400);
 	}
@@ -832,8 +832,6 @@ export async function exchangeRefreshToken({ refreshToken, client, host_id = nul
 
 	if (!releaseAccountWork) releaseAccountWork = await acquireTenantWork(refresh.host_id);
 	const scopes = normalizeScopeInput(refresh.scope);
-	const claimed = await OAuthRefreshToken.updateOne({ _id: refresh._id, revoked_at: null, rotated_at: null, expires_at: { $gt: new Date() } }, { $set: { rotated_at: new Date() } }, { session });
-	if (claimed.modifiedCount !== 1) throw new OAuthError('invalid_grant', 'refresh_token is invalid or expired', 400);
 	const nextPair = await issueTokenPair({
 		userId: refresh.user,
 		tenantId: refresh.tenant,
@@ -847,7 +845,7 @@ export async function exchangeRefreshToken({ refreshToken, client, host_id = nul
 	await OAuthRefreshToken.updateOne({ _id: refresh._id }, { $set: { replaced_by_token_hash: sha256Hex(nextPair.refresh_token) } }, { session });
 
 	return nextPair;
-	}, { readPreference: 'primary' });
+	}, {});
 	} finally { if (releaseAccountWork) await releaseAccountWork(); }
 }
 

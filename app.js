@@ -60,15 +60,23 @@ var _90_days_in_ms = 90 * 24 * 60 * 60 * 1000;
 
 const sessionStore = MongoStore.create({
 	'mongoUrl': config.mongoUri,
+	'mongoOptions': config.mongoOptions,
 	'collectionName': 'sessions',
 	// Store TTL/touchAfter use seconds; cookie maxAge uses milliseconds.
 	'ttl': _90_days_in_ms / 1000,
 	'touchAfter': 60,
 	'createTTLIndex': true,
 });
-const loadStoredSession = sessionStore.get.bind(sessionStore);
-// A revoked session stays signed out even if an in-flight request saved it again after revocation.
-sessionStore.get = (sid, callback) => isSessionRevoked(publicSessionId(sid)).then((revoked) => revoked ? sessionStore.destroy(sid, () => callback(null, null)) : loadStoredSession(sid, callback), callback);
+// Validate and return the current session atomically; a lagging replica must not lose a fresh login.
+sessionStore.get = async (sid, callback) => {
+	try {
+		if (await isSessionRevoked(publicSessionId(sid))) return sessionStore.destroy(sid, () => callback(null, null));
+		const row = await (await sessionStore.collectionP).findOneAndUpdate({ _id: sid, $or: [{ expires: { $exists: false } }, { expires: { $gt: new Date() } }] }, { $set: { _id: sid } }, { returnDocument: 'after' });
+		const value = row ? sessionStore.transformFunctions.unserialize(row.session) : null;
+		if (value && row.lastModified) value.lastModified = row.lastModified;
+		callback(null, value);
+	} catch (err) { callback(err); }
+};
 
 const sessionMiddleware = session({
 	'secret': config.sessionSecret,

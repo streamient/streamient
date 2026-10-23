@@ -679,11 +679,11 @@ export async function* resolveBatchIds(host_id, type, body, selectedAt = new Dat
 		return;
 	}
 	const query = { host_id, in_trash: { $ne: true }, createdAt: { $lt: selectedAt }, ...(body.filterProject ? { project: body.filterProject } : {}) };
-	const ceiling = await Model.findOne(query).select('_id').sort({ _id: -1 }).read('primary').lean();
+	const ceiling = await Model.findOne(query).select('_id').sort({ _id: -1 }).lean();
 	if (!ceiling) return;
 	let after;
 	for (;;) {
-		const docs = await Model.find({ ...query, _id: { $lte: ceiling._id, ...(after ? { $gt: after } : {}) } }).select('_id').sort({ _id: 1 }).limit(100).read('primary').lean();
+		const docs = await Model.find({ ...query, _id: { $lte: ceiling._id, ...(after ? { $gt: after } : {}) } }).select('_id').sort({ _id: 1 }).limit(100).lean();
 		if (!docs.length) return;
 		yield docs.map((doc) => String(doc._id));
 		after = docs.at(-1)._id;
@@ -737,7 +737,7 @@ export async function processBatch(hostId, type, body, operation) {
 
 export async function copyBatchItem(type, userId, hostId, id, project, ctx) {
 	const Model = { notes: Note, memories: Memory, urls: Url, emails: Email }[type];
-	const source = await Model.findOne({ _id: id, host_id: hostId, in_trash: { $ne: true } }).read('primary').lean();
+	const source = await Model.findOne({ _id: id, host_id: hostId, in_trash: { $ne: true } }).lean();
 	if (!source) return null;
 	if (type === 'notes') return noteService.createNote(userId, hostId, { title: source.title, content: source.content, text_content: source.text_content, tags: source.tags, project }, ctx);
 	if (type === 'memories') return memoryService.storeMemory(userId, hostId, { title: source.title, content: source.content, tags: source.tags, project }, ctx);
@@ -1685,14 +1685,9 @@ router.post('/tokens', async (req, res) => {
 
 router.delete('/tokens/:id', async (req, res) => {
 	try {
-		const user = await queryForSave(User.findById(req.userId));
-		if (!user) return res.status(404).json({ error: 'User not found' });
-
-		const idx = user.access_tokens.findIndex((t) => t._id.toString() === req.params.id);
-		if (idx === -1) return res.status(404).json({ error: 'Token not found' });
-
-		user.access_tokens.splice(idx, 1);
-		await user.save();
+		if (!mongoose.isObjectIdOrHexString(req.params.id)) return res.status(404).json({ error: 'Token not found' });
+		const result = await User.updateOne({ _id: req.userId, 'access_tokens._id': req.params.id }, { $pull: { access_tokens: { _id: req.params.id } } });
+		if (!result.matchedCount) return res.status(404).json({ error: 'Token not found' });
 
 		res.json({ message: 'Token deleted' });
 	} catch (err) {

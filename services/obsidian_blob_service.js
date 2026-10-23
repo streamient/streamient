@@ -274,7 +274,7 @@ export async function completeUpload(userId, hostId, id) {
 		await upload.save();
 		throw new ObsidianBlobError(upload.error, 409, 'file_integrity_conflict');
 	}
-	let blob = await ObsidianBlob.findOne({ host_id: hostId, sha256 }).read('primary').lean();
+	let blob = await ObsidianBlob.findOneAndUpdate({ host_id: hostId, sha256 }, { $inc: { __v: 0 } }, { timestamps: false, returnDocument: 'after' }).lean();
 	if (!blob) {
 		const destination = blobDir(hostId, sha256);
 		let installed = false;
@@ -291,7 +291,7 @@ export async function completeUpload(userId, hostId, id) {
 				chunks: upload.chunks,
 			});
 		} catch (err) {
-			blob = await ObsidianBlob.findOne({ host_id: hostId, sha256 }).read('primary').lean();
+			blob = await ObsidianBlob.findOneAndUpdate({ host_id: hostId, sha256 }, { $inc: { __v: 0 } }, { timestamps: false, returnDocument: 'after' }).lean();
 			if (!blob) throw err;
 			if (installed && blob.storage_key !== path.relative(storageRoot(), destination)) await rm(destination, { recursive: true, force: true });
 			await rm(uploadDir(hostId, upload._id), { recursive: true, force: true }).catch(() => {});
@@ -310,7 +310,7 @@ export async function storeBuffer(hostId, value, mimeType = 'application/octet-s
 	const buffer = Buffer.isBuffer(value) ? value : Buffer.from(value);
 	if (config.obsidian.maxFileBytes && buffer.length > config.obsidian.maxFileBytes) throw new ObsidianBlobError('File exceeds the configured Obsidian sync limit', 413, 'file_too_large');
 	const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
-	const existing = await ObsidianBlob.findOne({ host_id: hostId, sha256 }).read('primary').lean();
+	const existing = await ObsidianBlob.findOne({ host_id: hostId, sha256 }).lean();
 	if (existing) return existing;
 	const temporary = path.join(storageRoot(), 'server', cleanSegment(hostId), crypto.randomUUID());
 	await mkdir(temporary, { recursive: true });
@@ -337,7 +337,7 @@ export async function storeBuffer(hostId, value, mimeType = 'application/octet-s
 				chunks,
 			});
 		} catch (err) {
-			const raced = await ObsidianBlob.findOne({ host_id: hostId, sha256 }).read('primary').lean();
+			const raced = await ObsidianBlob.findOneAndUpdate({ host_id: hostId, sha256 }, { $inc: { __v: 0 } }, { timestamps: false, returnDocument: 'after' }).lean();
 			if (!raced) throw err;
 			if (installed && raced.storage_key !== path.relative(storageRoot(), destination)) await rm(destination, { recursive: true, force: true });
 			await rm(temporary, { recursive: true, force: true });

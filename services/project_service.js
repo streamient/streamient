@@ -13,7 +13,7 @@ export async function requireActiveProject(hostId, projectId) {
 	if (projectId !== undefined && (projectId === null || (typeof projectId !== 'string' && !(projectId instanceof mongoose.Types.ObjectId)))) throw Object.assign(new Error('Active project not found'), { status: 404, code: 'project_not_found' });
 	let project;
 	try {
-		project = await Project.findOne({ host_id: hostId, is_active: true, ...(projectId === undefined ? { is_default: true } : { _id: projectId }) }).select('_id').read('primary').lean();
+		project = await Project.findOneAndUpdate({ host_id: hostId, is_active: true, ...(projectId === undefined ? { is_default: true } : { _id: projectId }) }, { $set: { is_active: true } }, { timestamps: false, returnDocument: 'after' }).select('_id').lean();
 	} catch (err) {
 		if (err.name !== 'CastError') throw err;
 	}

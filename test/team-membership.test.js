@@ -156,7 +156,8 @@ describe('team membership helpers', () => {
 		TenantMember.findOne = () => ({
 			lean: async () => null,
 		});
-		TenantMember.create = async (payload) => {
+		TenantMember.create = async (rows) => {
+			const payload = rows[0];
 			createdMembershipPayload = payload;
 			const membership = {
 				_id: { toString: () => 'membership-2' },
@@ -167,7 +168,7 @@ describe('team membership helpers', () => {
 					throw new Error('createTeamMember should not populate after create');
 				},
 			};
-			return membership;
+			return [membership];
 		};
 		TeamInvite.deleteMany = async (filter) => {
 			deletedInviteFilter = filter;
@@ -254,14 +255,15 @@ describe('team membership helpers', () => {
 				return null;
 			},
 		});
-		TenantMember.create = async (payload) => {
+		TenantMember.create = async (rows) => {
+			const payload = rows[0];
 			createdMembershipPayload = payload;
-			return {
+			return [{
 				_id: { toString: () => 'membership-existing' },
 				role: payload.role,
 				joined_at: payload.joined_at,
 				user: payload.user,
-			};
+			}];
 		};
 		TeamInvite.deleteMany = async (filter) => {
 			deletedInviteFilter = filter;

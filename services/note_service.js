@@ -15,24 +15,12 @@ export async function createNote(userId, host_id, data, ctx = {}) {
 	await ctx.assertOwnership?.();
 	const project = await requireActiveProject(host_id, data.project);
 	const persist = async (session) => {
-		const lookup = () => {
-			const query = Note.findOne({ _id: ctx.idempotency_id, host_id, project }).read('primary');
-			return (session ? query.session(session) : query).lean();
-		};
-		let note = ctx.idempotency_id ? await lookup() : null;
-		if (note) return note;
 		ctx.signal?.throwIfAborted();
-		await ctx.assertOwnership?.();
+		if (!session) await ctx.assertOwnership?.();
 		const payload = { ...(ctx.idempotency_id ? { _id: ctx.idempotency_id } : {}), title: data.title, content: data.content || '', text_content: data.text_content || '', tags: data.tags || [], project, owner: userId, host_id, is_indexed: false };
-		try {
-			if (session) [note] = await Note.create([payload], { session });
-			else note = await Note.create(payload);
-		} catch (err) {
-			if (session || err.code !== 11000 || !ctx.idempotency_id) throw err;
-			note = await lookup();
-			if (!note) throw err;
-		}
-		return note;
+		if (ctx.idempotency_id) return Note.findOneAndUpdate({ _id: ctx.idempotency_id, host_id, project }, { $setOnInsert: { ...payload, createdAt: new Date(), updatedAt: new Date() } }, { upsert: true, returnDocument: 'after', session, timestamps: false }).lean();
+		if (session) return (await Note.create([payload], { session }))[0];
+		return Note.create(payload);
 	};
 	const note = ctx.withOwnership ? await ctx.withOwnership(persist) : await persist();
 	ctx.signal?.throwIfAborted();

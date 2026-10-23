@@ -27,9 +27,18 @@ async function findUserSessions(userId) {
 	if (!/^[a-f0-9]{24}$/.test(id)) return [];
 	const sessions = mongoose.connection.db.collection('sessions');
 	// shortcut: connect-mongo stores the session as a JSON string, so this scans the collection; switch the store to stringify:false and index session.userId if the Security page gets slow.
-	const rows = await sessions.find({ session: { $regex: `"userId":"${id}"` } }, { projection: { session: 1, expires: 1, lastModified: 1 } }).toArray();
-	const revoked = new Set((await revokedSessions().find({ _id: { $in: rows.map((row) => publicSessionId(row._id)) } }, { projection: { _id: 1 } }).toArray()).map((marker) => marker._id));
-	return rows.map((row) => ({ row, data: parseSession(row) })).filter(({ row, data }) => data && String(data.userId) === id && !data.impersonating && !revoked.has(publicSessionId(row._id)));
+	const rows = [];
+	while (true) {
+		const row = await sessions.findOneAndUpdate({ session: { $regex: `"userId":"${id}"` }, _id: { $nin: rows.map((value) => value._id) } }, { $set: {} }, { returnDocument: 'after', projection: { session: 1, expires: 1, lastModified: 1 } });
+		if (!row) break;
+		rows.push(row);
+	}
+	const result = [];
+	for (const row of rows) {
+		const data = parseSession(row);
+		if (data && String(data.userId) === id && !data.impersonating && !await isSessionRevoked(publicSessionId(row._id))) result.push({ row, data });
+	}
+	return result;
 }
 
 export async function listUserSessions(userId, currentSid) {
@@ -38,7 +47,8 @@ export async function listUserSessions(userId, currentSid) {
 }
 
 export async function isSessionRevoked(publicId) {
-	return Boolean(publicId) && Boolean(await revokedSessions().findOne({ _id: String(publicId) }, { projection: { _id: 1 } }));
+	// Match the marker atomically so replica lag cannot restore revoked access.
+	return Boolean(publicId) && (await revokedSessions().updateOne({ _id: String(publicId) }, { $set: { _id: String(publicId) } })).matchedCount > 0;
 }
 
 // The marker outlives the deleted row so an in-flight save cannot resurrect the session.

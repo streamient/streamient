@@ -14,7 +14,7 @@ if (!email) {
 	process.exit(1);
 }
 
-await mongoose.connect(config.mongoUri);
+await mongoose.connect(config.mongoUri, config.mongoOptions);
 
 const user = await User.findOne({ email }).select('host_id').lean();
 if (!user) {

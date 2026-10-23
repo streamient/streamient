@@ -47,18 +47,21 @@ function exportedSources(docs) {
 	return sources;
 }
 
-async function readPrimaryByIds(model, hostId, ids, batchSize, isValidId) {
+async function readByIds(model, hostId, ids, batchSize, isValidId) {
 	const docs = [];
 	const validIds = ids.filter((id) => isValidId(id));
 	for (const batch of splitBatches(validIds, batchSize)) {
-		const rows = await model.find({ _id: { $in: batch }, host_id: hostId }).read('primary').lean();
-		docs.push(...rows);
+		for (const id of batch) {
+			const row = await model.findOneAndUpdate({ _id: id, host_id: hostId }, { $inc: { __v: 0 } }, { timestamps: false, returnDocument: 'after' }).lean();
+			if (row) docs.push(row);
+		}
 	}
 	return docs;
 }
 
-async function readPrimaryTrash(model, hostId) {
-	return model.find({ host_id: hostId, in_trash: true }).read('primary').lean();
+async function readTrash(model, hostId, batchSize, isValidId) {
+	const candidates = await model.find({ host_id: hostId, in_trash: true }).lean();
+	return (await readByIds(model, hostId, candidates.map(mongoId), batchSize, isValidId)).filter((doc) => doc.in_trash === true);
 }
 
 function emptyTypeSummary(type, tsType) {
@@ -95,8 +98,8 @@ async function reconcileType(hostId, type, entry, options) {
 	const invalidIds = sourceIds.filter((id) => !isValidId(id));
 	const invalidIdSet = new Set(invalidIds);
 	const [indexedMongoDocs, mongoTrashDocs] = await Promise.all([
-		readPrimaryByIds(model, hostId, sourceIds, batchSize, isValidId),
-		readPrimaryTrash(model, hostId),
+		readByIds(model, hostId, sourceIds, batchSize, isValidId),
+		readTrash(model, hostId, batchSize, isValidId),
 	]);
 	const mongoById = new Map(indexedMongoDocs.map((doc) => [mongoId(doc), doc]));
 	for (const doc of mongoTrashDocs) mongoById.set(mongoId(doc), doc);
@@ -211,7 +214,7 @@ export async function reconcileTrashForTenant(hostId, {
 }
 
 export async function reconcileActiveTrashTenants({ tenantModel = Tenant, reconcileTenant = reconcileTrashForTenant, ...options } = {}) {
-	const tenants = await tenantModel.find({ is_active: { $ne: false } }).select('host_id').read('primary').lean();
+	const tenants = await tenantModel.find({ is_active: { $ne: false } }).select('host_id').lean();
 	const summaries = [];
 	for (const tenant of tenants) {
 		if (!tenant.host_id) continue;

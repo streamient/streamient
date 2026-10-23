@@ -42,7 +42,7 @@ export async function startExport(userId, hostId, userEmail, userName) {
 }
 
 export async function recoverExports() {
-	for await (const doc of Export.find({ $or: [{ status: { $in: ACTIVE_STATUSES } }, { status: 'ready', email_sent_at: null }] }).read('primary').lean().cursor()) {
+	for await (const doc of Export.find({ $or: [{ status: { $in: ACTIVE_STATUSES } }, { status: 'ready', email_sent_at: null }] }).lean().cursor()) {
 		try {
 			await enqueueExport(doc);
 			const existing = await MongoQueue.getJob(String(doc._id));
@@ -53,7 +53,7 @@ export async function recoverExports() {
 
 async function* jsonRecords(model, filter, signal) {
 	let separator = '';
-	const cursor = model.find(filter).read('primary').lean().cursor();
+	const cursor = model.find(filter).lean().cursor();
 	try {
 		yield '[';
 		for await (const row of cursor) { signal?.throwIfAborted(); yield `${separator}${JSON.stringify(row)}`; separator = ','; }
@@ -88,7 +88,7 @@ export async function writeExportArchive(filePath, hostId, signal) {
 
 export async function processExport(exportId, hostId, { signal, assertOwnership, isOwner, withOwnership = (callback) => callback(undefined), attempts = 1, maxAttempts = 3 } = {}) {
 	signal?.throwIfAborted();
-	const doc = await Export.findOne({ _id: exportId, host_id: hostId }).read('primary').lean();
+	const doc = await Export.findOneAndUpdate({ _id: exportId, host_id: hostId }, { $inc: { __v: 0 } }, { timestamps: false, returnDocument: 'after' }).lean();
 	if (!doc || (!ACTIVE_STATUSES.includes(doc.status) && doc.status !== 'ready')) return;
 	const filePath = doc.file_path || path.join(EXPORT_DIR, `export-${hostId}-${doc.token}.${crypto.randomUUID()}.zip`);
 	const temporaryPath = `${filePath}.part`;
@@ -113,7 +113,7 @@ export async function processExport(exportId, hostId, { signal, assertOwnership,
 			published = true;
 		}
 		if (!doc.email_sent_at) {
-			const user = doc.user_email ? null : await User.findById(doc.owner).select('email name').read('primary').lean();
+			const user = doc.user_email ? null : await User.findById(doc.owner).select('email name').lean();
 			signal?.throwIfAborted();
 			await assertOwnership?.();
 			try { await sendExportReadyEmail(doc.user_email || user?.email, doc.user_name || user?.name, doc.token); await withOwnership((session) => Export.updateOne({ _id: doc._id }, { $set: { email_sent_at: new Date() } }, { session })); }
@@ -125,7 +125,7 @@ export async function processExport(exportId, hostId, { signal, assertOwnership,
 	} finally {
 		await fs.promises.rm(temporaryPath, { force: true });
 		// Preserve files when commit acknowledgement is uncertain; orphan cleanup can retry later.
-		if (created && !published && !await Export.exists({ file_path: filePath }).read('primary').catch(() => true)) await fs.promises.rm(filePath, { force: true });
+		if (created && !published && !await Export.findOneAndUpdate({ file_path: filePath }, { $inc: { __v: 0 } }, { timestamps: false }).catch(() => true)) await fs.promises.rm(filePath, { force: true });
 	}
 }
 
@@ -136,7 +136,7 @@ export function createExportWorker() {
 export async function getExportStatus(hostId) { return Export.findOne({ host_id: hostId }).sort({ createdAt: -1 }).lean(); }
 
 export async function getExportFile(token, hostId) {
-	const doc = await Export.findOne({ token, host_id: hostId, status: 'ready' }).read('primary').lean();
+	const doc = await Export.findOneAndUpdate({ token, host_id: hostId, status: 'ready' }, { $inc: { __v: 0 } }, { timestamps: false, returnDocument: 'after' }).lean();
 	if (!doc || !doc.expires_at || doc.expires_at < new Date() || !fs.existsSync(doc.file_path)) return null;
 	return doc.file_path;
 }
@@ -145,7 +145,7 @@ export async function cleanupExpiredExports() {
 	const indexes = await Export.collection.listIndexes().toArray().catch((err) => { if (err.code === 26) return []; throw err; });
 	if (indexes.some((index) => index.key?.expires_at === 1 && index.expireAfterSeconds !== undefined)) throw new Error('Run migrate-export-indexes.mjs before export cleanup');
 	const now = new Date();
-	const expired = await Export.find({ status: 'ready', expires_at: { $lt: now } }).read('primary').lean();
+	const expired = await Export.find({ status: 'ready', expires_at: { $lt: now } }).lean();
 	let cleaned = 0;
 	for (const doc of expired) {
 		try {
@@ -162,7 +162,7 @@ export async function cleanupExpiredExports() {
 		if (!entry.isFile() || !/^export-.+-(?:[a-f0-9]{64}(?:\.[a-f0-9-]{36})?|[0-9]{13})\.zip(?:\.[a-f0-9-]{36})?(?:\.part)?$/.test(entry.name)) continue;
 		const filePath = path.join(EXPORT_DIR, entry.name);
 		const hostId = entry.name.replace(/^export-/, '').replace(/-(?:[a-f0-9]{64}(?:\.[a-f0-9-]{36})?|[0-9]{13})\.zip.*$/, '');
-		if (await Export.exists({ $or: [{ file_path: filePath }, { host_id: hostId, status: { $in: ACTIVE_STATUSES } }, { host_id: hostId, expires_at: { $gte: now } }] }).read('primary')) continue;
+		if (await Export.findOneAndUpdate({ $or: [{ file_path: filePath }, { host_id: hostId, status: { $in: ACTIVE_STATUSES } }, { host_id: hostId, expires_at: { $gte: now } }] }, { $inc: { __v: 0 } }, { timestamps: false })) continue;
 		try { if ((await fs.promises.stat(filePath)).mtimeMs < now.getTime() - EXPIRY_MS) await fs.promises.unlink(filePath); }
 		catch (err) { if (err.code !== 'ENOENT') log.warn({ err, file_path: filePath }, 'Orphan export cleanup failed'); }
 	}

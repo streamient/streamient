@@ -27,7 +27,7 @@ describe('URL service listing', () => {
 				return { read(value) { calls.push(value); return this; }, lean() { calls.push('lean'); return { _id: 'url-one' }; } };
 			};
 			const result = await getUrl('tenant-one', 'url-one');
-			assert.deepEqual(calls, [{ _id: 'url-one', host_id: 'tenant-one' }, 'primary', 'lean']);
+			assert.deepEqual(calls, [{ _id: 'url-one', host_id: 'tenant-one' }, 'lean']);
 			assert.match(result.html, /data-id="url-one"/);
 		} finally {
 			Url.findOne = originalFindOne;

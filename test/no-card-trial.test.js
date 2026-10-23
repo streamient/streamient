@@ -338,10 +338,10 @@ describe('email retention scheduler cleanup', () => {
 				};
 				return chain;
 			},
-			deleteMany: async (query) => {
+			findOneAndDelete: (query) => ({ lean: async () => {
 				deleteQueries.push(query);
-				return { deletedCount: 3 };
-			},
+				return [trashEmail, secondTrashEmail, spamEmail].find((doc) => doc._id === query.$and[1]._id);
+			} }),
 		};
 
 		const summary = await runEmailRetentionCleanup({
@@ -355,24 +355,14 @@ describe('email retention scheduler cleanup', () => {
 		assert.equal(summary.deleted, 3);
 		assert.equal(summary.cutoff.toISOString(), '2026-01-01T02:30:00.000Z');
 		assert.equal(findLimits[0], 25);
-		assert.deepEqual(readPreferences, ['primary', 'primary']);
+		assert.deepEqual(readPreferences, []);
 		assert.deepEqual(findQueries[0], {
 			$or: [
 				{ in_trash: true, trashed_at: { $lte: summary.cutoff } },
 				{ in_trash: { $ne: true }, mailbox: 'spam', updatedAt: { $lte: summary.cutoff } },
 			],
 		});
-		assert.deepEqual(deleteQueries, [{
-			$and: [
-				findQueries[0],
-				{
-					$or: [
-						{ host_id: 'host-1', _id: { $in: ['trash-email', 'trash-email-2'] } },
-						{ host_id: 'host-2', _id: { $in: ['spam-email'] } },
-					],
-				},
-			],
-		}]);
+		assert.deepEqual(deleteQueries, [trashEmail, secondTrashEmail, spamEmail].map((doc) => ({ $and: [findQueries[0], { _id: doc._id, host_id: doc.host_id }] })));
 		assert.deepEqual(removedSearchDocs, [
 			{ hostId: 'host-1', type: 'emails', ids: ['trash-email', 'trash-email-2'] },
 			{ hostId: 'host-2', type: 'emails', ids: ['spam-email'] },

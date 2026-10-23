@@ -1,3 +1,4 @@
+import config from '../config.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -17,7 +18,7 @@ const enabled = process.env.STREAMIENT_JOBS_EXPORTS_INTEGRATION === '1';
 test('isolated Mongo queue cancellation, leases, atomic export admission, restart, and TTL cleanup', { skip: !enabled, timeout: 30000 }, async (t) => {
 	assert.ok(process.env.MONGO_URI);
 	const dbName = `streamient_jobs_exports_test_${randomUUID().replaceAll('-', '')}`;
-	await mongoose.connect(process.env.MONGO_URI, { dbName, autoIndex: false });
+	await mongoose.connect(process.env.MONGO_URI, { ...config.mongoOptions, dbName, autoIndex: false });
 	const db = mongoose.connection.db;
 	assert.equal(db.databaseName, dbName);
 	const workers = [];

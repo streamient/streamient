@@ -22,10 +22,11 @@ for (const auth of ['cookie', 'token']) {
 			let revoked = false;
 			let failLookup = false;
 			let lookup;
-			Object.defineProperty(mongoose.connection, 'db', { configurable: true, value: { collection: () => ({ findOne: async () => { if (lookup) await lookup.promise; if (failLookup) throw new Error('lookup unavailable'); return revoked ? { _id: publicSessionId('browser') } : null; } }) } });
+			Object.defineProperty(mongoose.connection, 'db', { configurable: true, value: { collection: () => ({ updateOne: async () => { if (lookup) await lookup.promise; if (failLookup) throw new Error('lookup unavailable'); return { matchedCount: Number(revoked) }; } }) } });
 			t.after(() => originalDb ? Object.defineProperty(mongoose.connection, 'db', originalDb) : delete mongoose.connection.db);
 			const query = (value) => ({ select() { return this; }, populate() { return this; }, read() { return this; }, lean: async () => value });
-			t.mock.method(User, 'findById', () => query({ is_active: true }));
+			t.mock.method(User, 'findOneAndUpdate', () => query({ is_active: true }));
+			t.mock.method(TenantMember, 'findOneAndUpdate', () => query({ role: 'owner' }));
 			t.mock.method(TenantMember, 'find', () => query([{ _id: 'membership', role: 'owner', tenant: { _id: 'tenant', host_id: 'host', name: 'Test' } }]));
 			const entered = Promise.withResolvers();
 			const resume = Promise.withResolvers();

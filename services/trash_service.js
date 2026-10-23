@@ -77,24 +77,26 @@ function uniqueIds(ids) {
 	return [...new Set((ids || []).map((value) => String(value || '')).filter(Boolean))];
 }
 
-async function findPrimaryLean(model, query, fields = '') {
+async function findLean(model, query, fields = '') {
 	try {
-		let mongoQuery = model.findOne(query);
+		let mongoQuery = model.findOneAndUpdate(query, { $inc: { __v: 0 } }, { timestamps: false, returnDocument: 'after' });
 		if (fields) mongoQuery = mongoQuery.select(fields);
-		return await mongoQuery.read('primary').lean();
+		return await mongoQuery.lean();
 	} catch (err) {
 		if (err?.name === 'CastError') return null;
 		throw err;
 	}
 }
 
-async function findExistingPrimary(model, host_id, ids, batchSize = 250) {
+async function findExisting(model, host_id, ids, batchSize = 250) {
 	const validIds = uniqueIds(ids).filter((id) => mongoose.isObjectIdOrHexString(id));
 	const existing = [];
 	for (let index = 0; index < validIds.length; index += batchSize) {
 		const batch = validIds.slice(index, index + batchSize);
-		const docs = await model.find({ _id: { $in: batch }, host_id }).read('primary').lean();
-		existing.push(...docs);
+		for (const id of batch) {
+			const doc = await findLean(model, { _id: id, host_id });
+			if (doc) existing.push(doc);
+		}
 	}
 	return existing;
 }
@@ -142,7 +144,7 @@ async function restoreItemsByType(host_id, type, ids, deps = {}) {
 			docs.push(doc);
 			continue;
 		}
-		const current = await findPrimaryLean(model, { _id: id, host_id });
+		const current = await findLean(model, { _id: id, host_id });
 		if (current) currentDocs.push(current);
 		else missingIds.push(id);
 	}
@@ -192,7 +194,7 @@ async function permanentDeleteItemsByType(host_id, type, ids, deps = {}) {
 			docs.push(doc);
 			continue;
 		}
-		const current = await findPrimaryLean(model, { _id: id, host_id });
+		const current = await findLean(model, { _id: id, host_id });
 		if (current) currentDocs.push(current);
 		else missingIds.push(id);
 	}
@@ -276,12 +278,16 @@ export async function emptyTrash(host_id, deps = {}) {
 	for (const [type, { model, tsType }] of Object.entries(TRASH_MODEL_MAP)) {
 		const indexedDocs = await exportFn(host_id, tsType);
 		const indexedIds = uniqueIds(indexedDocs.map((doc) => doc.source_id || doc.id));
-		const mongoDocs = await model.find({ host_id, in_trash: true }).select('_id').read('primary').lean();
+		const mongoDocs = [];
+		while (true) {
+			const doc = await model.findOneAndDelete({ host_id, in_trash: true });
+			if (!doc) break;
+			mongoDocs.push(doc);
+		}
 		const mongoIds = uniqueIds(mongoDocs.map((doc) => doc._id));
-		await model.deleteMany({ host_id, in_trash: true });
 
 		const candidateIds = uniqueIds([...indexedIds, ...mongoIds]);
-		const remainingDocs = await findExistingPrimary(model, host_id, candidateIds);
+		const remainingDocs = await findExisting(model, host_id, candidateIds);
 		const remainingIds = new Set(remainingDocs.map((doc) => String(doc._id)));
 		const absentIds = candidateIds.filter((id) => !remainingIds.has(id));
 		await removeGraphLinks(host_id, absentIds);

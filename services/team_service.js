@@ -1,3 +1,4 @@
+import mongoose from '../model/mongoose.js';
 import { User } from '../model/user.js';
 import { queryForSave } from '../model/mongoose.js';
 import { TeamInvite } from '../model/team_invite.js';
@@ -85,13 +86,13 @@ export async function createTeamMember(userId, host_id, data, ctx = {}) {
 		});
 	}
 
-	const membership = await TenantMember.create({
-		tenant: tenant._id,
-		user: user._id,
-		host_id,
-		role: 'member',
-		invited_by: userId,
-		joined_at: new Date(),
+	const membership = await mongoose.connection.transaction(async (session) => {
+		// Conflict with orphan cleanup before linking an existing user to another account.
+		const current = await User.updateOne({ _id: user._id, is_active: true }, { $inc: { __v: 1 } }, { session });
+		if (!current.matchedCount) throw new Error('User is no longer available');
+		return (await TenantMember.create([{
+			tenant: tenant._id, user: user._id, host_id, role: 'member', invited_by: userId, joined_at: new Date(),
+		}], { session }))[0];
 	});
 
 	await TeamInvite.deleteMany({

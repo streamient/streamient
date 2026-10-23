@@ -147,7 +147,7 @@ describe('search selection and bulk actions', () => {
 	it('enforces the selected version atomically inside existing update and trash operations', async () => {
 		for (const [type, Model] of [['notes', Note], ['memory', Memory], ['urls', Url], ['emails', Email]]) {
 			mock.method(Model, 'findOne', () => ({ select: () => ({ lean: async () => ({ project: PROJECT }) }) }));
-			mock.method(Project, 'findOne', () => ({ select() { return this; }, read() { return this; }, lean: async () => ({ _id: OTHER }) }));
+			mock.method(Project, 'findOneAndUpdate', () => ({ select() { return this; }, read() { return this; }, lean: async () => ({ _id: OTHER }) }));
 			const mutation = mock.method(Model, 'findOneAndUpdate', async (filter) => {
 				assert.equal(filter.host_id, 'tenant-one');
 				assert.equal(filter.updatedAt.toISOString(), VERSION);

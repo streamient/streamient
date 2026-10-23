@@ -31,7 +31,7 @@ function usesMongoSocketTransport() {
 async function getSocketMongoClient(socketConfig) {
 	if (socketConfig.mongoUrl === config.mongoUri) return mongoose.connection.getClient();
 	if (socketMongoClient) return socketMongoClient;
-	socketMongoClient = new MongoClient(socketConfig.mongoUrl);
+	socketMongoClient = new MongoClient(socketConfig.mongoUrl, config.mongoOptions);
 	try {
 		await socketMongoClient.connect();
 	} catch (err) {

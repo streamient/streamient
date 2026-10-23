@@ -155,7 +155,7 @@ export async function listUrls(host_id, projectId, { page = 1, limit = 50, offse
 }
 
 export async function getUrl(host_id, urlId) {
-	const doc = await Url.findOne({ _id: urlId, host_id }).read('primary').lean();
+	const doc = await Url.findOne({ _id: urlId, host_id }).lean();
 	return attachScreenshotUrl(doc);
 }
 

@@ -1,3 +1,4 @@
+import config from '../config.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
@@ -35,7 +36,7 @@ test('authorization code conditional consumption admits exactly one concurrent e
 test('isolated MongoDB code races and transactional refresh rotation rollback', { skip: process.env.STREAMIENT_OAUTH_INTEGRATION !== '1', timeout: 30000 }, async (t) => {
 	assert.ok(process.env.MONGO_URI, 'explicit MongoDB URI required');
 	const dbName = `streamient_oauth_test_${crypto.randomUUID().replaceAll('-', '')}`;
-	await mongoose.connect(process.env.MONGO_URI, { dbName });
+	await mongoose.connect(process.env.MONGO_URI, { ...config.mongoOptions, dbName });
 	assert.equal(mongoose.connection.name, dbName);
 	const restore = mockTenantWork();
 	t.after(async () => { restore(); await mongoose.connection.dropDatabase(); await mongoose.disconnect(); });
