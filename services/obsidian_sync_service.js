@@ -26,7 +26,7 @@ import { emitToTenant } from '../modules/socket.js';
 import { getMongoCoordinator } from '../modules/cache.js';
 import { MongoQueue, MongoWorker } from '../modules/mongo_queue.js';
 import { extractText } from './import_service.js';
-import { materializeBlob, readBlobBuffer, storeBuffer, deleteBlob, deleteConnectionUploads } from './obsidian_blob_service.js';
+import { materializeBlob, readBlobBuffer, storeBuffer, deleteConnectionUploads } from './obsidian_blob_service.js';
 import { removeDocumentsByFilter } from '../modules/typesense.js';
 import * as audit from './audit_service.js';
 import { createLogger } from '../modules/logger.js';
@@ -982,11 +982,6 @@ export async function relocateConnectionFolder(hostId, connectionId, data, ctx =
 export async function removeConnection(hostId, connectionId, ctx = {}) {
 	const connection = await ObsidianConnection.findOne({ _id: connectionId, host_id: hostId }).lean();
 	if (!connection) throw new ObsidianSyncError('Obsidian connection not found', 404, 'connection_not_found');
-	const [files, revisions] = await Promise.all([
-		ObsidianFile.find({ connection: connection._id, host_id: hostId }).select('blob').lean(),
-		ObsidianRevision.find({ connection: connection._id, host_id: hostId }).select('blob').lean(),
-	]);
-	const blobIds = [...new Set([...files, ...revisions].map((item) => item.blob ? String(item.blob) : '').filter(Boolean))];
 	await deleteConnectionUploads(hostId, connection._id);
 	await Promise.all([
 		Note.updateMany({ host_id: hostId, 'obsidian_source.connection_id': connection._id }, { $unset: { obsidian_source: '' } }),
@@ -999,12 +994,8 @@ export async function removeConnection(hostId, connectionId, ctx = {}) {
 	]);
 	await ObsidianConnection.deleteOne({ _id: connection._id, host_id: hostId });
 	await removeDocumentsByFilter(hostId, 'vault_files', `connection_id:=\`${connection._id}\``).catch((err) => log.error({ err, connection_id: connection._id }, 'Obsidian Typesense connection cleanup failed'));
-	for (const blobId of blobIds) {
-		const [fileRef, revisionRef, uploadRef] = await Promise.all([ObsidianFile.exists({ blob: blobId }), ObsidianRevision.exists({ blob: blobId }), ObsidianUpload.exists({ blob: blobId })]);
-		if (fileRef || revisionRef || uploadRef) continue;
-		const blob = await ObsidianBlob.findOne({ _id: blobId, host_id: hostId }).lean();
-		if (blob) await deleteBlob(blob);
-	}
+	// Shared ciphertext follows the same conservative retention policy as scheduled cleanup.
+
 	audit.log({ action: 'delete', resource: 'obsidian_connection', resource_id: String(connectionId), host_id: hostId, ...ctx });
 	emitToTenant(hostId, 'obsidian:connection-removed', { connection_id: String(connectionId), project_id: String(connection.project) });
 	return { removed: true, retained_notes: true, retained_urls: true };

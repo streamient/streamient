@@ -10,8 +10,12 @@ import config from '../config.js';
 import { ObsidianUpload } from '../model/obsidian_upload.js';
 import { ObsidianBlob } from '../model/obsidian_blob.js';
 import { ObsidianFile } from '../model/obsidian_file.js';
+import { ObsidianConnection } from '../model/obsidian_connection.js';
+import { ObsidianRevision } from '../model/obsidian_revision.js';
+import { AuditLog } from '../model/audit_log.js';
+import { getTypesenseClient } from '../modules/typesense.js';
 import { appendUploadChunk, completeUpload, cleanupOrphanedUploads, readBlobBuffer } from '../services/obsidian_blob_service.js';
-import { cleanupObsidianRetention } from '../services/obsidian_sync_service.js';
+import { cleanupObsidianRetention, removeConnection } from '../services/obsidian_sync_service.js';
 
 test('isolated Mongo storage guards preserve concurrent uploads and restored content', { skip: process.env.STREAMIENT_AUDIT_INTEGRATION !== '1', timeout: 30000 }, async (t) => {
 	const dbName = `streamient_audit_test_${crypto.randomUUID().replaceAll('-', '')}`;
@@ -60,4 +64,17 @@ test('isolated Mongo storage guards preserve concurrent uploads and restored con
 	await ObsidianUpload.updateOne({ _id: live._id }, { $set: { expires_at: new Date(Date.now() + 60000) } });
 	await cleanupOrphanedUploads();
 	await access(path.join(liveDirectory, 'part'));
+
+	await ObsidianConnection.create({ _id: id, host_id: 'audit', project: id, owner: id });
+	const otherConnection = new mongoose.Types.ObjectId();
+	const shared = await ObsidianFile.create({ host_id: 'audit', connection: otherConnection, project: id, path: 'Shared.md', kind: 'markdown', modified_at: new Date(), size: body.length, blob: blob._id });
+	t.mock.method(ObsidianFile, 'exists', async () => null);
+	t.mock.method(ObsidianRevision, 'exists', async () => null);
+	t.mock.method(ObsidianUpload, 'exists', async () => null);
+	t.mock.method(AuditLog, 'create', async () => ({}));
+	t.mock.method(getTypesenseClient(), 'collections', () => ({ documents: () => ({ delete: async () => ({ num_deleted: 0 }) }) }));
+	await removeConnection('audit', id, { channel: 'api', user_id: id });
+	assert.deepEqual(await readBlobBuffer(blob, 'audit'), body);
+	assert.equal((await ObsidianFile.updateOne({ _id: shared._id, blob: blob._id }, { $set: { is_indexed: false } })).matchedCount, 1);
+
 });

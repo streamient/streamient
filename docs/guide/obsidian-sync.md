@@ -95,7 +95,7 @@ Encrypted blobs are currently retained to protect content that another file or u
 
 Signing out stops every profile on that device while retaining profile configuration and existing Streamient knowledge. Each profile can reconnect its own OAuth account later.
 
-Project settings also offers **Remove connection**. This removes the encrypted vault mirror, attachments, revisions, and sync history while retaining projected Streamient Notes, Memories, and saved URLs as normal project content.
+Project settings also offers **Remove connection**. This removes the vault mirror records, attachment links, revisions, and sync history while retaining projected Streamient Notes, Memories, and saved URLs as normal project content. Encrypted bytes follow the retention policy above so removing one connection cannot erase another connection’s shared content.
 
 ## Privacy
 

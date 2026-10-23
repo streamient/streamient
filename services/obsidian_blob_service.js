@@ -408,12 +408,6 @@ export async function materializeBlob(blob, hostId) {
 	}
 }
 
-export async function deleteBlob(blob) {
-	if (!blob) return;
-	await rm(path.join(storageRoot(), blob.storage_key), { recursive: true, force: true });
-	await ObsidianBlob.deleteOne({ _id: blob._id, host_id: blob.host_id });
-}
-
 export async function cleanupOrphanedUploads(now = new Date()) {
 	let removed = 0;
 	while (true) {
