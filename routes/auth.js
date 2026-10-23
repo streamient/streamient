@@ -18,6 +18,8 @@ import * as passkeyService from '../services/passkey_service.js';
 import { provisionSignupAccount } from '../services/account_provisioning_service.js';
 import { enqueueHelpmonksSignupSequence } from '../services/helpmonks_signup_sequence_service.js';
 import { createLogger } from '../modules/logger.js';
+import { publicSessionId, revokeCurrentUserSession } from '../services/user_session_service.js';
+import { disconnectSessionSockets } from '../modules/socket.js';
 
 const log = createLogger('auth');
 
@@ -443,14 +445,14 @@ router.post('/2fa/setup', async (req, res) => {
 	try {
 		if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
 
-		const user = await queryForSave(User.findById(req.session.userId).select('+totp_secret'));
+		const user = await User.findById(req.session.userId).select('email').lean();
 		if (!user) return res.status(404).json({ error: 'User not found' });
 
 		const secret = generateSecret();
 		const otpauth = generateURI({ issuer: 'Streamient', label: user.email, secret });
 
-		user.totp_secret = secret;
-		await user.save();
+		const result = await User.updateOne({ _id: req.session.userId, totp_enabled: { $ne: true } }, { $set: { totp_secret: secret } });
+		if (!result.matchedCount) return res.status(409).json({ error: '2FA is already enabled or the user is no longer available' });
 
 		res.json({ secret, otpauth });
 	} catch (err) {
@@ -639,15 +641,18 @@ router.all('/team-invite', (req, res) => {
 
 // ---- Logout ----
 
-router.post('/logout', (req, res) => {
-	if (req.session?.oauthLoginReturnTo) {
-		delete req.session.oauthLoginReturnTo;
-	}
-	req.session.destroy(() => {
+router.post('/logout', async (req, res) => {
+	try {
+		await revokeCurrentUserSession(req.sessionID);
+		await disconnectSessionSockets([publicSessionId(req.sessionID)]);
+		await new Promise((resolve, reject) => req.session.destroy((err) => err ? reject(err) : resolve()));
 		res.clearCookie('connect.sid');
 		if (req.accepts('html')) return res.redirect('/login');
 		res.json({ message: 'Logged out' });
-	});
+	} catch (err) {
+		log.error({ err }, 'Logout failed');
+		return res.status(500).format({ html: () => res.send('Logout failed. Please try again.'), json: () => res.json({ error: 'Logout failed' }) });
+	}
 });
 
 // ---- Render auth pages ----

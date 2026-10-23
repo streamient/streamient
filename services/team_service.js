@@ -163,7 +163,8 @@ export async function removeTeamMember(host_id, membershipId, actor, ctx = {}) {
 	if (membership.role === 'owner') throw new Error('The account owner cannot be removed');
 	if (membership.user && String(membership.user._id) === String(actor.userId)) throw new Error('You cannot remove yourself here');
 
-	await TenantMember.deleteOne({ _id: membership._id });
+	const result = await TenantMember.deleteOne({ _id: membership._id, host_id, role: membership.role });
+	if (!result.deletedCount) throw new Error('Member changed or was removed. Please try again.');
 
 	audit.log({
 		action: 'delete',

@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from '../model/mongoose.js';
-import { describeUserAgent, isSessionRevoked, listUserSessions, publicSessionId, revokeOtherUserSessions, revokeUserSession } from '../services/user_session_service.js';
+import { describeUserAgent, isSessionRevoked, listUserSessions, publicSessionId, revokeOtherUserSessions, revokeUserSession, revokeCurrentUserSession } from '../services/user_session_service.js';
 
 const me = '507f1f77bcf86cd799439011';
 const other = '507f1f77bcf86cd799439012';
@@ -61,4 +61,22 @@ describe('login sessions', () => {
 		store.push({ _id: 'phone', session: JSON.stringify({ userId: me }) });
 		assert.deepEqual((await listUserSessions(me, 'current')).map((s) => s.id), [publicSessionId('current')]);
 	}));
+});
+
+it('logout marks even a missing current SID so a late save remains revoked', () => withSessions([], async (store, markers) => {
+	assert.deepEqual(await revokeCurrentUserSession('missing-current'), ['missing-current']);
+	assert.ok(markers.get(publicSessionId('missing-current')).expires > new Date());
+	store.push({ _id: 'missing-current', session: JSON.stringify({ userId: me }) });
+	assert.equal(await isSessionRevoked(publicSessionId('missing-current')), true);
+	assert.deepEqual(await listUserSessions(me, 'missing-current'), []);
+}));
+
+it('logout never deletes sessions when the marker write fails', async () => {
+	const original = Object.getOwnPropertyDescriptor(mongoose.connection, 'db');
+	let deleted = false;
+	Object.defineProperty(mongoose.connection, 'db', { configurable: true, value: { collection: (name) => name === 'revoked_sessions' ? { createIndex: async () => {}, bulkWrite: async () => { throw Error('marker unavailable'); } } : { deleteMany: async () => { deleted = true; } } } });
+	try {
+		await assert.rejects(revokeCurrentUserSession('current'), /marker unavailable/);
+		assert.equal(deleted, false);
+	} finally { if (original) Object.defineProperty(mongoose.connection, 'db', original); else delete mongoose.connection.db; }
 });

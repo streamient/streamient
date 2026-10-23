@@ -69,3 +69,8 @@ export async function revokeUserSession(userId, publicId, currentSid) {
 export async function revokeOtherUserSessions(userId, currentSid) {
 	return revokeRows((await findUserSessions(userId)).map(({ row }) => row).filter((row) => row._id !== currentSid));
 }
+
+export async function revokeCurrentUserSession(sid) {
+	if (!sid) throw new Error('Session ID is required');
+	return revokeRows([{ _id: sid }]);
+}

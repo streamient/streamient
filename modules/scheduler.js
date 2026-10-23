@@ -90,7 +90,8 @@ export async function runTrialLifecycle({
 		try {
 			// Trial over → drop to Free. The account persists (no tenant deletion);
 			// Pro features re-lock automatically since status is no longer 'trialing'.
-			await userModel.updateOne({ _id: user._id }, { $set: { subscription_status: 'trial_expired', trial_locked_at: now } });
+			const result = await userModel.updateOne({ _id: user._id, trial_source: 'no_card', subscription_status: 'trialing', trial_ends_at: { $lte: now }, trial_locked_at: null }, { $set: { subscription_status: 'trial_expired', trial_locked_at: now } });
+			if (!result.matchedCount) continue;
 			const endDate = new Date(user.trial_ends_at).toLocaleDateString();
 			await sendExpiredEmail(user.email, user.name, endDate);
 			expired++;

@@ -124,8 +124,9 @@ router.get('/billing/success', async (req, res) => {
             const stripe = getStripe();
             const session = await stripe.checkout.sessions.retrieve(sessionId);
 
-            if (session.subscription) {
+            if (session.status === 'complete' && session.mode === 'subscription' && session.metadata?.streamient_user_id === String(billingUser._id) && billingUser.host_id === req.host_id && billingUser.stripe_customer_id && session.customer === billingUser.stripe_customer_id && session.subscription) {
                 const subscription = await stripe.subscriptions.retrieve(session.subscription);
+                if (subscription.customer !== billingUser.stripe_customer_id || !['active', 'trialing'].includes(subscription.status)) return res.redirect('/dashboard');
                 await applySubscriptionToUser(billingUser._id, subscription, session.customer);
                 return res.redirect('/dashboard');
             }
