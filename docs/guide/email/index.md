@@ -7,6 +7,10 @@ description: "Store email as searchable Streamient project context through forwa
 
 Streamient stores emails as searchable project context alongside notes, memories, and URLs. It does not triage, draft, send replies, or manage outbound identities. Those workflows live in Mailtwine.
 
+## Duplicate Messages
+
+Message-ID duplicate detection is scoped to the active account. The same email can be stored independently in different accounts. Repeated delivery within one account updates its existing message instead of creating another copy.
+
 ## What Streamient Keeps
 
 - Project-scoped email ingest by forwarding address, browser extension, API, or MCP.

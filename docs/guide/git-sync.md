@@ -88,6 +88,12 @@ The actual content starts here…
 | `tags`  | Array of tags applied to the item.                                         |
 | `type`  | `note` or `memory`. Overrides directory-based detection.                   |
 
+## Repository Access
+
+Streamient Cloud accepts public HTTP(S) repository URLs. Local filesystem paths, SSH transports, and private network destinations are blocked. Private repository contents remain supported through an access token when the repository server has a public address. Self-hosted installations keep their configured Git transport support.
+
+Scheduled sync renews its lock while it runs. After a server restart, an interrupted sync can run again once its previous lock expires.
+
 ## Adding a Git Repo
 
 ### Via the UI
