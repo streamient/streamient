@@ -16,6 +16,7 @@ import { createDateFormatters } from '../modules/date_format.js';
 import { getTimezoneOptions } from '../modules/timezones.js';
 import { avatarStyles, avatarUrl } from '../modules/avatar.js';
 import { renderMobileAppsModal } from './mobile_apps.js';
+import { listUserSessions } from '../services/user_session_service.js';
 import productUpdatesRouter, { isProductUpdatesEligible } from './product_updates.js';
 import {
 	buildStreamientDemoFixtures,
@@ -250,6 +251,14 @@ router.get('/ajax/section/emails', (req, res) => res.render('ajax/section/emails
 router.get('/ajax/section/trash', (req, res) => res.render('ajax/section/trash'));
 router.get('/ajax/section/settings/profile', (req, res) => res.render('ajax/section/settings/profile', { title: 'Profile' }));
 router.get('/ajax/section/settings/security', (req, res) => res.render('ajax/section/settings/security', { title: 'Security' }));
+router.get('/ajax/settings/sessions', async (req, res) => {
+	try {
+		res.render('ajax/section/settings/_sessions_list', { sessions: req.session.impersonating ? [] : await listUserSessions(req.session.userId, req.sessionID) });
+	} catch (err) {
+		log.error({ err, user_id: req.session.userId }, 'List sessions error');
+		res.status(500).send('');
+	}
+});
 router.get('/ajax/section/settings/team', (req, res) => res.render('ajax/section/settings/team', { title: 'My Team' }));
 router.get('/ajax/section/settings/tokens', (req, res) => res.render('ajax/section/settings/tokens', { title: 'Access Tokens' }));
 router.get('/ajax/section/settings/byo-ai', requireRestrictedSettingsAccess, requireByoAiWebAccess, (req, res) => res.render('ajax/section/settings/byo_ai', { title: 'AI' }));

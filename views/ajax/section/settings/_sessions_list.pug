@@ -1,0 +1,24 @@
+if !sessions.length
+	div.text-muted No active sessions found.
+else
+	.list-group
+		each session in sessions
+			.list-group-item.d-flex.justify-content-between.align-items-center.gap-3(data-session-id=session.id data-current=session.current ? 'true' : 'false')
+				div
+					div.fw-semibold
+						span= session.device
+						if session.current
+							span.badge.text-bg-success.ms-2 This device
+					div.text-muted.small
+						if session.ip
+							span.me-3= session.ip
+						if session.login_at
+							span.me-3
+								span.me-1 Signed in
+								time(datetime=session.login_at data-date-value=session.login_at data-date-format="locale")= session.login_at
+						if session.last_active_at
+							span
+								span.me-1 Last active
+								time(datetime=new Date(session.last_active_at).toISOString() data-date-value=new Date(session.last_active_at).toISOString() data-date-format="locale")= new Date(session.last_active_at).toISOString()
+				if !session.current
+					button.btn.btn-outline-danger.btn-sm.revoke-session(type="button" data-session-id=session.id) Revoke

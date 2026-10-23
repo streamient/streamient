@@ -26,7 +26,7 @@ Streamient supports multi-account membership.
 
 ## Security
 
-Manage your account security with three options:
+Manage your account security with these options:
 
 ### Reset Password
 
@@ -39,6 +39,15 @@ Enable or disable TOTP-based two-factor authentication. When enabled, you'll nee
 ### Passkeys
 
 Register WebAuthn passkeys for passwordless authentication. You can add multiple passkeys (hardware keys, biometrics, etc.) and remove them individually.
+
+### Sessions
+
+See every browser where you are signed in. Each entry shows the browser and operating system, the IP address, when you signed in, and when the session was last active. Your current browser is marked **This device**.
+
+- Select **Revoke** to sign out one browser.
+- Select **Sign out all other sessions** to sign out every browser except the one you are using.
+
+Revoking a session signs that browser out on its next request. Apps connected through OAuth and personal access tokens are not sessions. Manage them under **Settings > Access Tokens**.
 
 ## Access Tokens
 

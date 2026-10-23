@@ -54,6 +54,7 @@ import { isSupportedTimezone } from '../modules/timezones.js';
 import mobileApiRouter from './mobile_api.js';
 import obsidianApiRouter from './obsidian_api.js';
 import { streamientDemoApiMiddleware } from '../services/streamient_demo_service.js';
+import { revokeUserSession, revokeOtherUserSessions } from '../services/user_session_service.js';
 
 const log = createLogger('api');
 
@@ -1758,6 +1759,32 @@ router.delete('/passkeys/:id', async (req, res) => {
 	} catch (err) {
 		log.error({ err }, 'Delete passkey error');
 		res.status(500).json({ error: 'Failed to delete passkey' });
+	}
+});
+
+// ---- Login sessions ----
+
+function requireOwnBrowserSession(req, res, next) {
+	if (!req.session?.userId || req.session.impersonating || req.headers.authorization) return res.status(403).json({ error: 'Sessions can only be managed from a signed-in browser' });
+	next();
+}
+
+router.delete('/sessions/:id', requireOwnBrowserSession, async (req, res) => {
+	try {
+		if (!await revokeUserSession(req.session.userId, req.params.id, req.sessionID)) return res.status(404).json({ error: 'Session not found' });
+		res.json({ revoked: [req.params.id] });
+	} catch (err) {
+		log.error({ err, user_id: req.session.userId }, 'Revoke session error');
+		res.status(500).json({ error: 'Failed to revoke session' });
+	}
+});
+
+router.delete('/sessions', requireOwnBrowserSession, async (req, res) => {
+	try {
+		res.json({ revoked: await revokeOtherUserSessions(req.session.userId, req.sessionID) });
+	} catch (err) {
+		log.error({ err, user_id: req.session.userId }, 'Revoke other sessions error');
+		res.status(500).json({ error: 'Failed to revoke sessions' });
 	}
 });
 

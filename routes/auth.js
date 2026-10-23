@@ -92,6 +92,8 @@ async function recordSuccessfulLogin(req, userOrId) {
 	const timestamp = new Date();
 	if (req.session) {
 		req.session.lastLoginRecordedAt = timestamp.toISOString();
+		req.session.userAgent = String(req.headers['user-agent'] || '').slice(0, 300);
+		req.session.ip = req.ip;
 	}
 	await User.findByIdAndUpdate(userId, { $set: { last_login: timestamp } });
 	return timestamp;

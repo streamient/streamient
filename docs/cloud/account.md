@@ -35,6 +35,7 @@ Manage your personal settings at **Settings > Profile**, **Settings > Security**
 - Password reset
 - Two-factor authentication (TOTP)
 - Passkey registration (WebAuthn)
+- Signed-in sessions, with revoke one or sign out all others
 - Personal access tokens
 - OAuth connected apps and client registration
 
