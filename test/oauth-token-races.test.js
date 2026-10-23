@@ -7,6 +7,7 @@ import { OAuthAuthorizationCode } from '../model/oauth_authorization_code.js';
 import { OAuthRefreshToken } from '../model/oauth_refresh_token.js';
 import { OAuthConsent } from '../model/oauth_consent.js';
 import { OAuthClient } from '../model/oauth_client.js';
+import { AuditLog } from '../model/audit_log.js';
 import { exchangeAuthorizationCode, exchangeRefreshToken, issueAuthorizationCode, issueTokenPair, revokeConsent } from '../services/oauth_service.js';
 import { getMcpEndpointUrl } from '../modules/oauth.js';
 import { mockTenantWork } from './helpers/tenant-work.js';
@@ -39,6 +40,7 @@ test('isolated MongoDB code races and transactional refresh rotation rollback', 
 	await mongoose.connect(process.env.MONGO_URI, { ...config.mongoOptions, dbName });
 	assert.equal(mongoose.connection.name, dbName);
 	const restore = mockTenantWork();
+	t.mock.method(AuditLog, 'create', async () => ({}));
 	t.after(async () => { restore(); await mongoose.connection.dropDatabase(); await mongoose.disconnect(); });
 	await Promise.all([OAuthAuthorizationCode.init(), OAuthRefreshToken.init(), OAuthConsent.init(), OAuthClient.init()]);
 	const row = codeRow();
