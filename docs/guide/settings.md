@@ -34,7 +34,7 @@ Generate a new random password. Copy it before closing the dialog — it cannot 
 
 ### Two-Factor Authentication (2FA)
 
-Enable or disable TOTP-based two-factor authentication. When enabled, you'll need an authenticator app (like Google Authenticator or Authy) to sign in.
+Enable or disable TOTP-based two-factor authentication. When enabled, you'll need an authenticator app (like Google Authenticator or Authy) to sign in. To replace an enabled authenticator, first disable it with a current verification code.
 
 ### Passkeys
 
@@ -47,7 +47,7 @@ See every browser where you are signed in. Each entry shows the browser and oper
 - Select **Revoke** to sign out one browser.
 - Select **Sign out all other sessions** in the Sessions header to sign out every browser except the one you are using.
 
-Revoking a session signs that browser out on its next request and disconnects its live updates, including connections that were still signing in. Apps connected through OAuth and personal access tokens are not sessions. Manage them under **Settings > Access Tokens**.
+Signing out revokes the current browser session. Revoking a session signs that browser out on its next request and disconnects its live updates, including connections that were still signing in. Apps connected through OAuth and personal access tokens are not sessions. Manage them under **Settings > Access Tokens**.
 
 ## Access Tokens
 
@@ -76,6 +76,8 @@ Use the **OAuth** tab under **Settings > Access Tokens** to:
 - Review authorized apps connected to your account
 - Revoke previously authorized apps
 - Create and manage pre-registered OAuth clients for MCP HTTP integrations
+
+Revoking a connected app invalidates its unused authorization codes and refresh tokens. The app must obtain your consent again before reconnecting.
 
 When an MCP client asks for OAuth access, Streamient presents a consent screen before issuing tokens. Review the app name, the active account, and the requested access before choosing **Allow access**. Technical OAuth values such as the client ID, redirect URI, and MCP resource are available under **App details** on the consent screen.
 
