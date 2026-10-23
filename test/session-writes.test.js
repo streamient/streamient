@@ -35,12 +35,13 @@ function fixture() {
 	};
 	const stores = [];
 	let options;
-	const middleware = new Function('session', 'MongoStore', 'config', 'process', `${configuration}; return sessionMiddleware;`)((settings) => { options = settings; return session(settings); }, { create: (settings) => {
+	const revoked = new Set();
+	const middleware = new Function('session', 'MongoStore', 'config', 'process', 'isSessionRevoked', 'publicSessionId', `${configuration}; return sessionMiddleware;`)((settings) => { options = settings; return session(settings); }, { create: (settings) => {
 		const store = MongoStore.create({ ...settings, mongoUrl: undefined, client: { db: () => ({ collection: () => collection }) } });
 		stores.push(store);
 		return store;
-	} }, { sessionSecret: 'session-regression-secret', mongoUri: 'unused' }, { env: { NODE_ENV: 'test' } });
-	return { rows, writes, stores, options, middleware, collection, fail: () => { failure = true; } };
+	} }, { sessionSecret: 'session-regression-secret', mongoUri: 'unused' }, { env: { NODE_ENV: 'test' } }, async (id) => revoked.has(id), (sid) => `public:${sid}`);
+	return { rows, writes, stores, options, middleware, collection, revoked, fail: () => { failure = true; } };
 }
 
 function call(store, method, ...args) {
@@ -130,4 +131,16 @@ test('legacy sessions acquire throttle metadata and cookie expiry overrides TTL'
 	const count = f.writes.length;
 	await call(store, 'touch', 'legacy', await call(store, 'get', 'legacy'));
 	assert.equal(f.writes.length, count);
+});
+
+test('a revoked session stays signed out even after a late save recreates its row', async () => {
+	const f = fixture();
+	const store = f.stores[0];
+	await call(store, 'set', 'stolen', { cookie: {}, userId: 'user' });
+	f.revoked.add('public:stolen');
+	assert.equal(await call(store, 'get', 'stolen'), null);
+	assert.equal(f.rows.has('stolen'), false);
+	await call(store, 'set', 'stolen', { cookie: {}, userId: 'user' });
+	assert.equal(await call(store, 'get', 'stolen'), null);
+	assert.ok(await call(store, 'set', 'fresh', { cookie: {}, userId: 'user' }) === undefined && await call(store, 'get', 'fresh'));
 });

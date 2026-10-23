@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from '../model/mongoose.js';
-import { describeUserAgent, listUserSessions, publicSessionId, revokeOtherUserSessions, revokeUserSession } from '../services/user_session_service.js';
+import { describeUserAgent, isSessionRevoked, listUserSessions, publicSessionId, revokeOtherUserSessions, revokeUserSession } from '../services/user_session_service.js';
 
 const me = '507f1f77bcf86cd799439011';
 const other = '507f1f77bcf86cd799439012';
@@ -9,14 +9,19 @@ const chrome = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KH
 
 function withSessions(rows, fn) {
 	const store = rows.map((row) => ({ ...row, session: JSON.stringify(row.session) }));
-	const collection = {
+	const markers = new Map();
+	const sessions = {
 		find: (query) => ({ toArray: async () => store.filter((row) => new RegExp(query.session.$regex).test(row.session)) }),
-		deleteOne: async ({ _id }) => { store.splice(store.findIndex((row) => row._id === _id), 1); },
 		deleteMany: async ({ _id }) => { for (const id of _id.$in) store.splice(store.findIndex((row) => row._id === id), 1); },
 	};
+	const revoked = {
+		createIndex: async () => {},
+		findOne: async ({ _id }) => markers.has(_id) ? { _id } : null,
+		bulkWrite: async (ops) => { for (const { updateOne } of ops) markers.set(updateOne.filter._id, updateOne.update.$set); },
+	};
 	const original = Object.getOwnPropertyDescriptor(mongoose.connection, 'db');
-	Object.defineProperty(mongoose.connection, 'db', { configurable: true, value: { collection: () => collection } });
-	return fn(store).finally(() => original ? Object.defineProperty(mongoose.connection, 'db', original) : delete mongoose.connection.db);
+	Object.defineProperty(mongoose.connection, 'db', { configurable: true, value: { collection: (name) => name === 'revoked_sessions' ? revoked : sessions } });
+	return fn(store, markers).finally(() => original ? Object.defineProperty(mongoose.connection, 'db', original) : delete mongoose.connection.db);
 }
 
 const rows = () => [
@@ -41,12 +46,15 @@ describe('login sessions', () => {
 		assert.deepEqual(await listUserSessions('not-an-id', 'current'), []);
 	}));
 	it('revokes one own session but never the current, another user’s or an impersonation session', () => withSessions(rows(), async (store) => {
-		for (const sid of ['current', 'theirs', 'admin']) assert.equal(await revokeUserSession(me, publicSessionId(sid), 'current'), false);
-		assert.equal(await revokeUserSession(me, publicSessionId('phone'), 'current'), true);
+		for (const sid of ['current', 'theirs', 'admin']) assert.deepEqual(await revokeUserSession(me, publicSessionId(sid), 'current'), []);
+		assert.deepEqual(await revokeUserSession(me, publicSessionId('phone'), 'current'), ['phone']);
 		assert.deepEqual(store.map((row) => row._id), ['current', 'admin', 'theirs']);
 	}));
-	it('signs out all other own sessions and keeps the current one', () => withSessions(rows(), async (store) => {
-		assert.deepEqual(await revokeOtherUserSessions(me, 'current'), [publicSessionId('phone')]);
+	it('signs out all other own sessions, keeps the current one and marks revoked sessions so a late save cannot revive them', () => withSessions(rows(), async (store) => {
+		assert.deepEqual(await revokeOtherUserSessions(me, 'current'), ['phone']);
 		assert.deepEqual(store.map((row) => row._id), ['current', 'admin', 'theirs']);
+		assert.equal(await isSessionRevoked(publicSessionId('phone')), true);
+		assert.equal(await isSessionRevoked(publicSessionId('current')), false);
+		assert.equal(await isSessionRevoked(''), false);
 	}));
 });

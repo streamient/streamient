@@ -34,15 +34,27 @@ export async function listUserSessions(userId, currentSid) {
 	return sessions.map(({ row, data }) => ({ id: publicSessionId(row._id), current: row._id === currentSid, device: describeUserAgent(data.userAgent), ip: data.ip || '', login_at: data.lastLoginRecordedAt || null, last_active_at: row.lastModified || null })).sort((a, b) => Number(b.current) - Number(a.current) || new Date(b.last_active_at || 0) - new Date(a.last_active_at || 0));
 }
 
+const revokedSessions = () => mongoose.connection.db.collection('revoked_sessions');
+
+export async function isSessionRevoked(publicId) {
+	return Boolean(publicId) && Boolean(await revokedSessions().findOne({ _id: String(publicId) }, { projection: { _id: 1 } }));
+}
+
+// The marker outlives the deleted row so an in-flight save cannot resurrect the session.
+async function revokeRows(rows) {
+	if (!rows.length) return [];
+	const markers = revokedSessions();
+	await markers.createIndex({ expires: 1 }, { expireAfterSeconds: 0 });
+	await markers.bulkWrite(rows.map((row) => ({ updateOne: { filter: { _id: publicSessionId(row._id) }, update: { $set: { expires: row.expires || new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) } }, upsert: true } })));
+	await mongoose.connection.db.collection('sessions').deleteMany({ _id: { $in: rows.map((row) => row._id) } });
+	return rows.map((row) => row._id);
+}
+
 export async function revokeUserSession(userId, publicId, currentSid) {
-	const match = (await findUserSessions(userId)).find(({ row }) => publicSessionId(row._id) === publicId && row._id !== currentSid);
-	if (!match) return false;
-	await mongoose.connection.db.collection('sessions').deleteOne({ _id: match.row._id });
-	return true;
+	const rows = (await findUserSessions(userId)).map(({ row }) => row).filter((row) => publicSessionId(row._id) === publicId && row._id !== currentSid);
+	return revokeRows(rows);
 }
 
 export async function revokeOtherUserSessions(userId, currentSid) {
-	const ids = (await findUserSessions(userId)).map(({ row }) => row._id).filter((id) => id !== currentSid);
-	if (ids.length) await mongoose.connection.db.collection('sessions').deleteMany({ _id: { $in: ids } });
-	return ids.map(publicSessionId);
+	return revokeRows((await findUserSessions(userId)).map(({ row }) => row).filter((row) => row._id !== currentSid));
 }

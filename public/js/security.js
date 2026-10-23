@@ -465,6 +465,7 @@
 			if (!res.ok) throw new Error('Failed to load sessions');
 			sessionList.innerHTML = await res.text();
 			window.StreamientDateFormat?.refresh(sessionList);
+			document.getElementById('revoke-other-sessions')?.removeAttribute('disabled');
 		} catch (err) {
 			showError(err.message);
 		}
