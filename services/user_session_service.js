@@ -16,6 +16,8 @@ export function publicSessionId(sid) {
 	return crypto.createHash('sha256').update(String(sid)).digest('hex').slice(0, 32);
 }
 
+const revokedSessions = () => mongoose.connection.db.collection('revoked_sessions');
+
 function parseSession(row) {
 	try { return typeof row.session === 'string' ? JSON.parse(row.session) : row.session; } catch { return null; }
 }
@@ -26,15 +28,14 @@ async function findUserSessions(userId) {
 	const sessions = mongoose.connection.db.collection('sessions');
 	// shortcut: connect-mongo stores the session as a JSON string, so this scans the collection; switch the store to stringify:false and index session.userId if the Security page gets slow.
 	const rows = await sessions.find({ session: { $regex: `"userId":"${id}"` } }, { projection: { session: 1, expires: 1, lastModified: 1 } }).toArray();
-	return rows.map((row) => ({ row, data: parseSession(row) })).filter(({ data }) => data && String(data.userId) === id && !data.impersonating);
+	const revoked = new Set((await revokedSessions().find({ _id: { $in: rows.map((row) => publicSessionId(row._id)) } }, { projection: { _id: 1 } }).toArray()).map((marker) => marker._id));
+	return rows.map((row) => ({ row, data: parseSession(row) })).filter(({ row, data }) => data && String(data.userId) === id && !data.impersonating && !revoked.has(publicSessionId(row._id)));
 }
 
 export async function listUserSessions(userId, currentSid) {
 	const sessions = await findUserSessions(userId);
 	return sessions.map(({ row, data }) => ({ id: publicSessionId(row._id), current: row._id === currentSid, device: describeUserAgent(data.userAgent), ip: data.ip || '', login_at: data.lastLoginRecordedAt || null, last_active_at: row.lastModified || null })).sort((a, b) => Number(b.current) - Number(a.current) || new Date(b.last_active_at || 0) - new Date(a.last_active_at || 0));
 }
-
-const revokedSessions = () => mongoose.connection.db.collection('revoked_sessions');
 
 export async function isSessionRevoked(publicId) {
 	return Boolean(publicId) && Boolean(await revokedSessions().findOne({ _id: String(publicId) }, { projection: { _id: 1 } }));

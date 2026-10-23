@@ -17,6 +17,7 @@ function withSessions(rows, fn) {
 	const revoked = {
 		createIndex: async () => {},
 		findOne: async ({ _id }) => markers.has(_id) ? { _id } : null,
+		find: ({ _id }) => ({ toArray: async () => _id.$in.filter((id) => markers.has(id)).map((id) => ({ _id: id })) }),
 		bulkWrite: async (ops) => { for (const { updateOne } of ops) markers.set(updateOne.filter._id, updateOne.update.$set); },
 	};
 	const original = Object.getOwnPropertyDescriptor(mongoose.connection, 'db');
@@ -56,5 +57,7 @@ describe('login sessions', () => {
 		assert.equal(await isSessionRevoked(publicSessionId('phone')), true);
 		assert.equal(await isSessionRevoked(publicSessionId('current')), false);
 		assert.equal(await isSessionRevoked(''), false);
+		store.push({ _id: 'phone', session: JSON.stringify({ userId: me }) });
+		assert.deepEqual((await listUserSessions(me, 'current')).map((s) => s.id), [publicSessionId('current')]);
 	}));
 });

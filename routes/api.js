@@ -1774,8 +1774,9 @@ router.delete('/sessions/:id', requireOwnBrowserSession, async (req, res) => {
 	try {
 		const sids = await revokeUserSession(req.session.userId, req.params.id, req.sessionID);
 		if (!sids.length) return res.status(404).json({ error: 'Session not found' });
-		await disconnectSessionSockets(sids);
-		res.json({ revoked: sids.map(publicSessionId) });
+		const revoked = sids.map(publicSessionId);
+		await disconnectSessionSockets(revoked);
+		res.json({ revoked });
 	} catch (err) {
 		log.error({ err, user_id: req.session.userId }, 'Revoke session error');
 		res.status(500).json({ error: 'Failed to revoke session' });
@@ -1785,8 +1786,9 @@ router.delete('/sessions/:id', requireOwnBrowserSession, async (req, res) => {
 router.delete('/sessions', requireOwnBrowserSession, async (req, res) => {
 	try {
 		const sids = await revokeOtherUserSessions(req.session.userId, req.sessionID);
-		await disconnectSessionSockets(sids);
-		res.json({ revoked: sids.map(publicSessionId) });
+		const revoked = sids.map(publicSessionId);
+		await disconnectSessionSockets(revoked);
+		res.json({ revoked });
 	} catch (err) {
 		log.error({ err, user_id: req.session.userId }, 'Revoke other sessions error');
 		res.status(500).json({ error: 'Failed to revoke sessions' });

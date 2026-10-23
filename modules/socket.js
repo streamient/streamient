@@ -9,7 +9,7 @@ import mongoose from '../db.js';
 import { resolveActiveTenantContext } from './tenancy.js';
 import * as OtelRuntime from './otel_runtime.js';
 import { createLogger } from './logger.js';
-import { isSessionRevoked } from '../services/user_session_service.js';
+import { isSessionRevoked, publicSessionId } from '../services/user_session_service.js';
 
 const log = createLogger('socket');
 
@@ -99,6 +99,7 @@ async function authenticateSocketBearer(socket) {
 	const payload = jwt.verify(token, config.jwtSecret);
 	if (payload.aud && !SOCKET_ALLOWED_AUDIENCES.has(payload.aud)) throw new Error('Invalid socket token audience');
 	if (payload.sid && await isSessionRevoked(payload.sid)) throw new Error('Session revoked');
+	if (payload.sid) socket.join(`session:${payload.sid}`);
 	const userId = payload.userId || payload.sub;
 	if (!userId) throw new Error('Invalid socket token subject');
 	const context = await resolveActiveTenantContext(userId, payload.tenantId, payload.host_id);
@@ -152,9 +153,9 @@ export async function disconnectTenantSockets(hostId) {
 	if (usesMongoSocketTransport()) (await ensureMongoEmitter()).in(`account:${hostId}`).in(`tenant:${hostId}`).disconnectSockets(true);
 }
 
-export async function disconnectSessionSockets(sessionIds) {
-	if (!sessionIds.length) return;
-	const rooms = sessionIds.map((sid) => `session:${sid}`);
+export async function disconnectSessionSockets(publicIds) {
+	if (!publicIds.length) return;
+	const rooms = publicIds.map((id) => `session:${id}`);
 	if (io) return io.in(rooms).disconnectSockets(true);
 	if (usesMongoSocketTransport()) (await ensureMongoEmitter()).in(rooms).disconnectSockets(true);
 }
@@ -200,7 +201,7 @@ export async function setupSocketIO(httpServer, sessionMiddleware, handlers = {}
 			try {
 				if (!socket.request?.session?.userId || !socket.request?.session?.host_id) {
 					await authenticateSocketBearer(socket);
-				} else socket.join(`session:${socket.request.sessionID}`);
+				} else socket.join(`session:${publicSessionId(socket.request.sessionID)}`);
 				const identity = getSocketIdentity(socket);
 			if (identity.hostId) { await assertTenantAvailable(identity.hostId); socket.join(`account:${identity.hostId}`); }
 			next();
