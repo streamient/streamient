@@ -7,6 +7,7 @@ import { Readable } from 'node:stream';
 import test from 'node:test';
 import mongoose from '../model/mongoose.js';
 import config from '../config.js';
+import { accountWork } from '../modules/tenancy.js';
 import { ObsidianUpload } from '../model/obsidian_upload.js';
 import { ObsidianBlob } from '../model/obsidian_blob.js';
 import { ObsidianFile } from '../model/obsidian_file.js';
@@ -71,6 +72,7 @@ test('isolated Mongo storage guards preserve concurrent uploads and restored con
 	t.mock.method(ObsidianFile, 'exists', async () => null);
 	t.mock.method(ObsidianRevision, 'exists', async () => null);
 	t.mock.method(ObsidianUpload, 'exists', async () => null);
+	t.mock.method(accountWork, 'acquire', async () => async () => {});
 	t.mock.method(AuditLog, 'create', async () => ({}));
 	t.mock.method(getTypesenseClient(), 'collections', () => ({ documents: () => ({ delete: async () => ({ num_deleted: 0 }) }) }));
 	await removeConnection('audit', id, { channel: 'api', user_id: id });
