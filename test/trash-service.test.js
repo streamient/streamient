@@ -7,6 +7,7 @@ import { Url } from '../model/url.js';
 import { Email } from '../model/email.js';
 import { Project } from '../model/project.js';
 import { batchRestore, emptyTrash, getTrashCount, listTrash, permanentDelete, restoreItem } from '../services/trash_service.js';
+import { mockTenantWork } from './helpers/tenant-work.js';
 
 function cloneDoc(doc) {
 	return { ...doc };
@@ -89,6 +90,7 @@ describe('Trash service Typesense bulk writes', () => {
 	});
 
 	it('restores selected items with one bulk index call per type', async () => {
+		const restoreTenant = mockTenantWork();
 		const originals = {
 			noteFindOneAndUpdate: Note.findOneAndUpdate,
 			noteUpdateMany: Note.updateMany,
@@ -157,6 +159,7 @@ describe('Trash service Typesense bulk writes', () => {
 			Memory.updateMany = originals.memoryUpdateMany;
 			Project.findOneAndUpdate = originals.projectFindOneAndUpdate;
 			Project.updateOne = originals.projectUpdateOne;
+			restoreTenant();
 		}
 	});
 

@@ -26,7 +26,7 @@ export async function requireActiveProject(hostId, projectId) {
 // destination project and holds it across the record insert. `deleteProject`
 // gates new writers, drains these leases, then checks blockers authoritatively
 // before deactivating — so a record can never land in a deactivated project.
-async function acquireProjectWorkImpl(hostId, projectId) {
+async function acquireProjectWorkImpl(hostId, projectId, ctx = {}) {
 	if (projectId !== undefined && (projectId === null || (typeof projectId !== 'string' && !(projectId instanceof mongoose.Types.ObjectId)))) throw Object.assign(new Error('Active project not found'), { status: 404, code: 'project_not_found' });
 	const key = `active_work.${crypto.randomUUID()}`;
 	const expiry = () => new Date(Date.now() + 5 * 60 * 1000);
@@ -43,14 +43,75 @@ async function acquireProjectWorkImpl(hostId, projectId) {
 	const resolvedId = project._id;
 	const timer = setInterval(() => { void Project.updateOne({ _id: resolvedId, host_id: hostId, [key]: { $exists: true } }, { $set: { [key]: expiry() } }, { timestamps: false }).catch(() => {}); }, 20000);
 	timer.unref();
+
+	// Authoritative ownership fence: re-verify the captured (unexpired) lease key
+	// and that the project is still active with no pending deletion, inside the
+	// SAME session as the record write. Deletion's gate/deactivate writes to the
+	// Project doc, so this conditional write coordinates with them: an expired
+	// lease or a deactivated project fails the fence and aborts the publication.
+	const fence = async (session) => {
+		let ok;
+		try {
+			ok = await Project.findOneAndUpdate(
+				{ _id: resolvedId, host_id: hostId, is_active: true, 'deletion.requested_at': null, [key]: { $gt: new Date() } },
+				{ $set: { [key]: expiry() } },
+				{ timestamps: false, returnDocument: 'after', session },
+			).select('_id').lean();
+		} catch (err) {
+			if (err?.name !== 'CastError') throw err;
+			ok = null;
+		}
+		if (!ok) throw Object.assign(new Error('Active project not found'), { status: 404, code: 'project_not_found' });
+	};
+
+	const publish = async (persist) => {
+		if (ctx.withOwnership) {
+			return ctx.withOwnership(async (session) => { await fence(session); return persist(session); });
+		}
+		return mongoose.connection.transaction(async (session) => { await fence(session); return persist(session); });
+	};
+
 	return {
 		projectId: resolvedId,
 		release: async () => { clearInterval(timer); await Project.updateOne({ _id: resolvedId, host_id: hostId }, { $unset: { [key]: '' } }, { timestamps: false }).catch(() => {}); },
+		publish,
 	};
 }
 
 export const projectWork = { acquire: acquireProjectWorkImpl };
-export function acquireProjectWrite(hostId, projectId) { return projectWork.acquire(hostId, projectId); }
+export function acquireProjectWrite(hostId, projectId, ctx = {}) { return projectWork.acquire(hostId, projectId, ctx); }
+
+// Resolve the destination project for a trash restore. A trashed item whose
+// ORIGINAL project is already inactive (or missing) is restored into the host's
+// active Default project. An active project with a pending deletion, a foreign
+// host, or any other ambiguity fails closed. Write-based reads make the original
+// project's state authoritative rather than a lagging replica's view.
+export async function resolveRestoreProject(hostId, originalProjectId) {
+	if (originalProjectId === null || originalProjectId === undefined || (typeof originalProjectId !== 'string' && !(originalProjectId instanceof mongoose.Types.ObjectId))) throw Object.assign(new Error('Active project not found'), { status: 404, code: 'project_not_found' });
+	let original;
+	try {
+		original = await Project.findOneAndUpdate({ _id: originalProjectId, host_id: hostId }, { $inc: { __v: 0 } }, { timestamps: false, returnDocument: 'after' }).select('_id is_active deletion').lean();
+	} catch (err) {
+		if (err?.name !== 'CastError') throw err;
+		original = null;
+	}
+	if (original) {
+		if (original.is_active === true) {
+			if (original.deletion?.requested_at) throw Object.assign(new Error('Active project not found'), { status: 404, code: 'project_not_found' });
+			return original._id;
+		}
+		// Inactive → fall through to the default project fallback.
+	}
+	let fallback;
+	try {
+		fallback = await Project.findOneAndUpdate({ host_id: hostId, is_active: true, is_default: true, 'deletion.requested_at': null }, { $set: { is_active: true } }, { timestamps: false, returnDocument: 'after' }).select('_id').lean();
+	} catch (err) {
+		if (err?.name !== 'CastError') throw err;
+		fallback = null;
+	}
+	if (!fallback) throw Object.assign(new Error('Active project not found'), { status: 404, code: 'project_not_found' });
+	return fallback._id;
+}
 
 export async function createDefaultProject(userId, host_id, options = {}) {
 	const payload = {
@@ -142,47 +203,38 @@ export async function updateProject(host_id, projectId, data, ctx = {}) {
 	return project;
 }
 
-// Enumerate records through write results so a lagging replica cannot make an
-// occupied project look empty. Mirrors the account-cleanup enumeration fence.
-async function countProjectRecords(model, filter) {
-	let count = 0;
-	const seen = [];
-	while (true) {
-		let row;
-		try {
-			row = await model.findOneAndUpdate({ ...filter, _id: { $nin: seen } }, { $inc: { __v: 0 } }, { timestamps: false, returnDocument: 'after' }).select('_id').lean();
-		} catch (err) {
-			if (err?.name !== 'CastError') throw err;
-			row = null;
-		}
-		if (!row) return count;
-		seen.push(row._id);
-		count++;
+// Enumerate a single matching row through a write result so a lagging replica
+// cannot make an occupied project look empty. One conditional write per model
+// is enough to prove a blocker exists; exact totals belong to the preview path
+// (getProjectDeleteState), not the authoritative deletion gate.
+async function hasProjectRecords(model, filter) {
+	try {
+		const row = await model.findOneAndUpdate(filter, { $inc: { __v: 0 } }, { timestamps: false, returnDocument: 'after' }).select('_id').lean();
+		return !!row;
+	} catch (err) {
+		if (err?.name !== 'CastError') throw err;
+		return false;
 	}
 }
 
 async function getProjectDeleteStateAuthoritative(host_id, projectId) {
 	const itemFilter = { project: projectId, host_id, in_trash: { $ne: true } };
 	const [notes, memory, urls, emails, gitRepos, obsidianConnections] = await Promise.all([
-		countProjectRecords(Note, itemFilter),
-		countProjectRecords(Memory, itemFilter),
-		countProjectRecords(Url, itemFilter),
-		countProjectRecords(Email, itemFilter),
-		countProjectRecords(GitRepo, { project: projectId, host_id }),
-		countProjectRecords(ObsidianConnection, { project: projectId, host_id }),
+		hasProjectRecords(Note, itemFilter),
+		hasProjectRecords(Memory, itemFilter),
+		hasProjectRecords(Url, itemFilter),
+		hasProjectRecords(Email, itemFilter),
+		hasProjectRecords(GitRepo, { project: projectId, host_id }),
+		hasProjectRecords(ObsidianConnection, { project: projectId, host_id }),
 	]);
 	const blockers = [];
-	if (notes) blockers.push(`${notes} note${notes > 1 ? 's' : ''}`);
-	if (memory) blockers.push(`${memory} ${memory > 1 ? 'memories' : 'memory'}`);
-	if (urls) blockers.push(`${urls} URL${urls > 1 ? 's' : ''}`);
-	if (emails) blockers.push(`${emails} email${emails > 1 ? 's' : ''}`);
-	if (gitRepos) blockers.push(`${gitRepos} git repo${gitRepos > 1 ? 's' : ''}`);
-	if (obsidianConnections) blockers.push(`${obsidianConnections} Obsidian connection${obsidianConnections > 1 ? 's' : ''}`);
-	return {
-		canDelete: blockers.length === 0,
-		blockers,
-		counts: { notes, memory, urls, emails, gitRepos, obsidianConnections },
-	};
+	if (notes) blockers.push('notes');
+	if (memory) blockers.push('memories');
+	if (urls) blockers.push('URLs');
+	if (emails) blockers.push('emails');
+	if (gitRepos) blockers.push('git repos');
+	if (obsidianConnections) blockers.push('Obsidian connections');
+	return { canDelete: blockers.length === 0, blockers };
 }
 
 // Wait for in-flight project writers to release their leases. Leases heartbeat

@@ -1,5 +1,5 @@
 import mongoose from '../model/mongoose.js';
-import { acquireProjectWrite } from './project_service.js';
+import { acquireProjectWrite, resolveRestoreProject } from './project_service.js';
 import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
 import { Url } from '../model/url.js';
@@ -144,14 +144,18 @@ async function restoreItemsByType(host_id, type, ids, deps = {}) {
 			missingIds.push(id);
 			continue;
 		}
-		const { release } = await acquireProjectWrite(host_id, existing.project);
+		// Resolve the destination before restoring so the write lease can fence
+		// deleteProject. An already-inactive/missing original project falls back
+		// to the host's active Default project; anything ambiguous fails closed.
+		const destination = await resolveRestoreProject(host_id, existing.project);
+		const { release, publish } = await acquireProjectWrite(host_id, destination);
 		try {
 			try {
-				doc = await model.findOneAndUpdate(
+				doc = await publish(async (session) => model.findOneAndUpdate(
 					{ _id: id, host_id, in_trash: true },
-					{ $set: { in_trash: false, is_indexed: false }, $unset: { trashed_at: '' } },
-					{ returnDocument: 'after' },
-				);
+					{ $set: { in_trash: false, is_indexed: false, ...(String(destination) !== String(existing.project) ? { project: destination } : {}) }, $unset: { trashed_at: '' } },
+					{ returnDocument: 'after', ...(session ? { session } : {}) },
+				));
 			} catch (err) {
 				if (err?.name !== 'CastError') throw err;
 				doc = null;

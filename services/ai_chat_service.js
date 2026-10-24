@@ -441,8 +441,9 @@ async function handleStatsStream({ hostId, query, conversationId, projectId, inc
 // single project when one is requested, instead of physical Typesense chunks.
 // Emails are gated by `includeEmails`; active vault files stay in the total.
 async function getActiveStats(hostId, projectId, includeEmails) {
+	const { project_id } = SearchFilters.parse({ project_id: projectId });
 	const perProject = await getProjectCounts(hostId);
-	const scope = projectId ? [String(projectId)] : Object.keys(perProject);
+	const scope = project_id ? [project_id] : Object.keys(perProject);
 	const counts = { notes: 0, memory: 0, urls: 0, emails: 0 };
 	for (const pid of scope) {
 		const entry = perProject[pid] || {};
@@ -452,7 +453,7 @@ async function getActiveStats(hostId, projectId, includeEmails) {
 		if (includeEmails) counts.emails += entry.emails || 0;
 	}
 	const vaultFilter = { host_id: hostId, in_trash: { $ne: true } };
-	if (projectId) vaultFilter.project = projectId;
+	if (project_id) vaultFilter.project = project_id;
 	counts.vault_files = await ObsidianFile.countDocuments(vaultFilter);
 	return counts;
 }

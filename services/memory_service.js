@@ -30,18 +30,22 @@ function maybeObjectId(value) {
 }
 
 export async function storeMemory(userId, host_id, data, ctx = {}) {
-	const { projectId: project, release } = await acquireProjectWrite(host_id, data.project);
+	const { projectId: project, release, publish } = await acquireProjectWrite(host_id, data.project, ctx);
 	let mem;
 	try {
-		mem = await Memory.create({
-			title: data.title,
-			content: data.content || '',
-			tags: data.tags || [],
-			source: data.source || '',
-			project,
-			owner: userId,
-			host_id,
-			is_indexed: false,
+		mem = await publish(async (session) => {
+			const payload = {
+				title: data.title,
+				content: data.content || '',
+				tags: data.tags || [],
+				source: data.source || '',
+				project,
+				owner: userId,
+				host_id,
+				is_indexed: false,
+			};
+			if (session) return (await Memory.create([payload], { session }))[0];
+			return Memory.create(payload);
 		});
 	} finally {
 		await release();
@@ -93,17 +97,19 @@ export async function updateMemory(host_id, memoryId, data, ctx = {}) {
 
 	const before = ctx.user_id ? await Memory.findOne({ _id: memoryId, host_id }).lean() : null;
 
-	// A move must hold the destination project's write lease across the update.
-	const release = data.project !== undefined ? (await acquireProjectWrite(host_id, data.project)).release : null;
+	// A move must hold the destination project's write lease across the update,
+	// fenced atomically with the record write so a deactivated project is rejected.
+	const write = data.project !== undefined ? await acquireProjectWrite(host_id, data.project) : null;
 	let mem;
 	try {
-		mem = await Memory.findOneAndUpdate(
+		const apply = (session) => Memory.findOneAndUpdate(
 			{ _id: memoryId, host_id, ...(ctx.expected_updated_at ? { updatedAt: new Date(ctx.expected_updated_at), in_trash: { $ne: true } } : {}) },
 			{ $set: update },
-			{ returnDocument: 'after' },
+			{ returnDocument: 'after', ...(session ? { session } : {}) },
 		);
+		mem = write ? await write.publish(apply) : await apply();
 	} finally {
-		if (release) await release();
+		if (write) await write.release();
 	}
 
 	let syncWarning;

@@ -122,7 +122,7 @@ it('saves an omitted-project URL into the resolved default project', async (t) =
 	t.mock.method(AuditLog, 'create', async () => ({}));
 	t.mock.method(axios, 'get', async () => ({ data: '<html><title>Default URL</title><body>Content</body></html>' }));
 	let payload;
-	t.mock.method(Url, 'create', async (data) => { payload = data; return { _id: 'url-default', ...data }; });
+	t.mock.method(Url, 'create', async (data) => { payload = Array.isArray(data) ? data[0] : data; const doc = { _id: 'url-default', ...payload }; return Array.isArray(data) ? [doc] : doc; });
 	const result = await saveUrl('user', 'host', { url: 'https://example.com' });
 	assert.equal(payload.project, 'project-1');
 	assert.equal(result.project, 'project-1');

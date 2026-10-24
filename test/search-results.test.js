@@ -10,6 +10,7 @@ import { Memory } from '../model/memory.js';
 import { Url } from '../model/url.js';
 import { Email } from '../model/email.js';
 import { processChat, processChatStream } from '../services/ai_chat_service.js';
+import { mockTenantWork } from './helpers/tenant-work.js';
 
 const PROJECT = '507f1f77bcf86cd799439011';
 const OTHER = '507f1f77bcf86cd799439012';
@@ -145,19 +146,25 @@ describe('search selection and bulk actions', () => {
 	});
 
 	it('enforces the selected version atomically inside existing update and trash operations', async () => {
-		for (const [type, Model] of [['notes', Note], ['memory', Memory], ['urls', Url], ['emails', Email]]) {
-			mock.method(Model, 'findOne', () => ({ select: () => ({ lean: async () => ({ project: PROJECT }) }) }));
-			mock.method(Project, 'findOneAndUpdate', () => ({ select() { return this; }, read() { return this; }, lean: async () => ({ _id: OTHER }) }));
-			const mutation = mock.method(Model, 'findOneAndUpdate', async (filter) => {
-				assert.equal(filter.host_id, 'tenant-one');
-				assert.equal(filter.updatedAt.toISOString(), VERSION);
-				assert.deepEqual(filter.in_trash, { $ne: true });
-				return null;
-			});
-			await SearchResults.operations[type].update('tenant-one', PROJECT, { project: OTHER }, { expected_updated_at: VERSION });
-			await SearchResults.operations[type].trash('tenant-one', PROJECT, { expected_updated_at: VERSION });
-			assert.equal(mutation.mock.callCount(), 2);
-			mock.restoreAll();
+		const restoreWork = mockTenantWork();
+		try {
+			for (const [type, Model] of [['notes', Note], ['memory', Memory], ['urls', Url], ['emails', Email]]) {
+				mock.method(Model, 'findOne', () => ({ select: () => ({ lean: async () => ({ project: PROJECT }) }) }));
+				mock.method(Project, 'findOneAndUpdate', () => ({ select() { return this; }, read() { return this; }, lean: async () => ({ _id: OTHER }) }));
+				mock.method(Project, 'updateOne', async () => ({ matchedCount: 1 }));
+				const mutation = mock.method(Model, 'findOneAndUpdate', async (filter) => {
+					assert.equal(filter.host_id, 'tenant-one');
+					assert.equal(filter.updatedAt.toISOString(), VERSION);
+					assert.deepEqual(filter.in_trash, { $ne: true });
+					return null;
+				});
+				await SearchResults.operations[type].update('tenant-one', PROJECT, { project: OTHER }, { expected_updated_at: VERSION });
+				await SearchResults.operations[type].trash('tenant-one', PROJECT, { expected_updated_at: VERSION });
+				assert.equal(mutation.mock.callCount(), 2);
+				mock.restoreAll();
+			}
+		} finally {
+			restoreWork();
 		}
 	});
 	it('finds all tagged records across pages, excluding other projects, tenants, trash and body mentions', async () => {

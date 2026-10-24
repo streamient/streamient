@@ -73,10 +73,10 @@ export async function saveUrl(userId, host_id, data, ctx = {}) {
 
 	const screenshot = await saveClientScreenshot(rawUrl, data.screenshot_data_url, host_id);
 
-	const { release } = await acquireProjectWrite(host_id, project);
+	const { release, publish } = await acquireProjectWrite(host_id, project, ctx);
 	let urlDoc;
 	try {
-		urlDoc = await persistUrl(userId, host_id, {
+		urlDoc = await publish(async (session) => persistUrl(userId, host_id, {
 			url: rawUrl,
 			normalized_url: normalizedUrl,
 			title: data.title || extracted.title || rawUrl,
@@ -89,7 +89,7 @@ export async function saveUrl(userId, host_id, data, ctx = {}) {
 			project,
 			owner: userId,
 			host_id,
-		}, ctx);
+		}, ctx, session));
 	} finally {
 		await release();
 	}
@@ -106,8 +106,8 @@ export async function saveUrl(userId, host_id, data, ctx = {}) {
 	return urlDoc;
 }
 
-async function persistUrl(userId, host_id, payload, ctx) {
-	const urlDoc = await Url.create(payload);
+async function persistUrl(userId, host_id, payload, ctx, session) {
+	const urlDoc = session ? (await Url.create([payload], { session }))[0] : await Url.create(payload);
 
 	emitToTenant(host_id, 'url:created', attachScreenshotUrl(urlDoc));
 	invalidateGraphCache(host_id).catch(() => {});
@@ -118,10 +118,10 @@ async function persistUrl(userId, host_id, payload, ctx) {
 }
 
 export async function copyUrl(userId, host_id, source, project, ctx = {}) {
-	const { release } = await acquireProjectWrite(host_id, project);
+	const { release, publish } = await acquireProjectWrite(host_id, project, ctx);
 	try {
 		validatePublicUrl(source.url);
-		return await persistUrl(userId, host_id, { url: source.url, normalized_url: normalizeUrl(source.url), title: source.title, description: source.description, tags: source.tags || [], og_image: source.og_image || '', screenshot: source.screenshot || '', text_content: source.text_content || '', crawl_enabled: false, project, owner: userId, host_id, is_indexed: false }, ctx);
+		return await publish(async (session) => persistUrl(userId, host_id, { url: source.url, normalized_url: normalizeUrl(source.url), title: source.title, description: source.description, tags: source.tags || [], og_image: source.og_image || '', screenshot: source.screenshot || '', text_content: source.text_content || '', crawl_enabled: false, project, owner: userId, host_id, is_indexed: false }, ctx, session));
 	} finally {
 		await release();
 	}
@@ -188,17 +188,19 @@ export async function updateUrl(host_id, urlId, data, ctx = {}) {
 
 	const before = ctx.user_id ? await Url.findOne({ _id: urlId, host_id }).lean() : null;
 
-	// A move must hold the destination project's write lease across the update.
-	const release = data.project !== undefined ? (await acquireProjectWrite(host_id, data.project)).release : null;
+	// A move must hold the destination project's write lease across the update,
+	// fenced atomically with the record write so a deactivated project is rejected.
+	const write = data.project !== undefined ? await acquireProjectWrite(host_id, data.project) : null;
 	let urlDoc;
 	try {
-		urlDoc = await Url.findOneAndUpdate(
+		const apply = (session) => Url.findOneAndUpdate(
 			{ _id: urlId, host_id, ...(ctx.expected_updated_at ? { updatedAt: new Date(ctx.expected_updated_at), in_trash: { $ne: true } } : {}) },
 			{ $set: update },
-			{ returnDocument: 'after' },
+			{ returnDocument: 'after', ...(session ? { session } : {}) },
 		);
+		urlDoc = write ? await write.publish(apply) : await apply();
 	} finally {
-		if (release) await release();
+		if (write) await write.release();
 	}
 
 	let syncWarning;

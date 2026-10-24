@@ -1,5 +1,5 @@
 import { acquireTenantWork } from './tenancy.js';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import Typesense from 'typesense';
 import config, { getPlanLlmConfig } from '../config.js';
 import { emitToTenant } from './socket.js';
@@ -57,6 +57,7 @@ function chunkMetadataFields() {
 		{ name: 'source_id', type: 'string', facet: true },
 		{ name: 'chunk_index', type: 'int32', optional: true },
 		{ name: 'chunk_count', type: 'int32', optional: true },
+		{ name: 'claim', type: 'string', optional: true },
 	];
 }
 
@@ -905,12 +906,14 @@ export async function removeDocumentsByFilter(host_id, type, filterBy, options =
  * robined ~N/3 writes onto each Typesense node and stalled an entire batch
  * whenever a single node was momentarily slow.
  */
-export async function removeDocumentsBySourceIds(host_id, type, sourceIds) {
+export async function removeDocumentsBySourceIds(host_id, type, sourceIds, options = {}) {
 	const ids = [...new Set((sourceIds || []).map((id) => String(id)).filter(Boolean))];
 	if (!ids.length) return null;
 	const ts = getTypesenseClient();
 	const collectionName = buildCollectionName(type, host_id);
-	const filterBy = `source_id:=[${ids.map(exactFilterValue).join(',')}]`;
+	const filters = [`source_id:=[${ids.map(exactFilterValue).join(',')}]`];
+	if (options.claim) filters.push(`claim:=${exactFilterValue(options.claim)}`);
+	const filterBy = filters.join(' && ');
 	return withTypesenseResilience(
 		`bulk delete ${collectionName} (${ids.length} sources)`,
 		async () => {
@@ -1494,7 +1497,7 @@ export async function reindexHost(host_id, models) {
 
 		const query = { host_id, ...typeQuery };
 		const total = await model.countDocuments(query);
-		await model.updateMany(query, { $set: { is_indexed: false } }, { timestamps: false });
+		await model.updateMany(query, { $set: { is_indexed: false }, $unset: { index_claim: '' } }, { timestamps: false });
 		results[type] = { queued: total };
 		log.info({ count: total, type, host_id }, 'Queued docs for scheduler reindex');
 	}
@@ -1724,23 +1727,42 @@ export async function runStreamientIndexer(models) {
 					hostProgress.set(host_id, progress);
 				}
 
-				// Clear existing chunks for the whole batch in ONE bulk delete-by-filter
-				// (not one delete per doc) before re-importing — see removeDocumentsBySourceIds.
-				await removeDocumentsBySourceIds(host_id, type, docs.map((doc) => doc._id.toString()));
-
+				// Publication fencing: claim each row's captured content version before
+				// touching its chunks. The claim is a durable generation token on the
+				// row (`index_claim`); a newer claim invalidates any older worker's
+				// pending mark, and chunk cleanup is scoped to a worker's own claim
+				// token so a stale worker can never remove a newer publisher's chunks.
 				const tsDocEntries = [];
 				const chunkCounts = new Map();
+				const claims = new Map();
 				for (const doc of docs) {
 					const sourceId = doc._id.toString();
+					const token = randomUUID();
+					const version = doc.updatedAt ? { updatedAt: doc.updatedAt } : { updatedAt: { $exists: false } };
+					// Claim atomically: only lands while the row still holds the captured
+					// version. `returnDocument: 'before'` exposes the displaced generation
+					// token so its chunks can be removed exactly once.
+					const prev = await model.findOneAndUpdate(
+						{ _id: doc._id, host_id, ...version },
+						{ $set: { index_claim: token } },
+						{ timestamps: false, returnDocument: 'before' },
+					).select('index_claim').lean();
+					if (!prev) continue; // stale or deleted; a newer version is already queued
+					claims.set(sourceId, { token });
+					if (prev.index_claim) {
+						await removeDocumentsBySourceIds(host_id, type, [sourceId], { claim: prev.index_claim });
+					}
 					const chunks = toTypesenseDocs(type, doc);
 					chunkCounts.set(sourceId, chunks.length);
 					for (const chunk of chunks) {
+						chunk.claim = token;
 						tsDocEntries.push({ sourceId, doc: chunk });
 					}
 				}
+				if (!tsDocEntries.length) continue;
 				const results = await importDocuments(host_id, type, tsDocEntries.map((entry) => entry.doc));
 
-				// Separate successes and failures
+				// Separate successes and failures per source.
 				const successCounts = new Map();
 				const failedIds = new Map();
 				for (let i = 0; i < tsDocEntries.length; i++) {
@@ -1752,31 +1774,44 @@ export async function runStreamientIndexer(models) {
 					}
 				}
 
-				const successfulDocs = docs.filter((doc) => (successCounts.get(doc._id.toString()) || 0) === chunkCounts.get(doc._id.toString()) && !failedIds.has(doc._id.toString()));
 				const failed = Array.from(failedIds.entries()).map(([id, error]) => ({ id, error }));
 
-				// Mark each imported doc with a conditional write that re-matches the
-				// snapshot's `updatedAt`. A concurrent update/delete invalidates the
-				// fence; those docs are reconciled below so a stale publication never
-				// survives alongside an authoritative `is_indexed` state.
+				// Mark requires BOTH the claim token and the captured content version,
+				// so an older worker can never mark a row a newer worker owns (or has
+				// since republished). Failed imports stay unindexed for a later run.
 				const staleDocs = [];
 				let indexedCount = 0;
-				for (const doc of successfulDocs) {
+				for (const doc of docs) {
+					const sourceId = doc._id.toString();
+					if (!claims.has(sourceId)) continue; // never claimed (stale before import)
+					const allImported = (successCounts.get(sourceId) || 0) === chunkCounts.get(sourceId) && !failedIds.has(sourceId);
+					if (!allImported) continue;
 					const version = doc.updatedAt ? { updatedAt: doc.updatedAt } : { updatedAt: { $exists: false } };
-					const current = await model.findOneAndUpdate({ _id: doc._id, host_id, ...version }, { $set: { is_indexed: true } }, { timestamps: false, returnDocument: 'after' }).select('_id').lean();
-					if (current) indexedCount++;
-					else staleDocs.push(doc);
+					const marked = await model.findOneAndUpdate(
+						{ _id: doc._id, host_id, ...version, index_claim: claims.get(sourceId).token },
+						{ $set: { is_indexed: true } },
+						{ timestamps: false, returnDocument: 'after' },
+					).select('_id').lean();
+					if (marked) indexedCount++;
+					else staleDocs.push({ doc, claim: claims.get(sourceId).token });
 				}
 				totalIndexed += indexedCount;
 				progress.indexed += indexedCount;
 				progress.by_type[type] += indexedCount;
 
-				// Reconcile lost publications: the snapshot changed or the row was
-				// deleted after we read it. Remove the stale chunks just published and
-				// re-queue any row that still exists so a later run republishes it.
+				// Reconcile lost claims: remove only this worker's own chunks and
+				// requeue conditionally (still holding the claim + version) so a newer
+				// publisher's mark is never overwritten.
+				for (const { doc, claim } of staleDocs) {
+					await removeDocumentsBySourceIds(host_id, type, [doc._id.toString()], { claim });
+					const version = doc.updatedAt ? { updatedAt: doc.updatedAt } : { updatedAt: { $exists: false } };
+					await model.findOneAndUpdate(
+						{ _id: doc._id, host_id, ...version, index_claim: claim },
+						{ $set: { is_indexed: false } },
+						{ timestamps: false },
+					).select('_id').lean();
+				}
 				if (staleDocs.length) {
-					await removeDocumentsBySourceIds(host_id, type, staleDocs.map((doc) => doc._id.toString()));
-					await model.updateMany({ _id: { $in: staleDocs.map((doc) => doc._id) }, host_id }, { $set: { is_indexed: false } }, { timestamps: false });
 					log.warn({ staleCount: staleDocs.length, type, host_id }, 'Streamient indexer: repaired lost publications');
 				}
 
@@ -1787,7 +1822,7 @@ export async function runStreamientIndexer(models) {
 				}
 
 				if (docs.length > 0) {
-					log.info({ imported: successfulDocs.length, total: docs.length, type, host_id }, 'Streamient indexer: imported docs');
+					log.info({ imported: indexedCount, total: docs.length, type, host_id }, 'Streamient indexer: imported docs');
 				}
 			} finally {
 				if (hostLock) await getMongoCoordinator().releaseLock(hostLock).catch(() => {});

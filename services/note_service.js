@@ -13,7 +13,7 @@ const log = createLogger('note');
 export async function createNote(userId, host_id, data, ctx = {}) {
 	ctx.signal?.throwIfAborted();
 	await ctx.assertOwnership?.();
-	const { projectId: project, release } = await acquireProjectWrite(host_id, data.project);
+	const { projectId: project, release, publish } = await acquireProjectWrite(host_id, data.project, ctx);
 	let note;
 	try {
 		const persist = async (session) => {
@@ -24,7 +24,7 @@ export async function createNote(userId, host_id, data, ctx = {}) {
 			if (session) return (await Note.create([payload], { session }))[0];
 			return Note.create(payload);
 		};
-		note = ctx.withOwnership ? await ctx.withOwnership(persist) : await persist();
+		note = await publish(persist);
 	} finally {
 		await release();
 	}
@@ -80,17 +80,19 @@ export async function updateNote(host_id, noteId, data, ctx = {}) {
 
 	const before = ctx.user_id ? await Note.findOne({ _id: noteId, host_id }).lean() : null;
 
-	// A move must hold the destination project's write lease across the update.
-	const release = data.project !== undefined ? (await acquireProjectWrite(host_id, data.project)).release : null;
+	// A move must hold the destination project's write lease across the update,
+	// fenced atomically with the record write so a deactivated project is rejected.
+	const write = data.project !== undefined ? await acquireProjectWrite(host_id, data.project) : null;
 	let note;
 	try {
-		note = await Note.findOneAndUpdate(
+		const apply = (session) => Note.findOneAndUpdate(
 			{ _id: noteId, host_id, ...(ctx.expected_updated_at ? { updatedAt: new Date(ctx.expected_updated_at), in_trash: { $ne: true } } : {}) },
 			{ $set: update },
-			{ returnDocument: 'after' },
+			{ returnDocument: 'after', ...(session ? { session } : {}) },
 		);
+		note = write ? await write.publish(apply) : await apply();
 	} finally {
-		if (release) await release();
+		if (write) await write.release();
 	}
 
 	let syncWarning;

@@ -60,7 +60,7 @@ test('copies keep content with fresh identities and pending indexing', async (t)
 		let payload;
 		Model.findOne = () => ({ read() { return this; }, lean: async () => common });
 		if (type === 'emails') Model.findOne = async () => null;
-		Model.create = async (data) => { payload = data; return { _id: `copy-${type}`, ...data, updatedAt: new Date() }; };
+		Model.create = async (data) => { payload = Array.isArray(data) ? data[0] : data; const doc = { _id: `copy-${type}`, ...payload, updatedAt: new Date() }; return Array.isArray(data) ? [doc] : doc; };
 		try {
 			if (type === 'emails') {
 				let reads = 0;
