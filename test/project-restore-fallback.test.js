@@ -21,13 +21,13 @@ function mockProjectResolution(t, responses) {
 
 test('resolveRestoreProject returns the original project when it is active', async (t) => {
 	const restore = mockTenantWork(); t.after(restore);
-	mockProjectResolution(t, { originalId: 'project-1', original: { _id: 'project-1', is_active: true, deletion: null }, default: { _id: 'default' } });
+	mockProjectResolution(t, { originalId: 'project-1', original: { _id: 'project-1', host_id: 'host', is_active: true, deletion: null }, default: { _id: 'default' } });
 	assert.equal(String(await resolveRestoreProject('host', 'project-1')), 'project-1');
 });
 
 test('resolveRestoreProject falls back to the default project for an inactive original', async (t) => {
 	const restore = mockTenantWork(); t.after(restore);
-	const calls = mockProjectResolution(t, { originalId: 'project-1', original: { _id: 'project-1', is_active: false, deletion: null }, default: { _id: 'default' } });
+	const calls = mockProjectResolution(t, { originalId: 'project-1', original: { _id: 'project-1', host_id: 'host', is_active: false, deletion: null }, default: { _id: 'default' } });
 	assert.equal(String(await resolveRestoreProject('host', 'project-1')), 'default');
 	assert.ok(calls.some((filter) => filter.is_default === true));
 });
@@ -40,7 +40,15 @@ test('resolveRestoreProject falls back to the default project for a missing orig
 
 test('resolveRestoreProject fails closed for an active project with a pending deletion', async (t) => {
 	const restore = mockTenantWork(); t.after(restore);
-	mockProjectResolution(t, { originalId: 'project-1', original: { _id: 'project-1', is_active: true, deletion: { requested_at: new Date() } }, default: { _id: 'default' } });
+	mockProjectResolution(t, { originalId: 'project-1', original: { _id: 'project-1', host_id: 'host', is_active: true, deletion: { requested_at: new Date() } }, default: { _id: 'default' } });
+	await assert.rejects(resolveRestoreProject('host', 'project-1'), (err) => err.code === 'project_not_found');
+});
+
+test('resolveRestoreProject fails closed when the original project belongs to a foreign host', async (t) => {
+	const restore = mockTenantWork(); t.after(restore);
+	// The referenced project exists but is owned by a different tenant; the
+	// restore must never silently fall back to the host's Default project.
+	mockProjectResolution(t, { originalId: 'project-1', original: { _id: 'project-1', host_id: 'foreign-host', is_active: true, deletion: null }, default: { _id: 'default' } });
 	await assert.rejects(resolveRestoreProject('host', 'project-1'), (err) => err.code === 'project_not_found');
 });
 
@@ -55,7 +63,7 @@ test('restoring a trashed item whose original project is inactive lands in the d
 	});
 	t.mock.method(Project, 'findOneAndUpdate', (filter) => {
 		if (filter.is_default) return query({ _id: 'default-project' });
-		if (filter._id === 'old-project') return query({ _id: 'old-project', is_active: false, deletion: null });
+		if (filter._id === 'old-project') return query({ _id: 'old-project', host_id: 'host-1', is_active: false, deletion: null });
 		return query({ _id: 'default-project' });
 	});
 	t.mock.method(Project, 'updateOne', async () => ({ matchedCount: 1 }));

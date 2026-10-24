@@ -97,7 +97,7 @@ export async function updateNote(host_id, noteId, data, ctx = {}) {
 
 	let syncWarning;
 	if (note) {
-		removeDocument(host_id, 'notes', noteId).catch((err) => log.error({ err }, 'Typesense remove error'));
+		removeDocument(host_id, 'notes', noteId, { claim: note.index_claim || null }).catch((err) => log.error({ err }, 'Typesense remove error'));
 		emitToTenant(host_id, 'note:updated', attachItemHtml('note', note));
 		invalidateGraphCache(host_id).catch(() => {});
 		if (ctx.user_id) {

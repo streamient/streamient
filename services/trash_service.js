@@ -108,12 +108,6 @@ async function cleanupGraphLinks(host_id, ids) {
 	await removeLinksForItems(host_id, values);
 }
 
-async function markIndexed(model, host_id, ids) {
-	const uniqueIds = [...new Set(ids.map((id) => String(id || '')).filter(Boolean))];
-	if (!uniqueIds.length) return;
-	await model.updateMany({ _id: { $in: uniqueIds }, host_id }, { $set: { is_indexed: true } }, { timestamps: false });
-}
-
 async function markIndexPending(model, host_id, docs) {
 	const ids = uniqueIds(docs.map((doc) => doc?._id));
 	if (!ids.length) return;
@@ -173,9 +167,10 @@ async function restoreItemsByType(host_id, type, ids, deps = {}) {
 	const indexDocs = [...docs, ...currentDocs];
 	if (indexDocs.length) {
 		await markIndexPending(model, host_id, indexDocs);
+		// bulkIndexDocuments now runs the shared claim/version-conditional
+		// protocol, marking each row indexed only when its own claim + captured
+		// version still holds.
 		const results = await bulkIndexFn(host_id, tsType, indexDocs);
-		const successIds = results.filter((result) => result.success).map((result) => result.id);
-		await markIndexed(model, host_id, successIds);
 		const failed = results.filter((result) => !result.success);
 		if (failed.length) log.error({ failed, type, host_id }, 'Typesense bulk restore index error');
 		for (const doc of docs) {
@@ -227,8 +222,6 @@ async function permanentDeleteItemsByType(host_id, type, ids, deps = {}) {
 	if (currentDocs.length) {
 		await markIndexPending(model, host_id, currentDocs);
 		const results = await bulkIndexFn(host_id, tsType, currentDocs, { removeExisting: false });
-		const successIds = results.filter((result) => result.success).map((result) => result.id);
-		await markIndexed(model, host_id, successIds);
 		const failed = results.filter((result) => !result.success);
 		if (failed.length) log.error({ failed, type, host_id }, 'Typesense stale trash repair error');
 	}
@@ -316,8 +309,7 @@ export async function emptyTrash(host_id, deps = {}) {
 		await removeByFilterFn(host_id, tsType, 'in_trash:=true', { batch_size: 250 });
 		if (remainingDocs.length) {
 			await markIndexPending(model, host_id, remainingDocs);
-			const results = await bulkIndexFn(host_id, tsType, remainingDocs, { removeExisting: false });
-			await markIndexed(model, host_id, results.filter((result) => result.success).map((result) => result.id));
+			await bulkIndexFn(host_id, tsType, remainingDocs, { removeExisting: false });
 		}
 		for (const id of absentIds) emitToTenant(host_id, `${eventTypeForTrashType(type)}:deleted`, { _id: id });
 		deleted += absentIds.length;

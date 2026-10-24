@@ -9,6 +9,11 @@ import { sanitizeDeep } from './text_sanitize.js';
 import { SearchFilters } from './search_filters.js';
 import { buildEmailExcerpt } from './email_display.js';
 import { createLogger } from './logger.js';
+import { Note } from '../model/note.js';
+import { Memory } from '../model/memory.js';
+import { Url } from '../model/url.js';
+import { Email } from '../model/email.js';
+import { ObsidianFile } from '../model/obsidian_file.js';
 
 const log = createLogger('typesense');
 
@@ -48,6 +53,15 @@ const _trash_query_by = {
 	memory: 'title',
 	urls: 'title',
 	emails: 'subject',
+};
+// Claim-managed Mongo-backed types. `pages` are populated by the crawler and
+// are not claim-stamped, so they are deliberately absent here.
+const INDEXED_TYPE_MODELS = {
+	notes: Note,
+	memory: Memory,
+	urls: Url,
+	emails: Email,
+	vault_files: ObsidianFile,
 };
 const TYPESENSE_MAX_PAGE_SIZE = 250;
 const ensuredCollectionHosts = new Set();
@@ -261,7 +275,12 @@ export function mergeIndexedTextChunks(chunks = []) {
 	return { text_content: textContent, index_complete: indexComplete };
 }
 
-function chunkTypesenseDoc(type, doc) {
+function claimChunkId(sourceId, index, token) {
+	if (!token) return index === 0 ? sourceId : `${sourceId}_chunk_${index}`;
+	return index === 0 ? `${sourceId}_${token}` : `${sourceId}_${token}_chunk_${index}`;
+}
+
+function chunkTypesenseDoc(type, doc, token) {
 	const fields = _chunk_fields[type];
 	// Strip control/separator chars so they never reach the Typesense index
 	// (and thus never reach search results / MCP clients).
@@ -283,10 +302,11 @@ function chunkTypesenseDoc(type, doc) {
 	return chunkSpecs.map((spec, index) => {
 		const chunkDoc = {
 			...doc,
-			id: index === 0 ? sourceId : `${sourceId}_chunk_${index}`,
+			id: claimChunkId(sourceId, index, token),
 			source_id: sourceId,
 			chunk_index: index,
 			chunk_count: chunkSpecs.length,
+			...(token ? { claim: token } : {}),
 		};
 
 		for (const field of fields) {
@@ -494,8 +514,8 @@ export function toTypesenseDoc(type, doc) {
 	}
 }
 
-export function toTypesenseDocs(type, doc) {
-	return chunkTypesenseDoc(type, toTypesenseDoc(type, doc));
+export function toTypesenseDocs(type, doc, token) {
+	return chunkTypesenseDoc(type, toTypesenseDoc(type, doc), token);
 }
 const schemas = {
 	notes: (host_id) => ({
@@ -747,8 +767,8 @@ export async function ensureCollections(host_id) {
  * `id` and no `_id` — otherwise transform it. Skipping the transform would
  * drop `project_id`, which silently breaks project-scoped counts/filters.
  */
-export function toIndexDocs(type, doc) {
-	return doc.id && !doc._id ? chunkTypesenseDoc(type, doc) : toTypesenseDocs(type, doc);
+export function toIndexDocs(type, doc, token) {
+	return doc.id && !doc._id ? chunkTypesenseDoc(type, doc, token) : toTypesenseDocs(type, doc, token);
 }
 
 function sourceIdForIndexDocs(type, doc) {
@@ -810,8 +830,16 @@ function summarizeImportResultErrors(results) {
  * Bulk-index source documents into a collection.
  * Raw Mongo/Mongoose docs are transformed and chunked first; the return value
  * reports success per source document, not per chunk.
+ *
+ * Mongo-backed types (notes/memory/urls/emails/vault_files) go through the
+ * shared claim/version-conditional protocol so a stale or concurrent publisher
+ * can never erase a newer publisher's claim-unique chunks or mark a concurrent
+ * edit indexed. Non-Mongo types (e.g. crawler pages) keep the legacy path.
  */
 export async function bulkIndexDocuments(host_id, type, docs, options = {}) {
+	const model = options.model || INDEXED_TYPE_MODELS[type];
+	if (model) return publishClaimedDocuments(host_id, type, model, docs, options);
+
 	const sourceDocs = (Array.isArray(docs) ? docs : [docs]).filter(Boolean);
 	if (!sourceDocs.length) return [];
 
@@ -836,8 +864,8 @@ export async function bulkIndexDocuments(host_id, type, docs, options = {}) {
 	return summarizeSourceImportResults(sourceEntries, results);
 }
 
-export async function indexDocument(host_id, type, doc) {
-	return bulkIndexDocuments(host_id, type, [doc]).then((results) => results[0] || null);
+export async function indexDocument(host_id, type, doc, options = {}) {
+	return bulkIndexDocuments(host_id, type, [doc], options).then((results) => results[0] || null);
 }
 
 /**
@@ -870,11 +898,197 @@ export async function importDocuments(host_id, type, docs, action = 'upsert') {
 }
 
 /**
- * Remove a document from a collection.
+ * Remove a document's stale chunks from a collection without ever touching a
+ * newer publisher's claim-unique chunks. When `options.claim` is provided, only
+ * chunks stamped with that claim token are removed; otherwise only legacy
+ * claim-less deterministic chunks (pre-claim publications) are enumerated and
+ * removed by their exact IDs.
  */
-export async function removeDocument(host_id, type, docId) {
-	const results = await bulkRemoveDocuments(host_id, type, [docId]);
-	return results[0] || null;
+export async function removeDocument(host_id, type, docId, options = {}) {
+	const sourceId = String(docId);
+	if (!sourceId) return null;
+	if (options.claim) {
+		await removeDocumentsBySourceIds(host_id, type, [sourceId], { claim: options.claim });
+	} else {
+		await removeLegacyClaimlessChunks(host_id, type, sourceId);
+	}
+	return null;
+}
+
+/**
+ * Delete exact documents by their Typesense IDs (never by a broad source_id
+ * filter). Used for legacy claim-less cleanup so a stale publisher can only
+ * remove the deterministic pre-claim IDs it enumerated, never a newer
+ * publisher's claim-unique IDs.
+ */
+export async function removeDocumentsByIds(host_id, type, ids, options = {}) {
+	const safeIds = [...new Set((ids || []).map((id) => String(id)).filter(Boolean))];
+	if (!safeIds.length) return null;
+	const ts = getTypesenseClient();
+	const collectionName = buildCollectionName(type, host_id);
+	return withTypesenseResilience(
+		`delete by ids ${collectionName} (${safeIds.length})`,
+		async () => {
+			try {
+				return await ts.collections(collectionName).documents().delete({ filter_by: `id:=[${safeIds.map(exactFilterValue).join(',')}]`, batch_size: 250, ...options });
+			} catch (err) {
+				if (err?.httpStatus === 404) return null;
+				throw err;
+			}
+		},
+	);
+}
+
+/**
+ * Remove legacy deterministic chunks (pre-claim publications with no `claim`
+ * field) for a source. Enumerates exactly which chunks are claim-less, then
+ * deletes only those IDs — never an unqualified source_id delete, which could
+ * erase a newer publisher's claim-unique chunks that happened to be indexed in
+ * between a first claim and this cleanup.
+ */
+async function removeLegacyClaimlessChunks(host_id, type, sourceId) {
+	try {
+		const ts = getTypesenseClient();
+		const collectionName = buildCollectionName(type, host_id);
+		const queryBy = type === 'emails' ? 'subject' : 'title';
+		const legacyIds = [];
+		let page = 1;
+		while (true) {
+			const result = await withTypesenseResilience(
+				`list claimless chunks ${collectionName}`,
+				() => ts.collections(collectionName).documents().search({
+					q: '*',
+					query_by: queryBy,
+					filter_by: `source_id:=${exactFilterValue(sourceId)}`,
+					include_fields: 'id,claim',
+					per_page: 250,
+					page,
+				}),
+				{ fallback: { hits: [], found: 0 } },
+			);
+			const hits = result?.hits || [];
+			for (const hit of hits) {
+				if (!hit?.document?.claim) legacyIds.push(String(hit.document.id));
+			}
+			if (!hits.length || hits.length < 250 || legacyIds.length >= Number(result?.found || 0)) break;
+			page++;
+		}
+		if (legacyIds.length) await removeDocumentsByIds(host_id, type, legacyIds);
+	} catch (err) {
+		// Legacy cleanup is best-effort: a failure to enumerate old claim-less
+		// chunks must never abort a fresh publication.
+		log.warn({ err, sourceId, type, host_id }, 'Legacy claim-less chunk cleanup skipped');
+	}
+}
+
+/**
+ * Shared claim/version-conditional publication for Mongo-backed types. Claims
+ * each source row (atomically, version-guarded), imports claim-unique chunks,
+ * conditionally marks indexed, and reconciles stale claims. Returns one
+ * `{ id, success, error }` per source document.
+ */
+export async function publishClaimedDocuments(host_id, type, model, docs, options = {}) {
+	const sourceDocs = (Array.isArray(docs) ? docs : [docs]).filter(Boolean);
+	if (!sourceDocs.length || !model) return [];
+
+	const sourceIdOf = (doc) => String(doc?._id ?? doc?.id ?? '');
+	const results = new Map();
+	const sourceEntries = [];
+	const chunkCounts = new Map();
+	const claimedDocs = [];
+
+	for (const doc of sourceDocs) {
+		const sourceId = sourceIdOf(doc);
+		if (!sourceId) continue;
+		const token = randomUUID();
+		const version = doc.updatedAt ? { updatedAt: doc.updatedAt } : { updatedAt: { $exists: false } };
+		let prev;
+		try {
+			prev = await model.findOneAndUpdate(
+				{ _id: doc._id, host_id, ...version },
+				{ $set: { index_claim: token } },
+				{ timestamps: false, returnDocument: 'before' },
+			).select('index_claim').lean();
+		} catch (err) {
+			if (err?.name !== 'CastError') throw err;
+			prev = null;
+		}
+		if (!prev) {
+			// Stale or deleted: a newer version is already queued.
+			results.set(sourceId, { id: sourceId, success: false, error: 'stale' });
+			continue;
+		}
+		if (prev.index_claim) {
+			await removeDocumentsBySourceIds(host_id, type, [sourceId], { claim: prev.index_claim });
+		} else {
+			await removeLegacyClaimlessChunks(host_id, type, sourceId);
+		}
+		const chunks = toTypesenseDocs(type, doc, token);
+		chunkCounts.set(sourceId, chunks.length);
+		for (const chunk of chunks) sourceEntries.push({ sourceId, doc: chunk });
+		claimedDocs.push({ doc, sourceId, token, version });
+	}
+
+	if (!sourceEntries.length) {
+		return sourceDocs.map((doc) => {
+			const id = sourceIdOf(doc);
+			return results.get(id) || { id, success: false, error: 'stale' };
+		});
+	}
+
+	const importResults = await importDocuments(host_id, type, sourceEntries.map((entry) => entry.doc), options.action || 'upsert');
+
+	const successCounts = new Map();
+	const failedIds = new Map();
+	for (let i = 0; i < sourceEntries.length; i++) {
+		const entry = sourceEntries[i];
+		if (importResults[i]?.success) {
+			successCounts.set(entry.sourceId, (successCounts.get(entry.sourceId) || 0) + 1);
+		} else {
+			failedIds.set(entry.sourceId, importResults[i]?.error || MISSING_IMPORT_RESULT_ERROR);
+		}
+	}
+
+	const staleDocs = [];
+	for (const { doc, sourceId, token, version } of claimedDocs) {
+		const allImported = (successCounts.get(sourceId) || 0) === chunkCounts.get(sourceId) && !failedIds.has(sourceId);
+		if (!allImported) {
+			results.set(sourceId, { id: sourceId, success: false, error: failedIds.get(sourceId) || 'import_failed' });
+			continue;
+		}
+		const marked = await model.findOneAndUpdate(
+			{ _id: doc._id, host_id, ...version, index_claim: token },
+			{ $set: { is_indexed: true } },
+			{ timestamps: false, returnDocument: 'after' },
+		).select('_id').lean();
+		if (marked) {
+			results.set(sourceId, { id: sourceId, success: true, error: null });
+		} else {
+			staleDocs.push({ doc, sourceId, token, version });
+		}
+	}
+
+	// Reconcile lost claims: remove only this worker's own chunks and requeue
+	// conditionally (still holding the claim + version) so a newer publisher's
+	// mark is never overwritten.
+	for (const { doc, sourceId, token, version } of staleDocs) {
+		await removeDocumentsBySourceIds(host_id, type, [sourceId], { claim: token });
+		await model.findOneAndUpdate(
+			{ _id: doc._id, host_id, ...version, index_claim: token },
+			{ $set: { is_indexed: false } },
+			{ timestamps: false },
+		).select('_id').lean();
+		results.set(sourceId, { id: sourceId, success: false, error: 'stale' });
+	}
+
+	if (staleDocs.length) {
+		log.warn({ staleCount: staleDocs.length, type, host_id }, 'Streamient indexer: repaired lost publications');
+	}
+
+	return sourceDocs.map((doc) => {
+		const id = sourceIdOf(doc);
+		return results.get(id) || { id, success: false, error: null };
+	});
 }
 
 /**
@@ -1497,7 +1711,10 @@ export async function reindexHost(host_id, models) {
 
 		const query = { host_id, ...typeQuery };
 		const total = await model.countDocuments(query);
-		await model.updateMany(query, { $set: { is_indexed: false }, $unset: { index_claim: '' } }, { timestamps: false });
+		// Keep the previous index_claim so a displaced cleanup that races a
+		// reindex still knows which token's chunks to remove; the claim token is
+		// replaced atomically on the next publication, not cleared here.
+		await model.updateMany(query, { $set: { is_indexed: false } }, { timestamps: false });
 		results[type] = { queued: total };
 		log.info({ count: total, type, host_id }, 'Queued docs for scheduler reindex');
 	}
@@ -1727,93 +1944,18 @@ export async function runStreamientIndexer(models) {
 					hostProgress.set(host_id, progress);
 				}
 
-				// Publication fencing: claim each row's captured content version before
-				// touching its chunks. The claim is a durable generation token on the
-				// row (`index_claim`); a newer claim invalidates any older worker's
-				// pending mark, and chunk cleanup is scoped to a worker's own claim
-				// token so a stale worker can never remove a newer publisher's chunks.
-				const tsDocEntries = [];
-				const chunkCounts = new Map();
-				const claims = new Map();
-				for (const doc of docs) {
-					const sourceId = doc._id.toString();
-					const token = randomUUID();
-					const version = doc.updatedAt ? { updatedAt: doc.updatedAt } : { updatedAt: { $exists: false } };
-					// Claim atomically: only lands while the row still holds the captured
-					// version. `returnDocument: 'before'` exposes the displaced generation
-					// token so its chunks can be removed exactly once.
-					const prev = await model.findOneAndUpdate(
-						{ _id: doc._id, host_id, ...version },
-						{ $set: { index_claim: token } },
-						{ timestamps: false, returnDocument: 'before' },
-					).select('index_claim').lean();
-					if (!prev) continue; // stale or deleted; a newer version is already queued
-					claims.set(sourceId, { token });
-					if (prev.index_claim) {
-						await removeDocumentsBySourceIds(host_id, type, [sourceId], { claim: prev.index_claim });
-					}
-					const chunks = toTypesenseDocs(type, doc);
-					chunkCounts.set(sourceId, chunks.length);
-					for (const chunk of chunks) {
-						chunk.claim = token;
-						tsDocEntries.push({ sourceId, doc: chunk });
-					}
-				}
-				if (!tsDocEntries.length) continue;
-				const results = await importDocuments(host_id, type, tsDocEntries.map((entry) => entry.doc));
+				// Publication fencing: claim each row's captured content version
+				// before touching its chunks, import claim-unique chunks, and mark
+				// indexed conditionally on the claim token + version. The shared
+				// protocol guarantees a stale worker can never erase a newer
+				// publisher's chunks or mark a concurrent edit indexed.
+				const results = await publishClaimedDocuments(host_id, type, model, docs);
+				const indexedCount = results.filter((result) => result?.success).length;
+				const failed = results.filter((result) => !result?.success);
 
-				// Separate successes and failures per source.
-				const successCounts = new Map();
-				const failedIds = new Map();
-				for (let i = 0; i < tsDocEntries.length; i++) {
-					const entry = tsDocEntries[i];
-					if (results[i]?.success) {
-						successCounts.set(entry.sourceId, (successCounts.get(entry.sourceId) || 0) + 1);
-					} else {
-						failedIds.set(entry.sourceId, results[i]?.error || MISSING_IMPORT_RESULT_ERROR);
-					}
-				}
-
-				const failed = Array.from(failedIds.entries()).map(([id, error]) => ({ id, error }));
-
-				// Mark requires BOTH the claim token and the captured content version,
-				// so an older worker can never mark a row a newer worker owns (or has
-				// since republished). Failed imports stay unindexed for a later run.
-				const staleDocs = [];
-				let indexedCount = 0;
-				for (const doc of docs) {
-					const sourceId = doc._id.toString();
-					if (!claims.has(sourceId)) continue; // never claimed (stale before import)
-					const allImported = (successCounts.get(sourceId) || 0) === chunkCounts.get(sourceId) && !failedIds.has(sourceId);
-					if (!allImported) continue;
-					const version = doc.updatedAt ? { updatedAt: doc.updatedAt } : { updatedAt: { $exists: false } };
-					const marked = await model.findOneAndUpdate(
-						{ _id: doc._id, host_id, ...version, index_claim: claims.get(sourceId).token },
-						{ $set: { is_indexed: true } },
-						{ timestamps: false, returnDocument: 'after' },
-					).select('_id').lean();
-					if (marked) indexedCount++;
-					else staleDocs.push({ doc, claim: claims.get(sourceId).token });
-				}
 				totalIndexed += indexedCount;
 				progress.indexed += indexedCount;
 				progress.by_type[type] += indexedCount;
-
-				// Reconcile lost claims: remove only this worker's own chunks and
-				// requeue conditionally (still holding the claim + version) so a newer
-				// publisher's mark is never overwritten.
-				for (const { doc, claim } of staleDocs) {
-					await removeDocumentsBySourceIds(host_id, type, [doc._id.toString()], { claim });
-					const version = doc.updatedAt ? { updatedAt: doc.updatedAt } : { updatedAt: { $exists: false } };
-					await model.findOneAndUpdate(
-						{ _id: doc._id, host_id, ...version, index_claim: claim },
-						{ $set: { is_indexed: false } },
-						{ timestamps: false },
-					).select('_id').lean();
-				}
-				if (staleDocs.length) {
-					log.warn({ staleCount: staleDocs.length, type, host_id }, 'Streamient indexer: repaired lost publications');
-				}
 
 				if (failed.length) {
 					const failedIdsSample = failed.slice(0, 10).map((item) => item.id).join(',');

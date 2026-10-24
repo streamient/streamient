@@ -205,7 +205,7 @@ export async function updateUrl(host_id, urlId, data, ctx = {}) {
 
 	let syncWarning;
 	if (urlDoc) {
-		removeDocument(host_id, 'urls', urlId).catch((err) => log.error({ err }, 'Typesense remove error'));
+		removeDocument(host_id, 'urls', urlId, { claim: urlDoc.index_claim || null }).catch((err) => log.error({ err }, 'Typesense remove error'));
 		emitToTenant(host_id, 'url:updated', attachScreenshotUrl(urlDoc));
 		invalidateGraphCache(host_id).catch(() => {});
 		if (ctx.user_id) {

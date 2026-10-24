@@ -114,7 +114,7 @@ export async function updateMemory(host_id, memoryId, data, ctx = {}) {
 
 	let syncWarning;
 	if (mem) {
-		removeDocument(host_id, 'memory', memoryId).catch((err) => log.error({ err }, 'Typesense remove error'));
+		removeDocument(host_id, 'memory', memoryId, { claim: mem.index_claim || null }).catch((err) => log.error({ err }, 'Typesense remove error'));
 		emitToTenant(host_id, 'memory:updated', attachItemHtml('memory', mem));
 		invalidateGraphCache(host_id).catch(() => {});
 		if (ctx.user_id) {

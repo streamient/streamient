@@ -125,7 +125,7 @@ describe('Trash service Typesense bulk writes', () => {
 		};
 		Note.updateMany = async (query, update, options) => stateUpdates.push({ type: 'notes', query, update, options });
 		Memory.updateMany = async (query, update, options) => stateUpdates.push({ type: 'memory', query, update, options });
-		Project.findOneAndUpdate = () => ({ select() { return this; }, lean: async () => ({ _id: 'project-1' }) });
+		Project.findOneAndUpdate = () => ({ select() { return this; }, lean: async () => ({ _id: 'project-1', host_id: 'host-1' }) });
 		Project.updateOne = async () => ({ matchedCount: 1, modifiedCount: 1 });
 
 		try {
@@ -147,11 +147,11 @@ describe('Trash service Typesense bulk writes', () => {
 			]);
 			assert.deepEqual(stateUpdates.map((call) => call.query), [
 				{ _id: { $in: ['note-1', 'note-2'] }, host_id: 'host-1' },
-				{ _id: { $in: ['note-1', 'note-2'] }, host_id: 'host-1' },
-				{ _id: { $in: ['memory-1'] }, host_id: 'host-1' },
 				{ _id: { $in: ['memory-1'] }, host_id: 'host-1' },
 			]);
-			assert.deepEqual(stateUpdates.map((call) => call.update.$set.is_indexed), [false, true, false, true]);
+			// bulkIndexDocuments now marks indexed via the claim protocol; only the
+			// pending pre-step remains here, so there is no unconditional mark=true.
+			assert.deepEqual(stateUpdates.map((call) => call.update.$set.is_indexed), [false, false]);
 		} finally {
 			Note.findOneAndUpdate = originals.noteFindOneAndUpdate;
 			Note.updateMany = originals.noteUpdateMany;
@@ -184,7 +184,9 @@ describe('Trash service Typesense bulk writes', () => {
 		assert.deepEqual(removeCalls, ['notes', 'memory', 'urls', 'emails']);
 		assert.deepEqual(graphCalls[0], ['note-1', 'note-orphan', 'note-2']);
 		assert.deepEqual(indexCalls, [activeId]);
-		assert.deepEqual(stateUpdates.map((call) => call.update.$set.is_indexed), [false, true]);
+		// bulkIndexDocuments marks indexed via the claim protocol; only the
+		// pending pre-step remains here.
+		assert.deepEqual(stateUpdates.map((call) => call.update.$set.is_indexed), [false]);
 	});
 
 	it('stale permanent-delete repair preserves a concurrent live publication', async (t) => {

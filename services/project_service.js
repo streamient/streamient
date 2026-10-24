@@ -90,12 +90,14 @@ export async function resolveRestoreProject(hostId, originalProjectId) {
 	if (originalProjectId === null || originalProjectId === undefined || (typeof originalProjectId !== 'string' && !(originalProjectId instanceof mongoose.Types.ObjectId))) throw Object.assign(new Error('Active project not found'), { status: 404, code: 'project_not_found' });
 	let original;
 	try {
-		original = await Project.findOneAndUpdate({ _id: originalProjectId, host_id: hostId }, { $inc: { __v: 0 } }, { timestamps: false, returnDocument: 'after' }).select('_id is_active deletion').lean();
+		original = await Project.findOneAndUpdate({ _id: originalProjectId }, { $inc: { __v: 0 } }, { timestamps: false, returnDocument: 'after' }).select('_id host_id is_active deletion').lean();
 	} catch (err) {
 		if (err?.name !== 'CastError') throw err;
 		original = null;
 	}
 	if (original) {
+		// A foreign host's project ref must fail closed, not silently fall back.
+		if (String(original.host_id) !== String(hostId)) throw Object.assign(new Error('Active project not found'), { status: 404, code: 'project_not_found' });
 		if (original.is_active === true) {
 			if (original.deletion?.requested_at) throw Object.assign(new Error('Active project not found'), { status: 404, code: 'project_not_found' });
 			return original._id;
