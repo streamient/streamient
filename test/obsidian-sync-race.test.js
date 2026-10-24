@@ -80,7 +80,7 @@ test('sequence allocation and change insert share one write transaction with no 
 	const changes = [];
 	mock.method(mongoose.connection, 'transaction', async (callback) => callback('tx-session'));
 	mock.method(ObsidianConnection, 'findOneAndUpdate', async (_filter, update, options) => { sessions.push(options?.session); return { sequence: sequence += update.$inc.sequence }; });
-	mock.method(ObsidianChange, 'create', async (data, options) => { sessions.push(options?.session); changes.push(data); return data; });
+	mock.method(ObsidianChange, 'create', async (data, options) => { assert.equal(Array.isArray(data), true); sessions.push(options?.session); changes.push(data[0]); return data; });
 
 	const connection = { _id: 'conn', host_id: 'host' };
 	const file = { _id: 'file', path: 'a.png', revision: 1, sha256: 'sha', modified_at: new Date(), last_source: 'obsidian', last_device_id: '' };

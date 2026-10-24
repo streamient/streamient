@@ -20,7 +20,7 @@ import { storeBuffer } from '../services/obsidian_blob_service.js';
 // Isolated Mongo regression for concurrent public mutations, Streamient-side edits, and
 // atomic sequence allocation. It connects to a unique database, cleans up only that database,
 // and is skipped by default so the ordinary suite never requires a live Mongo server.
-test('concurrent Obsidian mutations and Streamient edits stay atomic', { skip: process.env.RUN_OBSIDIAN_INTEGRATION !== '1' }, async (t) => {
+test('concurrent Obsidian mutations and Streamient edits stay atomic', { skip: process.env.RUN_OBSIDIAN_INTEGRATION !== '1', timeout: 60000 }, async (t) => {
 	const hostId = `obsidian-atomic-${Date.now()}-${process.pid}`;
 	const dbName = `streamient_obsidian_atomic_${process.pid}_${Date.now()}`;
 	await mongoose.connect(config.mongoUri, { ...config.mongoOptions, dbName });

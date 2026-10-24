@@ -320,7 +320,7 @@ async function nextSequence(connection, session) {
 
 async function preserveRevision(file, reason, session) {
 	if (!file?.revision || (!file.blob && !file.sha256)) return null;
-	return ObsidianRevision.create({
+	const payload = {
 		connection: file.connection,
 		file: file._id,
 		host_id: file.host_id,
@@ -332,7 +332,8 @@ async function preserveRevision(file, reason, session) {
 		source: file.last_source,
 		reason,
 		expires_at: new Date(Date.now() + OBSIDIAN_REVISION_RETENTION_MS),
-	}, session ? { session } : undefined);
+	};
+	return session ? (await ObsidianRevision.create([payload], { session }))[0] : ObsidianRevision.create(payload);
 }
 
 const MARKDOWN_PROJECTIONS = [
@@ -393,7 +394,7 @@ async function projectMarkdownFile(file, raw, ownerId, session) {
 		record = await projection.Model.findOneAndUpdate({ _id: record._id, host_id: file.host_id, project: file.project, 'obsidian_source.file_id': file._id, updatedAt: record.updatedAt }, { $set: data }, { returnDocument: 'after', timestamps: false, session });
 		if (!record) throw new ObsidianSyncError('The linked record changed project or vault; synchronize again.', 409, 'projection_changed');
 	} else {
-		record = await projection.Model.create(data, session ? { session } : undefined);
+		record = session ? (await projection.Model.create([data], { session }))[0] : await projection.Model.create(data);
 		file[projection.field] = record._id;
 		created = true;
 	}
@@ -477,7 +478,7 @@ async function enqueueExtraction(file) {
 async function recordChange(connection, file, operation, options = {}, session) {
 	const insert = async (writeSession) => {
 		const sequence = await nextSequence(connection, writeSession);
-		const created = await ObsidianChange.create({
+		const payload = {
 			connection: connection._id,
 			file: file._id,
 			host_id: connection.host_id,
@@ -494,8 +495,8 @@ async function recordChange(connection, file, operation, options = {}, session) 
 			conflict: Boolean(options.conflict),
 			conflict_reason: options.conflictReason || '',
 			losing_revision: options.losingRevision || null,
-		}, writeSession ? { session: writeSession } : undefined);
-		return created;
+		};
+		return writeSession ? (await ObsidianChange.create([payload], { session: writeSession }))[0] : ObsidianChange.create(payload);
 	};
 	if (session) return insert(session);
 	return mongoose.connection.transaction((writeSession) => insert(writeSession));
