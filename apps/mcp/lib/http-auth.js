@@ -6,8 +6,10 @@ import {
 	getProtectedResourceMetadataUrl,
 	getRequiredScopesForTool,
 	hasRequiredScopes,
+	isMcpAppResource,
 	MCP_BASELINE_SCOPES,
 	MCP_DEFAULT_SCOPES,
+	normalizeScopeInput,
 	signMcpBridgeToken,
 	verifyMcpAccessToken,
 } from '../../../modules/oauth.js';
@@ -131,6 +133,28 @@ export function authenticateHttpRequest(req) {
 		}
 		return { ok: false, response: buildInvalidTokenResponse(resourceMetadataUrl, defaultScopes) };
 	}
+}
+
+/**
+ * Stable identity for an authenticated request. OAuth sessions are bound to
+ * the full grant — user, client, tenant, audience, and scopes — so a token
+ * minted for a different tenant, resource, or grant can never drive a session
+ * established under another identity. Legacy PAT sessions bind to the token.
+ */
+export function sessionBindingKeyForContext(authContext) {
+	if (!authContext) return 'anon';
+	if (authContext.mode === 'oauth') {
+		const claims = authContext.tokenClaims || {};
+		const scopes = normalizeScopeInput(claims.scope).join(' ');
+		const audience = String(claims.aud || '').replace(/\/+$/, '');
+		return `oauth:${claims.sub}:${claims.client_id}:${claims.host_id || ''}:${claims.tenantId || ''}:${audience}:${scopes}`;
+	}
+	return `legacy:${authContext.apiAuth}`;
+}
+
+/** True when an OAuth token was minted for the restricted /mcp/app profile. */
+export function isAppRestrictedToken(authContext) {
+	return authContext?.mode === 'oauth' && isMcpAppResource(authContext.tokenClaims?.aud);
 }
 
 export function checkRequestScopes(authContext, body) {

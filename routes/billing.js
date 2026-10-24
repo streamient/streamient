@@ -15,6 +15,16 @@ const log = createLogger('billing');
 
 const router = Router();
 
+// Billing management (checkout, trial, success, cancel, portal) is a browser
+// flow only. OAuth/MCP/API bearer tokens — including knowledge and API tokens —
+// must never reach it; requireAuth already resolved req.authMethod, and only a
+// cookie-backed session qualifies.
+function requireBrowserSession(req, res, next) {
+	if (req.authMethod === 'session') return next();
+	if (req.accepts('html')) return res.redirect('/login');
+	return res.status(401).json({ error: 'Authentication required', code: 'browser_session_required' });
+}
+
 // ---- Webhook (raw body, no auth — Stripe verifies via signature) ----
 
 router.post(
@@ -35,7 +45,7 @@ router.post(
 
 // ---- Checkout, success, cancel, portal (authenticated) ----
 
-router.use('/billing', requireAuth, requireTenant, (req, res, next) => {
+router.use('/billing', requireAuth, requireTenant, requireBrowserSession, (req, res, next) => {
 	if (!getStreamientDemoSession(req)) return next();
 	req.managaniSkip = true;
 	if (req.method === 'GET') return res.redirect('/dashboard');

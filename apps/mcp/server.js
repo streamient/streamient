@@ -6,7 +6,7 @@ import express from 'express';
 
 import mcpConfig from './config.js';
 import { ApiClient } from './lib/api-client.js';
-import { authenticateHttpRequest, checkRequestScopes } from './lib/http-auth.js';
+import { authenticateHttpRequest, checkRequestScopes, isAppRestrictedToken, sessionBindingKeyForContext } from './lib/http-auth.js';
 import { createMcpToolCatalog } from './tools/catalog.js';
 import { MCP_TOOL_PROFILES } from './tools/profile.js';
 import { MCP_SERVER_INSTRUCTIONS } from './instructions.js';
@@ -51,12 +51,10 @@ function logToolTelemetry(event) {
   log[level]({ event: 'mcp_tool_call', ...event }, `mcp tool ${event?.tool || ''} ${event?.success === false ? 'failed' : 'ok'}`.trim());
 }
 
-function authKeyForContext(authContext) {
-  if (!authContext) return 'anon';
-  if (authContext.mode === 'oauth') {
-    return `${authContext.tokenClaims.sub}:${authContext.tokenClaims.client_id}`;
-  }
-  return `legacy:${authContext.apiAuth}`;
+// An OAuth token minted for the restricted /mcp/app audience stays app-scoped
+// on every endpoint; the path alone can never widen it to the full profile.
+function resolveToolProfile(authContext, pathProfile = MCP_TOOL_PROFILES.FULL) {
+  return isAppRestrictedToken(authContext) ? MCP_TOOL_PROFILES.APP : pathProfile;
 }
 
 function sendAuthResponse(res, response) {
@@ -182,7 +180,7 @@ async function createServer(apiAuth, { projectId, oauthClientId, cacheKey, toolP
     }, wrappedHandler);
   }
 
-  return { server, bootstrapMs, bootstrapCacheHit: cacheHit };
+  return { server, api, bootstrapMs, bootstrapCacheHit: cacheHit };
 }
 
 // Determine transport mode
@@ -251,13 +249,14 @@ if (transportArg === '--stdio' || !transportArg) {
 
       const projectId = req.headers['x-project-id'] || null;
       const oauthClientId = authContext.tokenClaims?.client_name || authContext.tokenClaims?.client_id || null;
-      const authKey = authKeyForContext(authContext);
+      const authKey = sessionBindingKeyForContext(authContext);
       const rateLimitKey = McpRateLimit.getAuthContextRateLimitKey(MCP_PRODUCT, req, authContext);
       const cacheKey = `${authKey}:${projectId || ''}`;
-      const { server } = await createServer(authContext.apiAuth, { projectId, oauthClientId, cacheKey, rateLimitKey });
+      const { server, api } = await createServer(authContext.apiAuth, { projectId, oauthClientId, cacheKey, rateLimitKey, toolProfile: resolveToolProfile(authContext) });
       const transport = new SSEServerTransport('/messages', res);
       sseTransports.set(transport.sessionId, {
 		server,
+		api,
 		transport,
 		authKey,
 		mode: authContext.mode,
@@ -286,11 +285,15 @@ if (transportArg === '--stdio' || !transportArg) {
       const sessionId = req.query.sessionId;
       const session = sseTransports.get(sessionId);
       if (!session) return res.status(404).json({ error: 'Session not found' });
-      if (session.authKey !== authKeyForContext(authContext)) {
+      if (session.authKey !== sessionBindingKeyForContext(authContext)) {
 		return sendAuthResponse(res, authContext.response || { status: 401, body: { error: 'Session authentication mismatch' } });
 	}
 	const scopeResponse = checkRequestScopes(authContext, req.body);
 	if (scopeResponse) return sendAuthResponse(res, scopeResponse);
+      // The bridge token minted at connection time expires long before the
+      // outer OAuth token. Refresh it from this request's freshly validated
+      // identity so long-lived SSE sessions never reuse a stale credential.
+      if (authContext.mode === 'oauth') session.api.setAuth(authContext.apiAuth);
       await session.transport.handlePostMessage(req, res);
     } catch (err) {
       recordException(err);
@@ -316,8 +319,9 @@ if (transportArg === '--stdio' || !transportArg) {
 
       const projectId = req.headers['x-project-id'] || null;
       const oauthClientId = authContext.tokenClaims?.client_name || authContext.tokenClaims?.client_id || null;
-      const cacheKey = `${authKeyForContext(authContext)}:${projectId || ''}`;
-      const { server, bootstrapMs, bootstrapCacheHit } = await createServer(authContext.apiAuth, { projectId, oauthClientId, cacheKey, toolProfile, rateLimitKey });
+      const effectiveProfile = resolveToolProfile(authContext, toolProfile);
+      const cacheKey = `${sessionBindingKeyForContext(authContext)}:${projectId || ''}`;
+      const { server, bootstrapMs, bootstrapCacheHit } = await createServer(authContext.apiAuth, { projectId, oauthClientId, cacheKey, toolProfile: effectiveProfile, rateLimitKey });
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
@@ -327,7 +331,7 @@ if (transportArg === '--stdio' || !transportArg) {
         duration_ms: Date.now() - requestStart,
         bootstrap_ms: bootstrapMs,
         bootstrap_cache_hit: bootstrapCacheHit,
-        tool_profile: toolProfile,
+        tool_profile: effectiveProfile,
         success: true,
       });
     } catch (err) {

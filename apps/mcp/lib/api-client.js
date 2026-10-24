@@ -14,6 +14,12 @@ export class ApiClient {
     this.mcpClient = clientInfo;
   }
 
+  setAuth(token) {
+    this.auth = typeof token === 'string'
+      ? { scheme: 'Token', token }
+      : { scheme: token?.scheme || 'Token', token: token?.token || '' };
+  }
+
   async request(method, path, body) {
     const url = `${this.baseUrl}/api/v1${path}`;
     const headers = {

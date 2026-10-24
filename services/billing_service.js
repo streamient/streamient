@@ -315,6 +315,58 @@ export function buildSubscriptionUserUpdate(subscription, stripeCustomerId = und
 }
 
 /**
+ * Ordering guard for Stripe subscription events. A write only matches when the
+ * incoming event is newer than the last event already recorded for that
+ * subscription. The conditional write is atomic across replicas, so a delayed
+ * older event can never overwrite newer persisted state.
+ */
+function buildSubscriptionEventFilter(subscriptionId, eventCreated) {
+	return {
+		stripe_subscription_id: subscriptionId,
+		$or: [
+			{ stripe_subscription_event_at: { $lt: eventCreated } },
+			{ stripe_subscription_event_at: { $exists: false } },
+		],
+	};
+}
+
+/**
+ * Apply a customer.subscription.updated event only when it is newer than the
+ * last event recorded for that subscription. Returns the updated user, or null
+ * when the event is stale and was ignored.
+ */
+export async function applySubscriptionUpdatedEvent(subscription, eventCreated, options = {}) {
+	const userModel = options.userModel || User;
+	return userModel.findOneAndUpdate(
+		buildSubscriptionEventFilter(subscription.id, eventCreated),
+		{ $set: { ...buildSubscriptionUserUpdate(subscription), stripe_subscription_event_at: eventCreated } },
+		{ returnDocument: 'after' },
+	);
+}
+
+/**
+ * Apply a customer.subscription.deleted event only when it is newer than the
+ * last event recorded for that subscription. Returns the updated user, or null
+ * when the event is stale and was ignored.
+ */
+export async function applySubscriptionDeletedEvent(subscription, eventCreated, options = {}) {
+	const userModel = options.userModel || User;
+	return userModel.findOneAndUpdate(
+		buildSubscriptionEventFilter(subscription.id, eventCreated),
+		{ $set: {
+			subscription_status: 'canceled',
+			trial_source: null,
+			trial_ends_at: null,
+			trial_reminder_3d_sent_at: null,
+			trial_reminder_24h_sent_at: null,
+			trial_locked_at: null,
+			stripe_subscription_event_at: eventCreated,
+		} },
+		{ returnDocument: 'after' },
+	).select('+stripe_customer_id +stripe_free_subscription_id');
+}
+
+/**
  * Create a Stripe Checkout session for the Pro subscription.
  * Returns the Checkout URL to redirect the user to.
  */
@@ -405,12 +457,9 @@ export async function handleWebhook(rawBody, sig) {
             const subscription = event.data.object;
             // The $0 tracking subscription never drives plan or status.
             if (isFreePriceSubscription(subscription)) break;
-            const user = await queryForSave(User.findOne({ stripe_subscription_id: subscription.id }));
-            if (user) {
-                Object.assign(user, buildSubscriptionUserUpdate(subscription));
-                await user.save();
-                const plan = resolvePlanFromSubscription(subscription);
-                await Tenant.findOneAndUpdate({ host_id: user.host_id }, { plan });
+            const user = await applySubscriptionUpdatedEvent(subscription, event.created);
+            if (user?.host_id) {
+                await Tenant.findOneAndUpdate({ host_id: user.host_id }, { plan: resolvePlanFromSubscription(subscription) });
             }
             break;
         }
@@ -420,17 +469,8 @@ export async function handleWebhook(rawBody, sig) {
             // Deleting the $0 tracking subscription (e.g. on upgrade) must not
             // re-enter paid-cancellation handling or re-create anything.
             if (isFreePriceSubscription(subscription)) break;
-            const user = await queryForSave(
-                User.findOne({ stripe_subscription_id: subscription.id }).select('+stripe_customer_id +stripe_free_subscription_id'),
-            );
-            if (user) {
-                user.subscription_status = 'canceled';
-                user.trial_source = null;
-                user.trial_ends_at = null;
-                user.trial_reminder_3d_sent_at = null;
-                user.trial_reminder_24h_sent_at = null;
-                user.trial_locked_at = null;
-                await user.save();
+            const user = await applySubscriptionDeletedEvent(subscription, event.created);
+            if (user?.host_id) {
                 await Tenant.findOneAndUpdate({ host_id: user.host_id }, { plan: 'free' });
                 // Back on Free — resume tracking with a fresh $0 subscription.
                 try {
