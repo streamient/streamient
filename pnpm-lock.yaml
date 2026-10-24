@@ -238,9 +238,6 @@ importers:
       mongoose-lean-virtuals:
         specifier: ^2.1.0
         version: 2.1.0(mongoose@9.10.1(socks@2.8.10))
-      n-readlines:
-        specifier: ^3.4.1
-        version: 3.4.1
       nodemailer:
         specifier: ^10.0.10
         version: 10.0.10
@@ -5178,10 +5175,6 @@ packages:
   mute-stream@1.0.0:
     resolution: {integrity: sha512-avsJQhyd+680gKXyG/sQc0nXaC6rBkPOfyHYcFb9+hdkqQkR9bdnkJ0AMZhke0oesPqIO+mFFJ+IdBc7mst4IA==}
     engines: {node: ^14.17.0 || ^16.13.0 || >=18.0.0}
-
-  n-readlines@3.4.1:
-    resolution: {integrity: sha512-YDD8i8DiykXn4eXs8Xtuki5bIJ0gwBGeGLpTvPbRrfxnfyPTU6DRk03ISBMARpH75emKoLuE/IP9ycGetd9q/Q==}
-    engines: {node: '>=18.x.x'}
 
   nanoid@3.3.19:
     resolution: {integrity: sha512-Y2tUNy4ouw6tq5oDSKeQYGOyhkUBhNOcGV/02KC+6kd9eDGqdZd++mjMiIDilrBYvjEnCYvVtsuHCuP+okSfug==}
@@ -12101,8 +12094,6 @@ snapshots:
   mute-stream@0.0.8: {}
 
   mute-stream@1.0.0: {}
-
-  n-readlines@3.4.1: {}
 
   nanoid@3.3.19: {}
 
