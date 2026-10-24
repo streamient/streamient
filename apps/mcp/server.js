@@ -294,7 +294,10 @@ if (transportArg === '--stdio' || !transportArg) {
       // outer OAuth token. Refresh it from this request's freshly validated
       // identity so long-lived SSE sessions never reuse a stale credential.
       if (authContext.mode === 'oauth') session.api.setAuth(authContext.apiAuth);
-      await session.transport.handlePostMessage(req, res);
+      // express.json() has already consumed the request stream, so the parsed
+      // body must be handed to the transport explicitly; otherwise it falls back
+      // to getRawBody and fails with "stream is not readable".
+      await session.transport.handlePostMessage(req, res, req.body);
     } catch (err) {
       recordException(err);
       log.error({ err }, 'Error handling Streamient MCP SSE message');
