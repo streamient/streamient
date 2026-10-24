@@ -328,7 +328,6 @@ export async function processUpload(uploadId, { signal, assertOwnership, isOwner
 	signal?.throwIfAborted();
 	const upload = await NoteImportUpload.findOneAndUpdate({ _id: uploadId, state: { $in: ['processing', 'failed'] } }, { $set: { state: 'processing' } }, { returnDocument: 'after' }).lean();
 	if (!upload) return;
-	await requireActiveProject(upload.host_id, upload.project);
 	const releaseAccountWork = await acquireTenantWork(upload.host_id);
 	try {
 	await withOwnership((session) => NoteImportUpload.updateOne({ _id: upload._id }, { $set: { state: 'processing', error: '', last_activity_at: new Date(), expires_at: expiryDate() } }, { session }));

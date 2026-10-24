@@ -4,11 +4,16 @@ import express from 'express';
 
 import config from '../config.js';
 import importRoutes from '../routes/import.js';
+import { mockTenantWork } from './helpers/tenant-work.js';
 import { GraphLink } from '../model/graph_link.js';
 import { Project } from '../model/project.js';
 import { Email } from '../model/email.js';
 import { AuditLog } from '../model/audit_log.js';
 import { Tenant } from '../modules/tenancy.js';
+
+let restoreAccountWork;
+beforeEach(() => { restoreAccountWork = mockTenantWork(); });
+afterEach(() => { restoreAccountWork(); });
 
 function createServer() {
 	const app = express();
@@ -38,6 +43,7 @@ describe('Email forwarding import route', () => {
 	const originalGraphLinkUpdateOne = GraphLink.updateOne;
 	const originalTenantFindOne = Tenant.findOne;
 	const originalAuditLogCreate = AuditLog.create;
+	const originalProjectUpdateOne = Project.updateOne;
 
 	beforeEach(() => {
 		config.emailForwardDomain = 'email.streamient.com';
@@ -53,6 +59,7 @@ describe('Email forwarding import route', () => {
 				email_filter: '',
 			}),
 		});
+		Project.updateOne = async () => ({ matchedCount: 1, modifiedCount: 1 });
 		Email.findOne = () => ({ lean: async () => null });
 		Email.findOneAndUpdate = async (_filter, update) => ({ value: await Email.create(update.$set), lastErrorObject: { updatedExisting: false } });
 		Email.create = async (payload) => ({
@@ -79,6 +86,7 @@ describe('Email forwarding import route', () => {
 		config.emailForwardDomain = originalEmailForwardDomain;
 		Project.findOneAndUpdate = originalProjectFindOne;
 		Project.findOne = originalProjectRead;
+		Project.updateOne = originalProjectUpdateOne;
 		Email.findOne = originalEmailFindOne;
 		Email.create = originalEmailCreate;
 		Email.findOneAndUpdate = originalEmailUpsert;

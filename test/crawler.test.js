@@ -25,6 +25,7 @@ import {
 	isUrlInCrawlScope,
 	shouldSkipCrawledUrl,
 } from '../modules/crawler.js';
+import { Project } from '../model/project.js';
 
 function makeUrlDoc(overrides = {}) {
 	return {
@@ -757,5 +758,42 @@ describe('crawler indexing and state', () => {
 		assert.ok(stateModel.deletedFilters.some((filter) => filter.host_id === 'host-1' && filter.parent_url_id === urlDoc._id && !filter.status));
 		assert.ok(!stateModel.store.some((state) => state.normalized_url === 'https://example.com/blocked'));
 		assert.ok(stateModel.store.some((state) => state.url === 'https://example.com' && state.status === 'visited'));
+	});
+
+	it('fences crawl publication so a deactivated project writes no captured state or summary', async () => {
+		const urlDoc = makeUrlDoc();
+		const stateModel = makeCrawlStateModel();
+		const urlUpdates = [];
+		const projectFindOneAndUpdate = Project.findOneAndUpdate;
+		const projectUpdateOne = Project.updateOne;
+		try {
+			// Accept the lease acquisition but reject the in-transaction fence, as if
+			// the project was deactivated after the lease was accepted.
+			Project.findOneAndUpdate = (filter) => {
+				const holdsLease = Object.keys(filter).some((key) => key.startsWith('active_work.'));
+				return { select() { return this; }, read() { return this; }, lean: async () => (holdsLease ? null : { _id: filter._id }) };
+			};
+			Project.updateOne = async () => ({ matchedCount: 1, modifiedCount: 1 });
+			class FakeCrawler {
+				constructor(options) { this.options = options; }
+				async run(batch) {
+					await this.options.requestHandler({ request: { url: batch[0], loadedUrl: batch[0] }, response: makeHtmlResponse(), $: makeHtml(), enqueueLinks: async () => {} });
+				}
+			}
+			await assert.rejects(
+				crawlSite(urlDoc, {
+					CrawlState: stateModel,
+					Url: { updateOne: async (filter, update) => urlUpdates.push(update.$set) },
+					CheerioCrawler: FakeCrawler,
+					ensureCollections: async () => {},
+					bulkIndexCrawledPages: async () => ({ indexedCount: 0, attemptedCount: 0 }),
+				}),
+				(err) => err.code === 'project_not_found',
+			);
+			assert.equal(urlUpdates.length, 0);
+		} finally {
+			Project.findOneAndUpdate = projectFindOneAndUpdate;
+			Project.updateOne = projectUpdateOne;
+		}
 	});
 });

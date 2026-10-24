@@ -1,5 +1,5 @@
 import { attachItemHtml } from '../modules/item_html.js';
-import { requireActiveProject } from './project_service.js';
+import { requireActiveProject, acquireProjectWrite } from './project_service.js';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -434,10 +434,6 @@ function buildEmailListQuery(host_id, projectId, filters = {}) {
 	return query;
 }
 
-async function resolveProjectId(host_id, data = {}) {
-	return requireActiveProject(host_id, data.project);
-}
-
 async function createEmailThreadLinks(email, userId, host_id, options = {}) {
 	const referencedMessageIds = [...new Set([...(email.references || []), email.in_reply_to].map(canonicalMessageId).filter(Boolean))];
 	if (referencedMessageIds.length === 0) return;
@@ -523,43 +519,56 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 	}
 
 	const inTrash = Boolean(data.in_trash);
-	const payload = {
-		...normalized,
-		source: data.source === 'emailforwarding' ? 'emailforwarding' : 'api',
-		mailbox: normalizeMailbox(data.mailbox),
-		labels: inTrash ? [] : normalizeLabels(data.labels),
-		project: await resolveProjectId(host_id, data),
-		owner: userId,
-		host_id,
-		is_indexed: false,
-		in_trash: inTrash,
-		trashed_at: inTrash ? (data.trashed_at || new Date()) : null,
-	};
 
+	// Content-hash dedup is a best-effort read; keep it out of the project-write
+	// transaction because secondaryPreferred transaction reads are forbidden.
+	const existingByHash = !normalized.message_id && normalized.raw_hash
+		? await Email.findOne({ raw_hash: normalized.raw_hash, host_id }).lean()
+		: null;
+
+	const { projectId: project, release, publish } = await acquireProjectWrite(host_id, data.project, ctx);
 	let email;
 	let created = false;
-	if (normalized.message_id) {
-		const filter = { host_id, message_id: normalized.message_id };
-		const options = { upsert: true, returnDocument: 'after', includeResultMetadata: true };
-		let result;
-		try {
-			result = await Email.findOneAndUpdate(filter, { $set: payload }, options);
-		} catch (err) {
-			// A concurrent insert can win the unique index race; update its authoritative result.
-			if (err.code !== 11000 || !err.keyPattern?.host_id || !err.keyPattern?.message_id) throw err;
-			result = await Email.findOneAndUpdate(filter, { $set: payload }, { ...options, upsert: false });
-			if (!result.value) throw err;
-		}
-		email = result.value;
-		created = !result.lastErrorObject.updatedExisting;
-	} else {
-		const existing = normalized.raw_hash ? await Email.findOne({ raw_hash: normalized.raw_hash, host_id }).lean() : null;
-		if (existing) {
-			email = await Email.findOneAndUpdate({ _id: existing._id, host_id }, { $set: payload }, { returnDocument: 'after' });
-		} else {
-			email = await Email.create(payload);
-			created = true;
-		}
+	try {
+		const persist = async (session) => {
+			const payload = {
+				...normalized,
+				source: data.source === 'emailforwarding' ? 'emailforwarding' : 'api',
+				mailbox: normalizeMailbox(data.mailbox),
+				labels: inTrash ? [] : normalizeLabels(data.labels),
+				project,
+				owner: userId,
+				host_id,
+				is_indexed: false,
+				in_trash: inTrash,
+				trashed_at: inTrash ? (data.trashed_at || new Date()) : null,
+			};
+
+			if (normalized.message_id) {
+				// Atomic tenant-scoped Message-ID upsert shares the project fence
+				// session. A 11000 aborts the transaction; no in-session
+				// read-after-upsert fallback is possible, so it propagates.
+				const result = await Email.findOneAndUpdate(
+					{ host_id, message_id: normalized.message_id },
+					{ $set: payload },
+					{ upsert: true, returnDocument: 'after', includeResultMetadata: true, session },
+				);
+				return { email: result.value, created: !result.lastErrorObject.updatedExisting };
+			}
+
+			if (existingByHash) {
+				const result = await Email.findOneAndUpdate({ _id: existingByHash._id, host_id }, { $set: payload }, { returnDocument: 'after', session });
+				return { email: result, created: false };
+			}
+
+			const createdDoc = session ? (await Email.create([payload], { session }))[0] : await Email.create(payload);
+			return { email: createdDoc, created: true };
+		};
+		const outcome = await publish(persist);
+		email = outcome.email;
+		created = outcome.created;
+	} finally {
+		await release();
 	}
 
 	await createEmailThreadLinks(email, userId, host_id, { skipSideEffects: ctx.skipSideEffects });
@@ -575,13 +584,13 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 }
 
 export async function ingestEmail(userId, host_id, data, ctx = {}) {
-	await requireActiveProject(host_id, data.project);
+	// Parsing/extraction runs before the project lease; the fence is held only
+	// around the destination-record persist in persistEmail.
 	const normalized = await parseEmailInput(data);
 	return persistEmail(userId, host_id, normalized, data, ctx);
 }
 
 export async function ingestForwardedEmail(userId, host_id, data, ctx = {}) {
-	await requireActiveProject(host_id, data.project);
 	const normalized = parseForwardedEmailInput(data);
 	return persistEmail(userId, host_id, normalized, { ...data, source: 'emailforwarding' }, ctx);
 }
@@ -717,11 +726,21 @@ export async function updateEmail(host_id, emailId, data, ctx = {}) {
 	update.is_indexed = false;
 
 	const before = ctx.user_id ? await Email.findOne({ _id: emailId, host_id }).lean() : null;
-	const email = await Email.findOneAndUpdate(
-		{ _id: emailId, host_id, ...(ctx.expected_updated_at ? { updatedAt: new Date(ctx.expected_updated_at), in_trash: { $ne: true } } : {}) },
-		{ $set: update },
-		{ returnDocument: 'after' },
-	);
+
+	// A move must hold the destination project's write lease across the update,
+	// fenced atomically with the record write so a deactivated project is rejected.
+	const write = data.project !== undefined ? await acquireProjectWrite(host_id, data.project) : null;
+	let email;
+	try {
+		const apply = (session) => Email.findOneAndUpdate(
+			{ _id: emailId, host_id, ...(ctx.expected_updated_at ? { updatedAt: new Date(ctx.expected_updated_at), in_trash: { $ne: true } } : {}) },
+			{ $set: update },
+			{ returnDocument: 'after', ...(session ? { session } : {}) },
+		);
+		email = write ? await write.publish(apply) : await apply();
+	} finally {
+		if (write) await write.release();
+	}
 
 	if (email) {
 		await createEmailThreadLinks(email, email.owner, host_id, { skipSideEffects: ctx.skipSideEffects });

@@ -3,11 +3,17 @@ import { mockActiveProject } from './helpers/active-project.js';
 let restoreProject;
 beforeProject(() => { restoreProject = mockActiveProject(); });
 afterProject(() => { restoreProject(); });
+import { beforeEach as beforeAccountWork, afterEach as afterAccountWork } from 'node:test';
+import { mockTenantWork } from './helpers/tenant-work.js';
+let restoreAccountWork;
+beforeAccountWork(() => { restoreAccountWork = mockTenantWork(); });
+afterAccountWork(() => { restoreAccountWork(); });
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { GraphLink } from '../model/graph_link.js';
 import { Email } from '../model/email.js';
+import { Project } from '../model/project.js';
 import { ingestEmail, matchesEmailFilter, parseEmailInput, parseForwardedEmailInput } from '../services/email_ingest_service.js';
 
 describe('Email ingest storage service', () => {
@@ -125,19 +131,67 @@ describe('Email ingest storage service', () => {
 		assert.notEqual(results[0]._id, results[1]._id);
 	});
 
-	it('recovers only the tenant Message-ID unique race with a non-upsert write', async () => {
+	it('propagates a Message-ID unique-index conflict without an in-transaction fallback read', async () => {
 		let calls = 0;
-		Email.findOneAndUpdate = async (filter, update, options) => {
+		Email.findOneAndUpdate = async (filter) => {
 			assert.equal(filter.host_id, 'host-1');
-			if (++calls === 1) throw Object.assign(new Error('duplicate'), { code: 11000, keyPattern: { host_id: 1, message_id: 1 } });
-			assert.equal(options.upsert, false);
-			return { value: { _id: 'email-1', ...update.$set }, lastErrorObject: { updatedExisting: true } };
+			calls++;
+			throw Object.assign(new Error('duplicate'), { code: 11000, keyPattern: { host_id: 1, message_id: 1 } });
 		};
 		const data = { project: '507f1f77bcf86cd799439011', parsed_email: { message_id: 'race@example.com', text: 'Race' } };
-		await ingestEmail('507f1f77bcf86cd799439012', 'host-1', data, { skipSideEffects: true });
-		assert.equal(calls, 2);
+		await assert.rejects(ingestEmail('507f1f77bcf86cd799439012', 'host-1', data, { skipSideEffects: true }), /duplicate/);
+		assert.equal(calls, 1);
 		Email.findOneAndUpdate = async () => { throw Object.assign(new Error('unrelated index'), { code: 11000, keyPattern: { message_id: 1 } }); };
 		await assert.rejects(ingestEmail('507f1f77bcf86cd799439012', 'host-1', data, { skipSideEffects: true }), /unrelated index/);
+	});
+
+	it('fences publication so a deactivated destination project inserts nothing', async () => {
+		const projectFindOneAndUpdate = Project.findOneAndUpdate;
+		const projectUpdateOne = Project.updateOne;
+		try {
+			// Accept the lease acquisition but reject the in-transaction fence, as if
+			// the project was deactivated after the lease was accepted.
+			Project.findOneAndUpdate = (filter) => {
+				const holdsLease = Object.keys(filter).some((key) => key.startsWith('active_work.'));
+				return { select() { return this; }, read() { return this; }, lean: async () => (holdsLease ? null : { _id: filter._id }) };
+			};
+			Project.updateOne = async () => ({ matchedCount: 1, modifiedCount: 1 });
+			let inserts = 0;
+			Email.findOneAndUpdate = async () => { inserts++; return { value: { _id: 'email-1' }, lastErrorObject: { updatedExisting: false } }; };
+			await assert.rejects(
+				ingestEmail('507f1f77bcf86cd799439012', 'host-1', { project: '507f1f77bcf86cd799439011', parsed_email: { message_id: 'fence@example.com', text: 'Body' } }, { skipSideEffects: true }),
+				(err) => err.code === 'project_not_found',
+			);
+			assert.equal(inserts, 0);
+		} finally {
+			Project.findOneAndUpdate = projectFindOneAndUpdate;
+			Project.updateOne = projectUpdateOne;
+		}
+	});
+
+	it('reuses the owning queue transaction so the fence and the upsert share one session', async () => {
+		const projectFindOneAndUpdate = Project.findOneAndUpdate;
+		const projectUpdateOne = Project.updateOne;
+		try {
+			const session = { owner: 'job-claim' };
+			const sessions = [];
+			Project.findOneAndUpdate = (filter, update, options) => {
+				if (options?.session) sessions.push(options.session);
+				return { select() { return this; }, read() { return this; }, lean: async () => ({ _id: filter._id }) };
+			};
+			Project.updateOne = async () => ({ matchedCount: 1, modifiedCount: 1 });
+			Email.findOneAndUpdate = async (filter, update, options) => {
+				sessions.push(options.session);
+				return { value: { _id: 'email-1' }, lastErrorObject: { updatedExisting: false } };
+			};
+			const ctx = { skipSideEffects: true, withOwnership: async (callback) => callback(session) };
+			await ingestEmail('507f1f77bcf86cd799439012', 'host-1', { project: '507f1f77bcf86cd799439011', parsed_email: { message_id: 'queue@example.com', text: 'Body' } }, ctx);
+			assert.ok(sessions.length >= 2, 'fence and upsert each ran in a session');
+			assert.ok(sessions.every((seen) => seen === session), 'fence and upsert shared the owning session');
+		} finally {
+			Project.findOneAndUpdate = projectFindOneAndUpdate;
+			Project.updateOne = projectUpdateOne;
+		}
 	});
 
 });
