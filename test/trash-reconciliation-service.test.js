@@ -97,8 +97,8 @@ describe('trash reconciliation service', () => {
 		assert.equal(applied.totals.reindexed, 3);
 		assert.deepEqual(observations.reads, []);
 		assert.ok(observations.leans > 0);
-		assert.equal(observations.updates.length, 2);
-		assert.deepEqual(observations.updates.map((update) => update.update.$set.is_indexed), [false, true]);
+		assert.equal(observations.updates.length, 1);
+		assert.deepEqual(observations.updates.map((update) => update.update.$set.is_indexed), [false]);
 		assert.ok(observations.queries.every((query) => query.host_id === 'host-1'));
 	});
 

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { indexEmailNow, indexEmailsNow, removeEmailFromIndexNow, removeEmailsFromIndexNow } from '../services/email_index_service.js';
 
 describe('Email index service', () => {
-	it('marks email indexed only after immediate Typesense import succeeds', async () => {
+	it('leaves the indexed flag to conditional publication after import succeeds', async () => {
 		let indexed = null;
 		let stateUpdate = null;
 
@@ -26,8 +26,7 @@ describe('Email index service', () => {
 		assert.equal(result, true);
 		assert.equal(indexed.type, 'emails');
 		assert.equal(indexed.email.subject, 'Indexed');
-		assert.deepEqual(stateUpdate.update, { $set: { is_indexed: true } });
-		assert.deepEqual(stateUpdate.options, { timestamps: false });
+		assert.equal(stateUpdate, null);
 	});
 
 	it('leaves scheduler retry flag untouched when immediate import fails', async () => {
@@ -95,10 +94,10 @@ describe('Email index service', () => {
 
 		assert.equal(result, true);
 		assert.deepEqual(removed, { hostId: 'host-1', type: 'emails', id: '507f1f77bcf86cd799439011' });
-		assert.deepEqual(stateUpdate.update, { $set: { is_indexed: true } });
+		assert.equal(stateUpdate, null);
 	});
 
-	it('bulk indexes multiple emails with one Typesense call and one state update', async () => {
+	it('bulk indexes emails without overwriting conditional publication flags', async () => {
 		let indexCall = null;
 		let stateUpdate = null;
 		const emails = [
@@ -118,9 +117,7 @@ describe('Email index service', () => {
 
 		assert.deepEqual(results.map((result) => result.success), [true, true]);
 		assert.deepEqual(indexCall, { hostId: 'host-1', type: 'emails', ids: ['507f1f77bcf86cd799439011', '507f1f77bcf86cd799439013'] });
-		assert.deepEqual(stateUpdate.query, { _id: { $in: ['507f1f77bcf86cd799439011', '507f1f77bcf86cd799439013'] }, host_id: 'host-1' });
-		assert.deepEqual(stateUpdate.update, { $set: { is_indexed: true } });
-		assert.deepEqual(stateUpdate.options, { timestamps: false });
+		assert.equal(stateUpdate, null);
 	});
 
 	it('does not mark failed bulk email imports as indexed', async () => {
@@ -141,7 +138,7 @@ describe('Email index service', () => {
 		});
 
 		assert.deepEqual(results.map((result) => result.success), [true, false]);
-		assert.deepEqual(stateUpdate.query, { _id: { $in: ['507f1f77bcf86cd799439011'] }, host_id: 'host-1' });
+		assert.equal(stateUpdate, null);
 	});
 
 	it('bulk removes multiple email documents with one Typesense call', async () => {
@@ -160,6 +157,6 @@ describe('Email index service', () => {
 
 		assert.deepEqual(results.map((result) => result.success), [true, true]);
 		assert.deepEqual(removeCall, { hostId: 'host-1', type: 'emails', ids: ['507f1f77bcf86cd799439011', '507f1f77bcf86cd799439013'] });
-		assert.deepEqual(stateUpdate.query, { _id: { $in: ['507f1f77bcf86cd799439011', '507f1f77bcf86cd799439013'] }, host_id: 'host-1' });
+		assert.equal(stateUpdate, null);
 	});
 });

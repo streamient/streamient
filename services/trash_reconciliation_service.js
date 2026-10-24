@@ -165,7 +165,6 @@ async function reconcileType(hostId, type, entry, options) {
 			const results = await indexDocuments(hostId, tsType, docs);
 			const successIds = results.filter((result) => result?.success).map((result) => result.id);
 			summary.reindexed += successIds.length;
-			if (successIds.length) await model.updateMany({ _id: { $in: successIds }, host_id: hostId }, { $set: { is_indexed: true } }, { timestamps: false });
 			for (const result of results.filter((item) => !item?.success)) summary.errors.push(summarizeError(type, 'reindex', new Error(result?.error || 'Typesense import failed'), 1));
 		} catch (err) {
 			summary.errors.push(summarizeError(type, 'reindex', err, docs.length));
