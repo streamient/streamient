@@ -19,7 +19,7 @@ Ask questions in plain English. The AI searches across all your notes, memories,
 
 ### Get Stats
 
-Ask about your data and the AI returns live counts from your collections.
+Ask about your data and the AI returns counts of active records. Trashed records and search-index chunks do not increase these totals. The selected project also applies to statistics; select "All" for account-wide totals.
 
 > "How many notes do I have?"
 

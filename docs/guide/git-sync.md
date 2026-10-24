@@ -33,6 +33,8 @@ You can change the mode any time from the repo's settings or via the API/MCP `sy
 
 Git Sync uses guarded conflict handling. If the same item changed in both Streamient and Git since the last sync, Streamient skips the overwrite and records a conflict in the sync summary.
 
+An edit saved while an import is running also triggers conflict handling. Edits saved while a push is running remain pending for the next export; completing that push does not mark newer content as synchronized.
+
 ### Deleted Files
 
 When a previously synced Markdown file is deleted from Git, Streamient moves the linked Note or Memory to trash by default. If the Streamient item has newer local edits, the item is kept and a conflict is recorded.
