@@ -21,8 +21,8 @@ function doc(value) {
 }
 
 // Real MongoDB semantics: `$exists: false` matches only an ABSENT field (never a
-// null one); a null field sorts before numbers so it matches `$lt`/`$lte`; an
-// absent field never matches `$lt`/`$lte`.
+// null one); the inequality operators type-bracket, so a null field does NOT
+// match a numeric `$lt`/`$lte`; an absent field never matches `$lt`/`$lte`.
 function matchesFilter(state, filter) {
 	if (filter.stripe_subscription_id && state.stripe_subscription_id !== filter.stripe_subscription_id) return false;
 	if (filter.subscription_status?.$in && !filter.subscription_status.$in.includes(state.subscription_status)) return false;
@@ -30,8 +30,8 @@ function matchesFilter(state, filter) {
 		const cond = clause.stripe_subscription_event_at;
 		const current = state.stripe_subscription_event_at;
 		if (cond?.$exists === false && current === undefined) return true;
-		if (cond?.$lt !== undefined && (current === null || (typeof current === 'number' && current < cond.$lt))) return true;
-		if (cond?.$lte !== undefined && (current === null || (typeof current === 'number' && current <= cond.$lte))) return true;
+		if (cond?.$lt !== undefined && typeof current === 'number' && current < cond.$lt) return true;
+		if (cond?.$lte !== undefined && typeof current === 'number' && current <= cond.$lte) return true;
 	}
 	return false;
 }

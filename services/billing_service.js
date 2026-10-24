@@ -262,24 +262,71 @@ export async function cancelFreeSubscriptionForUser(userId, options = {}) {
 	return true;
 }
 
-export async function applySubscriptionToUser(userId, subscription, stripeCustomerId = undefined) {
-	const owner = await User.findById(userId).select('host_id +stripe_subscription_id').lean();
+/**
+ * Conditional match for a Checkout apply. A `checkout.session.completed` or
+ * GET /billing/success apply must never overwrite a terminal `canceled` state
+ * for the SAME subscription (Stripe can never reactivate a canceled id), but a
+ * genuinely DIFFERENT subscription still applies over a canceled one and
+ * re-applying the current active subscription stays idempotent. The condition
+ * is tested against the document's state at write time, not a stale pre-read.
+ */
+function buildCheckoutApplyFilter(userId, subscriptionId) {
+	return {
+		_id: userId,
+		$or: [
+			{ stripe_subscription_id: subscriptionId, subscription_status: { $ne: 'canceled' } },
+			{ stripe_subscription_id: { $ne: subscriptionId } },
+		],
+	};
+}
+
+/**
+ * Pipeline update for a Checkout apply. Clears the per-subscription event fence
+ * only when the applied subscription differs from the one currently stored (a
+ * real new subscription); re-applying the same subscription keeps the fence so a
+ * delayed older event stays blocked. Decided from the matched document itself,
+ * not a stale pre-read.
+ */
+function buildCheckoutApplyUpdate(subscription, stripeCustomerId = undefined) {
+	return [
+		{
+			$set: {
+				...buildSubscriptionUserUpdate(subscription, stripeCustomerId),
+				stripe_subscription_event_at: {
+					$cond: [
+						{ $eq: ['$stripe_subscription_id', subscription.id] },
+						{ $ifNull: ['$stripe_subscription_event_at', '$$REMOVE'] },
+						'$$REMOVE',
+					],
+				},
+			},
+		},
+	];
+}
+
+/**
+ * Apply a Checkout subscription to the owner's user and the tenant's plan in one
+ * atomic unit (conditional User write + Tenant plan write). Callers pass a
+ * transaction `session`; Stripe I/O and reads stay outside.
+ */
+export async function applyCheckoutSubscriptionPlan(userId, subscription, stripeCustomerId = undefined, { userModel = User, tenantModel = Tenant, session } = {}) {
+	const user = await userModel.findOneAndUpdate(
+		buildCheckoutApplyFilter(userId, subscription.id),
+		buildCheckoutApplyUpdate(subscription, stripeCustomerId),
+		{ returnDocument: 'after', updatePipeline: true, ...(session ? { session } : {}) },
+	);
+	if (!user?.host_id) return null;
+	await publishTenantPlan(user.host_id, resolvePlanFromSubscription(subscription), { tenantModel, session });
+	return user;
+}
+
+export async function applySubscriptionToUser(userId, subscription, stripeCustomerId = undefined, options = {}) {
+	const userModel = options.userModel || User;
+	const owner = await userModel.findById(userId).select('host_id').lean();
 	if (!owner) return null;
 	await assertTenantAvailable(owner.host_id);
-	const plan = resolvePlanFromSubscription(subscription);
-	const update = { $set: buildSubscriptionUserUpdate(subscription, stripeCustomerId) };
-	// A different subscription id means a new subscription: clear the
-	// per-subscription event fence so the prior subscription's timestamp can't
-	// reject the new subscription's first event. Re-applying the same
-	// subscription keeps the fence so a delayed older event stays blocked.
-	if (owner.stripe_subscription_id !== subscription.id) {
-		update.$unset = { stripe_subscription_event_at: '' };
-	}
-	const user = await User.findByIdAndUpdate(userId, update, { returnDocument: 'after' });
-	if (user?.host_id) {
-		await Tenant.findOneAndUpdate({ host_id: user.host_id }, { plan });
-	}
-	return user;
+	return runSubscriptionEventTransaction((session) =>
+		applyCheckoutSubscriptionPlan(userId, subscription, stripeCustomerId, { userModel, tenantModel: options.tenantModel || Tenant, session }));
 }
 
 export function buildCheckoutSessionParams(user, customerId, priceId) {
@@ -400,6 +447,15 @@ export async function applyInvoicePaymentFailed(subscriptionId, eventCreated, op
 }
 
 /**
+ * Write the tenant's plan for a subscription publication. Kept as the shared
+ * publication root so the User/Tenant pair stays one atomic unit for both the
+ * webhook event path and the Checkout apply path.
+ */
+async function publishTenantPlan(hostId, plan, { tenantModel = Tenant, session } = {}) {
+	await tenantModel.updateOne({ host_id: hostId }, { $set: { plan } }, session ? { session } : {});
+}
+
+/**
  * Apply a subscription.updated/deleted event to the owner's user and the
  * tenant's plan in one atomic unit. Callers pass a transaction `session` so the
  * conditional User write and the Tenant plan write cannot interleave with a
@@ -410,8 +466,7 @@ export async function applySubscriptionPlanEvent(subscription, eventCreated, { t
 		? await applySubscriptionDeletedEvent(subscription, eventCreated, { userModel, session })
 		: await applySubscriptionUpdatedEvent(subscription, eventCreated, { userModel, session });
 	if (user?.host_id) {
-		const plan = terminal ? 'free' : resolvePlanFromSubscription(subscription);
-		await tenantModel.updateOne({ host_id: user.host_id }, { $set: { plan } }, session ? { session } : {});
+		await publishTenantPlan(user.host_id, terminal ? 'free' : resolvePlanFromSubscription(subscription), { tenantModel, session });
 	}
 	return user;
 }
