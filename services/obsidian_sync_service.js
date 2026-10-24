@@ -582,8 +582,12 @@ async function commitFile(connection, file, operation, options, { session } = {}
 async function commitFileAtomic(connection, file, operation, options) {
 	let attempt = 0;
 	while (true) {
+		const original = { note: null, memory: null, url: null, ...fileDelta(file) };
+		const wasNew = file.isNew;
 		try {
 			const { result, buffer } = await mongoose.connection.transaction(async (session) => {
+				Object.assign(file, original);
+				file.isNew = wasNew;
 				const buffer = [];
 				const result = await emitBuffer.run(buffer, () => commitFile(connection, file, operation, options, { session }));
 				return { result, buffer };
@@ -738,8 +742,12 @@ async function applyMutation(connection, userId, mutation, source = 'obsidian') 
 			conflict: renameConflict || file.revision > 0 && baseRevision !== file.revision,
 			conflictReason: renameConflict ? 'Another file claimed the requested path' : file.revision > 0 && baseRevision !== file.revision ? 'Incoming file is newer' : '',
 		};
+		const original = { note: null, memory: null, url: null, ...fileDelta(file) };
+		const wasNew = file.isNew;
 		try {
 			const { result, buffer } = await mongoose.connection.transaction(async (session) => {
+				Object.assign(file, original);
+				file.isNew = wasNew;
 				const buffer = [];
 				const result = await emitBuffer.run(buffer, () => commitFile(connection, file, operation === 'create' && file.revision ? 'update' : operation, commitOptions, { session }));
 				return { result, buffer };

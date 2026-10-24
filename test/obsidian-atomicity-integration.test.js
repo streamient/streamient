@@ -76,7 +76,7 @@ test('concurrent Obsidian mutations and Streamient edits stay atomic', { skip: p
 	});
 
 	await t.test('concurrent change allocations produce unique contiguous sequences', async () => {
-		const file = { _id: new mongoose.Types.ObjectId(), path: 'Notes/seq.md', revision: 0, sha256: '', modified_at: new Date(), last_source: 'obsidian', last_device_id: '' };
+		const file = { _id: new mongoose.Types.ObjectId(), path: 'Notes/seq.md', revision: 1, sha256: '', modified_at: new Date(), last_source: 'obsidian', last_device_id: '' };
 		const changes = await Promise.all(Array.from({ length: 8 }, (_, index) => syncTest.recordChange(connection, file, 'update', { operationId: `seq-${index}` })));
 		const sequences = changes.map((change) => change.sequence);
 		assert.equal(new Set(sequences).size, 8, 'every allocation is unique');

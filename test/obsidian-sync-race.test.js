@@ -179,10 +179,11 @@ test('commit-phase transaction retry discards the aborted attempt socket buffer'
 		buffers[0].push(phantom);
 		return callback('committed-session');
 	});
-	await syncTest.commitFileAtomic({ _id: 'conn', host_id: 'host', project: 'project', storage_bytes: 1 }, file, 'update', { blob: { _id: 'new', sha256: 'new', total_bytes: 1 }, modifiedAt: new Date(2000), source: 'obsidian', operationId: 'op' });
+	const result = await syncTest.commitFileAtomic({ _id: 'conn', host_id: 'host', project: 'project', storage_bytes: 1 }, file, 'update', { blob: { _id: 'new', sha256: 'new', total_bytes: 1 }, modifiedAt: new Date(2000), source: 'obsidian', operationId: 'op' });
 	assert.equal(buffers.length, 2);
 	assert.notEqual(buffers[0], buffers[1]);
 	assert.equal(phantomFlushes, 0);
+	assert.equal(result.file.revision, 2);
 });
 
 test('buffered socket events are deferred to an active attempt buffer', async () => {
