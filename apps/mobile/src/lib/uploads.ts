@@ -1,24 +1,55 @@
 import type { StreamientApi } from "./api";
 import { uriChunk, uriSize } from "./nativeFile";
-import type { UploadSession } from "../types";
+import type { ServerOption, UploadSession } from "../types";
 
 export type UploadSource = Blob | { uri: string; name: string; mimeType: string };
 export type SavedUpload = { local_id: string; session: UploadSession; source_kind: "blob" | "uri"; uri?: string; name: string; mime_type: string };
 
-const REGISTRY_KEY = "streamient_upload_registry";
+const LEGACY_REGISTRY_KEY = "streamient_upload_registry";
 const DB_NAME = "streamient-mobile";
 const STORE_NAME = "uploads";
 
-function registry(): SavedUpload[] {
+function registryKey(namespace: string) {
+	return `${LEGACY_REGISTRY_KEY}:${namespace}`;
+}
+
+export function uploadNamespace(server: ServerOption, userId: string, tenantId: string) {
+	return `${server.baseUrl}:${userId || "unknown"}:${tenantId || "unknown"}`;
+}
+
+function readRegistry(key: string): SavedUpload[] {
 	try {
-		return JSON.parse(localStorage.getItem(REGISTRY_KEY) || "[]") as SavedUpload[];
+		return JSON.parse(localStorage.getItem(key) || "[]") as SavedUpload[];
 	} catch {
 		return [];
 	}
 }
 
-function saveRegistry(items: SavedUpload[]) {
-	localStorage.setItem(REGISTRY_KEY, JSON.stringify(items));
+function registry(namespace: string): SavedUpload[] {
+	return readRegistry(registryKey(namespace));
+}
+
+function legacyRegistry(): SavedUpload[] {
+	return readRegistry(LEGACY_REGISTRY_KEY);
+}
+
+function saveRegistry(namespace: string, items: SavedUpload[]) {
+	localStorage.setItem(registryKey(namespace), JSON.stringify(items));
+}
+
+// Attribute legacy (un-namespaced) uploads to the current identity only when the
+// upload's project belongs to that identity, so saved uploads never resurface
+// under another account.
+function migrateLegacyUploads(namespace: string, projectIds: string[]) {
+	if (localStorage.getItem(registryKey(namespace)) !== null) return;
+	const legacy = legacyRegistry();
+	if (!legacy.length) return;
+	const owned = legacy.filter((item) => projectIds.includes(item.session.project_id));
+	if (!owned.length) return;
+	const unowned = legacy.filter((item) => !projectIds.includes(item.session.project_id));
+	saveRegistry(namespace, owned);
+	if (unowned.length) localStorage.setItem(LEGACY_REGISTRY_KEY, JSON.stringify(unowned));
+	else localStorage.removeItem(LEGACY_REGISTRY_KEY);
 }
 
 function openDatabase() {
@@ -78,29 +109,30 @@ async function checksum(blob: Blob) {
 	return btoa(binary);
 }
 
-export async function rememberUpload(localId: string, session: UploadSession, source: UploadSource, name: string, mimeType: string) {
+export async function rememberUpload(namespace: string, localId: string, session: UploadSession, source: UploadSource, name: string, mimeType: string) {
 	const saved: SavedUpload = { local_id: localId, session, source_kind: source instanceof Blob ? "blob" : "uri", uri: source instanceof Blob ? undefined : source.uri, name, mime_type: mimeType };
-	const items = registry().filter((item) => item.local_id !== localId);
+	const items = registry(namespace).filter((item) => item.local_id !== localId);
 	items.push(saved);
-	saveRegistry(items);
+	saveRegistry(namespace, items);
 	if (source instanceof Blob) await storeBlob(localId, source);
 }
 
-export async function updateRememberedUpload(localId: string, session: UploadSession) {
-	const items = registry();
+export async function updateRememberedUpload(namespace: string, localId: string, session: UploadSession) {
+	const items = registry(namespace);
 	const item = items.find((entry) => entry.local_id === localId);
 	if (item) item.session = session;
-	saveRegistry(items);
+	saveRegistry(namespace, items);
 }
 
-export async function forgetUpload(localId: string) {
-	saveRegistry(registry().filter((item) => item.local_id !== localId));
+export async function forgetUpload(namespace: string, localId: string) {
+	saveRegistry(namespace, registry(namespace).filter((item) => item.local_id !== localId));
 	await removeBlob(localId).catch(() => undefined);
 }
 
-export async function restoreUploads() {
+export async function restoreUploads(namespace: string, projectIds: string[] = []) {
+	migrateLegacyUploads(namespace, projectIds);
 	const result: { saved: SavedUpload; source: UploadSource | null }[] = [];
-	for (const saved of registry()) {
+	for (const saved of registry(namespace)) {
 		const source = saved.source_kind === "uri" && saved.uri ? { uri: saved.uri, name: saved.name, mimeType: saved.mime_type } : await loadBlob(saved.local_id);
 		result.push({ saved, source });
 	}

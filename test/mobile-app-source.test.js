@@ -69,7 +69,8 @@ describe('Streamient Mobile source contracts', () => {
 		assert.match(api, /accessTokenNeedsRefresh\(\)/);
 		assert.match(api, /expires_in \* 1000 - 30_000/);
 		assert.match(api, /if \(retry && this\.accessTokenNeedsRefresh\(\)\)/);
-		assert.match(api, /navigator\.onLine && !\(error instanceof TypeError\)/);
+		assert.match(api, /error instanceof TypeError \|\| !navigator\.onLine/);
+		assert.match(api, /status >= 500/);
 		assert.match(api, /payload\.sub \|\| payload\.userId/);
 		assert.match(api, /getCachedJson<T>\(this\.cacheNamespace/);
 	});
@@ -102,7 +103,7 @@ describe('Streamient Mobile source contracts', () => {
 		assert.match(main, /class StartupBoundary/);
 		assert.match(main, /Streamient couldn’t start/);
 		assert.match(main, /root\.render\(<StartupFailure \/>\)/);
-		assert.match(restoreBlock, /try \{[\s\S]*Promise\.all\(\[loadSelectedServer\(\), loadTokens\(\)\]\)/);
+		assert.match(restoreBlock, /try \{[\s\S]*Promise\.all\(\[loadSelectedServer\(\), loadTokens\(\), loadPendingServer\(\)\]\)/);
 		assert.match(restoreBlock, /catch \(restoreError\)[\s\S]*setTokens\(null\)/);
 		assert.match(restoreBlock, /finally \{[\s\S]*setAuthReady\(true\)/);
 	});

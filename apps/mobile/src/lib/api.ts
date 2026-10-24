@@ -41,7 +41,10 @@ export class StreamientApi {
 	}
 
 	private handleRefreshFailure(error: unknown) {
-		if (navigator.onLine && !(error instanceof TypeError)) this.onTokens(null);
+		if (error instanceof TypeError || !navigator.onLine) return;
+		const status = (error as { status?: number }).status;
+		if (status && status >= 500) return; // Transient server failure preserves the session.
+		this.onTokens(null);
 	}
 
 	private async authorizedFetch(path: string, init: RequestInit = {}, retry = true): Promise<Response> {

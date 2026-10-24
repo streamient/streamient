@@ -496,6 +496,7 @@ let rmEmailSubject = '';
 let rmEmailFrom = '';
 let rmEmailRemoteImagesLoaded = false;
 let rmEmailBodyLoaded = false;
+let rmModalSeq = 0;
 
 function rmIsDemoReadOnly() {
 	return typeof __streamient_demo_mode === 'boolean' && __streamient_demo_mode;
@@ -554,6 +555,7 @@ async function openItemModal(type, id, defaults = {}) {
 
 	rmCurrentType = type;
 	rmCurrentId = id || null;
+	const openSeq = ++rmModalSeq;
 
 	const typeLabels = { notes: 'Note', memory: 'Memory', urls: 'URL' };
 	const isCreate = !id;
@@ -581,16 +583,20 @@ async function openItemModal(type, id, defaults = {}) {
 			const typeEndpoints = { notes: 'notes', memory: 'memories', urls: 'urls' };
 			const endpoint = typeEndpoints[type];
 			const res = await api('GET', `/${endpoint}/${id}`);
+			if (openSeq !== rmModalSeq) return;
 			const record = res.note || res.memory || res.url || res;
 			if (record.obsidian_source?.file_id && (type === 'notes' || type === 'memory')) {
 				const contentResponse = await fetch(`/api/v1/obsidian/files/${record.obsidian_source.file_id}/content`);
+				if (openSeq !== rmModalSeq) return;
 				if (!contentResponse.ok) throw new Error('Failed to load canonical Markdown');
 				record.markdown_content = await contentResponse.text();
+				if (openSeq !== rmModalSeq) return;
 			}
 			titleEl.textContent = record.title || record.url || 'Untitled';
 			loadingEl.classList.add('d-none');
 			rmPopulate(type, record);
 		} catch (err) {
+			if (openSeq !== rmModalSeq) return;
 			loadingEl.innerHTML = `<p class="text-danger">Failed to load: ${err.message || 'Unknown error'}</p>`;
 		}
 	}
@@ -1613,6 +1619,7 @@ async function rmSyncLinks(itemId, itemType) {
 // ── Cleanup ──────────────────────────────────────────────────────
 
 function rmCleanup() {
+	rmModalSeq++;
 	rmUrlPagesRequestSeq++;
 	rmUrlPageTextRequestSeq++;
 	rmUrlPagesPage = 1;
