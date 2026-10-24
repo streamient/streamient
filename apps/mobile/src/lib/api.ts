@@ -43,7 +43,7 @@ export class StreamientApi {
 	private handleRefreshFailure(error: unknown) {
 		if (error instanceof TypeError || !navigator.onLine) return;
 		const status = (error as { status?: number }).status;
-		if (status && status >= 500) return; // Transient server failure preserves the session.
+		if (status && (status >= 500 || status === 429)) return; // Transient server/rate-limit failure preserves the session.
 		this.onTokens(null);
 	}
 

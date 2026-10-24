@@ -134,11 +134,60 @@ export function App() {
 	const uploadNamespaceRef = useRef("");
 	const realtimeEventHandler = useRef<(event: string, payload: Record<string, unknown>) => void>(() => undefined);
 
-	const handleTokens = useCallback((next: TokenSet | null) => {
-		setTokens(next);
-		if (next) void saveTokens(next);
+	const resetSessionState = useCallback(async () => {
+		sessionEpoch.current++;
+		feedSeq.current++;
+		detailSeq.current++;
+		for (const controller of uploadControllers.current.values()) controller.abort();
+		uploadControllers.current.clear();
+		await clearAuth();
+		setTokens(null);
+		setBootstrap(null);
+		bootstrapRef.current = null;
+		uploadNamespaceRef.current = "";
+		setRecords([]);
+		setNextCursor(null);
+		setActiveProjectId("");
+		setFilter("all");
+		setView("projects");
+		setError("");
+		setDetail(null);
+		setDetailLoading(false);
+		setChatMessages([]);
+		setChatQuery("");
+		setConversationId("");
+		setConversations([]);
+		setHistoryDrawer(false);
+		setSearchQuery("");
+		setSearchResults([]);
+		setSearching(false);
+		setUploads([]);
+		setUploadTray(false);
+		setSaving(false);
+		setFeedLoading(false);
+		setLoadingMore(false);
+		setNoteDraft({ title: "", content: "", text: "", tags: "", projectId: "" });
+		setUrlDraft({ url: "", title: "", projectId: "" });
+		setFileDraft({ source: null, name: "", mimeType: "", projectId: "" });
 	}, []);
-	const api = useMemo(() => tokens ? new StreamientApi(server, tokens, handleTokens) : null, [server, tokens, handleTokens]);
+
+	const handleTokens = useCallback((next: TokenSet | null) => {
+		if (next) {
+			setTokens(next);
+			void saveTokens(next);
+		} else {
+			void resetSessionState();
+		}
+	}, [resetSessionState]);
+
+	const api = useMemo(() => {
+		if (!tokens) return null;
+		const epoch = sessionEpoch.current;
+		return new StreamientApi(server, tokens, (next) => {
+			if (epoch !== sessionEpoch.current) return;
+			handleTokens(next);
+		});
+	}, [server, tokens, handleTokens]);
 	const activeProject = bootstrap?.projects.find((project) => project.id === activeProjectId) || bootstrap?.projects[0] || null;
 	const visibleFilters = FILTERS.filter((item) => item.value !== "emails" || bootstrap?.features.emails);
 
@@ -230,19 +279,27 @@ export function App() {
 	useEffect(() => {
 		if (!api) { setBootstrap(null); bootstrapRef.current = null; return; }
 		let canceled = false;
+		const epoch = sessionEpoch.current;
 		setFeedLoading(true);
 		api.bootstrap().then(async (result) => {
-			if (canceled) return;
+			if (canceled || epoch !== sessionEpoch.current) return;
 			applyBootstrap(result.value);
 			setOffline(result.offline);
-			uploadNamespaceRef.current = uploadNamespace(server, result.value.user._id, result.value.account.host_id);
+			const namespace = uploadNamespace(server, result.value.user._id, result.value.account.host_id);
+			uploadNamespaceRef.current = namespace;
 			const pending = await loadPendingShare();
+			if (canceled || epoch !== sessionEpoch.current) return;
 			const storedProject = localStorage.getItem(activeProjectKey(server));
 			const pendingProjectId = result.value.projects.find((project) => project.id === storedProject)?.id || result.value.projects[0]?.id || "";
 			if (pending) await openSharedContent(pending, pendingProjectId);
-			const restored = await restoreUploads(uploadNamespaceRef.current, result.value.projects.map((project) => project.id));
+			if (canceled || epoch !== sessionEpoch.current) return;
+			const restored = await restoreUploads(namespace, (session) => api.uploadStatus(session.id).then(() => true).catch(() => false));
+			if (canceled || epoch !== sessionEpoch.current) return;
 			setUploads(restored.map(({ saved, source }) => ({ localId: saved.local_id, session: saved.session, source, name: saved.name, mimeType: saved.mime_type, paused: true, manualPause: false })));
-		}).catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Could not load Streamient")).finally(() => setFeedLoading(false));
+		}).catch((loadError) => {
+			if (canceled || epoch !== sessionEpoch.current) return;
+			setError(loadError instanceof Error ? loadError.message : "Could not load Streamient");
+		}).finally(() => { if (!canceled && epoch === sessionEpoch.current) setFeedLoading(false); });
 		return () => { canceled = true; };
 	}, [api, applyBootstrap]);
 
@@ -271,8 +328,10 @@ export function App() {
 
 	const refreshCounts = useCallback(async () => {
 		if (!api) return;
+		const epoch = sessionEpoch.current;
 		const result = await api.projectCounts();
-		setBootstrap((current) => current ? { ...current, projects: result.projects } : current);
+		if (epoch !== sessionEpoch.current) return;
+		setBootstrap((current) => (epoch === sessionEpoch.current && current) ? { ...current, projects: result.projects } : current);
 	}, [api]);
 
 	const applyChanges = useCallback(async () => {
@@ -343,10 +402,13 @@ export function App() {
 
 	async function saveNote() {
 		if (!api || !noteDraft.projectId || !online) return;
+		const epoch = sessionEpoch.current;
+		const apiRef = api;
 		setSaving(true);
 		try {
 			const payload = { title: noteDraft.title || "Untitled", content: noteDraft.content, text_content: noteDraft.text, tags: noteDraft.tags.split(",").map((tag) => tag.trim()).filter(Boolean), project_id: noteDraft.projectId };
-			const result = noteDraft.id ? await api.updateNote(noteDraft.id, payload) : await api.createNote(payload);
+			const result = noteDraft.id ? await apiRef.updateNote(noteDraft.id, payload) : await apiRef.createNote(payload);
+			if (epoch !== sessionEpoch.current) return;
 			setRecords((current) => upsertRecord(current, result.record, activeProjectId, filter));
 			clearDraft(draftKey(server, bootstrap?.user._id || "", noteDraft.id));
 			await clearPendingShare();
@@ -354,23 +416,28 @@ export function App() {
 			setDetail(null);
 			await refreshCounts();
 		} catch (saveError) {
+			if (epoch !== sessionEpoch.current) return;
 			void Swal.fire({ icon: "error", title: "Note not saved", text: saveError instanceof Error ? saveError.message : "Try again." });
-		} finally { setSaving(false); }
+		} finally { if (epoch === sessionEpoch.current) setSaving(false); }
 	}
 
 	async function saveUrl() {
 		if (!api || !urlDraft.projectId || !online) return;
+		const epoch = sessionEpoch.current;
+		const apiRef = api;
 		setSaving(true);
 		try {
-			const result = await api.createUrl({ url: urlDraft.url, title: urlDraft.title, project_id: urlDraft.projectId });
+			const result = await apiRef.createUrl({ url: urlDraft.url, title: urlDraft.title, project_id: urlDraft.projectId });
+			if (epoch !== sessionEpoch.current) return;
 			setRecords((current) => upsertRecord(current, result.record, activeProjectId, filter));
 			await clearPendingShare();
 			closeAdd();
 			await refreshCounts();
 			if (result.duplicate) void Swal.fire({ icon: "info", title: "Already saved", text: "That URL is already in this project." });
 		} catch (saveError) {
+			if (epoch !== sessionEpoch.current) return;
 			void Swal.fire({ icon: "error", title: "URL not saved", text: saveError instanceof Error ? saveError.message : "Try again." });
-		} finally { setSaving(false); }
+		} finally { if (epoch === sessionEpoch.current) setSaving(false); }
 	}
 
 	const updateUpload = useCallback((localId: string, session: UploadSession) => {
@@ -410,20 +477,28 @@ export function App() {
 	async function startFileUpload() {
 		if (!api || !fileDraft.source || !fileDraft.projectId || !online) return;
 		const source = fileDraft.source;
+		const epoch = sessionEpoch.current;
+		const namespace = uploadNamespaceRef.current;
+		const projectId = fileDraft.projectId;
+		const name = fileDraft.name;
+		const mimeType = fileDraft.mimeType;
 		setSaving(true);
 		try {
 			const length = await sourceSize(source);
-			const session = (await api.createUpload({ project_id: fileDraft.projectId, file_name: fileDraft.name, mime_type: fileDraft.mimeType, upload_length: length })).upload;
-			const item: UploadUi = { localId: crypto.randomUUID(), session, source, name: fileDraft.name, mimeType: fileDraft.mimeType, paused: false, manualPause: false };
-			await rememberUpload(uploadNamespaceRef.current, item.localId, session, source, item.name, item.mimeType);
+			const session = (await api.createUpload({ project_id: projectId, file_name: name, mime_type: mimeType, upload_length: length })).upload;
+			if (epoch !== sessionEpoch.current) return;
+			const item: UploadUi = { localId: crypto.randomUUID(), session, source, name, mimeType, paused: false, manualPause: false };
+			await rememberUpload(namespace, item.localId, session, source, item.name, item.mimeType);
+			if (epoch !== sessionEpoch.current) return;
 			setUploads((current) => [...current, item]);
 			setUploadTray(true);
 			closeAdd();
 			await clearPendingShare();
 			void runUpload(item);
 		} catch (uploadError) {
+			if (epoch !== sessionEpoch.current) return;
 			void Swal.fire({ icon: "error", title: "Import not started", text: uploadError instanceof Error ? uploadError.message : "Try again." });
-		} finally { setSaving(false); }
+		} finally { if (epoch === sessionEpoch.current) setSaving(false); }
 	}
 
 	async function openRecord(record: RecordSummary) {
@@ -524,37 +599,7 @@ export function App() {
 	async function signOut() {
 		const confirmed = await Swal.fire({ icon: "question", title: "Sign out?", showCancelButton: true, confirmButtonText: "Sign out" });
 		if (!confirmed.isConfirmed) return;
-		sessionEpoch.current++;
-		feedSeq.current++;
-		detailSeq.current++;
-		for (const controller of uploadControllers.current.values()) controller.abort();
-		uploadControllers.current.clear();
-		await clearAuth();
-		setTokens(null);
-		setBootstrap(null);
-		bootstrapRef.current = null;
-		uploadNamespaceRef.current = "";
-		setRecords([]);
-		setNextCursor(null);
-		setActiveProjectId("");
-		setFilter("all");
-		setView("projects");
-		setError("");
-		setDetail(null);
-		setDetailLoading(false);
-		setChatMessages([]);
-		setChatQuery("");
-		setConversationId("");
-		setConversations([]);
-		setHistoryDrawer(false);
-		setSearchQuery("");
-		setSearchResults([]);
-		setSearching(false);
-		setUploads([]);
-		setUploadTray(false);
-		setNoteDraft({ title: "", content: "", text: "", tags: "", projectId: "" });
-		setUrlDraft({ url: "", title: "", projectId: "" });
-		setFileDraft({ source: null, name: "", mimeType: "", projectId: "" });
+		await resetSessionState();
 	}
 
 	function chooseProject(id: string) {

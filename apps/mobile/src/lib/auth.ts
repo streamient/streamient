@@ -48,12 +48,22 @@ export async function loadTokens() {
 	return getStoredJson<TokenSet>(TOKEN_KEY);
 }
 
+// Serialize credential-store writes so a refresh that resolves before sign-out
+// cannot re-persist the old tokens after clearAuth has already run.
+let authWriteChain: Promise<unknown> = Promise.resolve();
+
+function serializeAuthWrite<T>(operation: () => Promise<T>): Promise<T> {
+	const result = authWriteChain.then(operation, operation);
+	authWriteChain = result.then(() => undefined, () => undefined);
+	return result;
+}
+
 export async function saveTokens(tokens: TokenSet) {
-	await setStoredJson(TOKEN_KEY, { ...tokens, obtained_at: Date.now() });
+	await serializeAuthWrite(() => setStoredJson(TOKEN_KEY, { ...tokens, obtained_at: Date.now() }));
 }
 
 export async function clearAuth() {
-	await Promise.all([removeStoredValue(TOKEN_KEY), removeStoredValue(VERIFIER_KEY), removeStoredValue(STATE_KEY), removeStoredValue(SERVER_KEY), removeStoredValue(PENDING_SERVER_KEY)]);
+	await serializeAuthWrite(() => Promise.all([removeStoredValue(TOKEN_KEY), removeStoredValue(VERIFIER_KEY), removeStoredValue(STATE_KEY), removeStoredValue(SERVER_KEY), removeStoredValue(PENDING_SERVER_KEY)]));
 }
 
 export async function beginOAuth(server: ServerOption) {

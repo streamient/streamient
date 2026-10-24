@@ -38,16 +38,21 @@ function saveRegistry(namespace: string, items: SavedUpload[]) {
 }
 
 // Attribute legacy (un-namespaced) uploads to the current identity only when the
-// upload's project belongs to that identity, so saved uploads never resurface
-// under another account.
-function migrateLegacyUploads(namespace: string, projectIds: string[]) {
+// server confirms the upload session still belongs to that user. The project list
+// is host-scoped, so it is not ownership proof: a teammate on the same host sees
+// the same projects. Unverified entries stay in the legacy registry, never shown
+// or deleted under the wrong account.
+async function migrateLegacyUploads(namespace: string, validateUpload?: (session: UploadSession) => Promise<boolean>) {
 	if (localStorage.getItem(registryKey(namespace)) !== null) return;
 	const legacy = legacyRegistry();
 	if (!legacy.length) return;
-	const owned = legacy.filter((item) => projectIds.includes(item.session.project_id));
-	if (!owned.length) return;
-	const unowned = legacy.filter((item) => !projectIds.includes(item.session.project_id));
-	saveRegistry(namespace, owned);
+	const owned: SavedUpload[] = [];
+	const unowned: SavedUpload[] = [];
+	for (const item of legacy) {
+		if (validateUpload && await validateUpload(item.session).catch(() => false)) owned.push(item);
+		else unowned.push(item);
+	}
+	if (owned.length) saveRegistry(namespace, owned);
 	if (unowned.length) localStorage.setItem(LEGACY_REGISTRY_KEY, JSON.stringify(unowned));
 	else localStorage.removeItem(LEGACY_REGISTRY_KEY);
 }
@@ -129,8 +134,8 @@ export async function forgetUpload(namespace: string, localId: string) {
 	await removeBlob(localId).catch(() => undefined);
 }
 
-export async function restoreUploads(namespace: string, projectIds: string[] = []) {
-	migrateLegacyUploads(namespace, projectIds);
+export async function restoreUploads(namespace: string, validateUpload?: (session: UploadSession) => Promise<boolean>) {
+	await migrateLegacyUploads(namespace, validateUpload);
 	const result: { saved: SavedUpload; source: UploadSource | null }[] = [];
 	for (const saved of registry(namespace)) {
 		const source = saved.source_kind === "uri" && saved.uri ? { uri: saved.uri, name: saved.name, mimeType: saved.mime_type } : await loadBlob(saved.local_id);

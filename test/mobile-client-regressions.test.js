@@ -73,18 +73,23 @@ describe('Streamient Mobile client regressions', () => {
 		assert.equal(await auth.exports.loadPendingServer(), null);
 	});
 
-	it('finding 7: sign-out resets chat, search, detail, conversation, and upload state', async () => {
-		const state = { tokens: 'A', bootstrap: 'A', records: ['A'], nextCursor: 'cursor', activeProjectId: 'p1', filter: 'urls', view: 'ai', error: 'x', detail: { id: 'n' }, detailLoading: true, chatMessages: ['A private answer'], chatQuery: 'private', conversationId: 'conv-A', conversations: ['A'], historyDrawer: true, searchQuery: 'private', searchResults: ['A private result'], searching: true, uploads: ['A private.pdf'], uploadTray: true, noteDraft: { title: 'A' }, urlDraft: { url: 'https://a' }, fileDraft: { name: 'A.pdf' } };
-		const globals = { Swal: { fire: async () => ({ isConfirmed: true }) }, clearAuth: async () => {}, bootstrapRef: { current: 'A' }, uploadNamespaceRef: { current: 'ns:A' }, sessionEpoch: { current: 0 }, feedSeq: { current: 0 }, detailSeq: { current: 0 }, uploadControllers: { current: new Map([['u', { abort() {} }]]) } };
+	it('finding 7: resetSessionState clears credentials, identity state, and pending work', async () => {
+		const state = { tokens: 'A', bootstrap: 'A', records: ['A'], nextCursor: 'cursor', activeProjectId: 'p1', filter: 'urls', view: 'ai', error: 'x', detail: { id: 'n' }, detailLoading: true, chatMessages: ['A private answer'], chatQuery: 'private', conversationId: 'conv-A', conversations: ['A'], historyDrawer: true, searchQuery: 'private', searchResults: ['A private result'], searching: true, uploads: ['A private.pdf'], uploadTray: true, saving: true, feedLoading: true, loadingMore: true, noteDraft: { title: 'A' }, urlDraft: { url: 'https://a' }, fileDraft: { name: 'A.pdf' } };
+		let cleared = false;
+		const globals = { clearAuth: async () => { cleared = true; }, bootstrapRef: { current: 'A' }, uploadNamespaceRef: { current: 'ns:A' }, sessionEpoch: { current: 0 }, feedSeq: { current: 0 }, detailSeq: { current: 0 }, uploadControllers: { current: new Map([['u', { abort() {} }]]) }, useCallback: (fn) => fn };
 		for (const name of Object.keys(state)) globals['set' + name[0].toUpperCase() + name.slice(1)] = (next) => { state[name] = next; };
-		const { exports: f } = await compile(block('async function signOut()', '\n\tfunction chooseProject') + '\nexport { signOut };', globals);
-		await f.signOut();
+		const { exports: f } = await compile(block('const resetSessionState = useCallback', 'const handleTokens = useCallback') + '\nexport { resetSessionState };', globals);
+		await f.resetSessionState();
+		assert.equal(cleared, true);
 		assert.equal(state.tokens, null);
+		assert.equal(state.bootstrap, null);
+		assert.equal(globals.bootstrapRef.current, null);
 		assert.equal(state.records.length, 0);
 		assert.equal(state.nextCursor, null);
 		assert.equal(state.activeProjectId, '');
 		assert.equal(state.filter, 'all');
 		assert.equal(state.view, 'projects');
+		assert.equal(state.error, '');
 		assert.equal(state.detail, null);
 		assert.equal(state.detailLoading, false);
 		assert.equal(state.chatMessages.length, 0);
@@ -97,11 +102,14 @@ describe('Streamient Mobile client regressions', () => {
 		assert.equal(state.searching, false);
 		assert.equal(state.uploads.length, 0);
 		assert.equal(state.uploadTray, false);
+		assert.equal(state.saving, false);
+		assert.equal(state.feedLoading, false);
+		assert.equal(state.loadingMore, false);
 		assert.equal(globals.uploadNamespaceRef.current, '');
 		assert.equal(globals.sessionEpoch.current, 1);
 	});
 
-	it('finding 7: upload storage is namespaced by identity and legacy entries are never reused across accounts', async () => {
+	it('finding 7: upload storage is namespaced by identity', async () => {
 		const store = new Map();
 		const localStorage = { getItem: (key) => (store.has(key) ? store.get(key) : null), setItem: (key, value) => store.set(key, String(value)), removeItem: (key) => store.delete(key) };
 		const uploads = await compile(read('apps/mobile/src/lib/uploads.ts'), { localStorage, indexedDB: { open: () => ({ set onupgradeneeded(fn) {}, set onsuccess(fn) {}, set onerror(fn) {} }) } });
@@ -109,19 +117,8 @@ describe('Streamient Mobile client regressions', () => {
 		const namespaceB = 'https://b.example:userB:tenantB';
 		const sessionA = { id: 'remote', project_id: 'P_A', state: 'uploading', upload_length: 10, upload_offset: 0, chunk_size: 10 };
 		await uploads.exports.rememberUpload(namespaceA, 'localA', sessionA, { uri: 'file://a', name: 'A.pdf', mimeType: 'application/pdf' }, 'A.pdf', 'application/pdf');
-		assert.equal((await uploads.exports.restoreUploads(namespaceB, [])).length, 0);
-		assert.equal((await uploads.exports.restoreUploads(namespaceA, [])).length, 1);
-
-		// Legacy (un-namespaced) uploads migrate only into the identity that owns their project.
-		const namespaceC = 'https://c.example:userC:tenantC';
-		const namespaceD = 'https://d.example:userD:tenantD';
-		const legacy = [{ local_id: 'legacyA', session: { ...sessionA, project_id: 'P_A' }, source_kind: 'uri', uri: 'file://a', name: 'A.pdf', mime_type: 'application/pdf' }];
-		store.set('streamient_upload_registry', JSON.stringify(legacy));
-		assert.equal((await uploads.exports.restoreUploads(namespaceD, ['P_B'])).length, 0);
-		assert.equal(store.has('streamient_upload_registry'), true);
-		const migrated = await uploads.exports.restoreUploads(namespaceC, ['P_A']);
-		assert.equal(migrated.length, 1);
-		assert.equal(store.has('streamient_upload_registry'), false);
+		assert.equal((await uploads.exports.restoreUploads(namespaceB)).length, 0);
+		assert.equal((await uploads.exports.restoreUploads(namespaceA)).length, 1);
 	});
 
 	it('finding 13: transient network TypeError pauses instead of failing, and retry resumes via authoritative status', async () => {
@@ -252,5 +249,206 @@ describe('Streamient Mobile client regressions', () => {
 		assert.equal(writes[0].path, '/notes/B');
 		assert.equal(writes[0].body.content, 'B original body');
 		assert.equal(writes[0].body.title, 'B');
+	});
+
+	it('MF1: a stale API token callback is fenced by the session epoch it was created under', async () => {
+		const calls = [];
+		let capturedOnTokens = null;
+		const sessionEpoch = { current: 5 };
+		await compile(block('const api = useMemo', 'const activeProject ='), {
+			useMemo: (fn) => fn(),
+			StreamientApi: class { constructor(server, tokens, onTokens) { capturedOnTokens = onTokens; } },
+			server: serverA, tokens: { access_token: 'A' }, handleTokens: (next) => calls.push(next), sessionEpoch,
+		});
+		assert.ok(capturedOnTokens);
+		capturedOnTokens({ access_token: 'A2' });
+		assert.equal(calls.length, 1);
+		sessionEpoch.current = 6;
+		capturedOnTokens({ access_token: 'A2' });
+		assert.equal(calls.length, 1);
+	});
+
+	it('MF2: definitive invalidation (handleTokens(null)) resets the session and clears persisted tokens', async () => {
+		const saved = new Map([['tokens', { access_token: 'A1' }]]);
+		const state = { tokens: 'A', bootstrap: 'A', records: ['A'] };
+		const noopSetters = {};
+		for (const name of ['nextCursor', 'activeProjectId', 'filter', 'view', 'error', 'detail', 'detailLoading', 'chatMessages', 'chatQuery', 'conversationId', 'conversations', 'historyDrawer', 'searchQuery', 'searchResults', 'searching', 'uploads', 'uploadTray', 'saving', 'feedLoading', 'loadingMore', 'noteDraft', 'urlDraft', 'fileDraft']) noopSetters['set' + name[0].toUpperCase() + name.slice(1)] = noop;
+		const globals = {
+			useCallback: (fn) => fn,
+			setTokens: (next) => { state.tokens = next; }, setBootstrap: (next) => { state.bootstrap = next; }, setRecords: (next) => { state.records = next; },
+			saveTokens: async (tokens) => { saved.set('tokens', tokens); }, clearAuth: async () => { saved.delete('tokens'); },
+			sessionEpoch: { current: 0 }, feedSeq: { current: 0 }, detailSeq: { current: 0 }, uploadControllers: { current: new Map() }, bootstrapRef: { current: 'A' }, uploadNamespaceRef: { current: 'ns:A' },
+			...noopSetters,
+		};
+		const src = block('const resetSessionState = useCallback', 'const handleTokens = useCallback') + '\n' + block('const handleTokens = useCallback', 'const api = useMemo') + '\nexport { handleTokens };';
+		const { exports: f } = await compile(src, globals);
+		f.handleTokens(null);
+		await new Promise((resolve) => setImmediate(resolve));
+		assert.equal(saved.has('tokens'), false);
+		assert.equal(state.tokens, null);
+		assert.equal(state.bootstrap, null);
+		assert.equal(state.records.length, 0);
+		assert.equal(globals.sessionEpoch.current, 1);
+	});
+
+	it('MF3: refreshCounts cannot merge a previous session project counts into the current bootstrap', async () => {
+		const state = { bootstrap: null };
+		const sessionEpoch = { current: 0 };
+		const { exports: f } = await compile(block('const refreshCounts = useCallback', 'const applyChanges = useCallback') + '\nexport { refreshCounts };', {
+			useCallback: (fn) => fn, sessionEpoch,
+			setBootstrap: (fn) => { state.bootstrap = fn(state.bootstrap); },
+			api: { projectCounts: () => new Promise((resolve) => setTimeout(() => resolve({ projects: [{ id: 'A_PROJECT', name: 'A private project' }] }), 20)) },
+		});
+		const pending = f.refreshCounts();
+		sessionEpoch.current++;
+		state.bootstrap = { user: { _id: 'B' }, projects: [{ id: 'B_PROJECT', name: 'B project' }] };
+		await pending;
+		assert.deepEqual(state.bootstrap.projects.map((p) => p.id), ['B_PROJECT']);
+	});
+
+	it('MF3 (queued): refreshCounts drops a stale queued bootstrap updater after the epoch changes', async () => {
+		const state = { bootstrap: { projects: [{ id: 'B', name: 'B project' }] } };
+		const sessionEpoch = { current: 0 };
+		let queuedUpdater = null;
+		const { exports: f } = await compile(block('const refreshCounts = useCallback', 'const applyChanges = useCallback') + '\nexport { refreshCounts };', {
+			useCallback: (fn) => fn, sessionEpoch,
+			setBootstrap: (updater) => { queuedUpdater = updater; },
+			api: { projectCounts: () => Promise.resolve({ projects: [{ id: 'A', name: 'A' }] }) },
+		});
+		await f.refreshCounts();
+		assert.ok(queuedUpdater);
+		sessionEpoch.current++;
+		const next = queuedUpdater(state.bootstrap);
+		assert.deepEqual(next.projects.map((p) => p.id), ['B']);
+	});
+
+	it('MF3: a note saved under A cannot merge into B after an identity change', async () => {
+		const state = { records: [], saving: false };
+		const sideEffects = { clearDraft: 0, closeAdd: 0, detail: 0, refreshCounts: 0, swal: 0 };
+		const sessionEpoch = { current: 0 };
+		let resolveCreate;
+		const { exports: f } = await compile(block('async function saveNote()', 'async function saveUrl()') + '\nexport { saveNote };', {
+			api: { createNote: () => new Promise((resolve) => { resolveCreate = resolve; }) },
+			noteDraft: { title: 'A note', content: '<p>x</p>', text: 'x', tags: '', projectId: 'P' },
+			online: true, sessionEpoch, activeProjectId: 'P', filter: 'all',
+			setSaving: (v) => { state.saving = v; }, setRecords: (fn) => { state.records = fn(state.records); },
+			clearDraft: () => { sideEffects.clearDraft++; }, clearPendingShare: async () => {}, closeAdd: () => { sideEffects.closeAdd++; }, setDetail: () => { sideEffects.detail++; }, refreshCounts: async () => { sideEffects.refreshCounts++; },
+			Swal: { fire: () => { sideEffects.swal++; } }, upsertRecord: noop, server: serverA, bootstrap: null, draftKey: () => 'k',
+		});
+		const pending = f.saveNote();
+		await new Promise((resolve) => setImmediate(resolve));
+		sessionEpoch.current++;
+		resolveCreate({ record: { key: 'notes:A1', id: 'A1', project_id: 'P', type: 'notes', title: 'A note', excerpt: '', created_at: '', updated_at: '', metadata: {} } });
+		await pending;
+		assert.equal(sideEffects.clearDraft, 0);
+		assert.equal(sideEffects.closeAdd, 0);
+		assert.equal(sideEffects.detail, 0);
+		assert.equal(sideEffects.refreshCounts, 0);
+		assert.equal(sideEffects.swal, 0);
+		assert.equal(state.records.length, 0);
+	});
+
+	it('MF3: a file upload started under A never persists into another namespace after identity change', async () => {
+		const state = { uploads: [], uploadTray: false, saving: false };
+		const sessionEpoch = { current: 0 };
+		const uploadNamespaceRef = { current: 'ns:A' };
+		const remembered = [];
+		let resolveCreate;
+		const { exports: f } = await compile(block('async function startFileUpload()', 'async function openRecord(') + '\nexport { startFileUpload };', {
+			api: { createUpload: () => new Promise((resolve) => { resolveCreate = resolve; }) },
+			fileDraft: { source: new Blob(['x']), name: 'A.pdf', mimeType: 'application/pdf', projectId: 'P' },
+			online: true, sessionEpoch, uploadNamespaceRef,
+			sourceSize: async () => 1, rememberUpload: async (ns) => { remembered.push(ns); }, crypto: { randomUUID: () => 'local-1' },
+			setUploads: (fn) => { state.uploads = fn(state.uploads); }, setUploadTray: (v) => { state.uploadTray = v; }, setSaving: (v) => { state.saving = v; },
+			closeAdd: () => {}, clearPendingShare: async () => {}, runUpload: () => {}, Swal: { fire: noop },
+		});
+		const pending = f.startFileUpload();
+		await new Promise((resolve) => setImmediate(resolve));
+		sessionEpoch.current++;
+		uploadNamespaceRef.current = 'ns:B';
+		resolveCreate({ upload: { id: 'sessA', project_id: 'P' } });
+		await pending;
+		assert.deepEqual(remembered, []);
+		assert.equal(state.uploads.length, 0);
+	});
+
+	it('MF4: bootstrap re-checks identity after each await before setting uploads', async () => {
+		const state = { uploads: [] };
+		const sessionEpoch = { current: 0 };
+		let resolveRestore;
+		const start = app.indexOf('api.bootstrap().then(async (result) => {');
+		const end = app.indexOf('}).catch(');
+		const body = app.slice(start + 'api.bootstrap().then(async (result) => {'.length, end);
+		const { exports: f } = await compile('async function chain(result) {' + body + '\n}\nexport { chain };', {
+			canceled: false, epoch: 0, sessionEpoch, server: serverA,
+			applyBootstrap: noop, setOffline: noop, setError: noop, setFeedLoading: noop,
+			setUploads: (fn) => { state.uploads = fn(state.uploads); },
+			uploadNamespace: (s, u, t) => 'ns:' + u, uploadNamespaceRef: { current: '' },
+			loadPendingShare: async () => null, localStorage: { getItem: () => null }, activeProjectKey: () => 'k', openSharedContent: async () => {},
+			restoreUploads: () => new Promise((resolve) => { resolveRestore = () => resolve([{ saved: { local_id: 'a1', session: { project_id: 'P' }, name: 'A private.pdf', mime_type: 'application/pdf' }, source: null }]); }),
+			api: { uploadStatus: async () => ({}) },
+		});
+		const result = { value: { user: { _id: 'A' }, account: { host_id: 'H' }, projects: [{ id: 'P' }] }, offline: false };
+		const pending = f.chain(result);
+		await new Promise((resolve) => setImmediate(resolve));
+		sessionEpoch.current++;
+		resolveRestore();
+		await pending;
+		assert.deepEqual(state.uploads, []);
+	});
+
+	it('MF5: legacy uploads never migrate across users of the same host without server validation', async () => {
+		const store = new Map();
+		const localStorage = { getItem: (key) => (store.has(key) ? store.get(key) : null), setItem: (key, value) => store.set(key, String(value)), removeItem: (key) => store.delete(key) };
+		const uploads = await compile(read('apps/mobile/src/lib/uploads.ts'), { localStorage, indexedDB: { open: () => ({ set onupgradeneeded(fn) {}, set onsuccess(fn) {}, set onerror(fn) {} }) } });
+		store.set('streamient_upload_registry', JSON.stringify([{ local_id: 'legacyA', session: { id: 'sessA', project_id: 'P', state: 'uploading', upload_length: 10, upload_offset: 0, chunk_size: 10 }, source_kind: 'uri', uri: 'file://a', name: 'A private.pdf', mime_type: 'application/pdf' }]));
+		const nsB = 'https://app.example:userB:samehost';
+		assert.equal((await uploads.exports.restoreUploads(nsB)).length, 0);
+		assert.equal(store.has('streamient_upload_registry'), true);
+		assert.equal((await uploads.exports.restoreUploads(nsB, async () => false)).length, 0);
+		assert.equal(store.has('streamient_upload_registry'), true);
+		assert.equal((await uploads.exports.restoreUploads(nsB, async () => true)).length, 1);
+		assert.equal(store.has('streamient_upload_registry'), false);
+	});
+
+	it('refresh 429 is transient and preserves the session', async () => {
+		const store = storage();
+		const auth429 = await compile(read('apps/mobile/src/lib/auth.ts'), { App: { addListener: async () => ({ remove() {} }) }, Browser: { open: async () => {}, close: async () => {} }, Capacitor: { isNativePlatform: () => true }, MOBILE_CLIENT_ID: 'm', MOBILE_SCOPES: '', oauthRedirectUri: () => 'x://cb', fetch: async () => new Response(JSON.stringify({ error: 'rate_limited' }), { status: 429 }), ...store });
+		const { exports: { StreamientApi } } = await compile(read('apps/mobile/src/lib/api.ts'), { refreshTokens: auth429.exports.refreshTokens, getCachedJson: async () => null, setCachedJson: async () => {}, fetch: async () => new Response(JSON.stringify({ error: 'rate_limited' }), { status: 429 }) });
+		const tokenA = { access_token: 'A_ACCESS', refresh_token: 'A_REFRESH', expires_in: 1, obtained_at: Date.now(), token_type: 'Bearer', scope: '' };
+		let cleared = 0;
+		await new StreamientApi(serverA, tokenA, (next) => { if (next === null) cleared++; }).bootstrap().catch(noop);
+		assert.equal(cleared, 0);
+	});
+
+	it('email modal open is fenced by generation so a late email cannot overwrite a newer note', async () => {
+		const script = read('public/js/chat.js');
+		const elements = new Map();
+		function element(id) {
+			if (!elements.has(id)) elements.set(id, { value: '', textContent: '', className: '', innerHTML: '', classList: { add() {}, remove() {}, toggle() {} }, addEventListener(event, callback) { this[event] = callback; }, disabled: false, style: {}, remove() {}, removeAttribute() {} });
+			return elements.get(id);
+		}
+		let resolveEmail; let resolveNote;
+		const context = vm.createContext({
+			document: { getElementById: element },
+			rmCurrentType: null, rmCurrentId: null, rmModalSeq: 0,
+			rmCleanup: () => { context.rmCurrentId = null; context.rmCurrentType = null; context.rmModalSeq += 1; },
+			rmResetEmailView: () => {}, rmShowModal: noop, typeBadgeClass: () => '', escapeHtml: (s) => String(s),
+			renderEmailDetails: (email, thread) => { context.renderedEmail = email.subject; },
+			rmPopulate: () => {}, rmShowNoteEdit: () => {}, rmShowMemoryEdit: () => {}, rmIsDemoReadOnly: () => false,
+			api: async (method, path) => { if (path === '/emails/A') return new Promise((resolve) => { resolveEmail = resolve; }); if (path === '/notes/B') return new Promise((resolve) => { resolveNote = resolve; }); return {}; },
+			BsModal: { getOrCreateInstance: () => ({ show() {} }) },
+		});
+		vm.runInContext(script.slice(script.indexOf('async function openEmailModal('), script.indexOf('function rmSetUrlParsedText(')) + '\nglobalThis.openEmailModal = openEmailModal;', context);
+		vm.runInContext(script.slice(script.indexOf('async function openItemModal('), script.indexOf('\n/**\n * Open modal from a chat')) + '\nglobalThis.openItemModal = openItemModal;', context);
+		const emailOpening = context.openEmailModal({ _type: 'emails', id: 'A' });
+		const noteOpening = context.openItemModal('notes', 'B');
+		resolveNote({ note: { _id: 'B', title: 'B', content: 'B body' } });
+		await noteOpening;
+		assert.equal(element('result-modal-title').textContent, 'B');
+		resolveEmail({ email: { _id: 'A', subject: 'A private email' }, thread: [] });
+		await emailOpening;
+		assert.equal(element('result-modal-title').textContent, 'B');
+		assert.equal(context.rmCurrentId, 'B');
 	});
 });

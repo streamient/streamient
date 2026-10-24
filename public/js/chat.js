@@ -844,6 +844,7 @@ async function openEmailModal(item) {
 	const badgeEl = document.getElementById('result-modal-badge');
 
 	rmCleanup();
+	const openSeq = ++rmModalSeq;
 	rmCurrentType = 'emails';
 	rmCurrentId = item.id || null;
 	document.getElementById('result-modal-note').classList.add('d-none');
@@ -873,6 +874,7 @@ async function openEmailModal(item) {
 			api('GET', `/emails/${item.id}`),
 			api('GET', `/emails/${item.id}/thread`).catch(() => ({ thread: [] })),
 		]);
+		if (openSeq !== rmModalSeq) return;
 		const email = emailRes.email || emailRes;
 		const thread = threadRes.thread || [];
 		rmCurrentId = email._id || item.id || null;
@@ -880,6 +882,7 @@ async function openEmailModal(item) {
 		renderEmailDetails(email, thread);
 		loadingEl.classList.add('d-none');
 	} catch (err) {
+		if (openSeq !== rmModalSeq) return;
 		loadingEl.innerHTML = `<p class="text-danger">Failed to load email: ${escapeHtml(err.message || 'Unknown error')}</p>`;
 	}
 }
