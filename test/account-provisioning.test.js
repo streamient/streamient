@@ -38,37 +38,13 @@ describe('account provisioning', () => {
 	it('rejects duplicate owner email with conflict', async () => {
 		await assert.rejects(
 			() => provisionAccount(validInput(), {
-				userModel: { findOne: async () => ({ _id: 'existing-user' }) },
+				userModel: { create: async () => { throw Object.assign(new Error('duplicate'), { code: 11000, keyPattern: { email: 1 } }); } },
 				transaction: async (callback) => callback('session-1'),
 			}),
 			(err) => err instanceof AccountProvisioningError && err.status === 409 && err.code === 'ACCOUNT_EMAIL_EXISTS',
 		);
 	});
 
-	it('uses a primary duplicate lookup inside the transaction', async () => {
-		const calls = [];
-		const query = {
-			session(session) {
-				calls.push(['session', session]);
-				return this;
-			},
-			read(preference) {
-				calls.push(['read', preference]);
-				return this;
-			},
-			then(resolve, reject) {
-				return Promise.resolve({ _id: 'existing-user' }).then(resolve, reject);
-			},
-		};
-		await assert.rejects(
-			() => provisionAccount(validInput(), {
-				userModel: { findOne: () => query },
-				transaction: async (callback) => callback('session-1'),
-			}),
-			(err) => err instanceof AccountProvisioningError && err.status === 409,
-		);
-		assert.deepEqual(calls, [['session', 'session-1'], ['read', 'primary']]);
-	});
 
 	it('creates every core record with one transaction session', async () => {
 		const calls = [];

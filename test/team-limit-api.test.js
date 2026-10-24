@@ -89,13 +89,13 @@ describe('stored account team user limit', () => {
 		User.findByIdAndUpdate = async () => null;
 		User.findOne = () => ({ lean: async () => ({ _id: { toString: () => 'existing-user' }, email: 'new@example.com', name: 'Existing User' }) });
 		TenantMember.findOne = () => ({ lean: async () => null });
-		TenantMember.findOneAndUpdate = async () => null;
-		TenantMember.create = async (payload) => ({
+		TenantMember.findOneAndUpdate = async (filter) => filter._id ? { role: 'owner' } : null;
+		TenantMember.create = async ([payload]) => ([{
 			_id: { toString: () => 'membership-2' },
 			role: payload.role,
 			joined_at: payload.joined_at,
 			user: payload.user,
-		});
+		}]);
 		TenantMember.countDocuments = async () => memberCount;
 		Tenant.findOne = (filter) => {
 			if (filter?.is_active === true) return tenant;

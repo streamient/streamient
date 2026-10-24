@@ -121,7 +121,6 @@
     "mongodb": "^7.6.0",
     "mongoose": "^9.10.1",
     "mongoose-lean-virtuals": "^2.1.0",
-    "n-readlines": "^3.4.1",
     "nodemailer": "^10.0.10",
     "otplib": "^13.5.0",
     "pino": "^10.3.1",

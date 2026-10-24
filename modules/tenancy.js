@@ -96,16 +96,15 @@ tenantSchema.index(
 
 export const Tenant = mongoose.model('Tenant', tenantSchema);
 
-function primaryTenantQuery(query) {
-	if (typeof query?.read === 'function') query = query.read('primary');
+function leanTenantQuery(query) {
 	if (typeof query?.lean === 'function') query = query.lean();
 	return query;
 }
 
-// Always read the authoritative tenant state for access/side-effect checks.
+// An atomic match validates access without relying on a replica's stale state.
 async function assertTenantAvailableImpl(hostId) {
 	if (!hostId) throw Object.assign(new Error('Account context is required'), { status: 403, code: 'account_context_required' });
-	const tenant = await Tenant.findOne({ host_id: String(hostId), is_active: { $ne: false }, 'deletion.requested_at': null }).select('_id').read('primary').lean();
+	const tenant = await Tenant.findOneAndUpdate({ host_id: String(hostId), is_active: { $ne: false }, 'deletion.requested_at': null }, { $set: { is_active: true } }, { timestamps: false, returnDocument: 'after' }).select('_id').lean();
 	if (!tenant) throw Object.assign(new Error('Account access is unavailable'), { status: 403, code: 'account_unavailable' });
 }
 
@@ -199,7 +198,7 @@ export async function ensureOwnerMembershipForUser(userOrId) {
 		: await User.findById(userOrId).select('tenant host_id');
 
 	if (!user?.tenant || !user?.host_id) return null;
-	const ownedTenant = await primaryTenantQuery(Tenant.findOne({ _id: user.tenant, host_id: user.host_id, owner: user._id, is_active: { $ne: false }, 'deletion.requested_at': null }).select('_id'));
+	const ownedTenant = await leanTenantQuery(Tenant.findOneAndUpdate({ _id: user.tenant, host_id: user.host_id, owner: user._id, is_active: { $ne: false }, 'deletion.requested_at': null }, { $set: { is_active: true } }, { timestamps: false }).select('_id'));
 	if (!ownedTenant) return null;
 
 	let release;
@@ -220,14 +219,14 @@ export async function ensureOwnerMembershipForUser(userOrId) {
 }
 
 export async function listAccessibleTenantsForUser(userId) {
-	const user = await primaryTenantQuery(User.findById(userId).select('tenant host_id is_active'));
+	const user = await leanTenantQuery(User.findOneAndUpdate({ _id: userId, is_active: { $ne: false } }, { $set: { is_active: true } }, { timestamps: false, returnDocument: 'after' }).select('tenant host_id is_active'));
 	if (!user || user.is_active === false) return [];
 
 	if (user.tenant && user.host_id) {
 		await ensureOwnerMembershipForUser(user);
 	}
 
-	const memberships = await primaryTenantQuery(TenantMember.find({ user: userId }).populate({ path: 'tenant', select: 'name host_id is_active deletion.requested_at', options: { readPreference: 'primary' } }));
+	const memberships = await leanTenantQuery(TenantMember.find({ user: userId }).populate({ path: 'tenant', select: 'name host_id is_active deletion.requested_at', options: {} }));
 
 	return memberships
 		.filter((membership) => membership.tenant && membership.tenant.is_active !== false && !membership.tenant.deletion?.requested_at)
@@ -249,6 +248,10 @@ export async function resolveActiveTenantContext(userId, preferredTenantId = nul
 			accessibleTenants,
 		};
 	}
+	const membership = await leanTenantQuery(TenantMember.findOneAndUpdate({ _id: activeTenant.membershipId, user: userId, tenant: activeTenant.tenantId }, { $set: { user: userId } }, { timestamps: false, returnDocument: 'after' }));
+	if (!membership) return { activeTenant: null, accessibleTenants: [] };
+	await assertTenantAvailable(activeTenant.host_id);
+	activeTenant.role = membership.role;
 
 	return {
 		activeTenant,

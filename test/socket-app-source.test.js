@@ -10,7 +10,7 @@ describe('Socket.IO app source', () => {
 		const appJs = fs.readFileSync(new URL('../public/js/app.js', import.meta.url), 'utf8');
 
 		assert.ok(authJs.includes("audience: 'streamient-socket'"));
-		assert.ok(webJs.includes('generateSocketToken(req.userId, req.host_id, req.tenantId)'));
+		assert.ok(webJs.includes('generateSocketToken(req.userId, req.host_id, req.tenantId, req.sessionID)'));
 		assert.ok(layoutPug.includes('var __user_id = "#{user_id}";'));
 		assert.ok(layoutPug.includes('var __socket_token = "#{socket_token}";'));
 		assert.ok(appJs.includes("'auth': { 'token': __socket_token }"));

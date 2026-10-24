@@ -118,7 +118,7 @@ export function publicDeletionState(tenant) {
 }
 
 export async function previewAccountDeletion(hostId, actor, options = {}) {
-	const tenant = await (options.tenantModel || Tenant).findOne({ host_id: hostId }).read('primary').lean();
+	const tenant = await (options.tenantModel || Tenant).findOne({ host_id: hostId }).lean();
 	if (!tenant) throw Object.assign(new Error('Account not found'), { status: 404 });
 	if (!actor?.admin && (actor?.impersonating || String(tenant.owner) !== String(actor?.userId))) throw Object.assign(new Error('Only the account owner can delete this account'), { status: 403 });
 	if (!tenant.deletion?.requested_at) {
@@ -131,8 +131,9 @@ export async function previewAccountDeletion(hostId, actor, options = {}) {
 export async function requestAccountDeletion(hostId, actor, confirmation, options = {}) {
 	if (confirmation !== 'DELETE') throw Object.assign(new Error('Type DELETE to confirm account deletion'), { status: 400 });
 	const preview = await previewAccountDeletion(hostId, actor, options);
-	if (!preview.deletion) await Tenant.updateOne({ host_id: hostId, 'deletion.requested_at': null }, { $set: { is_active: false, deletion: { requested_at: new Date(), stage: 'requested', job_id: `account-deletion:${hostId}`, error: '' } } });
-	const tenant = await Tenant.findOne({ host_id: hostId }).read('primary').lean();
+	const tenant = preview.deletion
+		? await Tenant.findOneAndUpdate({ host_id: hostId, 'deletion.requested_at': { $ne: null } }, { $set: { is_active: false } }, { returnDocument: 'after' }).lean()
+		: await Tenant.findOneAndUpdate({ host_id: hostId, 'deletion.requested_at': null }, { $set: { is_active: false, deletion: { requested_at: new Date(), stage: 'requested', job_id: `account-deletion:${hostId}`, error: '' } } }, { returnDocument: 'after' }).lean();
 	if (!tenant && preview.deletion) return { host_id: hostId, deletion: { ...preview.deletion, stage: 'complete' }, message: 'Account deletion completed.' };
 	await revokeAccountAccess(tenant).catch((error) => log.error({ err: error, host_id: hostId }, 'Account locked; task will finish revocation'));
 	await (options.enqueueDeletion || enqueueAccountDeletion)(tenant).catch((error) => log.error({ err: error, host_id: hostId }, 'Deletion outbox awaits recovery'));
@@ -162,21 +163,10 @@ async function revokeAccountAccess(tenant) {
 	const hostId = tenant.host_id;
 	await Promise.all([OAuthRefreshToken.updateMany({ host_id: hostId }, { $set: { revoked_at: new Date() } }), OAuthConsent.updateMany({ host_id: hostId }, { $set: { revoked_at: new Date() } }), OAuthAuthorizationCode.deleteMany({ host_id: hostId })]);
 	await stopAccountProducers(tenant);
-	const members = await TenantMember.find({ host_id: hostId }).select('user').read('primary').lean();
-	const users = await User.find({ $or: [{ host_id: hostId }, { tenant: tenant._id }, { _id: { $in: members.map((member) => member.user) } }] }).select('_id host_id tenant').read('primary').lean();
+	await User.updateMany({ $or: [{ host_id: hostId }, { tenant: tenant._id }] }, { $set: { access_tokens: [] } });
 	const disabled = [];
-	for (const user of users) {
-		const other = await TenantMember.find({ user: user._id, host_id: { $ne: hostId } }).select('tenant').read('primary').lean();
-		const needed = await Tenant.exists({ host_id: { $ne: hostId }, 'deletion.requested_at': null, $or: [{ _id: { $in: other.map((row) => row.tenant) } }, { owner: user._id }] }).read('primary');
-		const primaryDeleted = user.host_id === hostId || String(user.tenant) === String(tenant._id);
-		if (!needed || primaryDeleted) await User.updateOne({ _id: user._id }, { $set: { ...(primaryDeleted ? { access_tokens: [] } : {}), ...(!needed ? { is_active: false } : {}) } });
-		if (!needed) {
-			disabled.push(user._id);
-			await Promise.all([MagicLink.deleteMany({ user: user._id }), UserPasskey.deleteMany({ user: user._id })]);
-		}
-	}
 	const sessions = mongoose.connection.db.collection('sessions');
-	for await (const row of sessions.find({}, { projection: { session: 1 }, readPreference: 'primary' }).batchSize(BATCH_SIZE)) {
+	for await (const row of sessions.find({}, { projection: { session: 1 } }).batchSize(BATCH_SIZE)) {
 		let session;
 		try { session = typeof row.session === 'string' ? JSON.parse(row.session) : row.session; } catch { continue; }
 		if (!session || (String(session.host_id || '') !== hostId && !disabled.some((id) => String(id) === String(session.userId)))) continue;
@@ -208,7 +198,7 @@ async function tagAndDrainAccountJobs(hostId) {
 
 export async function deleteTenantData(hostId, tenantId = null, options = {}) {
 	if (!hostId) return { deleted: false, reason: 'host_id_required' };
-	const tenant = await (options.models?.Tenant || Tenant).findOne({ host_id: hostId, ...(tenantId ? { _id: tenantId } : {}) }).read('primary').lean();
+	const tenant = await (options.models?.Tenant || Tenant).findOne({ host_id: hostId, ...(tenantId ? { _id: tenantId } : {}) }).lean();
 	if (!tenant) return { deleted: false, reason: 'tenant_not_found' };
 	if (!tenant.deletion?.requested_at) throw new Error('Account deletion must be requested before cleanup');
 	return (options.processAccountDeletion || processAccountDeletion)({ host_id: hostId }, options);
@@ -218,8 +208,17 @@ export async function processAccountDeletion(data, options = {}) {
 	const hostId = data.host_id;
 	const leaseOwner = crypto.randomUUID();
 	const now = new Date();
-	const tenant = await Tenant.findOneAndUpdate({ host_id: hostId, 'deletion.requested_at': { $ne: null }, $or: [{ 'deletion.lease_until': { $lte: now } }, { 'deletion.lease_until': null }] }, { $set: { 'deletion.lease_owner': leaseOwner, 'deletion.lease_until': new Date(now.getTime() + 10 * 60 * 1000) } }, { returnDocument: 'after' }).read('primary').lean();
+	const tenant = await Tenant.findOneAndUpdate({ host_id: hostId, 'deletion.requested_at': { $ne: null }, $or: [{ 'deletion.lease_until': { $lte: now } }, { 'deletion.lease_until': null }] }, { $set: { 'deletion.lease_owner': leaseOwner, 'deletion.lease_until': new Date(now.getTime() + 10 * 60 * 1000) } }, { returnDocument: 'after' }).lean();
 	if (!tenant) return { deleted: false };
+	// Enumerate through write results; replica absence cannot authorize deletion.
+	const currentRows = async (model, filter, session) => {
+		const rows = [];
+		while (true) {
+			const row = await model.findOneAndUpdate({ ...filter, _id: { $nin: rows.map((value) => value._id) } }, { $inc: { __v: 0 } }, { returnDocument: 'after', timestamps: false, session }).lean();
+			if (!row) return rows;
+			rows.push(row);
+		}
+	};
 	const lock = { _id: tenant._id, 'deletion.lease_owner': leaseOwner };
 	const step = async (stage, extra = {}) => {
 		options.signal?.throwIfAborted();
@@ -238,8 +237,8 @@ export async function processAccountDeletion(data, options = {}) {
 		}
 		let userIds = tenant.deletion.user_ids;
 		if (!userIds) {
-			const users = await User.find({ $or: [{ host_id: hostId }, { tenant: tenant._id }] }).select('_id').read('primary').lean();
-			const members = await TenantMember.find({ host_id: hostId }).select('user').read('primary').lean();
+			const users = await currentRows(User, { $or: [{ host_id: hostId }, { tenant: tenant._id }] });
+			const members = await currentRows(TenantMember, { host_id: hostId });
 			userIds = [...new Set([String(tenant.owner), ...users.map((user) => String(user._id)), ...members.map((member) => String(member.user))])];
 			await step('resources', { 'deletion.user_ids': userIds });
 		}
@@ -249,9 +248,7 @@ export async function processAccountDeletion(data, options = {}) {
 		let remaining = 0;
 		for (const model of Object.values(HOST_SCOPED_MODELS)) {
 			options.signal?.throwIfAborted();
-			const rows = await model.find({ host_id: hostId }).select('_id').limit(BATCH_SIZE).read('primary').lean();
-			if (rows.length) await model.deleteMany({ host_id: hostId, _id: { $in: rows.map((row) => row._id) } });
-			remaining += await model.countDocuments({ host_id: hostId }).read('primary');
+			remaining += (await model.deleteMany({ host_id: hostId })).deletedCount;
 		}
 		if (remaining || await tagAndDrainAccountJobs(hostId)) {
 			await step('database', { 'deletion.clean_at': null });
@@ -265,21 +262,27 @@ export async function processAccountDeletion(data, options = {}) {
 		await (options.cancelBilling || cancelAccountTrackingSubscriptions)(tenant, tenant.deletion.billing_customer_id ? { user: { stripe_customer_id: tenant.deletion.billing_customer_id } } : {});
 		await step('users');
 		for (const id of userIds) {
-			const user = await User.findById(id).select('_id email tenant host_id').read('primary').lean();
-			if (!user) continue;
-			const memberships = await TenantMember.find({ user: id, host_id: { $ne: hostId } }).sort({ createdAt: 1, _id: 1 }).read('primary').lean();
-			const survivors = await Tenant.find({ _id: { $in: memberships.map((row) => row.tenant) }, 'deletion.requested_at': null }).select('_id').read('primary').lean();
-			const membership = memberships.find((member) => survivors.some((row) => String(row._id) === String(member.tenant)));
-			const owned = await Tenant.findOne({ owner: id, host_id: { $ne: hostId }, 'deletion.requested_at': null }).select('_id host_id').read('primary').lean();
-			if (membership || owned) {
-				if (user.host_id === hostId || String(user.tenant) === String(tenant._id)) {
-					const next = owned || { _id: membership.tenant, host_id: membership.host_id };
-					await User.updateOne({ _id: id }, { $set: { tenant: next._id, host_id: next.host_id, access_tokens: [] }, $unset: { stripe_customer_id: '', stripe_subscription_id: '', stripe_free_subscription_id: '', subscription_status: '', trial_source: '', trial_ends_at: '' } });
+			await mongoose.connection.transaction(async (session) => {
+				const user = await User.findOneAndUpdate({ _id: id }, { $inc: { __v: 1 } }, { session, timestamps: false, returnDocument: 'after' }).lean();
+				if (!user) return;
+				const memberships = await currentRows(TenantMember, { user: id, host_id: { $ne: hostId } }, session);
+				let membership;
+				for (const candidate of memberships) {
+					const survivor = await Tenant.findOneAndUpdate({ _id: candidate.tenant, 'deletion.requested_at': null }, { $inc: { __v: 0 } }, { session, timestamps: false }).lean();
+					if (survivor) { membership = candidate; break; }
 				}
-				continue;
-			}
-			await Promise.all([UserPasskey.deleteMany({ user: id }), MagicLink.deleteMany({ user: id }), PendingSignup.deleteMany({ email: user.email }), TenantMember.deleteMany({ user: id }), OAuthRefreshToken.deleteMany({ user: id }), OAuthAuthorizationCode.deleteMany({ user: id }), OAuthConsent.deleteMany({ user: id })]);
-			await User.deleteOne({ _id: id });
+				const owned = await Tenant.findOneAndUpdate({ owner: id, host_id: { $ne: hostId }, 'deletion.requested_at': null }, { $inc: { __v: 0 } }, { session, timestamps: false }).lean();
+				if (membership || owned) {
+					if (user.host_id === hostId || String(user.tenant) === String(tenant._id)) {
+						const next = owned || { _id: membership.tenant, host_id: membership.host_id };
+						await User.updateOne({ _id: id }, { $set: { tenant: next._id, host_id: next.host_id, access_tokens: [] }, $unset: { stripe_customer_id: '', stripe_subscription_id: '', stripe_free_subscription_id: '', subscription_status: '', trial_source: '', trial_ends_at: '' } }, { session });
+					}
+					return;
+				}
+				for (const model of [UserPasskey, MagicLink, TenantMember, OAuthRefreshToken, OAuthAuthorizationCode, OAuthConsent]) await model.deleteMany({ user: id }, { session });
+				await PendingSignup.deleteMany({ email: user.email }, { session });
+				await User.deleteOne({ _id: id }, { session });
+			});
 		}
 		await step('complete');
 		await Tenant.deleteOne(lock);
@@ -295,12 +298,12 @@ export async function processAccountDeletion(data, options = {}) {
 }
 
 export async function recoverAccountDeletions(options = {}) {
-	const tenants = Tenant.find({ 'deletion.requested_at': { $ne: null }, 'deletion.stage': { $ne: 'failed' }, ...(options.hostId ? { host_id: options.hostId } : {}) }).select('host_id deletion').read('primary').lean().cursor();
+	const tenants = Tenant.find({ 'deletion.requested_at': { $ne: null }, 'deletion.stage': { $ne: 'failed' }, ...(options.hostId ? { host_id: options.hostId } : {}) }).select('host_id deletion').lean().cursor();
 	for await (const tenant of tenants) await (options.enqueueDeletion || enqueueAccountDeletion)(tenant);
 }
 
 export async function retryAccountDeletion(tenantId) {
-	const tenant = await Tenant.findOneAndUpdate({ _id: tenantId, 'deletion.stage': 'failed' }, { $set: { 'deletion.stage': 'requested', 'deletion.error': '' } }, { returnDocument: 'after' }).read('primary').lean();
+	const tenant = await Tenant.findOneAndUpdate({ _id: tenantId, 'deletion.stage': 'failed' }, { $set: { 'deletion.stage': 'requested', 'deletion.error': '' } }, { returnDocument: 'after' }).lean();
 	if (!tenant) throw Object.assign(new Error('No failed deletion to retry'), { status: 409 });
 	await enqueueAccountDeletion(tenant);
 	return publicDeletionState(tenant);

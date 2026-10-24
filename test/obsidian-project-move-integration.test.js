@@ -4,7 +4,7 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test, { mock } from 'node:test';
 import config from '../config.js';
-import mongoose, { connectDB } from '../db.js';
+import mongoose from '../db.js';
 import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
 import { Url } from '../model/url.js';
@@ -47,7 +47,7 @@ class MoveFixture {
 			const version = record.updatedAt.toISOString();
 			const file = await syncStreamientItem(type, record._id, this.hostId, { item: record });
 			assert.ok(file);
-			const stored = await Model.findById(record._id).read('primary').lean();
+			const stored = await Model.findOneAndUpdate({ _id: record._id }, { $inc: { __v: 0 } }, { returnDocument: 'after', timestamps: false }).lean();
 			assert.equal(stored.updatedAt.toISOString(), version, 'Export must not change the record version');
 			this.records.push({ type, Model, id: record._id, oldFile: file.toObject(), before: stored });
 		}
@@ -87,9 +87,10 @@ class MoveFixture {
 }
 
 test('Obsidian-linked search moves persist without export rollback or stale-vault resurrection', { skip: process.env.RUN_OBSIDIAN_INTEGRATION !== '1' }, async (t) => {
-	await connectDB();
+	await mongoose.connect(config.mongoUri, { ...config.mongoOptions, dbName: `streamient_obsidian_policy_${process.pid}_${Date.now()}` });
 	const fixture = new MoveFixture();
-	t.after(async () => { try { await fixture.cleanup(); } finally { await mongoose.disconnect(); } });
+	t.after(async () => { try { await fixture.cleanup(); } finally { await mongoose.connection.dropDatabase(); await mongoose.disconnect(); } });
+	await Promise.all([User, TenantMember, ObsidianBlob, ObsidianFile, ObsidianUpload, ObsidianRevision, ObsidianChange, ObsidianConnection].map((Model) => Model.createIndexes()));
 	await fixture.setup();
 
 	await t.test('publishes concurrent identical content past an abandoned hash directory', async () => {
@@ -111,12 +112,12 @@ test('Obsidian-linked search moves persist without export rollback or stale-vaul
 	const upload = await fixture.upload(fixture.source, originalNote.oldFile, markdown);
 	const imported = await applyMutations(fixture.user._id, fixture.hostId, fixture.source._id, { mutations: [{ operation_id: 'initial-markdown', operation: 'update', file_id: originalNote.oldFile._id, path: originalNote.oldFile.path, upload_id: upload._id, base_revision: originalNote.oldFile.revision, modified_at: new Date() }] });
 	assert.equal(imported.results[0].accepted, true);
-	originalNote.before = await Note.findById(originalNote.id).read('primary').lean();
+	originalNote.before = await Note.findOneAndUpdate({ _id: originalNote.id }, { $inc: { __v: 0 } }, { returnDocument: 'after', timestamps: false }).lean();
 
 	await t.test('moves notes, memories and URLs through search while preserving IDs, content and versions', async () => {
 		const outcomes = await fixture.move(fixture.projects[0], fixture.projects[1]);
 		for (const record of fixture.records) {
-			const stored = await record.Model.findById(record.id).read('primary').lean();
+			const stored = await record.Model.findOneAndUpdate({ _id: record.id }, { $inc: { __v: 0 } }, { returnDocument: 'after', timestamps: false }).lean();
 			const outcome = outcomes.find((item) => item.id === String(record.id));
 			assert.equal(String(stored.project), String(fixture.projects[1]._id));
 			assert.equal(stored.updatedAt.toISOString(), outcome.item.version);
@@ -127,7 +128,7 @@ test('Obsidian-linked search moves persist without export rollback or stale-vaul
 			assert.equal(stored.crawl_enabled, record.before.crawl_enabled);
 			assert.equal(String(stored.obsidian_source.connection_id), String(fixture.destination._id));
 			assert.notEqual(String(stored.obsidian_source.file_id), String(record.oldFile._id));
-			const previous = await ObsidianFile.findById(record.oldFile._id).read('primary').lean();
+			const previous = await ObsidianFile.findOneAndUpdate({ _id: record.oldFile._id }, { $inc: { __v: 0 } }, { returnDocument: 'after', timestamps: false }).lean();
 			assert.equal(previous.in_trash, true);
 			assert.equal(previous.projection_detached, true);
 			assert.equal(await record.Model.countDocuments({ host_id: fixture.hostId }), 1);
@@ -146,7 +147,7 @@ test('Obsidian-linked search moves persist without export rollback or stale-vaul
 			assert.equal(result.results[0].file.in_trash, true);
 			assert.match(result.results[0].change.conflict_reason, /moved to another project/);
 			assert.equal(result.results[1].duplicate, true);
-			assert.deepEqual(await record.Model.findById(record.id).read('primary').lean(), record.moved);
+			assert.deepEqual(await record.Model.findOneAndUpdate({ _id: record.id }, { $inc: { __v: 0 } }, { returnDocument: 'after', timestamps: false }).lean(), record.moved);
 		}
 		const lateUpload = await fixture.upload(fixture.source, originalNote.oldFile, '# Late offline content');
 		const late = await applyMutations(fixture.user._id, fixture.hostId, fixture.source._id, { mutations: [{ operation_id: 'late-upload', operation: 'update', file_id: originalNote.oldFile._id, path: originalNote.oldFile.path, upload_id: lateUpload._id, base_revision: 1, modified_at: new Date(Date.now() + 60_000) }] });
@@ -158,14 +159,14 @@ test('Obsidian-linked search moves persist without export rollback or stale-vaul
 		for (const [index, [, , , update]] of fixture.specs.entries()) {
 			const record = fixture.records[index];
 			const changed = await update(fixture.hostId, record.id, { title: `Changed ${record.type}`, tags: ['new-tag'] });
-			const stored = await record.Model.findById(record.id).read('primary').lean();
+			const stored = await record.Model.findOneAndUpdate({ _id: record.id }, { $inc: { __v: 0 } }, { returnDocument: 'after', timestamps: false }).lean();
 			assert.equal(stored.title, changed.title);
 			assert.deepEqual(stored.tags, ['new-tag']);
 			assert.equal(stored.updatedAt.toISOString(), changed.updatedAt.toISOString());
 			const raw = await getMarkdownContent(fixture.hostId, stored.obsidian_source.file_id);
 			assert.equal(syncTest.parsedMarkdown(raw, 'Record.md').title, changed.title);
 			await syncStreamientItem(record.type, record.id, fixture.hostId, { item: record.before });
-			assert.equal((await record.Model.findById(record.id).read('primary').lean()).title, changed.title);
+			assert.equal((await record.Model.findOneAndUpdate({ _id: record.id }, { $inc: { __v: 0 } }, { returnDocument: 'after', timestamps: false }).lean()).title, changed.title);
 		}
 		const tools = noteTools({ get: async (url) => (await fixture.noteRequest('get', url)).body, put: async (url, body) => (await fixture.noteRequest('put', url, body)).body });
 		const before = (await tools.read_note.handler({ id: String(originalNote.id) })).structuredContent.data;
@@ -187,13 +188,13 @@ test('Obsidian-linked search moves persist without export rollback or stale-vaul
 		assert.equal(after.obsidian_source.file_id, before.obsidian_source.file_id);
 		assert.equal((await fixture.noteRequest('get', `/notes/${originalNote.id}?include_markdown=true`, {}, 'other-tenant')).statusCode, 404);
 		assert.equal((await fixture.noteRequest('put', `/notes/${originalNote.id}`, { markdown_content: '# Wrong tenant' }, 'other-tenant')).statusCode, 404);
-		assert.match((await Note.findById(originalNote.id).read('primary').lean()).text_content, /Corrected body/);
+		assert.match((await Note.findOneAndUpdate({ _id: originalNote.id }, { $inc: { __v: 0 } }, { returnDocument: 'after', timestamps: false }).lean()).text_content, /Corrected body/);
 	});
 
 	await t.test('moves to an unsynced project, retries, and later exports without duplicating records', async () => {
 		await fixture.move(fixture.projects[1], fixture.projects[2]);
 		for (const record of fixture.records) {
-			const stored = await record.Model.findById(record.id).read('primary').lean();
+			const stored = await record.Model.findOneAndUpdate({ _id: record.id }, { $inc: { __v: 0 } }, { returnDocument: 'after', timestamps: false }).lean();
 			assert.equal(String(stored.project), String(fixture.projects[2]._id));
 			assert.equal(stored.obsidian_source?.file_id, undefined);
 			assert.equal(await syncStreamientItem(record.type, record.id, fixture.hostId, { item: stored }), null);
@@ -202,13 +203,13 @@ test('Obsidian-linked search moves persist without export rollback or stale-vaul
 		for (const record of fixture.records) {
 			await syncStreamientItem(record.type, record.id, fixture.hostId);
 			await syncStreamientItem(record.type, record.id, fixture.hostId);
-			const stored = await record.Model.findById(record.id).read('primary').lean();
+			const stored = await record.Model.findOneAndUpdate({ _id: record.id }, { $inc: { __v: 0 } }, { returnDocument: 'after', timestamps: false }).lean();
 			assert.equal(String(stored.obsidian_source.connection_id), String(connection._id));
 			assert.equal(await ObsidianFile.countDocuments({ host_id: fixture.hostId, [record.type]: record.id, in_trash: false }), 1);
 			assert.equal(await record.Model.countDocuments({ host_id: fixture.hostId }), 1);
 		}
 		await fixture.move(fixture.projects[2], fixture.projects[0]);
-		for (const record of fixture.records) assert.equal(String((await record.Model.findById(record.id).read('primary').lean()).project), String(fixture.projects[0]._id));
+		for (const record of fixture.records) assert.equal(String((await record.Model.findOneAndUpdate({ _id: record.id }, { $inc: { __v: 0 } }, { returnDocument: 'after', timestamps: false }).lean()).project), String(fixture.projects[0]._id));
 	});
 
 	await t.test('recovers an interrupted source detachment on the next destination export batch', async () => {
@@ -216,9 +217,9 @@ test('Obsidian-linked search moves persist without export rollback or stale-vaul
 		const moved = await Note.findOneAndUpdate({ _id: record.id, host_id: fixture.hostId }, { $set: { project: fixture.projects[1]._id, is_indexed: false } }, { returnDocument: 'after' });
 		const failure = mock.method(ObsidianChange, 'create', async () => { throw new Error('Temporary change-log failure'); });
 		try { await assert.rejects(syncStreamientItem('note', record.id, fixture.hostId, { item: moved }), /Temporary change-log failure/); } finally { failure.mock.restore(); }
-		assert.equal(String((await Note.findById(record.id).read('primary').lean()).project), String(fixture.projects[1]._id));
+		assert.equal(String((await Note.findOneAndUpdate({ _id: record.id }, { $inc: { __v: 0 } }, { returnDocument: 'after', timestamps: false }).lean()).project), String(fixture.projects[1]._id));
 		await materializeProjectExports(fixture.hostId, fixture.destination._id);
-		const restored = await Note.findById(record.id).read('primary').lean();
+		const restored = await Note.findOneAndUpdate({ _id: record.id }, { $inc: { __v: 0 } }, { returnDocument: 'after', timestamps: false }).lean();
 		assert.equal(String(restored.obsidian_source.connection_id), String(fixture.destination._id));
 		assert.equal(await ObsidianFile.countDocuments({ host_id: fixture.hostId, note: record.id, in_trash: false }), 1);
 		assert.equal(await Note.countDocuments({ host_id: fixture.hostId }), 1);

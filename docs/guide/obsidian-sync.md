@@ -85,15 +85,17 @@ Every file has a server revision. When both sides changed from the same older re
 
 Project settings shows the conflict history. API responses include the losing revision identifier and authenticated download URL while that recovery snapshot is retained.
 
-Duplicate operations, repeated file hashes, and changes relayed through Obsidian Sync are idempotent. Renaming onto an unrelated existing path creates a conflict-suffixed file instead of destroying either file.
+Duplicate operations, repeated file hashes, and changes relayed through Obsidian Sync are idempotent. Concurrent retries of an upload chunk keep one accepted copy, and cleanup preserves active uploads. Renaming onto an unrelated existing path creates a conflict-suffixed file instead of destroying either file.
 
 ## Trash and Disconnect
 
-Deletes move the file and projected Streamient item to trash. Restoring on either side restores the other side. File bytes are removed after the 30-day retention period, while a lightweight tombstone prevents stale offline devices from silently resurrecting old data.
+Deletes move the file and projected Streamient item to trash. Restoring on either side restores the other side. After the 30-day retention period, trashed files lose their content links and expired revision history is removed. A lightweight tombstone prevents stale offline devices from silently resurrecting old data. Restored files keep their content.
+
+Encrypted blobs are currently retained to protect content that another file or upload may still reference. Deleted content can therefore continue to use server disk space; automatic removal of unreferenced blobs is deferred until reference creation and cleanup can be coordinated safely.
 
 Signing out stops every profile on that device while retaining profile configuration and existing Streamient knowledge. Each profile can reconnect its own OAuth account later.
 
-Project settings also offers **Remove connection**. This removes the encrypted vault mirror, attachments, revisions, and sync history while retaining projected Streamient Notes, Memories, and saved URLs as normal project content.
+Project settings also offers **Remove connection**. This removes the vault mirror records, attachment links, revisions, and sync history while retaining projected Streamient Notes, Memories, and saved URLs as normal project content. Encrypted bytes follow the retention policy above so removing one connection cannot erase another connection’s shared content.
 
 ## Privacy
 

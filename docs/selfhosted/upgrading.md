@@ -53,6 +53,22 @@ curl https://your-instance.com/api/v1/urls \
 
 Breaking changes, if any, are documented in the [GitHub releases](https://github.com/streamient/streamient/releases). Check the release notes before upgrading to a new major version.
 
+### Account-scoped email Message-IDs
+
+After every app and worker replica runs the new release, preview the email index migration:
+
+```bash
+docker compose exec app node scripts/migrate-email-message-id-index.mjs
+```
+
+Apply it only after the preview identifies the expected legacy global Message-ID index:
+
+```bash
+docker compose exec app node scripts/migrate-email-message-id-index.mjs --apply --confirm-all-replicas-upgraded
+```
+
+The migration builds the account-scoped unique index before removing the old global unique index. It does not remove email records. If duplicate records prevent index creation, it stops and keeps the existing index; resolve those records before retrying.
+
 ### Typesense-backed Trash retention
 
 After every app and scheduler replica runs the new release:

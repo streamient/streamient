@@ -5,7 +5,9 @@ import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
 import { Url } from '../model/url.js';
 import { Email } from '../model/email.js';
+import { Project } from '../model/project.js';
 import { batchRestore, emptyTrash, getTrashCount, listTrash, permanentDelete, restoreItem } from '../services/trash_service.js';
+import { mockTenantWork } from './helpers/tenant-work.js';
 
 function cloneDoc(doc) {
 	return { ...doc };
@@ -88,18 +90,21 @@ describe('Trash service Typesense bulk writes', () => {
 	});
 
 	it('restores selected items with one bulk index call per type', async () => {
+		const restoreTenant = mockTenantWork();
 		const originals = {
 			noteFindOneAndUpdate: Note.findOneAndUpdate,
 			noteUpdateMany: Note.updateMany,
 			memoryFindOneAndUpdate: Memory.findOneAndUpdate,
 			memoryUpdateMany: Memory.updateMany,
+			projectFindOneAndUpdate: Project.findOneAndUpdate,
+			projectUpdateOne: Project.updateOne,
 		};
 		const notes = new Map([
-			['note-1', { _id: 'note-1', host_id: 'host-1', title: 'Note 1', in_trash: true }],
-			['note-2', { _id: 'note-2', host_id: 'host-1', title: 'Note 2', in_trash: true }],
+			['note-1', { _id: 'note-1', host_id: 'host-1', project: 'project-1', title: 'Note 1', in_trash: true }],
+			['note-2', { _id: 'note-2', host_id: 'host-1', project: 'project-1', title: 'Note 2', in_trash: true }],
 		]);
 		const memories = new Map([
-			['memory-1', { _id: 'memory-1', host_id: 'host-1', title: 'Memory 1', in_trash: true }],
+			['memory-1', { _id: 'memory-1', host_id: 'host-1', project: 'project-1', title: 'Memory 1', in_trash: true }],
 		]);
 		const indexCalls = [];
 		const stateUpdates = [];
@@ -120,6 +125,8 @@ describe('Trash service Typesense bulk writes', () => {
 		};
 		Note.updateMany = async (query, update, options) => stateUpdates.push({ type: 'notes', query, update, options });
 		Memory.updateMany = async (query, update, options) => stateUpdates.push({ type: 'memory', query, update, options });
+		Project.findOneAndUpdate = () => ({ select() { return this; }, lean: async () => ({ _id: 'project-1', host_id: 'host-1' }) });
+		Project.updateOne = async () => ({ matchedCount: 1, modifiedCount: 1 });
 
 		try {
 			const restored = await batchRestore('host-1', [
@@ -140,82 +147,74 @@ describe('Trash service Typesense bulk writes', () => {
 			]);
 			assert.deepEqual(stateUpdates.map((call) => call.query), [
 				{ _id: { $in: ['note-1', 'note-2'] }, host_id: 'host-1' },
-				{ _id: { $in: ['note-1', 'note-2'] }, host_id: 'host-1' },
-				{ _id: { $in: ['memory-1'] }, host_id: 'host-1' },
 				{ _id: { $in: ['memory-1'] }, host_id: 'host-1' },
 			]);
-			assert.deepEqual(stateUpdates.map((call) => call.update.$set.is_indexed), [false, true, false, true]);
+			// bulkIndexDocuments now marks indexed via the claim protocol; only the
+			// pending pre-step remains here, so there is no unconditional mark=true.
+			assert.deepEqual(stateUpdates.map((call) => call.update.$set.is_indexed), [false, false]);
 		} finally {
 			Note.findOneAndUpdate = originals.noteFindOneAndUpdate;
 			Note.updateMany = originals.noteUpdateMany;
 			Memory.findOneAndUpdate = originals.memoryFindOneAndUpdate;
 			Memory.updateMany = originals.memoryUpdateMany;
+			Project.findOneAndUpdate = originals.projectFindOneAndUpdate;
+			Project.updateOne = originals.projectUpdateOne;
+			restoreTenant();
 		}
 	});
 
-	it('empty trash removes Typesense docs once per non-empty type', async () => {
+	it('empty trash uses returned deletes and preserves a restored item', async (t) => {
 		const activeId = '507f1f77bcf86cd799439011';
-		const originals = {
-			noteFind: Note.find,
-			noteDeleteMany: Note.deleteMany,
-			noteUpdateMany: Note.updateMany,
-			memoryFind: Memory.find,
-			memoryDeleteMany: Memory.deleteMany,
-			urlFind: Url.find,
-			urlDeleteMany: Url.deleteMany,
-			emailFind: Email.find,
-			emailDeleteMany: Email.deleteMany,
-		};
 		const removeCalls = [];
 		const graphCalls = [];
-		const deleteQueries = [];
 		const indexCalls = [];
 		const stateUpdates = [];
-
-		Note.find = (query) => chainFindIds(query.in_trash ? ['note-1', 'note-2'] : query._id?.$in?.includes(activeId) ? [activeId] : []);
-		Memory.find = (query) => chainFindIds(query.in_trash ? ['memory-1'] : []);
-		Url.find = () => chainFindIds([]);
-		Email.find = (query) => chainFindIds(query.in_trash ? ['email-1'] : []);
-		Note.deleteMany = async (query) => deleteQueries.push({ type: 'notes', query });
-		Memory.deleteMany = async (query) => deleteQueries.push({ type: 'memory', query });
-		Url.deleteMany = async (query) => deleteQueries.push({ type: 'urls', query });
-		Email.deleteMany = async (query) => deleteQueries.push({ type: 'emails', query });
-		Note.updateMany = async (query, update) => stateUpdates.push({ query, update });
-
-		try {
-			const result = await emptyTrash('host-1', {
-				exportTrashDocuments: async (hostId, type) => type === 'notes' ? [{ source_id: 'note-1' }, { source_id: 'note-orphan' }, { source_id: activeId }] : [],
-				removeDocumentsByFilter: async (hostId, type, filter, options) => removeCalls.push({ hostId, type, filter, options }),
-				removeGraphLinks: async (hostId, ids) => graphCalls.push({ hostId, ids }),
-				bulkIndexDocuments: async (hostId, type, docs, options) => {
-					indexCalls.push({ hostId, type, ids: docs.map((doc) => String(doc._id)), options });
-					return docs.map((doc) => ({ id: String(doc._id), success: true }));
-				},
-			});
-
-			assert.deepEqual(result, { deleted: 5 });
-			assert.deepEqual(removeCalls.map((call) => call.type), ['notes', 'memory', 'urls', 'emails']);
-			assert.ok(removeCalls.every((call) => call.filter === 'in_trash:=true'));
-			assert.ok(removeCalls.every((call) => call.options.batch_size === 250));
-			assert.deepEqual(graphCalls[0], { hostId: 'host-1', ids: ['note-1', 'note-orphan', 'note-2'] });
-			assert.deepEqual(indexCalls, [{ hostId: 'host-1', type: 'notes', ids: [activeId], options: { removeExisting: false } }]);
-			assert.deepEqual(stateUpdates.map((call) => call.update.$set.is_indexed), [false, true]);
-			assert.equal(deleteQueries.length, 4);
-		} finally {
-			Note.find = originals.noteFind;
-			Note.deleteMany = originals.noteDeleteMany;
-			Note.updateMany = originals.noteUpdateMany;
-			Memory.find = originals.memoryFind;
-			Memory.deleteMany = originals.memoryDeleteMany;
-			Url.find = originals.urlFind;
-			Url.deleteMany = originals.urlDeleteMany;
-			Email.find = originals.emailFind;
-			Email.deleteMany = originals.emailDeleteMany;
+		for (const [Model, ids] of [[Note, ['note-1', 'note-2']], [Memory, ['memory-1']], [Url, []], [Email, ['email-1']]]) {
+			t.mock.method(Model, 'findOneAndDelete', async () => ids.length ? { _id: ids.shift() } : null);
+			t.mock.method(Model, 'findOneAndUpdate', (filter) => ({ lean: async () => Model === Note && filter._id === activeId ? { _id: activeId } : null }));
 		}
+		t.mock.method(Note, 'updateMany', async (query, update) => stateUpdates.push({ query, update }));
+		const result = await emptyTrash('host-1', {
+			exportTrashDocuments: async (hostId, type) => type === 'notes' ? [{ source_id: 'note-1' }, { source_id: 'note-orphan' }, { source_id: activeId }] : [],
+			removeDocumentsByFilter: async (hostId, type) => removeCalls.push(type),
+			removeGraphLinks: async (hostId, ids) => graphCalls.push(ids),
+			bulkIndexDocuments: async (hostId, type, docs) => { indexCalls.push(...docs.map((doc) => String(doc._id))); return docs.map((doc) => ({ id: String(doc._id), success: true })); },
+		});
+		assert.deepEqual(result, { deleted: 5 });
+		assert.deepEqual(removeCalls, ['notes', 'memory', 'urls', 'emails']);
+		assert.deepEqual(graphCalls[0], ['note-1', 'note-orphan', 'note-2']);
+		assert.deepEqual(indexCalls, [activeId]);
+		// bulkIndexDocuments marks indexed via the claim protocol; only the
+		// pending pre-step remains here.
+		assert.deepEqual(stateUpdates.map((call) => call.update.$set.is_indexed), [false]);
+	});
+
+	it('stale permanent-delete repair preserves a concurrent live publication', async (t) => {
+		const id = '507f1f77bcf86cd799439011';
+		const old = { _id: id, host_id: 'host-1', in_trash: false, updatedAt: new Date(1) };
+		let indexed = true;
+		let chunks = [];
+		t.mock.method(Note, 'findOneAndDelete', async () => null);
+		t.mock.method(Note, 'findOneAndUpdate', () => ({ lean: async () => {
+			chunks = [{ id: 'fresh-live', in_trash: false }];
+			return old;
+		} }));
+		t.mock.method(Note, 'updateMany', async (_filter, update) => { indexed = update.$set.is_indexed; });
+		const outcome = await permanentDelete('host-1', 'notes', id, {
+			removeGraphLinks: async (_host, ids) => assert.deepEqual(ids, []),
+			bulkRemoveDocuments: async () => assert.fail('live rows must not receive broad source removal'),
+			bulkIndexDocuments: async () => {
+				indexed = true; // The fresh publisher marks after repair queues its older snapshot.
+				return [{ id, success: false, error: 'stale' }];
+			},
+		});
+		assert.equal(outcome.repaired, true);
+		assert.equal(indexed, true);
+		assert.deepEqual(chunks.map((chunk) => chunk.id), ['fresh-live']);
 	});
 
 	it('permanent delete is idempotent and always cleans the source ID', async () => {
-		const originals = { findOneAndDelete: Note.findOneAndDelete, findOne: Note.findOne };
+		const originals = { findOneAndDelete: Note.findOneAndDelete, findOne: Note.findOne, atomic: Note.findOneAndUpdate };
 		const removeCalls = [];
 		const graphCalls = [];
 		let present = true;
@@ -223,7 +222,7 @@ describe('Trash service Typesense bulk writes', () => {
 			if (present) return { _id: 'note-1' };
 			throw Object.assign(new Error('invalid ObjectId'), { name: 'CastError' });
 		};
-		Note.findOne = () => ({ read: () => ({ lean: async () => { throw Object.assign(new Error('invalid ObjectId'), { name: 'CastError' }); } }) });
+		Note.findOneAndUpdate = () => ({ lean: async () => { throw Object.assign(new Error('invalid ObjectId'), { name: 'CastError' }); } });
 
 		try {
 			const deps = {
@@ -247,6 +246,7 @@ describe('Trash service Typesense bulk writes', () => {
 		} finally {
 			Note.findOneAndDelete = originals.findOneAndDelete;
 			Note.findOne = originals.findOne;
+			if (originals.atomic) Note.findOneAndUpdate = originals.atomic;
 		}
 	});
 
@@ -254,8 +254,8 @@ describe('Trash service Typesense bulk writes', () => {
 		const originals = { findOneAndUpdate: Note.findOneAndUpdate, findOne: Note.findOne };
 		const removeCalls = [];
 		const graphCalls = [];
-		Note.findOneAndUpdate = async () => { throw Object.assign(new Error('invalid ObjectId'), { name: 'CastError' }); };
-		Note.findOne = () => ({ read: () => ({ lean: async () => { throw Object.assign(new Error('invalid ObjectId'), { name: 'CastError' }); } }) });
+		const castError = Object.assign(new Error('invalid ObjectId'), { name: 'CastError' });
+		Note.findOneAndUpdate = () => ({ lean: async () => { throw castError; }, then(resolve, reject) { return Promise.reject(castError).then(resolve, reject); } });
 
 		try {
 			await assert.rejects(
@@ -270,6 +270,7 @@ describe('Trash service Typesense bulk writes', () => {
 		} finally {
 			Note.findOneAndUpdate = originals.findOneAndUpdate;
 			Note.findOne = originals.findOne;
+			if (originals.atomic) Note.findOneAndUpdate = originals.atomic;
 		}
 	});
 });

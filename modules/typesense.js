@@ -1,14 +1,19 @@
 import { acquireTenantWork } from './tenancy.js';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import Typesense from 'typesense';
 import config, { getPlanLlmConfig } from '../config.js';
 import { emitToTenant } from './socket.js';
-import { cacheDelete, cacheGet, cacheSet } from './cache.js';
+import { cacheDelete, cacheGet, cacheSet, getMongoCoordinator } from './cache.js';
 import { normalizeLlmScope, resolveLlmKeyContext } from '../services/byo_ai_service.js';
 import { sanitizeDeep } from './text_sanitize.js';
 import { SearchFilters } from './search_filters.js';
 import { buildEmailExcerpt } from './email_display.js';
 import { createLogger } from './logger.js';
+import { Note } from '../model/note.js';
+import { Memory } from '../model/memory.js';
+import { Url } from '../model/url.js';
+import { Email } from '../model/email.js';
+import { ObsidianFile } from '../model/obsidian_file.js';
 
 const log = createLogger('typesense');
 
@@ -49,6 +54,15 @@ const _trash_query_by = {
 	urls: 'title',
 	emails: 'subject',
 };
+// Claim-managed Mongo-backed types. `pages` are populated by the crawler and
+// are not claim-stamped, so they are deliberately absent here.
+const INDEXED_TYPE_MODELS = {
+	notes: Note,
+	memory: Memory,
+	urls: Url,
+	emails: Email,
+	vault_files: ObsidianFile,
+};
 const TYPESENSE_MAX_PAGE_SIZE = 250;
 const ensuredCollectionHosts = new Set();
 
@@ -57,6 +71,7 @@ function chunkMetadataFields() {
 		{ name: 'source_id', type: 'string', facet: true },
 		{ name: 'chunk_index', type: 'int32', optional: true },
 		{ name: 'chunk_count', type: 'int32', optional: true },
+		{ name: 'claim', type: 'string', optional: true },
 	];
 }
 
@@ -77,6 +92,18 @@ function resolveIncludeFields(includeFields, type) {
 export function getConversationModelId(hostId, userId, llmScope = 'global') {
 	const base = `convo-${hostId}-${userId}`;
 	return normalizeLlmScope(llmScope) === 'email' ? `${base}-email` : base;
+}
+
+// Typesense generates conversation IDs as UUID v4 (`sole::uuid4().str()`).
+// Reject anything else before it reaches a filter so cross-tenant reads and
+// deletes fail closed instead of being widened by injected filter syntax.
+const CONVERSATION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function assertValidConversationId(conversationId) {
+	if (typeof conversationId !== 'string' || !CONVERSATION_ID_RE.test(conversationId)) {
+		throw Object.assign(new Error('Invalid conversation ID'), { status: 400, code: 'invalid_conversation_id' });
+	}
+	return conversationId;
 }
 
 const _token_separators = ['+', '-', '@', '.', '_', ' ', '=', '\\', ';', ',', ':', "'", '|', '&', '(', ')', '[', ']', '{', '}', '<', '>', '/', '?', '!', '#', '$', '%', '^', '*', '~', '`', '"', '\n', '\t', '\r', '\f', '\v'];
@@ -248,7 +275,12 @@ export function mergeIndexedTextChunks(chunks = []) {
 	return { text_content: textContent, index_complete: indexComplete };
 }
 
-function chunkTypesenseDoc(type, doc) {
+function claimChunkId(sourceId, index, token) {
+	if (!token) return index === 0 ? sourceId : `${sourceId}_chunk_${index}`;
+	return index === 0 ? `${sourceId}_${token}` : `${sourceId}_${token}_chunk_${index}`;
+}
+
+function chunkTypesenseDoc(type, doc, token) {
 	const fields = _chunk_fields[type];
 	// Strip control/separator chars so they never reach the Typesense index
 	// (and thus never reach search results / MCP clients).
@@ -270,10 +302,11 @@ function chunkTypesenseDoc(type, doc) {
 	return chunkSpecs.map((spec, index) => {
 		const chunkDoc = {
 			...doc,
-			id: index === 0 ? sourceId : `${sourceId}_chunk_${index}`,
+			id: claimChunkId(sourceId, index, token),
 			source_id: sourceId,
 			chunk_index: index,
 			chunk_count: chunkSpecs.length,
+			...(token ? { claim: token } : {}),
 		};
 
 		for (const field of fields) {
@@ -481,8 +514,8 @@ export function toTypesenseDoc(type, doc) {
 	}
 }
 
-export function toTypesenseDocs(type, doc) {
-	return chunkTypesenseDoc(type, toTypesenseDoc(type, doc));
+export function toTypesenseDocs(type, doc, token) {
+	return chunkTypesenseDoc(type, toTypesenseDoc(type, doc), token);
 }
 const schemas = {
 	notes: (host_id) => ({
@@ -734,8 +767,8 @@ export async function ensureCollections(host_id) {
  * `id` and no `_id` — otherwise transform it. Skipping the transform would
  * drop `project_id`, which silently breaks project-scoped counts/filters.
  */
-export function toIndexDocs(type, doc) {
-	return doc.id && !doc._id ? chunkTypesenseDoc(type, doc) : toTypesenseDocs(type, doc);
+export function toIndexDocs(type, doc, token) {
+	return doc.id && !doc._id ? chunkTypesenseDoc(type, doc, token) : toTypesenseDocs(type, doc, token);
 }
 
 function sourceIdForIndexDocs(type, doc) {
@@ -797,8 +830,16 @@ function summarizeImportResultErrors(results) {
  * Bulk-index source documents into a collection.
  * Raw Mongo/Mongoose docs are transformed and chunked first; the return value
  * reports success per source document, not per chunk.
+ *
+ * Mongo-backed types (notes/memory/urls/emails/vault_files) go through the
+ * shared claim/version-conditional protocol so a stale or concurrent publisher
+ * can never erase a newer publisher's claim-unique chunks or mark a concurrent
+ * edit indexed. Non-Mongo types (e.g. crawler pages) keep the legacy path.
  */
 export async function bulkIndexDocuments(host_id, type, docs, options = {}) {
+	const model = options.model || INDEXED_TYPE_MODELS[type];
+	if (model) return publishClaimedDocuments(host_id, type, model, docs, options);
+
 	const sourceDocs = (Array.isArray(docs) ? docs : [docs]).filter(Boolean);
 	if (!sourceDocs.length) return [];
 
@@ -823,8 +864,8 @@ export async function bulkIndexDocuments(host_id, type, docs, options = {}) {
 	return summarizeSourceImportResults(sourceEntries, results);
 }
 
-export async function indexDocument(host_id, type, doc) {
-	return bulkIndexDocuments(host_id, type, [doc]).then((results) => results[0] || null);
+export async function indexDocument(host_id, type, doc, options = {}) {
+	return bulkIndexDocuments(host_id, type, [doc], options).then((results) => results[0] || null);
 }
 
 /**
@@ -857,11 +898,199 @@ export async function importDocuments(host_id, type, docs, action = 'upsert') {
 }
 
 /**
- * Remove a document from a collection.
+ * Remove a document's stale chunks from a collection without ever touching a
+ * newer publisher's claim-unique chunks. When `options.claim` is provided, only
+ * chunks stamped with that claim token are removed; otherwise only legacy
+ * claim-less deterministic chunks (pre-claim publications) are enumerated and
+ * removed by their exact IDs.
  */
-export async function removeDocument(host_id, type, docId) {
-	const results = await bulkRemoveDocuments(host_id, type, [docId]);
-	return results[0] || null;
+export async function removeDocument(host_id, type, docId, options = {}) {
+	const sourceId = String(docId);
+	if (!sourceId) return null;
+	if (options.claim) {
+		await ensureCollections(host_id);
+		await removeDocumentsBySourceIds(host_id, type, [sourceId], { claim: options.claim });
+	} else {
+		await removeLegacyClaimlessChunks(host_id, type, sourceId);
+	}
+	return null;
+}
+
+/**
+ * Delete exact documents by their Typesense IDs (never by a broad source_id
+ * filter). Used for legacy claim-less cleanup so a stale publisher can only
+ * remove the deterministic pre-claim IDs it enumerated, never a newer
+ * publisher's claim-unique IDs.
+ */
+export async function removeDocumentsByIds(host_id, type, ids, options = {}) {
+	const safeIds = [...new Set((ids || []).map((id) => String(id)).filter(Boolean))];
+	if (!safeIds.length) return null;
+	const ts = getTypesenseClient();
+	const collectionName = buildCollectionName(type, host_id);
+	return withTypesenseResilience(
+		`delete by ids ${collectionName} (${safeIds.length})`,
+		async () => {
+			try {
+				return await ts.collections(collectionName).documents().delete({ filter_by: `id:=[${safeIds.map(exactFilterValue).join(',')}]`, batch_size: 250, ...options });
+			} catch (err) {
+				if (err?.httpStatus === 404) return null;
+				throw err;
+			}
+		},
+	);
+}
+
+/**
+ * Remove legacy deterministic chunks (pre-claim publications with no `claim`
+ * field) for a source. Enumerates exactly which chunks are claim-less, then
+ * deletes only those IDs — never an unqualified source_id delete, which could
+ * erase a newer publisher's claim-unique chunks that happened to be indexed in
+ * between a first claim and this cleanup.
+ */
+async function removeLegacyClaimlessChunks(host_id, type, sourceId) {
+	try {
+		const ts = getTypesenseClient();
+		const collectionName = buildCollectionName(type, host_id);
+		const queryBy = type === 'emails' ? 'subject' : 'title';
+		const legacyIds = [];
+		let page = 1;
+		while (true) {
+			const result = await withTypesenseResilience(
+				`list claimless chunks ${collectionName}`,
+				() => ts.collections(collectionName).documents().search({
+					q: '*',
+					query_by: queryBy,
+					filter_by: `source_id:=${exactFilterValue(sourceId)}`,
+					include_fields: 'id,claim',
+					per_page: 250,
+					page,
+				}),
+				{ fallback: { hits: [], found: 0 } },
+			);
+			const hits = result?.hits || [];
+			for (const hit of hits) {
+				if (!hit?.document?.claim) legacyIds.push(String(hit.document.id));
+			}
+			if (!hits.length || hits.length < 250 || legacyIds.length >= Number(result?.found || 0)) break;
+			page++;
+		}
+		if (legacyIds.length) await removeDocumentsByIds(host_id, type, legacyIds);
+	} catch (err) {
+		// Legacy cleanup is best-effort: a failure to enumerate old claim-less
+		// chunks must never abort a fresh publication.
+		log.warn({ err, sourceId, type, host_id }, 'Legacy claim-less chunk cleanup skipped');
+	}
+}
+
+/**
+ * Shared claim/version-conditional publication for Mongo-backed types. Claims
+ * each source row (atomically, version-guarded), imports claim-unique chunks,
+ * conditionally marks indexed, and reconciles stale claims. Returns one
+ * `{ id, success, error }` per source document.
+ */
+export async function publishClaimedDocuments(host_id, type, model, docs, options = {}) {
+	const sourceDocs = (Array.isArray(docs) ? docs : [docs]).filter(Boolean);
+	if (!sourceDocs.length || !model) return [];
+	await ensureCollections(host_id);
+
+	const sourceIdOf = (doc) => String(doc?._id ?? doc?.id ?? '');
+	const results = new Map();
+	const sourceEntries = [];
+	const chunkCounts = new Map();
+	const claimedDocs = [];
+
+	for (const doc of sourceDocs) {
+		const sourceId = sourceIdOf(doc);
+		if (!sourceId) continue;
+		const token = randomUUID();
+		const version = doc.updatedAt ? { updatedAt: doc.updatedAt } : { updatedAt: { $exists: false } };
+		let prev;
+		try {
+			prev = await model.findOneAndUpdate(
+				{ _id: doc._id, host_id, ...version },
+				{ $set: { index_claim: token } },
+				{ timestamps: false, returnDocument: 'before' },
+			).select('index_claim').lean();
+		} catch (err) {
+			if (err?.name !== 'CastError') throw err;
+			prev = null;
+		}
+		if (!prev) {
+			// Stale or deleted: a newer version is already queued.
+			results.set(sourceId, { id: sourceId, success: false, error: 'stale' });
+			continue;
+		}
+		if (prev.index_claim) {
+			await removeDocumentsBySourceIds(host_id, type, [sourceId], { claim: prev.index_claim });
+		} else {
+			await removeLegacyClaimlessChunks(host_id, type, sourceId);
+		}
+		const chunks = toTypesenseDocs(type, doc, token);
+		chunkCounts.set(sourceId, chunks.length);
+		for (const chunk of chunks) sourceEntries.push({ sourceId, doc: chunk });
+		claimedDocs.push({ doc, sourceId, token, version });
+	}
+
+	if (!sourceEntries.length) {
+		return sourceDocs.map((doc) => {
+			const id = sourceIdOf(doc);
+			return results.get(id) || { id, success: false, error: 'stale' };
+		});
+	}
+
+	const importResults = await importDocuments(host_id, type, sourceEntries.map((entry) => entry.doc), options.action || 'upsert');
+
+	const successCounts = new Map();
+	const failedIds = new Map();
+	for (let i = 0; i < sourceEntries.length; i++) {
+		const entry = sourceEntries[i];
+		if (importResults[i]?.success) {
+			successCounts.set(entry.sourceId, (successCounts.get(entry.sourceId) || 0) + 1);
+		} else {
+			failedIds.set(entry.sourceId, importResults[i]?.error || MISSING_IMPORT_RESULT_ERROR);
+		}
+	}
+
+	const staleDocs = [];
+	for (const { doc, sourceId, token, version } of claimedDocs) {
+		const allImported = (successCounts.get(sourceId) || 0) === chunkCounts.get(sourceId) && !failedIds.has(sourceId);
+		if (!allImported) {
+			results.set(sourceId, { id: sourceId, success: false, error: failedIds.get(sourceId) || 'import_failed' });
+			continue;
+		}
+		const marked = await model.findOneAndUpdate(
+			{ _id: doc._id, host_id, ...version, index_claim: token },
+			{ $set: { is_indexed: true } },
+			{ timestamps: false, returnDocument: 'after' },
+		).select('_id').lean();
+		if (marked) {
+			results.set(sourceId, { id: sourceId, success: true, error: null });
+		} else {
+			staleDocs.push({ doc, sourceId, token, version });
+		}
+	}
+
+	// Reconcile lost claims: remove only this worker's own chunks and requeue
+	// conditionally (still holding the claim + version) so a newer publisher's
+	// mark is never overwritten.
+	for (const { doc, sourceId, token, version } of staleDocs) {
+		await removeDocumentsBySourceIds(host_id, type, [sourceId], { claim: token });
+		await model.findOneAndUpdate(
+			{ _id: doc._id, host_id, ...version, index_claim: token },
+			{ $set: { is_indexed: false } },
+			{ timestamps: false },
+		).select('_id').lean();
+		results.set(sourceId, { id: sourceId, success: false, error: 'stale' });
+	}
+
+	if (staleDocs.length) {
+		log.warn({ staleCount: staleDocs.length, type, host_id }, 'Streamient indexer: repaired lost publications');
+	}
+
+	return sourceDocs.map((doc) => {
+		const id = sourceIdOf(doc);
+		return results.get(id) || { id, success: false, error: null };
+	});
 }
 
 /**
@@ -893,12 +1122,14 @@ export async function removeDocumentsByFilter(host_id, type, filterBy, options =
  * robined ~N/3 writes onto each Typesense node and stalled an entire batch
  * whenever a single node was momentarily slow.
  */
-export async function removeDocumentsBySourceIds(host_id, type, sourceIds) {
+export async function removeDocumentsBySourceIds(host_id, type, sourceIds, options = {}) {
 	const ids = [...new Set((sourceIds || []).map((id) => String(id)).filter(Boolean))];
 	if (!ids.length) return null;
 	const ts = getTypesenseClient();
 	const collectionName = buildCollectionName(type, host_id);
-	const filterBy = `source_id:=[${ids.map(exactFilterValue).join(',')}]`;
+	const filters = [`source_id:=[${ids.map(exactFilterValue).join(',')}]`];
+	if (options.claim) filters.push(`claim:=${exactFilterValue(options.claim)}`);
+	const filterBy = filters.join(' && ');
 	return withTypesenseResilience(
 		`bulk delete ${collectionName} (${ids.length} sources)`,
 		async () => {
@@ -1482,6 +1713,9 @@ export async function reindexHost(host_id, models) {
 
 		const query = { host_id, ...typeQuery };
 		const total = await model.countDocuments(query);
+		// Keep the previous index_claim so a displaced cleanup that races a
+		// reindex still knows which token's chunks to remove; the claim token is
+		// replaced atomically on the next publication, not cleared here.
 		await model.updateMany(query, { $set: { is_indexed: false } }, { timestamps: false });
 		results[type] = { queued: total };
 		log.info({ count: total, type, host_id }, 'Queued docs for scheduler reindex');
@@ -1679,80 +1913,63 @@ export async function runStreamientIndexer(models) {
 		if (!hosts.length) continue;
 
 		for (const { _id: host_id } of hosts) {
-			await ensureCollections(host_id);
-
-			const docs = await model
-				.find({ host_id, ...typeQuery, is_indexed: { $ne: true } })
-				.sort({ updatedAt: -1 })
-				.limit(BATCH_LIMIT)
-				.lean();
-
-			if (!docs.length) continue;
-
-			let progress = hostProgress.get(host_id);
-			if (!progress) {
-				progress = {
-					indexed: 0,
-					by_type: Object.fromEntries(typeModelMap.map((entry) => [entry.type, 0])),
-				};
-				hostProgress.set(host_id, progress);
+			// Serialize indexers for this host so a stale snapshot cannot overwrite a
+			// newer worker's publication or resurrect a deleted row. The lock is best
+			// effort: when the coordinator is unavailable, the reconciliation below
+			// still repairs lost publications against concurrent mutations.
+			let hostLock = null;
+			let coordinatorAvailable = true;
+			try {
+				hostLock = await getMongoCoordinator().acquireLock(`indexer:${host_id}`, { ttlMs: 120000 });
+			} catch (err) {
+				coordinatorAvailable = false;
+				log.warn({ err, host_id }, 'Streamient indexer: host lock unavailable, continuing unsynchronized');
 			}
+			if (coordinatorAvailable && !hostLock) continue;
+			try {
+				await ensureCollections(host_id);
 
-			// Clear existing chunks for the whole batch in ONE bulk delete-by-filter
-			// (not one delete per doc) before re-importing — see removeDocumentsBySourceIds.
-			await removeDocumentsBySourceIds(host_id, type, docs.map((doc) => doc._id.toString()));
+				const docs = await model
+					.find({ host_id, ...typeQuery, is_indexed: { $ne: true } })
+					.sort({ updatedAt: -1 })
+					.limit(BATCH_LIMIT)
+					.lean();
 
-			const tsDocEntries = [];
-			const chunkCounts = new Map();
-			for (const doc of docs) {
-				const sourceId = doc._id.toString();
-				const chunks = toTypesenseDocs(type, doc);
-				chunkCounts.set(sourceId, chunks.length);
-				for (const chunk of chunks) {
-					tsDocEntries.push({ sourceId, doc: chunk });
+				if (!docs.length) continue;
+
+				let progress = hostProgress.get(host_id);
+				if (!progress) {
+					progress = {
+						indexed: 0,
+						by_type: Object.fromEntries(typeModelMap.map((entry) => [entry.type, 0])),
+					};
+					hostProgress.set(host_id, progress);
 				}
-			}
-			const results = await importDocuments(host_id, type, tsDocEntries.map((entry) => entry.doc));
 
-			// Separate successes and failures
-			const successCounts = new Map();
-			const failedIds = new Map();
-			for (let i = 0; i < tsDocEntries.length; i++) {
-				const entry = tsDocEntries[i];
-				if (results[i]?.success) {
-					successCounts.set(entry.sourceId, (successCounts.get(entry.sourceId) || 0) + 1);
-				} else {
-					failedIds.set(entry.sourceId, results[i]?.error || MISSING_IMPORT_RESULT_ERROR);
+				// Publication fencing: claim each row's captured content version
+				// before touching its chunks, import claim-unique chunks, and mark
+				// indexed conditionally on the claim token + version. The shared
+				// protocol guarantees a stale worker can never erase a newer
+				// publisher's chunks or mark a concurrent edit indexed.
+				const results = await publishClaimedDocuments(host_id, type, model, docs);
+				const indexedCount = results.filter((result) => result?.success).length;
+				const failed = results.filter((result) => !result?.success);
+
+				totalIndexed += indexedCount;
+				progress.indexed += indexedCount;
+				progress.by_type[type] += indexedCount;
+
+				if (failed.length) {
+					const failedIdsSample = failed.slice(0, 10).map((item) => item.id).join(',');
+					const errorSummary = [...new Set(failed.map((item) => item.error))].slice(0, 5).join(' | ');
+					log.error({ failedCount: failed.length, failedSampleCount: Math.min(failed.length, 10), errorSummary, type, host_id, failedIdsSample }, 'Streamient indexer: failures');
 				}
-			}
 
-			const successIds = [];
-			for (const doc of docs) {
-				const sourceId = doc._id.toString();
-				if ((successCounts.get(sourceId) || 0) === chunkCounts.get(sourceId) && !failedIds.has(sourceId)) {
-					successIds.push(doc._id);
+				if (docs.length > 0) {
+					log.info({ imported: indexedCount, total: docs.length, type, host_id }, 'Streamient indexer: imported docs');
 				}
-			}
-			const failed = Array.from(failedIds.entries()).map(([id, error]) => ({ id, error }));
-
-			// A move/edit during import must remain queued for its current version.
-			if (successIds.length) {
-				const successful = new Set(successIds.map(String));
-				const versions = docs.filter((doc) => successful.has(String(doc._id))).map((doc) => ({ _id: doc._id, updatedAt: doc.updatedAt || { $exists: false } }));
-				const marked = await model.updateMany({ host_id, $or: versions }, { $set: { is_indexed: true } }, { timestamps: false });
-				totalIndexed += marked.modifiedCount;
-				progress.indexed += marked.modifiedCount;
-				progress.by_type[type] += marked.modifiedCount;
-			}
-
-			if (failed.length) {
-				const failedIdsSample = failed.slice(0, 10).map((item) => item.id).join(',');
-				const errorSummary = [...new Set(failed.map((item) => item.error))].slice(0, 5).join(' | ');
-				log.error({ failedCount: failed.length, failedSampleCount: Math.min(failed.length, 10), errorSummary, type, host_id, failedIdsSample }, 'Streamient indexer: failures');
-			}
-
-			if (docs.length > 0) {
-				log.info({ imported: successIds.length, total: docs.length, type, host_id }, 'Streamient indexer: imported docs');
+			} finally {
+				if (hostLock) await getMongoCoordinator().releaseLock(hostLock).catch(() => {});
 			}
 		}
 	}
@@ -2210,7 +2427,7 @@ export async function listConversations(hostId, userId, { limit = 10 } = {}) {
 			() => ts.collections(collectionName).documents().search({
 				q: '*',
 				query_by: 'conversation_id',
-				filter_by: `model_id:=${modelId}`,
+				filter_by: `model_id:=${exactFilterValue(modelId)}`,
 				sort_by: 'timestamp:desc',
 				per_page: limit * 5,
 				exclude_fields: _ts_exlude_default,
@@ -2268,13 +2485,14 @@ export async function getConversationMessages(hostId, userId, conversationId) {
 	const ts = getTypesenseClient();
 	const collectionName = CONVERSATION_STORE_COLLECTION;
 	const modelId = getConversationModelId(hostId, userId);
+	const safeConversationId = exactFilterValue(assertValidConversationId(conversationId));
 
 	const result = await withTypesenseResilience(
 		`get conversation messages ${collectionName}/${conversationId}`,
 		() => ts.collections(collectionName).documents().search({
 			q: '*',
 			query_by: 'conversation_id',
-			filter_by: `conversation_id:=${conversationId} && model_id:=${modelId}`,
+			filter_by: `conversation_id:=${safeConversationId} && model_id:=${exactFilterValue(modelId)}`,
 			sort_by: 'timestamp:asc',
 			per_page: 200,
 			exclude_fields: _ts_exlude_default,
@@ -2298,10 +2516,11 @@ export async function deleteConversation(hostId, userId, conversationId) {
 	const ts = getTypesenseClient();
 	const collectionName = CONVERSATION_STORE_COLLECTION;
 	const modelId = getConversationModelId(hostId, userId);
+	const safeConversationId = exactFilterValue(assertValidConversationId(conversationId));
 	return withTypesenseResilience(
 		`delete conversation ${collectionName}/${conversationId}`,
 		() => ts.collections(collectionName).documents().delete({
-			filter_by: `conversation_id:=${conversationId} && model_id:=${modelId}`,
+			filter_by: `conversation_id:=${safeConversationId} && model_id:=${exactFilterValue(modelId)}`,
 		}),
 		{ fallback: null },
 	);

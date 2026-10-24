@@ -21,6 +21,7 @@ import managani from './modules/managani.js';
 import { createApiLimiters } from './middleware/rate_limit.js';
 import securityHeaders from './middleware/security_headers.js';
 import { browserCsrfProtection } from './middleware/csrf.js';
+import { isSessionRevoked, publicSessionId } from './services/user_session_service.js';
 import { verifyScreenshotSignature, resolveScreenshotPath } from './modules/screenshot.js';
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './swagger.js';
@@ -57,19 +58,32 @@ app.use('/health', healthRoutes);
 
 var _90_days_in_ms = 90 * 24 * 60 * 60 * 1000;
 
+const sessionStore = MongoStore.create({
+	'mongoUrl': config.mongoUri,
+	'mongoOptions': config.mongoOptions,
+	'collectionName': 'sessions',
+	// Store TTL/touchAfter use seconds; cookie maxAge uses milliseconds.
+	'ttl': _90_days_in_ms / 1000,
+	'touchAfter': 60,
+	'createTTLIndex': true,
+});
+// Validate and return the current session atomically; a lagging replica must not lose a fresh login.
+sessionStore.get = async (sid, callback) => {
+	try {
+		if (await isSessionRevoked(publicSessionId(sid))) return sessionStore.destroy(sid, () => callback(null, null));
+		const row = await (await sessionStore.collectionP).findOneAndUpdate({ _id: sid, $or: [{ expires: { $exists: false } }, { expires: { $gt: new Date() } }] }, { $set: { _id: sid } }, { returnDocument: 'after' });
+		const value = row ? sessionStore.transformFunctions.unserialize(row.session) : null;
+		if (value && row.lastModified) value.lastModified = row.lastModified;
+		callback(null, value);
+	} catch (err) { callback(err); }
+};
+
 const sessionMiddleware = session({
 	'secret': config.sessionSecret,
 	'resave': false,
 	'saveUninitialized': false,
 	'proxy': process.env.NODE_ENV === 'production' ? true : false,
-	'store': MongoStore.create({
-		'mongoUrl': config.mongoUri,
-		'collectionName': 'sessions',
-		// Store TTL/touchAfter use seconds; cookie maxAge uses milliseconds.
-		'ttl': _90_days_in_ms / 1000,
-		'touchAfter': 60,
-		'createTTLIndex': true,
-	}),
+	'store': sessionStore,
 	'cookie': {
 		'maxAge': _90_days_in_ms,
 		'sameSite': process.env.NODE_ENV === 'production' ? 'None' : 'Lax',

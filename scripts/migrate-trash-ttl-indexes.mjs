@@ -5,7 +5,7 @@ import { migrateTrashTtlIndexes } from '../services/trash_ttl_migration_service.
 const apply = process.argv.includes('--apply');
 if (apply && !process.argv.includes('--confirm-all-replicas-upgraded')) throw new Error('--apply requires --confirm-all-replicas-upgraded');
 
-await mongoose.connect(config.mongoUri);
+await mongoose.connect(config.mongoUri, config.mongoOptions);
 try {
 	const result = await migrateTrashTtlIndexes({ apply });
 	console.log(JSON.stringify(result));

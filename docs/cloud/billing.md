@@ -29,6 +29,8 @@ Manage your subscription at **Settings > Billing**:
 - Upgrade or downgrade your plan
 - Update payment method
 
+Billing management requires a signed-in browser session with the appropriate account role. Knowledge API tokens and connected AI apps do not grant access to the billing portal.
+
 ## Payment Methods
 
 We accept:

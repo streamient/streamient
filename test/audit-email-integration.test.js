@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import test from 'node:test';
+import mongoose from '../model/mongoose.js';
+import config from '../config.js';
+import { Email } from '../model/email.js';
+import { Project } from '../model/project.js';
+import { ingestForwardedEmail } from '../services/email_ingest_service.js';
+import { migrateEmailMessageIdIndex } from '../scripts/migrate-email-message-id-index.mjs';
+
+test('isolated Mongo email migration preserves rows and allows independent account copies', { skip: process.env.STREAMIENT_AUDIT_INTEGRATION !== '1', timeout: 30000 }, async (t) => {
+	await mongoose.connect(config.mongoUri, { ...config.mongoOptions, dbName: `streamient_email_audit_${crypto.randomUUID().replaceAll('-', '')}`, autoIndex: false });
+	t.after(async () => { await mongoose.connection.dropDatabase(); await mongoose.disconnect(); });
+	await Email.createCollection();
+	await Email.collection.createIndex({ message_id: 1 }, { name: 'message_id_1', unique: true, partialFilterExpression: { message_id: { $gt: '' } } });
+	const owner = new mongoose.Types.ObjectId();
+	const projects = await Project.create([{ name: 'A', host_id: 'host-a', owner }, { name: 'B', host_id: 'host-b', owner }]);
+	const message = { messageId: '<same-broadcast@example.invalid>', from: 'sender@example.invalid', to: 'reader@example.invalid', subject: 'Broadcast', text: 'Independent account content' };
+	const first = await ingestForwardedEmail(owner, 'host-a', { ...message, project: projects[0]._id }, { skipSideEffects: true });
+	assert.ok(first._id);
+	assert.deepEqual((await migrateEmailMessageIdIndex()).drop, ['message_id_1']);
+	await migrateEmailMessageIdIndex({ apply: true });
+	const indexes = await Email.collection.listIndexes().toArray();
+	assert.ok(indexes.some((entry) => entry.name === 'host_message_id_unique' && entry.unique));
+	assert.ok(!indexes.some((entry) => entry.name === 'message_id_1'));
+	const second = await ingestForwardedEmail(owner, 'host-b', { ...message, project: projects[1]._id }, { skipSideEffects: true });
+	assert.notEqual(String(first._id), String(second._id));
+	const repeated = await Promise.all(Array.from({ length: 8 }, () => ingestForwardedEmail(owner, 'host-a', { ...message, project: projects[0]._id }, { skipSideEffects: true })));
+	assert.ok(repeated.every((value) => String(value._id) === String(first._id)));
+	assert.equal(await Email.countDocuments(), 2);
+});

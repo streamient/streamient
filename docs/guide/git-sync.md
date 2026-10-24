@@ -33,6 +33,8 @@ You can change the mode any time from the repo's settings or via the API/MCP `sy
 
 Git Sync uses guarded conflict handling. If the same item changed in both Streamient and Git since the last sync, Streamient skips the overwrite and records a conflict in the sync summary.
 
+An edit saved while an import is running also triggers conflict handling. Edits saved while a push is running remain pending for the next export; completing that push does not mark newer content as synchronized.
+
 ### Deleted Files
 
 When a previously synced Markdown file is deleted from Git, Streamient moves the linked Note or Memory to trash by default. If the Streamient item has newer local edits, the item is kept and a conflict is recorded.
@@ -87,6 +89,12 @@ The actual content starts here…
 | `title` | Item title. Falls back to filename if omitted.                             |
 | `tags`  | Array of tags applied to the item.                                         |
 | `type`  | `note` or `memory`. Overrides directory-based detection.                   |
+
+## Repository Access
+
+Streamient Cloud accepts public HTTP(S) repository URLs. Local filesystem paths, SSH transports, and private network destinations are blocked. Private repository contents remain supported through an access token when the repository server has a public address. Self-hosted installations keep their configured Git transport support.
+
+Scheduled sync renews its lock while it runs. After a server restart, an interrupted sync can run again once its previous lock expires.
 
 ## Adding a Git Repo
 

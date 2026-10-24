@@ -109,7 +109,7 @@ describe('team membership helpers', () => {
 		try {
 			await removeTeamMember('host-1', 'membership-1', { userId: 'actor-1', role: 'owner' }, { channel: 'web' });
 
-			assert.deepEqual(deleteFilter, { _id: membership._id });
+			assert.deepEqual(deleteFilter, { _id: membership._id, host_id: 'host-1', role: 'member' });
 			assert.equal(auditPayload.details.missing_user, true);
 			assert.equal(auditPayload.details.member_email, null);
 		} finally {
@@ -156,7 +156,8 @@ describe('team membership helpers', () => {
 		TenantMember.findOne = () => ({
 			lean: async () => null,
 		});
-		TenantMember.create = async (payload) => {
+		TenantMember.create = async (rows) => {
+			const payload = rows[0];
 			createdMembershipPayload = payload;
 			const membership = {
 				_id: { toString: () => 'membership-2' },
@@ -167,7 +168,7 @@ describe('team membership helpers', () => {
 					throw new Error('createTeamMember should not populate after create');
 				},
 			};
-			return membership;
+			return [membership];
 		};
 		TeamInvite.deleteMany = async (filter) => {
 			deletedInviteFilter = filter;
@@ -254,14 +255,15 @@ describe('team membership helpers', () => {
 				return null;
 			},
 		});
-		TenantMember.create = async (payload) => {
+		TenantMember.create = async (rows) => {
+			const payload = rows[0];
 			createdMembershipPayload = payload;
-			return {
+			return [{
 				_id: { toString: () => 'membership-existing' },
 				role: payload.role,
 				joined_at: payload.joined_at,
 				user: payload.user,
-			};
+			}];
 		};
 		TeamInvite.deleteMany = async (filter) => {
 			deletedInviteFilter = filter;
@@ -337,4 +339,21 @@ describe('team membership helpers', () => {
 			TenantMember.findOne = originalTenantMemberFindOne;
 		}
 	});
+});
+
+it('rejects deleting a member promoted or moved after the permission check', async () => {
+	const originalFind = TenantMember.findOne;
+	const originalDelete = TenantMember.deleteOne;
+	const originalAudit = AuditLog.create;
+	try {
+		for (const current of [{ host_id: 'host', role: 'admin' }, { host_id: 'other', role: 'member' }, null]) {
+			TenantMember.findOne = () => ({ populate: async () => ({ _id: 'membership', role: 'member', user: { _id: 'target' } }) });
+			TenantMember.deleteOne = async (filter) => {
+				assert.deepEqual(filter, { _id: 'membership', host_id: 'host', role: 'member' });
+				return { deletedCount: Number(Boolean(current && current.host_id === filter.host_id && current.role === filter.role)) };
+			};
+			AuditLog.create = async () => { assert.fail('must not audit a deletion that did not happen'); };
+			await assert.rejects(removeTeamMember('host', 'membership', { role: 'admin', userId: 'actor' }), /Member changed or was removed/);
+		}
+	} finally { TenantMember.findOne = originalFind; TenantMember.deleteOne = originalDelete; AuditLog.create = originalAudit; }
 });

@@ -13,7 +13,7 @@ describe('Streamient Mobile source contracts', () => {
 
 		assert.match(app, /function upsertRecord\(/);
 		assert.match(app, /setRecords\(\(current\) => upsertRecord\(current, result\.record, activeProjectId, filter\)\)/);
-		assert.match(realtimeBlock, /setRecords\(\(current\) => upsertRecord\(current, record, activeProjectId, filter\)\)/);
+		assert.match(realtimeBlock, /setRecords\(\(current\) => \(epoch === sessionEpoch\.current \? upsertRecord\(current, record, activeProjectId, filter\) : current\)\)/);
 		assert.match(app, /filter !== "all" && record\.type !== filter/);
 		assert.match(realtimeBlock, /event === "counts:refresh"[\s\S]*refreshCounts\(\)/);
 		assert.match(realtimeBlock, /api\.record\(type, id\)[\s\S]*refreshCounts\(\)/);
@@ -69,7 +69,8 @@ describe('Streamient Mobile source contracts', () => {
 		assert.match(api, /accessTokenNeedsRefresh\(\)/);
 		assert.match(api, /expires_in \* 1000 - 30_000/);
 		assert.match(api, /if \(retry && this\.accessTokenNeedsRefresh\(\)\)/);
-		assert.match(api, /navigator\.onLine && !\(error instanceof TypeError\)/);
+		assert.match(api, /error instanceof TypeError \|\| !navigator\.onLine/);
+		assert.match(api, /status >= 500/);
 		assert.match(api, /payload\.sub \|\| payload\.userId/);
 		assert.match(api, /getCachedJson<T>\(this\.cacheNamespace/);
 	});
@@ -102,7 +103,7 @@ describe('Streamient Mobile source contracts', () => {
 		assert.match(main, /class StartupBoundary/);
 		assert.match(main, /Streamient couldn’t start/);
 		assert.match(main, /root\.render\(<StartupFailure \/>\)/);
-		assert.match(restoreBlock, /try \{[\s\S]*Promise\.all\(\[loadSelectedServer\(\), loadTokens\(\)\]\)/);
+		assert.match(restoreBlock, /try \{[\s\S]*Promise\.all\(\[loadSelectedServer\(\), loadTokens\(\), loadPendingServer\(\)\]\)/);
 		assert.match(restoreBlock, /catch \(restoreError\)[\s\S]*setTokens\(null\)/);
 		assert.match(restoreBlock, /finally \{[\s\S]*setAuthReady\(true\)/);
 	});
@@ -134,14 +135,14 @@ describe('Streamient Mobile source contracts', () => {
 		assert.doesNotMatch(assets, /size \* 0\.(?:75|58)/);
 		assert.match(playAssets, /resize\(288, 288/);
 		assert.match(playAssets, /left: 112, top: 112/);
-		assert.match(androidBuild, /versionCode 3/);
+		assert.match(androidBuild, /versionCode 4/);
 		assert.match(androidBuild, /versionName "1\.0"/);
-		assert.equal((iosProject.match(/CURRENT_PROJECT_VERSION = 5;/g) || []).length, 4);
+		assert.equal((iosProject.match(/CURRENT_PROJECT_VERSION = 6;/g) || []).length, 4);
 		assert.equal((iosProject.match(/MARKETING_VERSION = 1\.0;/g) || []).length, 4);
 		assert.equal((iosProject.match(/CODE_SIGN_STYLE = Automatic;/g) || []).length, 4);
 		assert.match(iosExport, /<key>signingStyle<\/key>\s*<string>automatic<\/string>/);
 		assert.match(iosUpload, /<key>signingStyle<\/key>\s*<string>automatic<\/string>/);
-		assert.match(iosRelease, /STREAMIENT_IOS_BUILD_NUMBER:-5/);
+		assert.match(iosRelease, /STREAMIENT_IOS_BUILD_NUMBER:-6/);
 		assert.match(iosRelease, /CODE_SIGNING_ALLOWED=NO/);
 		assert.match(iosRelease, /embedded\.mobileprovision/);
 		assert.match(iosRelease, /plutil -extract Entitlements/);

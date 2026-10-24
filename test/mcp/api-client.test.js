@@ -60,6 +60,14 @@ describe('ApiClient', () => {
         assert.equal(req.headers.authorization, 'Bearer bridge-token');
     });
 
+    it('refreshes auth with setAuth for long-lived sessions', async () => {
+        const api = new ApiClient(backendUrl, { scheme: 'Bearer', token: 'stale-bridge-token' });
+        api.setAuth({ scheme: 'Bearer', token: 'fresh-bridge-token' });
+        await api.get('/test');
+        const req = requests.at(-1);
+        assert.equal(req.headers.authorization, 'Bearer fresh-bridge-token');
+    });
+
     it('strips trailing slash from baseUrl', () => {
         const api = new ApiClient('http://localhost:3000/', 'tok');
         assert.equal(api.baseUrl, 'http://localhost:3000');

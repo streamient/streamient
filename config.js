@@ -180,6 +180,7 @@ const config = {
 	env: process.env.NODE_ENV || 'development',
 	port: parseInt(process.env.PORT, 10) || 3000,
 	mongoUri,
+	mongoOptions: { readPreference: 'secondaryPreferred', maxStalenessSeconds: 90, readConcern: { level: 'majority' }, writeConcern: { w: 'majority' } },
 	memcachedServers: parseMemcachedServers(),
 	socketIO: resolveSocketIOConfig(process.env, { mongoUri }),
 	socketEmitDelay: parseNonNegativeNumberEnv('SOCKET_EMIT_DELAY', 0),

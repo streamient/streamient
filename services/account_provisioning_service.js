@@ -30,12 +30,6 @@ function normalizeEmail(value) {
 	return normalized;
 }
 
-function withSession(query, session) {
-	if (!session || typeof query?.session !== 'function') return query;
-	const sessionQuery = query.session(session);
-	return typeof sessionQuery?.read === 'function' ? sessionQuery.read('primary') : sessionQuery;
-}
-
 export function normalizeAccountProvisioningInput(input = {}) {
 	const plan = typeof input.plan === 'string' ? input.plan.trim().toLowerCase() : '';
 	if (!TENANT_PLANS.includes(plan)) throw new AccountProvisioningError('plan is invalid');
@@ -69,11 +63,6 @@ export async function provisionAccount(input, options = {}) {
 
 	try {
 		return await transaction(async (session) => {
-			const existing = await withSession(userModel.findOne({ email: data.owner_email }), session);
-			if (existing) {
-				throw new AccountProvisioningError('Owner email is already registered', 'ACCOUNT_EMAIL_EXISTS', 409);
-			}
-
 			const [user] = await userModel.create([{
 				email: data.owner_email,
 				password: data.password,

@@ -26,7 +26,7 @@ Streamient supports multi-account membership.
 
 ## Security
 
-Manage your account security with three options:
+Manage your account security with these options:
 
 ### Reset Password
 
@@ -34,11 +34,28 @@ Generate a new random password. Copy it before closing the dialog — it cannot 
 
 ### Two-Factor Authentication (2FA)
 
-Enable or disable TOTP-based two-factor authentication. When enabled, you'll need an authenticator app (like Google Authenticator or Authy) to sign in.
+Enable or disable TOTP-based two-factor authentication. When enabled, you'll need an authenticator app (like Google Authenticator or Authy) to sign in. To replace an enabled authenticator, first disable it with a current verification code.
 
 ### Passkeys
 
 Register WebAuthn passkeys for passwordless authentication. You can add multiple passkeys (hardware keys, biometrics, etc.) and remove them individually.
+
+### Sessions
+
+See every browser where you are signed in. Each entry shows the browser and operating system, the IP address, when you signed in, and when the session was last active. Your current browser is marked **This device**.
+
+- Select **Revoke** to sign out one browser.
+- Select **Sign out all other sessions** in the Sessions header to sign out every browser except the one you are using.
+
+Signing out revokes the current browser session. Revoking a session signs that browser out on its next request and disconnects its live updates, including connections that were still signing in. Apps connected through OAuth and personal access tokens are not sessions. Manage them under **Settings > Access Tokens**.
+
+### Mobile sessions and uploads
+
+In the mobile app, open **Settings** to sign out. Signing out clears the current account's records, chat, search results, and upload tray from the app. Saved upload progress belongs to the account and server that started it.
+
+Use **Advanced > Custom server URL** on the sign-in screen to connect to a self-hosted server. The app remembers the new server after sign-in succeeds. Canceling sign-in keeps the previous server selection.
+
+Temporary connection or server failures keep your session available. Retry an interrupted upload from the upload tray; the app checks its progress before resuming. You can close a record while it loads, and its delayed response will not reopen it.
 
 ## Access Tokens
 
@@ -68,6 +85,8 @@ Use the **OAuth** tab under **Settings > Access Tokens** to:
 - Revoke previously authorized apps
 - Create and manage pre-registered OAuth clients for MCP HTTP integrations
 
+Revoking a connected app invalidates its unused authorization codes and refresh tokens. The app must obtain your consent again before reconnecting.
+
 When an MCP client asks for OAuth access, Streamient presents a consent screen before issuing tokens. Review the app name, the active account, and the requested access before choosing **Allow access**. Technical OAuth values such as the client ID, redirect URI, and MCP resource are available under **App details** on the consent screen.
 
 ## Role-based visibility
@@ -90,6 +109,8 @@ Use this if search results seem incomplete or out of sync. Requires confirmation
 ## Export
 
 Owners and admins can start full account exports from **Settings > Export**.
+
+Ready exports remain available to download from Settings while valid. If the notification email cannot be delivered, Streamient retries delivery; an email failure does not remove the downloadable export.
 
 ## Usage
 

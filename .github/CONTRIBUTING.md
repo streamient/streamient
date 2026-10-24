@@ -4,7 +4,7 @@
 
 - Base contribution branches on current `develop`; every contribution PR must target `develop`.
 - Use `gh pr create --base develop`. Verify the base after creation and before merging with `gh pr view --json baseRefName --jq .baseRefName`.
-- Maintainer and agent tasks follow [AGENTS.md](../AGENTS.md): approved plan, task branch and worktree, relevant validation and independent review, then integration and push to `develop`.
+- Maintainer and agent tasks follow [AGENTS.md](../AGENTS.md): approved plan, detached task worktree, relevant validation and independent review, then integration and push to `develop`.
 - External contributors may use any branch name. Describe the change and its validation. Never commit credentials or private customer data.
 - Only explicitly authorized release work updates `main`. Never use release credentials for ordinary contributions.
 

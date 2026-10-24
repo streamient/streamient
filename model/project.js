@@ -9,6 +9,8 @@ const projectSchema = new mongoose.Schema(
 		email_filter: { type: String, default: '' },
 		is_default: { type: Boolean, default: false },
 		is_active: { type: Boolean, default: true },
+		active_work: { type: mongoose.Schema.Types.Mixed, default: {} },
+		deletion: { type: mongoose.Schema.Types.Mixed, default: null },
 	},
 	{ timestamps: true },
 );

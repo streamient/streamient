@@ -16,7 +16,7 @@ if (!Number.isSafeInteger(batchSize) || batchSize < 1 || batchSize > 250) throw 
 if (apply && !process.argv.includes('--confirm-typesense-healthy')) throw new Error('--apply requires --confirm-typesense-healthy after verifying every Typesense follower and Raft applied gap');
 
 let hasErrors = false;
-await mongoose.connect(config.mongoUri);
+await mongoose.connect(config.mongoUri, config.mongoOptions);
 try {
 	const summaries = hostId
 		? [await reconcileTrashForTenant(hostId, { dryRun: !apply, batchSize })]

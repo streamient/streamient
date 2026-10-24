@@ -18,14 +18,14 @@ test('committed moves and deletions remain successful when Obsidian synchronizat
 	const enabled = config.obsidian.enabled;
 	config.obsidian.enabled = true;
 	t.after(() => { config.obsidian.enabled = enabled; });
-	t.mock.method(Project, 'findOne', (filter) => ({ select() { return this; }, read() { return this; }, lean: async () => ({ _id: filter._id }) }));
+	t.mock.method(Project, 'findOneAndUpdate', (filter) => ({ select() { return this; }, read() { return this; }, lean: async () => ({ _id: filter._id }) }));
 	t.mock.method(ObsidianConnection, 'findOne', () => ({ read() { return this; }, lean: async () => { throw new Error('vault unavailable'); } }));
 	t.mock.method(getTypesenseClient(), 'collections', () => ({ documents: () => ({ delete: async () => ({ num_deleted: 1 }), import: async () => [{ success: true }] }) }));
 	for (const [type, Model, update, remove] of [['notes', Note, updateNote, deleteNote], ['memories', Memory, updateMemory, deleteMemory], ['urls', Url, updateUrl, deleteUrl]]) {
 		let saved;
 		t.mock.method(Model, 'findOne', () => ({ select() { return this; }, lean: async () => ({ _id: 'record', project: 'source' }) }));
 		t.mock.method(Model, 'exists', () => ({ read: async () => true }));
-		t.mock.method(Model, 'findOneAndUpdate', async (_filter, change) => { saved = { _id: 'record', host_id: 'host', project: 'source', title: 'Saved', url: 'https://example.com', updatedAt: new Date(), ...change.$set }; return saved; });
+		t.mock.method(Model, 'findOneAndUpdate', async (_filter, change) => { saved = { _id: 'record', host_id: 'host', project: 'source', title: 'Saved', url: 'https://example.com', updatedAt: new Date(), ...saved, ...change.$set }; return saved; });
 		const moved = await processBatch('host', type, { ids: ['record'] }, (id) => update('host', id, { project: 'destination' }));
 		assert.equal(saved.project, 'destination');
 		assert.equal(moved.success_count, 1);

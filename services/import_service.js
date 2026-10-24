@@ -101,7 +101,7 @@ async function extractWordContent(filePath, signal) {
 }
 
 /**
- * Extract text from plain text files using n-readlines (proven in Razuna).
+ * Extract text from plain text files using a bounded stream.
  * Handles MD, TXT, RTF, code, and any other text-based file.
  */
 async function extractTextContent(filePath, signal) {

@@ -107,7 +107,7 @@ describe('White-label API', () => {
 			}),
 		});
 		User.findByIdAndUpdate = async () => null;
-		TenantMember.findOneAndUpdate = async () => null;
+		TenantMember.findOneAndUpdate = async (filter) => filter._id ? { role: memberRole } : null;
 		TenantMember.find = () => ({
 			populate: () => ({
 				lean: async () => [{

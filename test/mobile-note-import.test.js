@@ -45,7 +45,7 @@ describe('mobile resumable note imports', () => {
 		originals.countDocuments = NoteImportUpload.countDocuments;
 		originals.create = NoteImportUpload.create;
 		originals.updateOne = NoteImportUpload.updateOne;
-		originals.projectFindOne = Project.findOne;
+		originals.projectFindOne = Project.findOneAndUpdate;
 		originals.noteFindOne = Note.findOne;
 		Note.findOne = () => queryResult(null);
 
@@ -59,7 +59,7 @@ describe('mobile resumable note imports', () => {
 			return structuredClone(upload);
 		} });
 		NoteImportUpload.countDocuments = async () => 0;
-		Project.findOne = () => queryResult({ _id: projectId });
+		Project.findOneAndUpdate = () => queryResult({ _id: projectId });
 	});
 
 	afterEach(async () => {
@@ -68,7 +68,7 @@ describe('mobile resumable note imports', () => {
 		NoteImportUpload.countDocuments = originals.countDocuments;
 		NoteImportUpload.create = originals.create;
 		NoteImportUpload.updateOne = originals.updateOne;
-		Project.findOne = originals.projectFindOne;
+		Project.findOneAndUpdate = originals.projectFindOne;
 		Note.findOne = originals.noteFindOne;
 		await rm(path.resolve('assets', 'import', 'mobile', uploadId), { recursive: true, force: true });
 	});
@@ -152,6 +152,35 @@ describe('mobile resumable note imports', () => {
 		await assert.rejects(processUpload(uploadId), /binary and cannot be imported/);
 		assert.equal(upload.state, 'failed');
 		assert.equal((await stat(path.resolve('assets', 'import', 'mobile', uploadId, 'source.bin'))).size, binary.length);
+	});
+
+	it('fences imported note publication so a deactivated project marks the upload failed', async () => {
+		const text = Buffer.from('importable text content');
+		upload = { ...upload, original_name: 'plain.txt', mime_type: 'text/plain', total_bytes: text.length, received_bytes: text.length, state: 'processing', chunks: [{ offset: 0, size: text.length, checksum: `sha256 ${checksum(text)}` }] };
+		const chunksPath = path.resolve('assets', 'import', 'mobile', uploadId, 'chunks');
+		await mkdir(chunksPath, { recursive: true });
+		await writeFile(path.join(chunksPath, '0.part'), text);
+		NoteImportUpload.findOne = () => queryResult(upload);
+		NoteImportUpload.updateOne = async (_filter, update) => Object.assign(upload, update.$set || {});
+		NoteImportUpload.findOneAndUpdate = (_filter, update) => ({ read() { return this; }, lean: async () => { Object.assign(upload, update.$set || {}); return structuredClone(upload); } });
+
+		const projectFindOneAndUpdate = Project.findOneAndUpdate;
+		const projectUpdateOne = Project.updateOne;
+		try {
+			// Accept the lease acquisition but reject the in-transaction fence, so
+			// createNote's shared project fence aborts publication.
+			Project.findOneAndUpdate = (filter) => {
+				const holdsLease = Object.keys(filter).some((key) => key.startsWith('active_work.'));
+				return queryResult(holdsLease ? null : { _id: projectId });
+			};
+			Project.updateOne = async () => ({ matchedCount: 1, modifiedCount: 1 });
+			await assert.rejects(processUpload(uploadId), (err) => err.code === 'project_not_found');
+			assert.equal(upload.state, 'failed');
+			assert.match(upload.error, /Active project not found/);
+		} finally {
+			Project.findOneAndUpdate = projectFindOneAndUpdate;
+			Project.updateOne = projectUpdateOne;
+		}
 	});
 
 	it('enforces the exact bounded chunk constant and seven-day TTL schema', () => {

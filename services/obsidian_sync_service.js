@@ -1,4 +1,4 @@
-import { requireActiveProject } from './project_service.js';
+import { requireActiveProject, acquireProjectWrite } from './project_service.js';
 import { acquireTenantWork } from '../modules/tenancy.js';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -9,7 +9,7 @@ import TurndownService from 'turndown';
 import sanitizeHtml from 'sanitize-html';
 
 import config from '../config.js';
-import { queryForSave } from '../model/mongoose.js';
+import mongoose, { queryForSave } from '../model/mongoose.js';
 import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
 import { Url } from '../model/url.js';
@@ -26,13 +26,25 @@ import { emitToTenant } from '../modules/socket.js';
 import { getMongoCoordinator } from '../modules/cache.js';
 import { MongoQueue, MongoWorker } from '../modules/mongo_queue.js';
 import { extractText } from './import_service.js';
-import { materializeBlob, readBlobBuffer, storeBuffer, deleteBlob, deleteConnectionUploads } from './obsidian_blob_service.js';
+import { materializeBlob, readBlobBuffer, storeBuffer, deleteConnectionUploads } from './obsidian_blob_service.js';
 import { removeDocumentsByFilter } from '../modules/typesense.js';
 import * as audit from './audit_service.js';
 import { createLogger } from '../modules/logger.js';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 const log = createLogger('obsidian-sync');
 const turndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
+
+// Socket events produced inside a commit transaction are buffered per attempt and flushed
+// only after the transaction commits, so an aborted/retried attempt can never emit a
+// phantom created/updated/deleted event.
+const emitBuffer = new AsyncLocalStorage();
+
+function bufferedEmit(hostId, event, payload) {
+	const buffer = emitBuffer.getStore();
+	if (buffer) buffer.push({ hostId, event, payload });
+	else emitToTenant(hostId, event, payload);
+}
 
 export const OBSIDIAN_CONFLICT_CLOCK_SKEW_MS = 5 * 60 * 1000;
 export const OBSIDIAN_REVISION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -57,6 +69,14 @@ export class ObsidianSyncError extends Error {
 		super(message);
 		this.status = status;
 		this.code = code;
+	}
+}
+
+// A concurrent writer committed the same file first. The losing caller reloads and re-arbitrates newest-wins.
+class ObsidianFileRevisionLostError extends Error {
+	constructor(fileId, baseRevision) {
+		super(`Obsidian file revision changed concurrently (${fileId}:${baseRevision})`);
+		this.name = 'ObsidianFileRevisionLostError';
 	}
 }
 
@@ -287,20 +307,20 @@ async function releaseManifestLock(lock) {
 	await getMongoCoordinator().releaseLock(lock);
 }
 
-async function nextSequence(connection) {
+async function nextSequence(connection, session) {
 	const updated = await ObsidianConnection.findOneAndUpdate(
 		{ _id: connection._id, host_id: connection.host_id },
 		{ $inc: { sequence: 1 } },
-		{ returnDocument: 'after' },
+		{ returnDocument: 'after', session },
 	);
 	if (!updated) throw new ObsidianSyncError('Obsidian connection disappeared', 404, 'connection_not_found');
 	connection.sequence = updated.sequence;
 	return updated.sequence;
 }
 
-async function preserveRevision(file, reason) {
+async function preserveRevision(file, reason, session) {
 	if (!file?.revision || (!file.blob && !file.sha256)) return null;
-	return ObsidianRevision.create({
+	const payload = {
 		connection: file.connection,
 		file: file._id,
 		host_id: file.host_id,
@@ -312,7 +332,8 @@ async function preserveRevision(file, reason) {
 		source: file.last_source,
 		reason,
 		expires_at: new Date(Date.now() + OBSIDIAN_REVISION_RETENTION_MS),
-	});
+	};
+	return session ? (await ObsidianRevision.create([payload], { session }))[0] : ObsidianRevision.create(payload);
 }
 
 const MARKDOWN_PROJECTIONS = [
@@ -325,28 +346,25 @@ function markdownProjection(type) {
 	return MARKDOWN_PROJECTIONS.find((projection) => projection.type === type);
 }
 
-async function removeOtherMarkdownProjections(file, retainedType) {
+async function removeOtherMarkdownProjections(file, retainedType, session) {
 	for (const projection of MARKDOWN_PROJECTIONS) {
 		if (projection.type === retainedType || !file[projection.field]) continue;
-		const removed = await projection.Model.findOneAndDelete({ _id: file[projection.field], host_id: file.host_id, project: file.project, 'obsidian_source.file_id': file._id });
+		const removed = await projection.Model.findOneAndDelete({ _id: file[projection.field], host_id: file.host_id, project: file.project, 'obsidian_source.file_id': file._id }, session ? { session } : undefined);
 		if (!removed) throw new ObsidianSyncError('The linked record changed project or vault; synchronize again.', 409, 'projection_changed');
-		emitToTenant(file.host_id, `${projection.type}:deleted`, { _id: file[projection.field] });
+		bufferedEmit(file.host_id, `${projection.type}:deleted`, { _id: file[projection.field] });
 		file[projection.field] = null;
 	}
 }
 
-async function projectMarkdownFile(file, raw, ownerId) {
-	await requireActiveProject(file.host_id, file.project);
+async function projectMarkdownFile(file, raw, ownerId, session) {
 	if (file.projection_detached) return null;
 	const parsed = parsedMarkdown(raw, file.path);
 	const now = file.modified_at || new Date();
 	const currentProjectionType = file.url ? 'url' : file.memory ? 'memory' : file.note ? 'note' : '';
 	const changesUrlBoundary = Boolean(currentProjectionType) && (currentProjectionType === 'url') !== (parsed.type === 'url');
 	if (changesUrlBoundary) throw new ObsidianSyncError('Create a separate file instead of changing a saved URL record type', 409, 'url_type_change');
-	await removeOtherMarkdownProjections(file, parsed.type);
+	await removeOtherMarkdownProjections(file, parsed.type, session);
 	const projection = markdownProjection(parsed.type);
-	let record = file[projection.field] ? await projection.Model.findOne({ _id: file[projection.field], host_id: file.host_id }).lean() : null;
-	const created = !record;
 	const data = {
 		title: parsed.title,
 		tags: parsed.tags,
@@ -365,14 +383,21 @@ async function projectMarkdownFile(file, raw, ownerId) {
 		data.content = renderCanonicalMarkdown(parsed.body);
 		data.text_content = striptags(data.content, [], ' ').replace(/\s+/g, ' ').trim();
 	}
-	if (record) {
-		record = await projection.Model.findOneAndUpdate({ _id: record._id, host_id: file.host_id, project: file.project, 'obsidian_source.file_id': file._id, updatedAt: record.updatedAt }, { $set: data }, { returnDocument: 'after', timestamps: false });
+	let record = null;
+	let created = false;
+	if (file[projection.field]) {
+		// Authoritative conditional write-return resolves the projection identity scoped to
+		// file and host, so a stale secondary null can never mint a duplicate projection.
+		record = await projection.Model.findOneAndUpdate({ _id: file[projection.field], host_id: file.host_id, project: file.project, 'obsidian_source.file_id': file._id }, { $inc: { __v: 0 } }, { returnDocument: 'after', timestamps: false, session });
+		if (!record) throw new ObsidianSyncError('The linked record changed project or vault; synchronize again.', 409, 'projection_changed');
+		record = await projection.Model.findOneAndUpdate({ _id: record._id, host_id: file.host_id, project: file.project, 'obsidian_source.file_id': file._id, updatedAt: record.updatedAt }, { $set: data }, { returnDocument: 'after', timestamps: false, session });
 		if (!record) throw new ObsidianSyncError('The linked record changed project or vault; synchronize again.', 409, 'projection_changed');
 	} else {
-		record = await projection.Model.create(data);
+		record = session ? (await projection.Model.create([data], { session }))[0] : await projection.Model.create(data);
 		file[projection.field] = record._id;
+		created = true;
 	}
-	emitToTenant(file.host_id, `${parsed.type}:${created ? 'created' : 'updated'}`, record);
+	bufferedEmit(file.host_id, `${parsed.type}:${created ? 'created' : 'updated'}`, record);
 	return record;
 }
 
@@ -405,24 +430,24 @@ async function extractFileText(file, blob, signal) {
 	}
 }
 
-async function updateProjection(file, ownerId) {
+async function updateProjection(file, ownerId, session) {
 	if (file.projection_detached) return;
 	if (file.in_trash) {
 		file.extraction_status = 'not_needed';
 		file.extraction_error = '';
 		for (const projection of MARKDOWN_PROJECTIONS) {
 			if (!file[projection.field]) continue;
-			const record = await projection.Model.findOneAndUpdate({ _id: file[projection.field], host_id: file.host_id, project: file.project, 'obsidian_source.file_id': file._id }, { $set: { in_trash: true, trashed_at: file.trashed_at || new Date(), is_indexed: false } });
-			if (record) emitToTenant(file.host_id, `${projection.type}:deleted`, { _id: file[projection.field] });
+			const record = await projection.Model.findOneAndUpdate({ _id: file[projection.field], host_id: file.host_id, project: file.project, 'obsidian_source.file_id': file._id }, { $set: { in_trash: true, trashed_at: file.trashed_at || new Date(), is_indexed: false } }, session ? { session } : undefined);
+			if (record) bufferedEmit(file.host_id, `${projection.type}:deleted`, { _id: file[projection.field] });
 		}
 		file.is_indexed = file.kind === 'markdown';
 		return;
 	}
-	const blob = file.blob ? await ObsidianBlob.findOne({ _id: file.blob, host_id: file.host_id }).lean() : null;
+	const blob = file.blob ? await ObsidianBlob.findOneAndUpdate({ _id: file.blob, host_id: file.host_id }, { $inc: { __v: 0 } }, { returnDocument: 'after', timestamps: false, ...(session ? { session } : {}) }) : null;
 	if (!blob) return;
 	if (file.kind === 'markdown') {
 		const raw = (await readBlobBuffer(blob, file.host_id)).toString('utf8');
-		await projectMarkdownFile(file, raw, ownerId);
+		await projectMarkdownFile(file, raw, ownerId, session);
 		file.text_content = '';
 		file.extraction_status = 'not_needed';
 		file.extraction_error = '';
@@ -447,35 +472,52 @@ async function enqueueExtraction(file) {
 	await MongoQueue.add(OBSIDIAN_EXTRACTION_QUEUE, { file_id: String(file._id), host_id: file.host_id }, { dedupKey: `${file._id}:${file.revision}`, maxAttempts: 3 });
 }
 
-async function recordChange(connection, file, operation, options = {}) {
-	const sequence = await nextSequence(connection);
-	const change = await ObsidianChange.create({
-		connection: connection._id,
-		file: file._id,
-		host_id: connection.host_id,
-		sequence,
-		operation,
-		path: file.path,
-		previous_path: options.previousPath || '',
-		revision: file.revision,
-		sha256: file.sha256,
-		modified_at: file.modified_at,
-		source: options.source || file.last_source,
-		device_id: options.deviceId || file.last_device_id || '',
-		operation_id: options.operationId || crypto.randomUUID(),
-		conflict: Boolean(options.conflict),
-		conflict_reason: options.conflictReason || '',
-		losing_revision: options.losingRevision || null,
-	});
-	return change;
+// Allocate the connection sequence and insert the change in one write-only transaction so a
+// poller can never advance past an allocated-but-uninserted sequence.
+async function recordChange(connection, file, operation, options = {}, session) {
+	const insert = async (writeSession) => {
+		const sequence = await nextSequence(connection, writeSession);
+		const payload = {
+			connection: connection._id,
+			file: file._id,
+			host_id: connection.host_id,
+			sequence,
+			operation,
+			path: file.path,
+			previous_path: options.previousPath || '',
+			revision: file.revision,
+			sha256: file.sha256,
+			modified_at: file.modified_at,
+			source: options.source || file.last_source,
+			device_id: options.deviceId || file.last_device_id || '',
+			operation_id: options.operationId || crypto.randomUUID(),
+			conflict: Boolean(options.conflict),
+			conflict_reason: options.conflictReason || '',
+			losing_revision: options.losingRevision || null,
+		};
+		return writeSession ? (await ObsidianChange.create([payload], { session: writeSession }))[0] : ObsidianChange.create(payload);
+	};
+	if (session) return insert(session);
+	return mongoose.connection.transaction((writeSession) => insert(writeSession));
 }
 
-async function commitFile(connection, file, operation, options) {
+function fileDelta(file) {
+	const fields = ['path', 'kind', 'mime_type', 'size', 'sha256', 'blob', 'revision', 'modified_at', 'last_source', 'last_device_id', 'note', 'memory', 'url', 'projection_detached', 'text_content', 'is_indexed', 'extraction_status', 'extraction_error', 'in_trash', 'trashed_at'];
+	const delta = {};
+	for (const field of fields) {
+		const value = file[field];
+		if (value !== undefined) delta[field] = value;
+	}
+	return delta;
+}
+
+async function commitFile(connection, file, operation, options, { session } = {}) {
+	const baseRevision = file.revision;
 	const previousSize = file.size || 0;
 	const nextSize = options.blob ? options.blob.total_bytes : previousSize;
 	const projectedStorage = Number(connection.storage_bytes || 0) - previousSize + nextSize;
 	if (config.obsidian.maxVaultBytes && projectedStorage > config.obsidian.maxVaultBytes) throw new ObsidianSyncError('Vault exceeds the configured Streamient storage limit', 413, 'vault_too_large');
-	const previousRevision = file.revision ? await preserveRevision(file, options.revisionReason || 'File updated') : null;
+	const previousRevision = file.revision ? await preserveRevision(file, options.revisionReason || 'File updated', session) : null;
 	if (options.path) file.path = options.path;
 	if (options.blob) {
 		file.blob = options.blob._id;
@@ -501,24 +543,85 @@ async function commitFile(connection, file, operation, options) {
 		file.extraction_status = 'not_needed';
 		file.extraction_error = '';
 		file.is_indexed = true;
-	} else await updateProjection(file, connection.owner);
-	await file.save();
-	await enqueueExtraction(file).catch(async (err) => {
-		log.error({ err, file_id: file._id }, 'Obsidian file extraction queue failed');
-		file.extraction_status = 'failed';
-		file.extraction_error = err.message || String(err);
-		file.is_indexed = false;
-		await file.save();
-	});
+	} else await updateProjection(file, connection.owner, session);
+
+	// Atomic conditional file publication: the observed revision is the fence. A concurrent
+	// writer that already advanced the revision loses here and its whole transaction rolls back.
+	if (file.isNew) {
+		await file.save(session ? { session } : undefined);
+	} else {
+		const published = await ObsidianFile.findOneAndUpdate(
+			{ _id: file._id, connection: connection._id, host_id: connection.host_id, revision: baseRevision },
+			{ $set: fileDelta(file) },
+			{ returnDocument: 'after', timestamps: false, session },
+		);
+		if (!published) throw new ObsidianFileRevisionLostError(file._id, baseRevision);
+		Object.assign(file, published.toObject ? published.toObject() : published);
+	}
+
+	if (!session) {
+		await enqueueExtraction(file).catch(async (err) => {
+			log.error({ err, file_id: file._id }, 'Obsidian file extraction queue failed');
+			await ObsidianFile.findOneAndUpdate({ _id: file._id, host_id: connection.host_id }, { $set: { extraction_status: 'failed', extraction_error: err.message || String(err), is_indexed: false } }, { timestamps: false });
+		});
+	}
 	const storageDelta = (file.size || 0) - previousSize;
 	const updates = { $set: { last_synced_at: new Date(), last_sync_status: 'success', last_sync_error: '', sync_requested_at: null } };
 	if (storageDelta) updates.$inc = { storage_bytes: storageDelta };
-	await ObsidianConnection.updateOne({ _id: connection._id, host_id: connection.host_id }, updates);
-	connection.storage_bytes = Math.max(0, Number(connection.storage_bytes || 0) + storageDelta);
-	const change = await recordChange(connection, file, operation, { ...options, losingRevision: options.conflict ? previousRevision?._id : null });
-	emitToTenant(connection.host_id, 'obsidian:file-changed', publicChange(change));
-	emitToTenant(connection.host_id, 'counts:refresh', { project: String(connection.project) });
-	return { file, change };
+	await ObsidianConnection.updateOne({ _id: connection._id, host_id: connection.host_id }, updates, session ? { session } : undefined);
+	const change = await recordChange(connection, file, operation, { ...options, losingRevision: options.conflict ? previousRevision?._id : null }, session);
+	bufferedEmit(connection.host_id, 'obsidian:file-changed', publicChange(change));
+	bufferedEmit(connection.host_id, 'counts:refresh', { project: String(connection.project) });
+	return { file, change, storageDelta };
+}
+
+// Default transaction opener for a bare publication. Callers holding a project write lease
+// pass gate.publish instead so the lease fence and the file/change write share one transaction.
+const plainTransaction = (callback) => mongoose.connection.transaction(callback);
+
+// Acquire the destination project's write lease outside any transaction, then run `persist`
+// in a single write-only transaction that re-verifies the lease (active, no pending deletion,
+// unexpired) before the record write. One lease per publication/item; never nest.
+async function withProjectGate(connection, persist) {
+	const gate = await acquireProjectWrite(connection.host_id, connection.project, { withOwnership: plainTransaction });
+	try {
+		return await persist(gate.publish);
+	} finally {
+		await gate.release();
+	}
+}
+
+// Commit a file publication atomically inside one write-only transaction, buffering socket
+// events per attempt and flushing only after a successful commit. A concurrent writer that
+// advances the revision aborts the attempt; the caller reloads authoritatively and retries.
+async function commitFileAtomic(connection, file, operation, options, publish = plainTransaction) {
+	let attempt = 0;
+	while (true) {
+		const original = { note: null, memory: null, url: null, ...fileDelta(file) };
+		const wasNew = file.isNew;
+		try {
+			const { result, buffer } = await publish(async (session) => {
+				Object.assign(file, original);
+				file.isNew = wasNew;
+				const buffer = [];
+				const result = await emitBuffer.run(buffer, () => commitFile(connection, file, operation, options, { session }));
+				return { result, buffer };
+			});
+			for (const entry of buffer) emitToTenant(entry.hostId, entry.event, entry.payload);
+			connection.storage_bytes = Math.max(0, Number(connection.storage_bytes || 0) + result.storageDelta);
+			if (file.extraction_status === 'pending') await enqueueExtraction(file).catch(async (err) => {
+				log.error({ err, file_id: file._id }, 'Obsidian file extraction queue failed');
+				await ObsidianFile.findOneAndUpdate({ _id: file._id, host_id: connection.host_id }, { $set: { extraction_status: 'failed', extraction_error: err.message || String(err), is_indexed: false } }, { timestamps: false });
+			});
+			return result;
+		} catch (err) {
+			if (!(err instanceof ObsidianFileRevisionLostError)) throw err;
+			const reloaded = await ObsidianFile.findOneAndUpdate({ _id: file._id, host_id: connection.host_id }, { $inc: { revision: 0 } }, { timestamps: false, returnDocument: 'after' });
+			if (!reloaded) throw new ObsidianSyncError('Synchronized file not found', 404, 'file_not_found');
+			Object.assign(file, reloaded.toObject ? reloaded.toObject() : reloaded);
+			if (++attempt > 5) throw new ObsidianSyncError('Too many concurrent Obsidian file updates', 409, 'sync_contention');
+		}
+	}
 }
 
 async function findFileForMutation(connection, mutation) {
@@ -544,13 +647,13 @@ function conflictPath(value, source) {
 	return `${stem} (${source} conflict ${suffix})${extension}`;
 }
 
-async function resolveRenamePath(connection, file, requestedPath, modifiedAt, options) {
+async function resolveRenamePath(connection, file, requestedPath, modifiedAt, options, publish = plainTransaction) {
 	const collision = await queryForSave(ObsidianFile.findOne({ connection: connection._id, host_id: connection.host_id, path: requestedPath, _id: { $ne: file._id } }));
 	if (!collision) return { path: requestedPath, conflict: false };
 	await ObsidianConnection.updateOne({ _id: connection._id, host_id: connection.host_id }, { $inc: { conflict_count: 1 } });
 	if (modifiedAt.getTime() <= new Date(collision.modified_at).getTime()) return { path: conflictPath(requestedPath, options.source), conflict: true };
 	const previousPath = collision.path;
-	await commitFile(connection, collision, 'rename', {
+	await commitFileAtomic(connection, collision, 'rename', {
 		path: conflictPath(requestedPath, collision.last_source),
 		modifiedAt,
 		source: options.source,
@@ -560,7 +663,7 @@ async function resolveRenamePath(connection, file, requestedPath, modifiedAt, op
 		revisionReason: 'Rename path collision',
 		conflict: true,
 		conflictReason: 'Another file claimed this path',
-	});
+	}, publish);
 	return { path: requestedPath, conflict: true };
 }
 
@@ -594,7 +697,7 @@ async function recordLosingConflict(connection, file, mutation, blob, modifiedAt
 	return { accepted: false, conflict: true, file: publicFile(file), change: publicChange(change) };
 }
 
-async function applyMutation(connection, userId, mutation, source = 'obsidian') {
+async function applyMutation(connection, userId, mutation, source = 'obsidian', publish = plainTransaction) {
 	const operationId = String(mutation.operation_id || '').trim();
 	if (!operationId || operationId.length > 200) throw new ObsidianSyncError('operation_id is required', 400, 'operation_id_required');
 	const previous = await ObsidianChange.findOne({ connection: connection._id, host_id: connection.host_id, operation_id: operationId }).lean();
@@ -629,43 +732,64 @@ async function applyMutation(connection, userId, mutation, source = 'obsidian') 
 		});
 	}
 	const baseRevision = Number(mutation.base_revision || 0);
-	if (file.revision && baseRevision !== file.revision && modifiedAt.getTime() <= new Date(file.modified_at).getTime()) {
-		return recordLosingConflict(connection, file, { ...mutation, operation, operation_id: operationId }, blob, modifiedAt, source, deviceId);
+	let attempt = 0;
+	while (true) {
+		if (file.revision && baseRevision !== file.revision && modifiedAt.getTime() <= new Date(file.modified_at).getTime()) {
+			return recordLosingConflict(connection, file, { ...mutation, operation, operation_id: operationId }, blob, modifiedAt, source, deviceId);
+		}
+		if (file.revision && baseRevision !== file.revision) await ObsidianConnection.updateOne({ _id: connection._id, host_id: connection.host_id }, { $inc: { conflict_count: 1 } });
+		const previousPath = file.path;
+		let renameConflict = false;
+		if (operation === 'rename') {
+			const rename = await resolveRenamePath(connection, file, requestedPath, modifiedAt, { source, deviceId, operationId }, publish);
+			requestedPath = rename.path;
+			renameConflict = rename.conflict;
+		}
+		const commitOptions = {
+			path: requestedPath,
+			blob,
+			modifiedAt,
+			source,
+			deviceId,
+			operationId,
+			previousPath: operation === 'rename' ? previousPath : '',
+			revisionReason: baseRevision !== file.revision ? 'Won newest-wins conflict' : 'File updated',
+			conflict: renameConflict || file.revision > 0 && baseRevision !== file.revision,
+			conflictReason: renameConflict ? 'Another file claimed the requested path' : file.revision > 0 && baseRevision !== file.revision ? 'Incoming file is newer' : '',
+		};
+		const original = { note: null, memory: null, url: null, ...fileDelta(file) };
+		const wasNew = file.isNew;
+		try {
+			const { result, buffer } = await publish(async (session) => {
+				Object.assign(file, original);
+				file.isNew = wasNew;
+				const buffer = [];
+				const result = await emitBuffer.run(buffer, () => commitFile(connection, file, operation === 'create' && file.revision ? 'update' : operation, commitOptions, { session }));
+				return { result, buffer };
+			});
+			for (const entry of buffer) emitToTenant(entry.hostId, entry.event, entry.payload);
+			connection.storage_bytes = Math.max(0, Number(connection.storage_bytes || 0) + result.storageDelta);
+			// Extraction enqueue runs after a committed transaction so its queue writes never survive a rollback.
+			if (file.extraction_status === 'pending') await enqueueExtraction(file).catch(async (err) => {
+				log.error({ err, file_id: file._id }, 'Obsidian file extraction queue failed');
+				await ObsidianFile.findOneAndUpdate({ _id: file._id, host_id: connection.host_id }, { $set: { extraction_status: 'failed', extraction_error: err.message || String(err), is_indexed: false } }, { timestamps: false });
+			});
+			return { accepted: true, conflict: Boolean(result.change.conflict), file: publicFile(result.file), change: publicChange(result.change) };
+		} catch (err) {
+			if (!(err instanceof ObsidianFileRevisionLostError)) throw err;
+			// A concurrent writer committed this file; reload and re-arbitrate newest-wins.
+			const reloaded = await findFileForMutation(connection, { file_id: file._id });
+			if (!reloaded) throw new ObsidianSyncError('Synchronized file not found', 404, 'file_not_found');
+			file = reloaded;
+			requestedPath = mutation.path ? normalizeVaultPath(mutation.path) : file.path;
+			if (++attempt > 5) throw new ObsidianSyncError('Too many concurrent Obsidian file updates', 409, 'sync_contention');
+		}
 	}
-	if (file.revision && baseRevision !== file.revision) await ObsidianConnection.updateOne({ _id: connection._id, host_id: connection.host_id }, { $inc: { conflict_count: 1 } });
-	const previousPath = file.path;
-	let renameConflict = false;
-	if (operation === 'rename') {
-		const rename = await resolveRenamePath(connection, file, requestedPath, modifiedAt, { source, deviceId, operationId });
-		requestedPath = rename.path;
-		renameConflict = rename.conflict;
-	}
-	const result = await commitFile(connection, file, operation === 'create' && file.revision ? 'update' : operation, {
-		path: requestedPath,
-		blob,
-		modifiedAt,
-		source,
-		deviceId,
-		operationId,
-		previousPath: operation === 'rename' ? previousPath : '',
-		revisionReason: baseRevision !== file.revision ? 'Won newest-wins conflict' : 'File updated',
-		conflict: renameConflict || file.revision > 0 && baseRevision !== file.revision,
-		conflictReason: renameConflict ? 'Another file claimed the requested path' : file.revision > 0 && baseRevision !== file.revision ? 'Incoming file is newer' : '',
-	});
-	return { accepted: true, conflict: Boolean(result.change.conflict), file: publicFile(result.file), change: publicChange(result.change) };
 }
 
-async function uniqueExportPath(connection, desired) {
-	let candidate = desired;
-	const extension = path.posix.extname(desired);
-	const stem = extension ? desired.slice(0, -extension.length) : desired;
-	for (let index = 2; await ObsidianFile.exists({ connection: connection._id, host_id: connection.host_id, path: candidate }).read('primary'); index++) candidate = `${stem}-${index}${extension}`;
-	return candidate;
-}
-
-async function exportProjectItem(connection, type, item, options = {}) {
+async function exportProjectItem(connection, type, item, options = {}, publish = plainTransaction) {
 	const folder = type === 'memory' ? `${connection.streamient_folder}/Memories` : type === 'url' ? `${connection.streamient_folder}/URLs` : connection.streamient_folder;
-	const filePath = await uniqueExportPath(connection, `${folder}/${safeFileName(item.title)}.md`);
+	const filePath = `${folder}/${safeFileName(item.title)}.md`;
 	const file = new ObsidianFile({
 		connection: connection._id,
 		project: connection.project,
@@ -679,6 +803,14 @@ async function exportProjectItem(connection, type, item, options = {}) {
 		last_source: 'streamient',
 		[type]: item._id,
 	});
+	for (let suffix = 2; ; suffix++) {
+		try { await file.save(); break; }
+		catch (err) {
+			if (err.code !== 11000 || !err.keyPattern?.path) throw err;
+			file.path = `${filePath.slice(0, -3)}-${suffix}.md`;
+		}
+	}
+
 	const Model = markdownProjection(type)?.Model;
 	if (!Model) throw new ObsidianSyncError('Unsupported Streamient projection type', 400, 'invalid_projection_type');
 	const claimed = await Model.findOneAndUpdate(
@@ -687,23 +819,24 @@ async function exportProjectItem(connection, type, item, options = {}) {
 		{ returnDocument: 'after', timestamps: false },
 	);
 	if (!claimed) {
-		const current = await Model.findOne({ _id: item._id, host_id: connection.host_id }).select('obsidian_source').read('primary').lean();
-		return current?.obsidian_source?.file_id ? ObsidianFile.findOne({ _id: current.obsidian_source.file_id, connection: connection._id, host_id: connection.host_id }).read('primary') : null;
+		await ObsidianFile.deleteOne({ _id: file._id, revision: 0 });
+		const current = await Model.findOneAndUpdate({ _id: item._id, host_id: connection.host_id }, { $inc: { __v: 0 } }, { timestamps: false, returnDocument: 'after' }).select('obsidian_source').lean();
+		return current?.obsidian_source?.file_id ? ObsidianFile.findOneAndUpdate({ _id: current.obsidian_source.file_id, connection: connection._id, host_id: connection.host_id }, { $inc: { revision: 0 } }, { timestamps: false, returnDocument: 'after' }) : null;
 	}
 	try {
 		const raw = typeof options.markdown === 'string' ? options.markdown : itemMarkdown(type, claimed, options.existingRaw || '');
 		const blob = await storeBuffer(connection.host_id, Buffer.from(raw), 'text/markdown');
-		await commitFile(connection, file, 'create', {
+		await commitFileAtomic(connection, file, 'create', {
 			blob,
 			modifiedAt: claimed.updatedAt || new Date(),
 			source: 'streamient',
 			updateRecord: typeof options.markdown === 'string',
 			operationId: `streamient:${type}:${item._id}:create:${file._id}`,
-		});
+		}, publish);
 		item.obsidian_source = claimed.obsidian_source;
 		return file;
 	} catch (err) {
-		if (!(await ObsidianFile.exists({ _id: file._id, host_id: connection.host_id }).read('primary'))) await Model.updateOne({ _id: item._id, host_id: connection.host_id, 'obsidian_source.file_id': file._id }, { $unset: { obsidian_source: '' } }, { timestamps: false });
+		if (!(await ObsidianFile.findOneAndUpdate({ _id: file._id, host_id: connection.host_id }, { $inc: { revision: 0 } }, { timestamps: false, returnDocument: 'after' }))) await Model.updateOne({ _id: item._id, host_id: connection.host_id, 'obsidian_source.file_id': file._id }, { $unset: { obsidian_source: '' } }, { timestamps: false });
 		throw err;
 	}
 }
@@ -720,9 +853,9 @@ function pendingProjectQuery(connection) {
 async function pendingProjectItems(connection) {
 	const query = pendingProjectQuery(connection);
 	return Promise.all([
-		Note.find(query).read('primary').lean(),
-		Memory.find(query).read('primary').lean(),
-		Url.find(query).read('primary').lean(),
+		Note.find(query).lean(),
+		Memory.find(query).lean(),
+		Url.find(query).lean(),
 	]);
 }
 
@@ -799,7 +932,7 @@ async function connectionFiles(connection, scope) {
 	while (true) {
 		const query = { connection: connection._id, host_id: connection.host_id, ...scopeMongoFilter(scope) };
 		if (lastId) query._id = { $gt: lastId };
-		const batch = await ObsidianFile.find(query).select('_id path kind mime_type size sha256 revision modified_at in_trash note memory url').sort({ _id: 1 }).limit(OBSIDIAN_REMOTE_BATCH_SIZE).read('primary').lean();
+		const batch = await ObsidianFile.find(query).select('_id path kind mime_type size sha256 revision modified_at in_trash note memory url').sort({ _id: 1 }).limit(OBSIDIAN_REMOTE_BATCH_SIZE).lean();
 		files.push(...batch);
 		if (batch.length < OBSIDIAN_REMOTE_BATCH_SIZE) return files;
 		lastId = batch.at(-1)._id;
@@ -863,23 +996,32 @@ export async function listConnections(hostId, projectId = null) {
 }
 
 export async function createConnection(userId, hostId, data, ctx = {}) {
-	const project = { _id: await requireActiveProject(hostId, data.project_id) };
-	let connection = await queryForSave(ObsidianConnection.findOne({ host_id: hostId, project: project._id }));
-	if (!connection) {
-		try {
-			connection = await ObsidianConnection.create({
-				project: project._id,
-				owner: userId,
-				host_id: hostId,
-				name: String(data.name || 'Obsidian vault').trim().slice(0, 200),
-				streamient_folder: normalizeVaultPath(data.streamient_folder || 'Streamient'),
-			});
-			audit.log({ action: 'create', resource: 'obsidian_connection', resource_id: connection._id.toString(), user_id: userId, host_id: hostId, ...ctx });
-		} catch (err) {
-			if (err?.code !== 11000) throw err;
-			connection = await queryForSave(ObsidianConnection.findOne({ host_id: hostId, project: project._id }));
-			if (!connection) throw err;
+	const { projectId: project, release, publish } = await acquireProjectWrite(hostId, data.project_id, ctx);
+	let connection;
+	try {
+		connection = await queryForSave(ObsidianConnection.findOne({ host_id: hostId, project }));
+		if (!connection) {
+			try {
+				connection = await publish(async (session) => {
+					const payload = {
+						project,
+						owner: userId,
+						host_id: hostId,
+						name: String(data.name || 'Obsidian vault').trim().slice(0, 200),
+						streamient_folder: normalizeVaultPath(data.streamient_folder || 'Streamient'),
+					};
+					if (session) return (await ObsidianConnection.create([payload], { session }))[0];
+					return ObsidianConnection.create(payload);
+				});
+				audit.log({ action: 'create', resource: 'obsidian_connection', resource_id: connection._id.toString(), user_id: userId, host_id: hostId, ...ctx });
+			} catch (err) {
+				if (err?.code !== 11000) throw err;
+				connection = await queryForSave(ObsidianConnection.findOne({ host_id: hostId, project }));
+				if (!connection) throw err;
+			}
 		}
+	} finally {
+		await release();
 	}
 	if (data.device_id) await registerDeviceOnConnection(connection, data);
 	return publicConnection(connection);
@@ -981,11 +1123,6 @@ export async function relocateConnectionFolder(hostId, connectionId, data, ctx =
 export async function removeConnection(hostId, connectionId, ctx = {}) {
 	const connection = await ObsidianConnection.findOne({ _id: connectionId, host_id: hostId }).lean();
 	if (!connection) throw new ObsidianSyncError('Obsidian connection not found', 404, 'connection_not_found');
-	const [files, revisions] = await Promise.all([
-		ObsidianFile.find({ connection: connection._id, host_id: hostId }).select('blob').lean(),
-		ObsidianRevision.find({ connection: connection._id, host_id: hostId }).select('blob').lean(),
-	]);
-	const blobIds = [...new Set([...files, ...revisions].map((item) => item.blob ? String(item.blob) : '').filter(Boolean))];
 	await deleteConnectionUploads(hostId, connection._id);
 	await Promise.all([
 		Note.updateMany({ host_id: hostId, 'obsidian_source.connection_id': connection._id }, { $unset: { obsidian_source: '' } }),
@@ -998,12 +1135,8 @@ export async function removeConnection(hostId, connectionId, ctx = {}) {
 	]);
 	await ObsidianConnection.deleteOne({ _id: connection._id, host_id: hostId });
 	await removeDocumentsByFilter(hostId, 'vault_files', `connection_id:=\`${connection._id}\``).catch((err) => log.error({ err, connection_id: connection._id }, 'Obsidian Typesense connection cleanup failed'));
-	for (const blobId of blobIds) {
-		const [fileRef, revisionRef, uploadRef] = await Promise.all([ObsidianFile.exists({ blob: blobId }), ObsidianRevision.exists({ blob: blobId }), ObsidianUpload.exists({ blob: blobId })]);
-		if (fileRef || revisionRef || uploadRef) continue;
-		const blob = await ObsidianBlob.findOne({ _id: blobId, host_id: hostId }).lean();
-		if (blob) await deleteBlob(blob);
-	}
+	// Shared ciphertext follows the same conservative retention policy as scheduled cleanup.
+
 	audit.log({ action: 'delete', resource: 'obsidian_connection', resource_id: String(connectionId), host_id: hostId, ...ctx });
 	emitToTenant(hostId, 'obsidian:connection-removed', { connection_id: String(connectionId), project_id: String(connection.project) });
 	return { removed: true, retained_notes: true, retained_urls: true };
@@ -1043,7 +1176,7 @@ export async function reconcileManifest(userId, hostId, connectionId, data) {
 		}
 		const batchCount = Number(data.batch_count);
 		if (!Number.isSafeInteger(batchCount) || batchCount < 0 || batchCount > OBSIDIAN_MAX_MANIFEST_BATCHES) throw new ObsidianSyncError(`batch_count must be between 0 and ${OBSIDIAN_MAX_MANIFEST_BATCHES}`, 400, 'invalid_batch_count');
-		const batches = await ObsidianManifestBatch.find({ host_id: hostId, user: userId, connection: connection._id, manifest_id: manifestId }).sort({ batch_index: 1 }).read('primary').lean();
+		const batches = await ObsidianManifestBatch.find({ host_id: hostId, user: userId, connection: connection._id, manifest_id: manifestId }).sort({ batch_index: 1 }).lean();
 		if (batches.length !== batchCount || batches.some((batch, index) => batch.batch_index !== index)) throw new ObsidianSyncError('Manifest batches are incomplete', 409, 'manifest_incomplete');
 		data = { ...data, files: batches.flatMap((batch) => batch.files || []) };
 	}
@@ -1102,7 +1235,7 @@ export async function applyMutations(userId, hostId, connectionId, data) {
 	const mutations = Array.isArray(data.mutations) ? data.mutations : [];
 	if (!mutations.length || mutations.length > 100) throw new ObsidianSyncError('Provide 1 to 100 mutations', 400, 'invalid_mutation_count');
 	const results = [];
-	for (const mutation of mutations) results.push(await applyMutation(connection, userId, mutation));
+	for (const mutation of mutations) results.push(await withProjectGate(connection, (publish) => applyMutation(connection, userId, mutation, 'obsidian', publish)));
 	if (data.device_id) await registerDevice(hostId, connection._id, data);
 	return { results, cursor: connection.sequence || 0 };
 }
@@ -1181,19 +1314,18 @@ export async function syncStreamientItem(type, itemId, hostId, options = {}) {
 	if (!config.obsidian.enabled) return null;
 	const Model = markdownProjection(type)?.Model;
 	if (!Model) return null;
-	const item = options.item || await Model.findOne({ _id: itemId, host_id: hostId }).read('primary').lean();
+	const item = await Model.findOneAndUpdate({ _id: itemId, host_id: hostId, ...(options.item ? { project: options.item.project, updatedAt: options.item.updatedAt } : {}) }, { $inc: { __v: 0 } }, { timestamps: false, returnDocument: 'after' }).lean();
 	if (!item || String(item._id) !== String(itemId) || item.host_id !== hostId) return null;
 	await requireActiveProject(hostId, item.project);
-	if (options.item && !(await Model.exists({ _id: itemId, host_id: hostId, project: item.project, updatedAt: item.updatedAt }).read('primary'))) return null;
-	const connection = await ObsidianConnection.findOne({ project: item.project, host_id: hostId, enabled: true }).read('primary').lean();
-	let file = item.obsidian_source?.file_id ? await queryForSave(ObsidianFile.findOne({ _id: item.obsidian_source.file_id, host_id: hostId }).read('primary')) : null;
+	const connection = await ObsidianConnection.findOne({ project: item.project, host_id: hostId, enabled: true }).lean();
+	let file = item.obsidian_source?.file_id ? await queryForSave(ObsidianFile.findOneAndUpdate({ _id: item.obsidian_source.file_id, host_id: hostId }, { $inc: { revision: 0 } }, { timestamps: false, returnDocument: 'after' })) : null;
 	const existingRaw = file?.blob ? await getMarkdownContent(hostId, file._id) : '';
 	if (item.obsidian_source?.file_id && (!file || file.projection_detached || String(file.project) !== String(item.project) || (connection && String(file.connection) !== String(connection._id)))) {
 		if (file) {
-			const previousConnection = await ObsidianConnection.findOne({ _id: file.connection, host_id: hostId }).read('primary').lean();
+			const previousConnection = await ObsidianConnection.findOne({ _id: file.connection, host_id: hostId }).lean();
 			if (!previousConnection) throw new ObsidianSyncError('The original vault connection is unavailable', 409, 'connection_not_found');
 			file.projection_detached = true;
-			await commitFile(previousConnection, file, 'trash', { modifiedAt: item.updatedAt || new Date(), source: 'streamient', updateRecord: false, operationId: `streamient:${type}:${item._id}:${file._id}:move:${file.revision + 1}` });
+			await withProjectGate(previousConnection, (publish) => commitFileAtomic(previousConnection, file, 'trash', { modifiedAt: item.updatedAt || new Date(), source: 'streamient', updateRecord: false, operationId: `streamient:${type}:${item._id}:${file._id}:move:${file.revision + 1}` }, publish));
 		}
 		const detached = await Model.updateOne({ _id: itemId, host_id: hostId, project: item.project, updatedAt: item.updatedAt, 'obsidian_source.file_id': item.obsidian_source.file_id }, { $unset: { obsidian_source: '' } }, { timestamps: false });
 		if (!detached.modifiedCount) return null;
@@ -1201,62 +1333,45 @@ export async function syncStreamientItem(type, itemId, hostId, options = {}) {
 		file = null;
 	}
 	if (!connection) return null;
-	if (!file) return item.in_trash ? null : exportProjectItem(connection, type, item, { ...options, existingRaw });
+	if (!file) return item.in_trash ? null : withProjectGate(connection, (publish) => exportProjectItem(connection, type, item, { ...options, existingRaw }, publish));
 	if (new Date(file.modified_at).getTime() > new Date(item.updatedAt).getTime() && typeof options.markdown !== 'string') return file;
 	if (item.in_trash) {
 		const changeTime = item.trashed_at || new Date();
-		await commitFile(connection, file, 'trash', {
+		await withProjectGate(connection, (publish) => commitFileAtomic(connection, file, 'trash', {
 			modifiedAt: changeTime,
 			source: 'streamient',
 			updateRecord: false,
 			operationId: `streamient:${type}:${item._id}:${file._id}:trash:${file.revision + 1}`,
-		});
+		}, publish));
 		return file;
 	}
 	const raw = typeof options.markdown === 'string' ? options.markdown : itemMarkdown(type, item, existingRaw);
 	const blob = await storeBuffer(hostId, Buffer.from(raw), 'text/markdown');
 	const changeTime = typeof options.markdown === 'string' ? new Date() : item.updatedAt || new Date();
-	await commitFile(connection, file, file.in_trash ? 'restore' : 'update', {
+	await withProjectGate(connection, (publish) => commitFileAtomic(connection, file, file.in_trash ? 'restore' : 'update', {
 		blob,
 		modifiedAt: changeTime,
 		source: 'streamient',
 		updateRecord: typeof options.markdown === 'string',
 		operationId: `streamient:${type}:${item._id}:${file._id}:update:${file.revision + 1}`,
-	});
+	}, publish));
 	return file;
 	} finally { await releaseAccountWork(); }
 }
 
 export async function cleanupObsidianRetention(now = new Date()) {
 	const cutoff = new Date(now.getTime() - OBSIDIAN_REVISION_RETENTION_MS);
-	const trashed = await queryForSave(ObsidianFile.find({ in_trash: true, trashed_at: { $lte: cutoff }, blob: { $ne: null } }));
-	for (const file of trashed) {
-		const size = file.size || 0;
-		file.blob = null;
-		file.sha256 = '';
-		file.size = 0;
-		file.text_content = '';
-		file.extraction_status = 'not_needed';
-		file.extraction_error = '';
-		file.is_indexed = file.kind === 'markdown';
-		await file.save();
-		if (size) await ObsidianConnection.updateOne({ _id: file.connection, host_id: file.host_id }, { $inc: { storage_bytes: -size } });
+	let purgedFiles = 0;
+	for (const markdown of [true, false]) while (true) {
+		const file = await ObsidianFile.findOneAndUpdate({ kind: markdown ? 'markdown' : { $ne: 'markdown' }, in_trash: true, trashed_at: { $lte: cutoff }, blob: { $ne: null } }, { $set: { blob: null, sha256: '', size: 0, text_content: '', extraction_status: 'not_needed', extraction_error: '', is_indexed: markdown } }, { returnDocument: 'before', timestamps: false }).lean();
+		if (!file) break;
+		if (file.size) await ObsidianConnection.updateOne({ _id: file.connection, host_id: file.host_id }, { $inc: { storage_bytes: -file.size } });
+		purgedFiles++;
 	}
 	await ObsidianRevision.deleteMany({ expires_at: { $lte: now } });
-	const blobs = await ObsidianBlob.find({ createdAt: { $lte: cutoff } }).lean();
-	let deletedBlobs = 0;
-	for (const blob of blobs) {
-		const [fileRef, revisionRef, uploadRef] = await Promise.all([
-			ObsidianFile.exists({ blob: blob._id }),
-			ObsidianRevision.exists({ blob: blob._id }),
-			ObsidianUpload.exists({ blob: blob._id, state: 'complete' }),
-		]);
-		if (!fileRef && !revisionRef && !uploadRef) {
-			await deleteBlob(blob);
-			deletedBlobs++;
-		}
-	}
-	return { purged_files: trashed.length, deleted_blobs: deletedBlobs };
+	// shortcut: retain unreferenced blobs until collection-wide reference creation and GC share a write fence.
+
+	return { purged_files: purgedFiles, deleted_blobs: 0 };
 }
 
 export async function processObsidianExtraction(fileId, hostId, { signal, assertOwnership, isOwner, withOwnership = (callback) => callback(undefined) } = {}) {
@@ -1300,4 +1415,4 @@ export async function deleteObsidianHostDirectory(hostId) {
 	for (const area of ['blobs', 'uploads', 'server', 'extract']) await rm(path.resolve(config.obsidian.vaultsDir, area, String(hostId)), { recursive: true, force: true });
 }
 
-export const __test = { normalizedModifiedAt, parsedMarkdown, itemMarkdown, projectMarkdownFile, commitFile, renderCanonicalMarkdown, canvasText, conflictPath, publicFile, publicChange, applyMutation, normalizeSyncScope, pathInSyncScope, summarizeActions, registerDeviceOnConnection, reconcileManifestEntries, scopeMongoFilter };
+export const __test = { normalizedModifiedAt, parsedMarkdown, itemMarkdown, projectMarkdownFile, commitFile, commitFileAtomic, bufferedEmit, emitBuffer, recordChange, nextSequence, renderCanonicalMarkdown, canvasText, conflictPath, publicFile, publicChange, applyMutation, normalizeSyncScope, pathInSyncScope, summarizeActions, registerDeviceOnConnection, reconcileManifestEntries, scopeMongoFilter };

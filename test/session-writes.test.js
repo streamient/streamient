@@ -14,6 +14,7 @@ function fixture() {
 	let failure = false;
 	const collection = {
 		createIndex: async () => {},
+		findOneAndUpdate: async (filter) => collection.findOne(filter),
 		findOne: async ({ _id }) => {
 			if (failure) throw new Error('database unavailable');
 			const row = rows.get(_id);
@@ -35,19 +36,20 @@ function fixture() {
 	};
 	const stores = [];
 	let options;
-	const middleware = new Function('session', 'MongoStore', 'config', 'process', `${configuration}; return sessionMiddleware;`)((settings) => { options = settings; return session(settings); }, { create: (settings) => {
+	const revoked = new Set();
+	const middleware = new Function('session', 'MongoStore', 'config', 'process', 'isSessionRevoked', 'publicSessionId', `${configuration}; return sessionMiddleware;`)((settings) => { options = settings; return session(settings); }, { create: (settings) => {
 		const store = MongoStore.create({ ...settings, mongoUrl: undefined, client: { db: () => ({ collection: () => collection }) } });
 		stores.push(store);
 		return store;
-	} }, { sessionSecret: 'session-regression-secret', mongoUri: 'unused' }, { env: { NODE_ENV: 'test' } });
-	return { rows, writes, stores, options, middleware, collection, fail: () => { failure = true; } };
+	} }, { sessionSecret: 'session-regression-secret', mongoUri: 'unused' }, { env: { NODE_ENV: 'test' } }, async (id) => revoked.has(id), (sid) => `public:${sid}`);
+	return { rows, writes, stores, options, middleware, collection, revoked, fail: () => { failure = true; } };
 }
 
 function call(store, method, ...args) {
 	return new Promise((resolve, reject) => store[method](...args, (err, result) => err ? reject(err) : resolve(result)));
 }
 
-test('real HTTP middleware skips unchanged writes, saves changes/explicit saves, preserves cookie policy and logout', async (t) => {
+test('real HTTP middleware skips unchanged payload writes, saves changes/explicit saves, preserves cookie policy and logout', async (t) => {
 	const f = fixture();
 	const app = express();
 	app.use(f.middleware);
@@ -130,4 +132,16 @@ test('legacy sessions acquire throttle metadata and cookie expiry overrides TTL'
 	const count = f.writes.length;
 	await call(store, 'touch', 'legacy', await call(store, 'get', 'legacy'));
 	assert.equal(f.writes.length, count);
+});
+
+test('a revoked session stays signed out even after a late save recreates its row', async () => {
+	const f = fixture();
+	const store = f.stores[0];
+	await call(store, 'set', 'stolen', { cookie: {}, userId: 'user' });
+	f.revoked.add('public:stolen');
+	assert.equal(await call(store, 'get', 'stolen'), null);
+	assert.equal(f.rows.has('stolen'), false);
+	await call(store, 'set', 'stolen', { cookie: {}, userId: 'user' });
+	assert.equal(await call(store, 'get', 'stolen'), null);
+	assert.ok(await call(store, 'set', 'fresh', { cookie: {}, userId: 'user' }) === undefined && await call(store, 'get', 'fresh'));
 });

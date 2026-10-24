@@ -213,7 +213,7 @@ router.post('/email', raw({ type: () => true, limit: '25mb' }), async (req, res)
 
 		res.json({ accepted: true, email_id: email._id.toString() });
 	} catch (err) {
-		if (err.message === 'Email message already exists') {
+		if (err.code === 'email_already_exists') {
 			return res.json({ accepted: false });
 		}
 		res.status(400).json({ error: err.message });

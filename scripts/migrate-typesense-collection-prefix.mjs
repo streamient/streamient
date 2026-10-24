@@ -31,7 +31,7 @@ if (!prefix) {
 	process.exit(1);
 }
 
-await mongoose.connect(config.mongoUri);
+await mongoose.connect(config.mongoUri, config.mongoOptions);
 const hosts = await Tenant.find({}).select('host_id').lean();
 const ts = getTypesenseClient();
 

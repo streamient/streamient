@@ -10,7 +10,7 @@ import { getCache } from '../modules/cache.js';
 
 describe('Typesense import handling', () => {
 	it('keeps a record queued when its project changes during import, then indexes the new version', async (t) => {
-		const record = { _id: '507f1f77bcf86cd799439011', host_id: 'index-race', project: 'source', title: 'Moved note', text_content: 'Content', tags: [], createdAt: new Date('2026-09-17T00:00:00Z'), updatedAt: new Date('2026-09-17T00:00:00Z'), is_indexed: false };
+		const record = { _id: '507f1f77bcf86cd799439011', host_id: 'index-race', project: 'source', title: 'Moved note', text_content: 'Content', tags: [], exists: true, updatedAt: new Date('2026-09-17T00:00:00Z'), is_indexed: false, index_claim: null };
 		const importedProjects = [];
 		t.mock.method(getCache(), 'get', async () => null);
 		const originalClient = Typesense.Client;
@@ -28,16 +28,33 @@ describe('Typesense import handling', () => {
 			}
 		};
 		const Model = {
-			aggregate: async () => record.is_indexed ? [] : [{ _id: record.host_id }],
+			aggregate: async () => (record.exists && record.is_indexed !== true ? [{ _id: record.host_id }] : []),
 			find() {
-				const snapshot = structuredClone(record);
-				const query = { sort: () => query, limit: () => query, lean: async () => [snapshot] };
+				const query = { sort: () => query, limit: () => query, lean: async () => [{ ...record }] };
 				return query;
 			},
-			async updateMany(filter, update) {
-				const matches = filter.$or ? filter.host_id === record.host_id && filter.$or.some((version) => String(version._id) === record._id && version.updatedAt.getTime() === record.updatedAt.getTime()) : filter._id.$in.includes(record._id);
-				if (matches) record.is_indexed = update.$set.is_indexed;
-				return { modifiedCount: matches ? 1 : 0 };
+			findOneAndUpdate(filter, update, options) {
+				return {
+					select() { return this; },
+					lean: async () => {
+						const set = update?.$set || {};
+						const isClaim = 'index_claim' in set;
+						const isMark = set.is_indexed === true;
+						const isRequeue = set.is_indexed === false;
+						const versionMatches = filter.updatedAt ? record.updatedAt && filter.updatedAt.getTime() === record.updatedAt.getTime() : true;
+						const claimMatches = filter.index_claim !== undefined ? filter.index_claim === record.index_claim : true;
+						const matches = record.exists && filter.host_id === record.host_id && String(filter._id) === record._id && versionMatches && claimMatches;
+						if (isClaim) {
+							if (!matches) return null;
+							const before = { _id: record._id, index_claim: record.index_claim };
+							record.index_claim = set.index_claim;
+							return options?.returnDocument === 'before' ? before : { _id: record._id, index_claim: record.index_claim };
+						}
+						if (isMark) { if (!matches) return null; record.is_indexed = true; return { _id: record._id }; }
+						if (isRequeue) { if (!matches) return null; record.is_indexed = false; return { _id: record._id }; }
+						return null;
+					},
+				};
 			},
 		};
 		const { runStreamientIndexer } = await import(`../modules/typesense.js?move-during-import=${Date.now()}`);

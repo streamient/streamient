@@ -10,6 +10,7 @@ import { User, compareUserPassword, toSafeUser } from '../model/user.js';
 import { applyTenantContextToSession, initializeSessionTenant } from '../modules/tenancy.js';
 import { ensureCollections } from '../modules/typesense.js';
 import { generateToken } from '../middleware/auth.js';
+import { getClientIp } from '../middleware/rate_limit.js';
 import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail, sendSignupNotificationEmail } from '../services/email_service.js';
 import { buildHostedTrialFields } from '../services/billing_service.js';
 import { sendMagicLink, isMagicLinkValid, verifyMagicLink } from '../services/magic_link_service.js';
@@ -17,6 +18,8 @@ import * as passkeyService from '../services/passkey_service.js';
 import { provisionSignupAccount } from '../services/account_provisioning_service.js';
 import { enqueueHelpmonksSignupSequence } from '../services/helpmonks_signup_sequence_service.js';
 import { createLogger } from '../modules/logger.js';
+import { publicSessionId, revokeCurrentUserSession } from '../services/user_session_service.js';
+import { disconnectSessionSockets } from '../modules/socket.js';
 
 const log = createLogger('auth');
 
@@ -31,7 +34,7 @@ async function deletionActor(req) {
 	const hostId = String(req.query.host_id || '');
 	if (!/^[a-f\d]{24}$/i.test(hostId) || hostId !== String(req.session.host_id || '')) throw Object.assign(new Error('Select the account to delete'), { status: 403 });
 	if (req.whiteLabelHostId && req.whiteLabelHostId !== hostId) throw Object.assign(new Error('Account context does not match this domain'), { status: 403 });
-	const tenant = await Tenant.findOne({ host_id: hostId, _id: req.session.tenantId, owner: req.session.userId }).read('primary').lean();
+	const tenant = await Tenant.findOne({ host_id: hostId, _id: req.session.tenantId, owner: req.session.userId }).lean();
 	if (!tenant) throw Object.assign(new Error('Only the account owner can delete this account'), { status: 403 });
 	return { tenant, actor: { userId: String(req.session.userId) } };
 }
@@ -53,7 +56,7 @@ router.post('/api/v1/account/deletion', csrfProtection, async (req, res) => {
 		const confirmation = req.session.accountDeletionConfirmation;
 		if (!confirmation || confirmation.host_id !== tenant.host_id || confirmation.expires_at < Date.now() || typeof req.body.confirmation_token !== 'string' || req.body.confirmation_token !== confirmation.token) return res.status(403).json({ error: 'Deletion confirmation expired. Please try again.' });
 		const result = await requestAccountDeletion(tenant.host_id, actor, req.body.confirmation);
-		const user = await User.findById(actor.userId).select('is_active').read('primary').lean();
+		const user = await User.findById(actor.userId).select('is_active').lean();
 		const destination = await pruneDeletedAccountSession(req.session, tenant, user?.is_active !== false && user ? [] : [actor.userId]);
 		const redirectTo = destination ? '/dashboard' : '/login';
 		if (!destination) return req.session.destroy(() => { res.clearCookie('connect.sid'); res.status(202).json({ ...result, redirect_to: redirectTo }); });
@@ -92,6 +95,8 @@ async function recordSuccessfulLogin(req, userOrId) {
 	const timestamp = new Date();
 	if (req.session) {
 		req.session.lastLoginRecordedAt = timestamp.toISOString();
+		req.session.userAgent = String(req.headers['user-agent'] || '').slice(0, 300);
+		req.session.ip = getClientIp(req);
 	}
 	await User.findByIdAndUpdate(userId, { $set: { last_login: timestamp } });
 	return timestamp;
@@ -440,14 +445,14 @@ router.post('/2fa/setup', async (req, res) => {
 	try {
 		if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
 
-		const user = await queryForSave(User.findById(req.session.userId).select('+totp_secret'));
+		const user = await User.findById(req.session.userId).select('email').lean();
 		if (!user) return res.status(404).json({ error: 'User not found' });
 
 		const secret = generateSecret();
 		const otpauth = generateURI({ issuer: 'Streamient', label: user.email, secret });
 
-		user.totp_secret = secret;
-		await user.save();
+		const result = await User.updateOne({ _id: req.session.userId, totp_enabled: { $ne: true } }, { $set: { totp_secret: secret } });
+		if (!result.matchedCount) return res.status(409).json({ error: '2FA is already enabled or the user is no longer available' });
 
 		res.json({ secret, otpauth });
 	} catch (err) {
@@ -467,8 +472,8 @@ router.post('/2fa/confirm', async (req, res) => {
 		const result = verifySync({ token: code, secret: user.totp_secret });
 		if (!result.valid) return res.status(400).json({ error: 'Invalid code — try again' });
 
-		user.totp_enabled = true;
-		await user.save();
+		const enabled = await User.updateOne({ _id: req.session.userId, totp_enabled: { $ne: true }, totp_secret: user.totp_secret }, { $set: { totp_enabled: true } });
+		if (!enabled.matchedCount) return res.status(409).json({ error: '2FA setup changed. Please start setup again.' });
 
 		res.json({ message: '2FA enabled successfully' });
 	} catch (err) {
@@ -636,15 +641,18 @@ router.all('/team-invite', (req, res) => {
 
 // ---- Logout ----
 
-router.post('/logout', (req, res) => {
-	if (req.session?.oauthLoginReturnTo) {
-		delete req.session.oauthLoginReturnTo;
-	}
-	req.session.destroy(() => {
+router.post('/logout', async (req, res) => {
+	try {
+		await revokeCurrentUserSession(req.sessionID);
+		await disconnectSessionSockets([publicSessionId(req.sessionID)]);
+		await new Promise((resolve, reject) => req.session.destroy((err) => err ? reject(err) : resolve()));
 		res.clearCookie('connect.sid');
 		if (req.accepts('html')) return res.redirect('/login');
 		res.json({ message: 'Logged out' });
-	});
+	} catch (err) {
+		log.error({ err }, 'Logout failed');
+		return res.status(500).format({ html: () => res.send('Logout failed. Please try again.'), json: () => res.json({ error: 'Logout failed' }) });
+	}
 });
 
 // ---- Render auth pages ----

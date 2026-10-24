@@ -9,6 +9,7 @@ import mongoose from '../db.js';
 import { resolveActiveTenantContext } from './tenancy.js';
 import * as OtelRuntime from './otel_runtime.js';
 import { createLogger } from './logger.js';
+import { isSessionRevoked, publicSessionId } from '../services/user_session_service.js';
 
 const log = createLogger('socket');
 
@@ -30,7 +31,7 @@ function usesMongoSocketTransport() {
 async function getSocketMongoClient(socketConfig) {
 	if (socketConfig.mongoUrl === config.mongoUri) return mongoose.connection.getClient();
 	if (socketMongoClient) return socketMongoClient;
-	socketMongoClient = new MongoClient(socketConfig.mongoUrl);
+	socketMongoClient = new MongoClient(socketConfig.mongoUrl, config.mongoOptions);
 	try {
 		await socketMongoClient.connect();
 	} catch (err) {
@@ -97,6 +98,9 @@ async function authenticateSocketBearer(socket) {
 	if (!token) throw new Error('Socket authentication required');
 	const payload = jwt.verify(token, config.jwtSecret);
 	if (payload.aud && !SOCKET_ALLOWED_AUDIENCES.has(payload.aud)) throw new Error('Invalid socket token audience');
+	if (payload.sid && await isSessionRevoked(payload.sid)) throw new Error('Session revoked');
+	socket.data.sessionId = payload.sid;
+	if (payload.sid) socket.join(`session:${payload.sid}`);
 	const userId = payload.userId || payload.sub;
 	if (!userId) throw new Error('Invalid socket token subject');
 	const context = await resolveActiveTenantContext(userId, payload.tenantId, payload.host_id);
@@ -150,6 +154,13 @@ export async function disconnectTenantSockets(hostId) {
 	if (usesMongoSocketTransport()) (await ensureMongoEmitter()).in(`account:${hostId}`).in(`tenant:${hostId}`).disconnectSockets(true);
 }
 
+export async function disconnectSessionSockets(publicIds) {
+	if (!publicIds.length) return;
+	const rooms = publicIds.map((id) => `session:${id}`);
+	if (io) return io.in(rooms).disconnectSockets(true);
+	if (usesMongoSocketTransport()) (await ensureMongoEmitter()).in(rooms).disconnectSockets(true);
+}
+
 export async function deleteTenantSocketPackets(hostId) {
 	if (!usesMongoSocketTransport()) return;
 	const collection = await getSocketMongoCollection();
@@ -173,12 +184,7 @@ export async function setupSocketIO(httpServer, sessionMiddleware, handlers = {}
 			pingTimeout: 60000,
 			cleanupEmptyChildNamespaces: true,
 			cors: { origin: '*', credentials: true },
-			connectionStateRecovery: {
-				// the backup duration of the sessions and the packets
-				maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes
-				// whether to skip middlewares upon successful recovery
-				skipMiddlewares: false,
-			},
+			// Recovery restores rooms and packets before authorization; reconnects must subscribe again.
 			tls: { rejectUnauthorized: false },
 			perMessageDeflate: { threshold: 32768 },
 		});
@@ -191,6 +197,9 @@ export async function setupSocketIO(httpServer, sessionMiddleware, handlers = {}
 			try {
 				if (!socket.request?.session?.userId || !socket.request?.session?.host_id) {
 					await authenticateSocketBearer(socket);
+				} else {
+					socket.data.sessionId = publicSessionId(socket.request.sessionID);
+					socket.join(`session:${socket.data.sessionId}`);
 				}
 				const identity = getSocketIdentity(socket);
 			if (identity.hostId) { await assertTenantAvailable(identity.hostId); socket.join(`account:${identity.hostId}`); }
@@ -207,6 +216,16 @@ export async function setupSocketIO(httpServer, sessionMiddleware, handlers = {}
 		}
 
 		io.on('connection', (socket) => {
+			// Room disconnects miss pending handshakes; check again once the socket can be disconnected.
+			const sessionReady = isSessionRevoked(socket.data.sessionId).then((revoked) => {
+				if (revoked) socket.disconnect(true);
+				return !revoked;
+			}).catch((err) => {
+				log.warn({ err, socketId: socket.id }, 'Socket session check failed');
+				socket.disconnect(true);
+				return false;
+			});
+			socket.use(async (_packet, next) => { if (await sessionReady && socket.connected) next(); });
 			OtelRuntime.createCustomSpan('socketio.connection', (connectionSpan) => {
 				connectionSpan.setAttribute('socket.id', socket.id);
 				connectionSpan.setAttribute('server.mode', process.env.SERVER_MODE || 'app');
@@ -217,7 +236,7 @@ export async function setupSocketIO(httpServer, sessionMiddleware, handlers = {}
 			socket.on('subscribe', async (room, userId, hostId, app = '') => {
 				const authorizedRoom = resolveAuthorizedSubscribeRoom(getSocketIdentity(socket), room, userId, hostId);
 			try { await assertTenantAvailable(hostId); } catch { socket.disconnect(true); return; }
-				if (!authorizedRoom) return;
+				if (!authorizedRoom || !socket.connected) return;
 				OtelRuntime.createCustomSpan('socketio.subscribe', (subscribeSpan) => {
 					subscribeSpan.setAttribute('socket.id', socket.id);
 					subscribeSpan.setAttribute('socket.room', authorizedRoom);

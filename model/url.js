@@ -23,6 +23,7 @@ const urlSchema = new mongoose.Schema(
 		owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 		host_id: { type: String, required: true, index: true },
 		is_indexed: { type: Boolean, default: false },
+		index_claim: { type: String, default: null },
 		in_trash: { type: Boolean, default: false },
 		trashed_at: { type: Date, default: null },
 		obsidian_source: {

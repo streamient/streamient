@@ -26,6 +26,7 @@ export function toSafeUser(user) {
 	delete obj.stripe_customer_id;
 	delete obj.stripe_subscription_id;
 	delete obj.stripe_free_subscription_id;
+	delete obj.stripe_subscription_event_at;
 	delete obj.timezone_configured;
 	delete obj.product_updates_seen_at;
 	if (Array.isArray(obj.access_tokens)) obj.access_tokens = safeAccessTokens(obj.access_tokens);
@@ -58,6 +59,11 @@ const userSchema = new mongoose.Schema(
 		// $0 tracking subscription for Free accounts — never mirrored into
 		// subscription_status, so it can't block checkout or the trial flow.
 		stripe_free_subscription_id: { type: String, select: false },
+		// Unix seconds of the most recent applied Stripe subscription event for
+		// the current stripe_subscription_id. Guards against a delayed older
+		// webhook (e.g. a stale "updated" after a newer "deleted") reactivating
+		// a canceled subscription.
+		stripe_subscription_event_at: { type: Number, select: false },
 		subscription_status: {
 			type: String,
 			enum: ['incomplete', 'trialing', 'trial_expired', 'active', 'past_due', 'canceled', 'unpaid'],

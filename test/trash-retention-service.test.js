@@ -31,15 +31,12 @@ function fakeRetentionModel(type, doc, observations) {
 			};
 			return chain;
 		},
-		deleteMany: async (query) => {
-			observations.deletes.push({ type, query });
-			return { deletedCount: 1 };
-		},
+		findOneAndDelete: (query) => ({ lean: async () => { observations.deletes.push({ type, query }); return doc; } }),
 	};
 }
 
 describe('trash retention service', () => {
-	it('deletes all four trash models, preserves spam retention, and uses primary lean reads', async () => {
+	it('deletes all four trash models, preserves spam retention, and uses replica candidates and atomic delete results', async () => {
 		const now = new Date('2026-02-01T02:30:00.000Z');
 		const observations = { queries: {}, limits: [], reads: [], leans: [], deletes: [] };
 		const models = {};
@@ -66,7 +63,7 @@ describe('trash retention service', () => {
 		assert.deepEqual(observations.queries.memories[0], observations.queries.notes[0]);
 		assert.deepEqual(observations.queries.urls[0], observations.queries.notes[0]);
 		assert.deepEqual(observations.queries.emails[0], buildTrashRetentionQuery('emails', summary.cutoff));
-		assert.equal(observations.reads.length, 8);
+		assert.equal(observations.reads.length, 0);
 		assert.ok(observations.reads.every((item) => item.preference === 'primary'));
 		assert.deepEqual(new Set(observations.leans), new Set(['notes', 'memories', 'urls', 'emails']));
 		assert.equal(observations.deletes.length, 4);

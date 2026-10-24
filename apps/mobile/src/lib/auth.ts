@@ -9,6 +9,7 @@ const TOKEN_KEY = "tokens";
 const VERIFIER_KEY = "pkce_verifier";
 const STATE_KEY = "oauth_state";
 const SERVER_KEY = "server";
+const PENDING_SERVER_KEY = "oauth_pending_server";
 
 function base64Url(bytes: ArrayBuffer) {
 	return btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
@@ -31,23 +32,45 @@ export async function saveSelectedServer(server: ServerOption) {
 	await setStoredJson(SERVER_KEY, server);
 }
 
+export async function loadPendingServer() {
+	return getStoredJson<ServerOption>(PENDING_SERVER_KEY);
+}
+
+export async function savePendingServer(server: ServerOption) {
+	await setStoredJson(PENDING_SERVER_KEY, server);
+}
+
+export async function clearPendingServer() {
+	await removeStoredValue(PENDING_SERVER_KEY);
+}
+
 export async function loadTokens() {
 	return getStoredJson<TokenSet>(TOKEN_KEY);
 }
 
+// Serialize credential-store writes so a refresh that resolves before sign-out
+// cannot re-persist the old tokens after clearAuth has already run.
+let authWriteChain: Promise<unknown> = Promise.resolve();
+
+function serializeAuthWrite<T>(operation: () => Promise<T>): Promise<T> {
+	const result = authWriteChain.then(operation, operation);
+	authWriteChain = result.then(() => undefined, () => undefined);
+	return result;
+}
+
 export async function saveTokens(tokens: TokenSet) {
-	await setStoredJson(TOKEN_KEY, { ...tokens, obtained_at: Date.now() });
+	await serializeAuthWrite(() => setStoredJson(TOKEN_KEY, { ...tokens, obtained_at: Date.now() }));
 }
 
 export async function clearAuth() {
-	await Promise.all([removeStoredValue(TOKEN_KEY), removeStoredValue(VERIFIER_KEY), removeStoredValue(STATE_KEY), removeStoredValue(SERVER_KEY)]);
+	await serializeAuthWrite(() => Promise.all([removeStoredValue(TOKEN_KEY), removeStoredValue(VERIFIER_KEY), removeStoredValue(STATE_KEY), removeStoredValue(SERVER_KEY), removeStoredValue(PENDING_SERVER_KEY)]));
 }
 
 export async function beginOAuth(server: ServerOption) {
 	const verifier = randomString(86);
 	const state = randomString(40);
 	const params = new URLSearchParams({ client_id: MOBILE_CLIENT_ID, code_challenge: await sha256(verifier), code_challenge_method: "S256", redirect_uri: oauthRedirectUri(), resource: server.resourceUrl, response_type: "code", scope: MOBILE_SCOPES, state });
-	await Promise.all([setStoredJson(VERIFIER_KEY, verifier), setStoredJson(STATE_KEY, state), saveSelectedServer(server)]);
+	await Promise.all([setStoredJson(VERIFIER_KEY, verifier), setStoredJson(STATE_KEY, state), savePendingServer(server)]);
 	const url = `${server.baseUrl}/oauth/authorize?${params}`;
 	if (Capacitor.isNativePlatform()) await Browser.open({ url, presentationStyle: "fullscreen" });
 	else window.location.assign(url);
@@ -66,7 +89,7 @@ export function parseOAuthCallback(url: string) {
 async function tokenRequest(server: ServerOption, body: URLSearchParams): Promise<TokenSet> {
 	const response = await fetch(`${server.baseUrl}/oauth/token`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
 	const result = await response.json().catch(() => ({})) as TokenSet & { error?: string; error_description?: string };
-	if (!response.ok) throw new Error(result.error_description || result.error || "OAuth token exchange failed");
+	if (!response.ok) throw Object.assign(new Error(result.error_description || result.error || "OAuth token exchange failed"), { status: response.status, code: result.error });
 	return { ...result, obtained_at: Date.now() };
 }
 
@@ -75,7 +98,7 @@ export async function exchangeCode(server: ServerOption, code: string, state: st
 	if (!expectedState || expectedState !== state) throw new Error("OAuth state mismatch");
 	if (!verifier) throw new Error("Missing PKCE verifier");
 	const tokens = await tokenRequest(server, new URLSearchParams({ client_id: MOBILE_CLIENT_ID, code, code_verifier: verifier, grant_type: "authorization_code", redirect_uri: oauthRedirectUri(), resource: server.resourceUrl }));
-	await Promise.all([removeStoredValue(VERIFIER_KEY), removeStoredValue(STATE_KEY), saveTokens(tokens)]);
+	await Promise.all([removeStoredValue(VERIFIER_KEY), removeStoredValue(STATE_KEY), saveTokens(tokens), saveSelectedServer(server), clearPendingServer()]);
 	if (Capacitor.isNativePlatform()) await Browser.close().catch(() => undefined);
 	return tokens;
 }

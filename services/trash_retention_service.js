@@ -36,23 +36,6 @@ function groupIdsByHost(docs) {
 	return grouped;
 }
 
-function hostIdQueryForDocs(docs) {
-	const groups = [...groupIdsByHost(docs)].map(([hostId, ids]) => ({ host_id: hostId, _id: { $in: ids } }));
-	if (!groups.length) return { _id: { $in: [] } };
-	if (groups.length === 1) return groups[0];
-	return { $or: groups };
-}
-
-function documentKey(doc) {
-	return `${stringValue(doc.host_id)}\u0000${stringValue(doc._id)}`;
-}
-
-async function findDeletedDocs(model, docs) {
-	const remaining = await model.find(hostIdQueryForDocs(docs)).select('_id host_id').read('primary').lean();
-	const remainingKeys = new Set(remaining.map(documentKey));
-	return docs.filter((doc) => !remainingKeys.has(documentKey(doc)));
-}
-
 async function cleanupReferences(type, tsType, docs, removeSearchDocuments, removeGraphLinks, errors) {
 	for (const [hostId, ids] of groupIdsByHost(docs)) {
 		let graphCleaned = false;
@@ -80,10 +63,13 @@ async function runTypeRetention(type, entry, options) {
 	const summary = { deleted: 0, batches: 0, errors: [] };
 
 	while (true) {
-		const docs = await model.find(query).select('_id host_id').limit(batchSize).read('primary').lean();
+		const docs = await model.find(query).select('_id host_id').limit(batchSize).lean();
 		if (!docs.length) break;
-		await model.deleteMany({ $and: [query, hostIdQueryForDocs(docs)] });
-		const deletedDocs = await findDeletedDocs(model, docs);
+		const deletedDocs = [];
+		for (const doc of docs) {
+			const deleted = await model.findOneAndDelete({ $and: [query, { _id: doc._id, host_id: doc.host_id }] }).lean();
+			if (deleted) deletedDocs.push(deleted);
+		}
 		const deletedInBatch = deletedDocs.length;
 		summary.deleted += deletedInBatch;
 		summary.batches++;

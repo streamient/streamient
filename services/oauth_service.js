@@ -600,12 +600,13 @@ export async function listConsents(userId, host_id) {
 }
 
 export async function revokeConsent(consentId, userId, host_id, ctx = {}) {
-	const consent = await queryForSave(OAuthConsent.findOne({ _id: consentId, user: userId, host_id, revoked_at: null }));
-	if (!consent) throw new Error('Authorized app not found');
-
-	consent.revoked_at = new Date();
-	await consent.save();
-	await OAuthRefreshToken.updateMany({ user: userId, host_id, client_id: consent.client_id, revoked_at: null }, { $set: { revoked_at: new Date() } });
+	const consent = await mongoose.connection.transaction(async (session) => {
+		const revoked = await OAuthConsent.findOneAndUpdate({ _id: consentId, user: userId, host_id, revoked_at: null }, { $set: { revoked_at: new Date() }, $inc: { __v: 1 } }, { session, returnDocument: 'after' }).lean();
+		if (!revoked) throw new Error('Authorized app not found');
+		await OAuthRefreshToken.updateMany({ user: userId, host_id, client_id: revoked.client_id, revoked_at: null }, { $set: { revoked_at: new Date() } }, { session });
+		await OAuthAuthorizationCode.deleteMany({ user: userId, host_id, client_id: revoked.client_id }, { session });
+		return revoked;
+	});
 
 	audit.log({
 		action: 'delete',
@@ -634,10 +635,6 @@ export async function findConsent(options) {
 	return consentLookupQuery(options).lean();
 }
 
-async function findConsentForSave(options) {
-	return queryForSave(consentLookupQuery(options));
-}
-
 export function consentCoversScopes(consent, requestedScopes) {
 	if (!consent) return false;
 	const granted = new Set(normalizeScopeInput(consent.scopes || []));
@@ -645,8 +642,7 @@ export function consentCoversScopes(consent, requestedScopes) {
 }
 
 export async function approveConsent({ userId, tenantId, host_id, client, requestedScopes, resource, redirectUri, ctx = {} }) {
-	const existing = await findConsentForSave({ userId, host_id, clientId: client.client_id, resource });
-	const scopes = normalizeScopesForResource([...(existing?.scopes || []), ...normalizeScopeInput(requestedScopes)], resource);
+	const scopes = normalizeScopesForResource(requestedScopes, resource);
 	const redirectUris = [...new Set([...(client.redirect_uris || []), redirectUri].filter(Boolean))];
 	const snapshot = {
 		client_name: client.client_name,
@@ -657,32 +653,25 @@ export async function approveConsent({ userId, tenantId, host_id, client, reques
 		scopes,
 	};
 
-	const consent = existing || new OAuthConsent({
-		user: userId,
-		tenant: tenantId,
-		host_id,
-		client_id: client.client_id,
-		resource,
-		granted_at: new Date(),
-	});
-
-	consent.client_name = snapshot.client_name;
-	consent.client_uri = snapshot.client_uri;
-	consent.logo_uri = snapshot.logo_uri;
-	consent.redirect_uris = snapshot.redirect_uris;
-	consent.registration_source = snapshot.registration_source;
-	consent.scopes = scopes;
-	consent.revoked_at = undefined;
-	consent.last_used_at = new Date();
-	await consent.save();
+	const now = new Date();
+	const result = await OAuthConsent.findOneAndUpdate({ user: userId, host_id, client_id: client.client_id, resource }, [{ $set: {
+		...Object.fromEntries(Object.entries(snapshot).filter(([key]) => key !== 'scopes').map(([key, value]) => [key, { $literal: value }])),
+		tenant: { $literal: new mongoose.Types.ObjectId(tenantId) },
+		granted_at: { $ifNull: ['$granted_at', now] },
+		createdAt: { $ifNull: ['$createdAt', now] },
+		last_used_at: now,
+		scopes: { $cond: [{ $ne: [{ $ifNull: ['$revoked_at', null] }, null] }, { $literal: scopes }, { $setUnion: [{ $ifNull: ['$scopes', []] }, { $literal: scopes }] }] },
+		revoked_at: null,
+	} }], { upsert: true, returnDocument: 'after', includeResultMetadata: true, updatePipeline: true }).lean();
+	const consent = result.value;
 
 	audit.log({
-		action: existing ? 'update' : 'create',
+		action: result.lastErrorObject.updatedExisting ? 'update' : 'create',
 		resource: 'oauth_consent',
 		resource_id: consent._id.toString(),
 		user_id: userId,
 		host_id,
-		details: { client_id: client.client_id, client_name: client.client_name, scopes },
+		details: { client_id: client.client_id, client_name: client.client_name, scopes: consent.scopes },
 		...ctx,
 	});
 
@@ -695,20 +684,24 @@ export async function issueAuthorizationCode({ userId, tenantId, host_id, client
 	}
 
 	const code = randomToken(32);
-	await OAuthAuthorizationCode.create({
-		code_hash: sha256Hex(code),
-		user: userId,
-		tenant: tenantId,
-		host_id,
-		client_id: client.client_id,
-		client_name: client.client_name,
-		redirect_uri: redirectUri,
-		registration_source: client.registration_source,
-		scope: scopeString(scopes),
-		resource,
-		code_challenge: codeChallenge,
-		code_challenge_method: codeChallengeMethod,
-		expires_at: new Date(Date.now() + 10 * 60 * 1000),
+	await mongoose.connection.transaction(async (session) => {
+		const consent = await OAuthConsent.updateOne({ user: userId, host_id, client_id: client.client_id, resource, revoked_at: null, scopes: { $all: normalizeScopeInput(scopes) } }, { $inc: { __v: 1 } }, { session });
+		if (!consent.matchedCount) throw new OAuthError('invalid_grant', 'App authorization has been revoked', 400);
+		await OAuthAuthorizationCode.create([{
+			code_hash: sha256Hex(code),
+			user: userId,
+			tenant: tenantId,
+			host_id,
+			client_id: client.client_id,
+			client_name: client.client_name,
+			redirect_uri: redirectUri,
+			registration_source: client.registration_source,
+			scope: scopeString(scopes),
+			resource,
+			code_challenge: codeChallenge,
+			code_challenge_method: codeChallengeMethod,
+			expires_at: new Date(Date.now() + 10 * 60 * 1000),
+		}], { session });
 	});
 
 	return code;
@@ -741,10 +734,11 @@ export async function exchangeAuthorizationCode({ code, clientId, redirectUri, c
 	const claimed = await OAuthAuthorizationCode.findOneAndUpdate({ _id: authCode._id, used_at: null, expires_at: { $gt: new Date() } }, { $set: { used_at: new Date() } }, { returnDocument: 'after' });
 	if (!claimed) throw new OAuthError('invalid_grant', 'authorization code is invalid or expired', 400);
 
-	await OAuthConsent.updateOne(
+	const consent = await OAuthConsent.updateOne(
 		{ user: authCode.user, host_id: authCode.host_id, client_id: authCode.client_id, resource: authCode.resource, revoked_at: null },
-		{ $set: { last_used_at: new Date() } },
+		{ $set: { last_used_at: new Date() }, $inc: { __v: 1 } },
 	);
+	if (!consent.matchedCount) throw new OAuthError('invalid_grant', 'App authorization has been revoked', 400);
 	await OAuthClient.updateOne({ client_id: authCode.client_id }, { $set: { last_used_at: new Date() } });
 
 	return authCode;
@@ -772,9 +766,12 @@ async function storeRefreshToken({ userId, tenantId, host_id, client, scopes, re
 }
 
 export async function issueTokenPair({ userId, tenantId, host_id, client, scopes, resource, session }) {
+	if (!session) return mongoose.connection.transaction((session) => issueTokenPair({ userId, tenantId, host_id, client, scopes, resource, session }));
 	const releaseAccountWork = await acquireTenantWork(host_id);
 	try {
 	const normalizedScopes = normalizeScopesForResource(scopes, resource);
+	const consent = await OAuthConsent.updateOne({ user: userId, host_id, client_id: client.client_id, resource, revoked_at: null, scopes: { $all: normalizedScopes } }, { $set: { last_used_at: new Date() }, $inc: { __v: 1 } }, { session });
+	if (!consent.matchedCount) throw new OAuthError('invalid_grant', 'App authorization has been revoked', 400);
 	const accessToken = signMcpAccessToken({
 		userId,
 		tenantId,
@@ -794,11 +791,6 @@ export async function issueTokenPair({ userId, tenantId, host_id, client, scopes
 		session,
 	});
 
-	await OAuthConsent.updateOne(
-		{ user: userId, host_id, client_id: client.client_id, resource, revoked_at: null },
-		{ $set: { last_used_at: new Date() } },
-		{ session },
-	);
 	await OAuthClient.updateOne({ client_id: client.client_id }, { $set: { last_used_at: new Date() } }, { session });
 
 	return {
@@ -819,7 +811,7 @@ export async function exchangeRefreshToken({ refreshToken, client, host_id = nul
 	let releaseAccountWork;
 	try {
 	return await mongoose.connection.transaction(async (session) => {
-	const refresh = await OAuthRefreshToken.findOne({ token_hash: sha256Hex(refreshToken) }).session(session).read('primary').lean();
+	const refresh = await OAuthRefreshToken.findOneAndUpdate({ token_hash: sha256Hex(refreshToken), revoked_at: null, rotated_at: null, expires_at: { $gt: new Date() } }, { $set: { rotated_at: new Date() } }, { session, returnDocument: 'before' }).lean();
 	if (!refresh || refresh.revoked_at || refresh.rotated_at || refresh.expires_at <= new Date()) {
 		throw new OAuthError('invalid_grant', 'refresh_token is invalid or expired', 400);
 	}
@@ -832,8 +824,6 @@ export async function exchangeRefreshToken({ refreshToken, client, host_id = nul
 
 	if (!releaseAccountWork) releaseAccountWork = await acquireTenantWork(refresh.host_id);
 	const scopes = normalizeScopeInput(refresh.scope);
-	const claimed = await OAuthRefreshToken.updateOne({ _id: refresh._id, revoked_at: null, rotated_at: null, expires_at: { $gt: new Date() } }, { $set: { rotated_at: new Date() } }, { session });
-	if (claimed.modifiedCount !== 1) throw new OAuthError('invalid_grant', 'refresh_token is invalid or expired', 400);
 	const nextPair = await issueTokenPair({
 		userId: refresh.user,
 		tenantId: refresh.tenant,
@@ -847,7 +837,7 @@ export async function exchangeRefreshToken({ refreshToken, client, host_id = nul
 	await OAuthRefreshToken.updateOne({ _id: refresh._id }, { $set: { replaced_by_token_hash: sha256Hex(nextPair.refresh_token) } }, { session });
 
 	return nextPair;
-	}, { readPreference: 'primary' });
+	}, {});
 	} finally { if (releaseAccountWork) await releaseAccountWork(); }
 }
 

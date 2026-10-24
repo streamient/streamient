@@ -10,12 +10,12 @@ import { LoginScreen } from "./components/LoginScreen";
 import { RichTextEditor } from "./components/RichTextEditor";
 import { Sheet } from "./components/Sheet";
 import { StreamientApi } from "./lib/api";
-import { beginOAuth, clearAuth, exchangeCode, listenForOAuthCallbacks, loadSelectedServer, loadTokens, parseOAuthCallback, saveTokens } from "./lib/auth";
+import { beginOAuth, clearAuth, exchangeCode, listenForOAuthCallbacks, loadPendingServer, loadSelectedServer, loadTokens, parseOAuthCallback, saveTokens } from "./lib/auth";
 import { clearDraft, loadDraft, saveDraft } from "./lib/cache";
 import { APP_VERSION, HOSTED_SERVER } from "./lib/config";
 import { startRealtime } from "./lib/realtime";
 import { clearPendingShare, listenForShares, loadPendingShare, sharedTextKind } from "./lib/shareTarget";
-import { forgetUpload, rememberUpload, restoreUploads, sourceSize, updateRememberedUpload, uploadWithResume, waitForProcessing, type UploadSource } from "./lib/uploads";
+import { forgetUpload, rememberUpload, restoreUploads, sourceSize, updateRememberedUpload, uploadNamespace, uploadWithResume, waitForProcessing, type UploadSource } from "./lib/uploads";
 import type { AppView, BootstrapResponse, ChatConversation, ChatMessage, FeedFilter, Project, RecordDetail, RecordSummary, RecordType, SearchResult, ServerOption, SharePayload, TokenSet, UploadSession } from "./types";
 
 type AddMode = "chooser" | "note" | "url" | "file";
@@ -124,18 +124,70 @@ export function App() {
 	const [historyDrawer, setHistoryDrawer] = useState(false);
 	const [appearance, setAppearance] = useState(localStorage.getItem("streamient_appearance") || "system");
 	const uploadControllers = useRef(new Map<string, AbortController>());
-	const onlineRef = useRef(online);
 	const bootstrapRef = useRef<BootstrapResponse | null>(null);
 	const activeProjectIdRef = useRef("");
 	const changeCursor = useRef("");
 	const authHandled = useRef(false);
+	const sessionEpoch = useRef(0);
+	const feedSeq = useRef(0);
+	const detailSeq = useRef(0);
+	const uploadNamespaceRef = useRef("");
 	const realtimeEventHandler = useRef<(event: string, payload: Record<string, unknown>) => void>(() => undefined);
 
-	const handleTokens = useCallback((next: TokenSet | null) => {
-		setTokens(next);
-		if (next) void saveTokens(next);
+	const resetSessionState = useCallback(async () => {
+		sessionEpoch.current++;
+		feedSeq.current++;
+		detailSeq.current++;
+		for (const controller of uploadControllers.current.values()) controller.abort();
+		uploadControllers.current.clear();
+		await clearAuth();
+		setTokens(null);
+		setBootstrap(null);
+		bootstrapRef.current = null;
+		uploadNamespaceRef.current = "";
+		setRecords([]);
+		setNextCursor(null);
+		setActiveProjectId("");
+		setFilter("all");
+		setView("projects");
+		setError("");
+		setDetail(null);
+		setDetailLoading(false);
+		setChatMessages([]);
+		setChatQuery("");
+		setConversationId("");
+		setConversations([]);
+		setHistoryDrawer(false);
+		setSearchQuery("");
+		setSearchResults([]);
+		setSearching(false);
+		setUploads([]);
+		setUploadTray(false);
+		setSaving(false);
+		setFeedLoading(false);
+		setLoadingMore(false);
+		setNoteDraft({ title: "", content: "", text: "", tags: "", projectId: "" });
+		setUrlDraft({ url: "", title: "", projectId: "" });
+		setFileDraft({ source: null, name: "", mimeType: "", projectId: "" });
 	}, []);
-	const api = useMemo(() => tokens ? new StreamientApi(server, tokens, handleTokens) : null, [server, tokens, handleTokens]);
+
+	const handleTokens = useCallback((next: TokenSet | null) => {
+		if (next) {
+			setTokens(next);
+			void saveTokens(next);
+		} else {
+			void resetSessionState();
+		}
+	}, [resetSessionState]);
+
+	const api = useMemo(() => {
+		if (!tokens) return null;
+		const epoch = sessionEpoch.current;
+		return new StreamientApi(server, tokens, (next) => {
+			if (epoch !== sessionEpoch.current) return;
+			handleTokens(next);
+		});
+	}, [server, tokens, handleTokens]);
 	const activeProject = bootstrap?.projects.find((project) => project.id === activeProjectId) || bootstrap?.projects[0] || null;
 	const visibleFilters = FILTERS.filter((item) => item.value !== "emails" || bootstrap?.features.emails);
 
@@ -159,7 +211,9 @@ export function App() {
 		const finishCallback = async (url: string, selectedServer: ServerOption) => {
 			try {
 				const parsed = parseOAuthCallback(url);
-				setTokens(await exchangeCode(selectedServer, parsed.code, parsed.state));
+				const nextTokens = await exchangeCode(selectedServer, parsed.code, parsed.state);
+				sessionEpoch.current++;
+				setTokens(nextTokens);
 				setServer(selectedServer);
 				setError("");
 				if (!url.startsWith("com.streamient.mobile:")) history.replaceState({}, "", "/");
@@ -171,15 +225,15 @@ export function App() {
 		};
 		void (async () => {
 			try {
-				const [storedServer, storedTokens] = await Promise.all([loadSelectedServer(), loadTokens()]);
+				const [storedServer, storedTokens, pendingServer] = await Promise.all([loadSelectedServer(), loadTokens(), loadPendingServer()]);
 				const selectedServer = storedServer || HOSTED_SERVER;
 				setServer(selectedServer);
 				if (window.location.pathname === "/oauth/callback" && !authHandled.current) {
 					authHandled.current = true;
 					setLoginLoading(true);
-					await finishCallback(window.location.href, selectedServer);
+					await finishCallback(window.location.href, pendingServer || selectedServer);
 				} else setTokens(storedTokens);
-				removeCallback = listenForOAuthCallbacks((url) => void loadSelectedServer().then((callbackServer) => finishCallback(url, callbackServer || selectedServer)));
+				removeCallback = listenForOAuthCallbacks((url) => void loadPendingServer().then((callbackServer) => finishCallback(url, callbackServer || selectedServer)));
 			} catch (restoreError) {
 				console.error("Streamient Mobile authentication restore failed:", restoreError);
 				setServer(HOSTED_SERVER);
@@ -210,7 +264,6 @@ export function App() {
 	}, []);
 
 	useEffect(() => {
-		onlineRef.current = online;
 		if (!online) for (const controller of uploadControllers.current.values()) controller.abort();
 	}, [online]);
 
@@ -226,34 +279,48 @@ export function App() {
 	useEffect(() => {
 		if (!api) { setBootstrap(null); bootstrapRef.current = null; return; }
 		let canceled = false;
+		const epoch = sessionEpoch.current;
 		setFeedLoading(true);
 		api.bootstrap().then(async (result) => {
-			if (canceled) return;
+			if (canceled || epoch !== sessionEpoch.current) return;
 			applyBootstrap(result.value);
 			setOffline(result.offline);
+			const namespace = uploadNamespace(server, result.value.user._id, result.value.account.host_id);
+			uploadNamespaceRef.current = namespace;
 			const pending = await loadPendingShare();
+			if (canceled || epoch !== sessionEpoch.current) return;
 			const storedProject = localStorage.getItem(activeProjectKey(server));
 			const pendingProjectId = result.value.projects.find((project) => project.id === storedProject)?.id || result.value.projects[0]?.id || "";
 			if (pending) await openSharedContent(pending, pendingProjectId);
-			const restored = await restoreUploads();
+			if (canceled || epoch !== sessionEpoch.current) return;
+			const restored = await restoreUploads(namespace, (session) => api.uploadStatus(session.id).then(() => true).catch(() => false));
+			if (canceled || epoch !== sessionEpoch.current) return;
 			setUploads(restored.map(({ saved, source }) => ({ localId: saved.local_id, session: saved.session, source, name: saved.name, mimeType: saved.mime_type, paused: true, manualPause: false })));
-		}).catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Could not load Streamient")).finally(() => setFeedLoading(false));
+		}).catch((loadError) => {
+			if (canceled || epoch !== sessionEpoch.current) return;
+			setError(loadError instanceof Error ? loadError.message : "Could not load Streamient");
+		}).finally(() => { if (!canceled && epoch === sessionEpoch.current) setFeedLoading(false); });
 		return () => { canceled = true; };
 	}, [api, applyBootstrap]);
 
 	const loadFeed = useCallback(async (cursor = "") => {
 		if (!api || !activeProjectId) return;
+		const requestId = ++feedSeq.current;
 		cursor ? setLoadingMore(true) : setFeedLoading(true);
 		try {
 			const result = await api.records({ projectId: activeProjectId, type: filter, cursor: cursor || undefined });
+			if (requestId !== feedSeq.current) return;
 			setRecords((current) => cursor ? [...current, ...result.value.records.filter((record) => !current.some((item) => item.key === record.key))] : result.value.records);
 			setNextCursor(result.value.next_cursor);
 			setOffline(result.offline);
 		} catch (loadError) {
+			if (requestId !== feedSeq.current) return;
 			void Swal.fire({ icon: "error", title: "Could not load records", text: loadError instanceof Error ? loadError.message : "Try again." });
 		} finally {
-			setFeedLoading(false);
-			setLoadingMore(false);
+			if (requestId === feedSeq.current) {
+				setFeedLoading(false);
+				setLoadingMore(false);
+			}
 		}
 	}, [api, activeProjectId, filter]);
 
@@ -261,19 +328,24 @@ export function App() {
 
 	const refreshCounts = useCallback(async () => {
 		if (!api) return;
+		const epoch = sessionEpoch.current;
 		const result = await api.projectCounts();
-		setBootstrap((current) => current ? { ...current, projects: result.projects } : current);
+		if (epoch !== sessionEpoch.current) return;
+		setBootstrap((current) => (epoch === sessionEpoch.current && current) ? { ...current, projects: result.projects } : current);
 	}, [api]);
 
 	const applyChanges = useCallback(async () => {
 		if (!api || !activeProjectId || !changeCursor.current) return;
+		const epoch = sessionEpoch.current;
 		let result = await api.changes(changeCursor.current, activeProjectId);
-		do {
-			setRecords((current) => result.changes.reduce((items, change) => change.action === "delete" ? items.filter((item) => item.key !== change.key) : upsertRecord(items, change.record, activeProjectId, filter), current));
+		while (true) {
+			if (epoch !== sessionEpoch.current) return;
+			const changes = result.changes;
+			setRecords((current) => changes.reduce((items, change) => change.action === "delete" ? items.filter((item) => item.key !== change.key) : upsertRecord(items, change.record, activeProjectId, filter), current));
 			changeCursor.current = result.next_cursor;
 			if (!result.has_more) break;
 			result = await api.changes(changeCursor.current, activeProjectId);
-		} while (result.has_more);
+		}
 	}, [api, activeProjectId, filter]);
 
 	realtimeEventHandler.current = (event, payload) => {
@@ -290,7 +362,13 @@ export function App() {
 		const type = ({ note: "notes", memory: "memories", url: "urls", email: "emails" } as const)[match[1] as "note" | "memory" | "url" | "email"];
 		const id = String(payload._id || payload.id || "");
 		if (match[2] === "deleted") setRecords((current) => current.filter((item) => item.key !== `${type}:${id}`));
-		else if (id) void api.record(type, id).then(({ record }) => setRecords((current) => upsertRecord(current, record, activeProjectId, filter))).catch(() => undefined);
+		else if (id) {
+			const epoch = sessionEpoch.current;
+			void api.record(type, id).then(({ record }) => {
+				if (epoch !== sessionEpoch.current) return;
+				setRecords((current) => (epoch === sessionEpoch.current ? upsertRecord(current, record, activeProjectId, filter) : current));
+			}).catch(() => undefined);
+		}
 		void refreshCounts();
 	};
 
@@ -330,10 +408,13 @@ export function App() {
 
 	async function saveNote() {
 		if (!api || !noteDraft.projectId || !online) return;
+		const epoch = sessionEpoch.current;
+		const apiRef = api;
 		setSaving(true);
 		try {
 			const payload = { title: noteDraft.title || "Untitled", content: noteDraft.content, text_content: noteDraft.text, tags: noteDraft.tags.split(",").map((tag) => tag.trim()).filter(Boolean), project_id: noteDraft.projectId };
-			const result = noteDraft.id ? await api.updateNote(noteDraft.id, payload) : await api.createNote(payload);
+			const result = noteDraft.id ? await apiRef.updateNote(noteDraft.id, payload) : await apiRef.createNote(payload);
+			if (epoch !== sessionEpoch.current) return;
 			setRecords((current) => upsertRecord(current, result.record, activeProjectId, filter));
 			clearDraft(draftKey(server, bootstrap?.user._id || "", noteDraft.id));
 			await clearPendingShare();
@@ -341,45 +422,53 @@ export function App() {
 			setDetail(null);
 			await refreshCounts();
 		} catch (saveError) {
+			if (epoch !== sessionEpoch.current) return;
 			void Swal.fire({ icon: "error", title: "Note not saved", text: saveError instanceof Error ? saveError.message : "Try again." });
-		} finally { setSaving(false); }
+		} finally { if (epoch === sessionEpoch.current) setSaving(false); }
 	}
 
 	async function saveUrl() {
 		if (!api || !urlDraft.projectId || !online) return;
+		const epoch = sessionEpoch.current;
+		const apiRef = api;
 		setSaving(true);
 		try {
-			const result = await api.createUrl({ url: urlDraft.url, title: urlDraft.title, project_id: urlDraft.projectId });
+			const result = await apiRef.createUrl({ url: urlDraft.url, title: urlDraft.title, project_id: urlDraft.projectId });
+			if (epoch !== sessionEpoch.current) return;
 			setRecords((current) => upsertRecord(current, result.record, activeProjectId, filter));
 			await clearPendingShare();
 			closeAdd();
 			await refreshCounts();
 			if (result.duplicate) void Swal.fire({ icon: "info", title: "Already saved", text: "That URL is already in this project." });
 		} catch (saveError) {
+			if (epoch !== sessionEpoch.current) return;
 			void Swal.fire({ icon: "error", title: "URL not saved", text: saveError instanceof Error ? saveError.message : "Try again." });
-		} finally { setSaving(false); }
+		} finally { if (epoch === sessionEpoch.current) setSaving(false); }
 	}
 
 	const updateUpload = useCallback((localId: string, session: UploadSession) => {
 		setUploads((current) => current.map((item) => item.localId === localId ? { ...item, session, paused: false } : item));
-		void updateRememberedUpload(localId, session);
+		void updateRememberedUpload(uploadNamespaceRef.current, localId, session);
 	}, []);
 
 	async function runUpload(item: UploadUi) {
 		if (!api || !item.source || !online) return;
 		const source = item.source;
+		const epoch = sessionEpoch.current;
 		const controller = new AbortController();
 		uploadControllers.current.set(item.localId, controller);
 		setUploads((current) => current.map((currentItem) => currentItem.localId === item.localId ? { ...currentItem, paused: false, manualPause: false } : currentItem));
 		try {
 			let session = item.session;
-			if (session.state === "failed") session = (await api.completeUpload(session.id)).upload;
+			if (session.state === "failed") session = await api.uploadStatus(session.id);
 			if (session.state === "uploading") session = await uploadWithResume(api, session, source, (next) => updateUpload(item.localId, next), controller.signal);
 			if (session.state === "processing") session = await waitForProcessing(api, session, (next) => updateUpload(item.localId, next), controller.signal);
+			if (epoch !== sessionEpoch.current) return;
 			updateUpload(item.localId, session);
-			if (session.state === "complete") { await forgetUpload(item.localId); await refreshCounts(); }
+			if (session.state === "complete") { await forgetUpload(uploadNamespaceRef.current, item.localId); await refreshCounts(); }
 		} catch (uploadError) {
-			if ((uploadError as Error).name === "AbortError" || (uploadError instanceof TypeError && !onlineRef.current)) setUploads((current) => current.map((currentItem) => currentItem.localId === item.localId ? { ...currentItem, paused: true } : currentItem));
+			if ((uploadError as Error).name === "AbortError") setUploads((current) => current.map((currentItem) => currentItem.localId === item.localId ? { ...currentItem, paused: true } : currentItem));
+			else if (uploadError instanceof TypeError) setUploads((current) => current.map((currentItem) => currentItem.localId === item.localId ? { ...currentItem, paused: true, manualPause: true } : currentItem));
 			else setUploads((current) => current.map((currentItem) => currentItem.localId === item.localId ? { ...currentItem, session: { ...currentItem.session, state: "failed", error: uploadError instanceof Error ? uploadError.message : "Upload failed" }, paused: false } : currentItem));
 		} finally { uploadControllers.current.delete(item.localId); }
 	}
@@ -394,28 +483,50 @@ export function App() {
 	async function startFileUpload() {
 		if (!api || !fileDraft.source || !fileDraft.projectId || !online) return;
 		const source = fileDraft.source;
+		const epoch = sessionEpoch.current;
+		const namespace = uploadNamespaceRef.current;
+		const projectId = fileDraft.projectId;
+		const name = fileDraft.name;
+		const mimeType = fileDraft.mimeType;
 		setSaving(true);
 		try {
 			const length = await sourceSize(source);
-			const session = (await api.createUpload({ project_id: fileDraft.projectId, file_name: fileDraft.name, mime_type: fileDraft.mimeType, upload_length: length })).upload;
-			const item: UploadUi = { localId: crypto.randomUUID(), session, source, name: fileDraft.name, mimeType: fileDraft.mimeType, paused: false, manualPause: false };
-			await rememberUpload(item.localId, session, source, item.name, item.mimeType);
+			const session = (await api.createUpload({ project_id: projectId, file_name: name, mime_type: mimeType, upload_length: length })).upload;
+			if (epoch !== sessionEpoch.current) return;
+			const item: UploadUi = { localId: crypto.randomUUID(), session, source, name, mimeType, paused: false, manualPause: false };
+			await rememberUpload(namespace, item.localId, session, source, item.name, item.mimeType);
+			if (epoch !== sessionEpoch.current) return;
 			setUploads((current) => [...current, item]);
 			setUploadTray(true);
 			closeAdd();
 			await clearPendingShare();
 			void runUpload(item);
 		} catch (uploadError) {
+			if (epoch !== sessionEpoch.current) return;
 			void Swal.fire({ icon: "error", title: "Import not started", text: uploadError instanceof Error ? uploadError.message : "Try again." });
-		} finally { setSaving(false); }
+		} finally { if (epoch === sessionEpoch.current) setSaving(false); }
 	}
 
 	async function openRecord(record: RecordSummary) {
 		if (!api) return;
+		const requestId = ++detailSeq.current;
 		setDetailLoading(true);
-		try { setDetail((await api.record(record.type, record.id)).record); }
-		catch (detailError) { void Swal.fire({ icon: "error", title: "Record unavailable", text: detailError instanceof Error ? detailError.message : "Try again." }); }
-		finally { setDetailLoading(false); }
+		try {
+			const loaded = (await api.record(record.type, record.id)).record;
+			if (requestId !== detailSeq.current) return;
+			setDetail(loaded);
+		} catch (detailError) {
+			if (requestId !== detailSeq.current) return;
+			void Swal.fire({ icon: "error", title: "Record unavailable", text: detailError instanceof Error ? detailError.message : "Try again." });
+		} finally {
+			if (requestId === detailSeq.current) setDetailLoading(false);
+		}
+	}
+
+	function closeDetail() {
+		detailSeq.current++;
+		setDetail(null);
+		setDetailLoading(false);
 	}
 
 	function editDetail() {
@@ -429,18 +540,24 @@ export function App() {
 
 	async function runSearch() {
 		if (!api || !searchQuery.trim()) return;
+		const epoch = sessionEpoch.current;
 		setSearching(true);
 		try {
 			const result = await api.search(searchQuery.trim(), { projectId: activeProjectId, allProjects: searchAllProjects, type: searchType });
+			if (epoch !== sessionEpoch.current) return;
 			setSearchResults(result.results as RecordSummary[]);
 		} catch (searchError) {
+			if (epoch !== sessionEpoch.current) return;
 			void Swal.fire({ icon: "error", title: "Search failed", text: searchError instanceof Error ? searchError.message : "Try again." });
-		} finally { setSearching(false); }
+		} finally {
+			if (epoch === sessionEpoch.current) setSearching(false);
+		}
 	}
 
 	async function sendChat() {
 		if (!api || !chatQuery.trim() || chatting) return;
 		if (!online) { void Swal.fire({ icon: "info", title: "AI needs a connection", text: "Reconnect to continue chatting." }); return; }
+		const epoch = sessionEpoch.current;
 		const query = chatQuery.trim();
 		setChatQuery("");
 		setChatMessages((current) => [...current, { role: "user", message: query }, { role: "assistant", message: "" }]);
@@ -448,25 +565,38 @@ export function App() {
 		try {
 			let answer = "";
 			const result = await api.chat(query, { projectId: activeProjectId, allProjects: chatAllProjects, conversationId: conversationId || undefined }, (token) => {
+				if (epoch !== sessionEpoch.current) return;
 				answer += token;
 				setChatMessages((current) => current.map((message, index) => index === current.length - 1 ? { ...message, message: answer } : message));
 			});
+			if (epoch !== sessionEpoch.current) return;
 			setConversationId(result.conversation_id || conversationId);
 			setChatMessages((current) => current.map((message, index) => index === current.length - 1 ? { ...message, sources: result.results } : message));
 		} catch (chatError) {
+			if (epoch !== sessionEpoch.current) return;
 			setChatMessages((current) => current.map((message, index) => index === current.length - 1 ? { ...message, message: chatError instanceof Error ? chatError.message : "AI request failed" } : message));
-		} finally { setChatting(false); }
+		} finally {
+			if (epoch === sessionEpoch.current) setChatting(false);
+		}
 	}
 
 	async function openHistory() {
 		if (!api) return;
+		const epoch = sessionEpoch.current;
 		setHistoryDrawer(true);
-		try { setConversations((await api.conversations()).conversations); } catch { setConversations([]); }
+		try {
+			const result = await api.conversations();
+			if (epoch === sessionEpoch.current) setConversations(result.conversations);
+		} catch {
+			if (epoch === sessionEpoch.current) setConversations([]);
+		}
 	}
 
 	async function selectConversation(conversation: ChatConversation) {
 		if (!api) return;
+		const epoch = sessionEpoch.current;
 		const result = await api.conversationMessages(conversation.conversation_id);
+		if (epoch !== sessionEpoch.current) return;
 		setConversationId(conversation.conversation_id);
 		setChatMessages(result.messages);
 		setHistoryDrawer(false);
@@ -475,11 +605,7 @@ export function App() {
 	async function signOut() {
 		const confirmed = await Swal.fire({ icon: "question", title: "Sign out?", showCancelButton: true, confirmButtonText: "Sign out" });
 		if (!confirmed.isConfirmed) return;
-		await clearAuth();
-		setTokens(null);
-		setBootstrap(null);
-		bootstrapRef.current = null;
-		setRecords([]);
+		await resetSessionState();
 	}
 
 	function chooseProject(id: string) {
@@ -528,7 +654,27 @@ export function App() {
 
 		{view === "search" && <SearchScreen query={searchQuery} setQuery={setSearchQuery} allProjects={searchAllProjects} setAllProjects={setSearchAllProjects} type={searchType} setType={setSearchType} filters={visibleFilters} results={searchResults} searching={searching} onBack={() => setView("projects")} onSearch={() => void runSearch()} onOpen={(record) => void openRecord(record)} />}
 		{view === "ai" && <AiScreen project={activeProject} allProjects={chatAllProjects} setAllProjects={setChatAllProjects} messages={chatMessages} query={chatQuery} setQuery={setChatQuery} chatting={chatting} onHome={showAllRecords} onSend={() => void sendChat()} onHistory={() => void openHistory()} onNew={() => { setChatMessages([]); setConversationId(""); }} onOpen={(record) => void openRecord(record)} />}
-		{view === "settings" && <SettingsScreen bootstrap={bootstrap} server={server} appearance={appearance} setAppearance={setAppearance} onBack={() => setView("projects")} onSave={async (data) => { if (!api) return; const result = await api.updateProfile(data); setBootstrap((current) => current ? { ...current, user: { ...current.user, ...result.user } } : current); }} onRefresh={async () => { if (!api) return; applyBootstrap((await api.bootstrap()).value); await loadFeed(); }} onSignOut={() => void signOut()} />}
+		{view === "settings" && <SettingsScreen bootstrap={bootstrap} server={server} appearance={appearance} setAppearance={setAppearance} onBack={() => setView("projects")} onSave={async (data) => {
+			if (!api) return;
+			const epoch = sessionEpoch.current;
+			const apiRef = api;
+			try {
+				const result = await apiRef.updateProfile(data);
+				if (epoch !== sessionEpoch.current) return;
+				setBootstrap((current) => (epoch === sessionEpoch.current && current) ? { ...current, user: { ...current.user, ...result.user } } : current);
+			} catch (saveError) {
+				if (epoch !== sessionEpoch.current) return;
+				throw saveError;
+			}
+		}} onRefresh={async () => {
+			if (!api) return;
+			const epoch = sessionEpoch.current;
+			const apiRef = api;
+			const result = await apiRef.bootstrap();
+			if (epoch !== sessionEpoch.current) return;
+			applyBootstrap(result.value);
+			await loadFeed();
+		}} onSignOut={() => void signOut()} />}
 
 		<BottomNav active={view} onProjects={() => setProjectDrawer(true)} onAdd={() => openAdd()} onAi={() => changeView("ai")} />
 
@@ -541,8 +687,8 @@ export function App() {
 			{addMode === "file" && <FileForm draft={fileDraft} projects={bootstrap.projects} saving={saving} onChange={setFileDraft} onCancel={closeAdd} onSave={() => void startFileUpload()} />}
 		</Sheet>
 
-		<Sheet open={!!detail || detailLoading} title={detail?.title || "Record"} onClose={() => setDetail(null)} wide>{detailLoading && !detail ? <RecordSkeleton /> : detail && <RecordView record={detail} onEdit={editDetail} />}</Sheet>
-		<UploadTray open={uploadTray} uploads={uploads} onClose={() => setUploadTray(false)} onPause={(item) => { setUploads((current) => current.map((value) => value.localId === item.localId ? { ...value, paused: true, manualPause: true } : value)); uploadControllers.current.get(item.localId)?.abort(); }} onResume={(item) => void runUpload(item)} onCancel={async (item) => { if (!api) return; uploadControllers.current.get(item.localId)?.abort(); await api.cancelUpload(item.session.id).catch(() => undefined); await forgetUpload(item.localId); setUploads((current) => current.filter((value) => value.localId !== item.localId)); }} />
+		<Sheet open={!!detail || detailLoading} title={detail?.title || "Record"} onClose={closeDetail} wide>{detailLoading && !detail ? <RecordSkeleton /> : detail && <RecordView record={detail} onEdit={editDetail} />}</Sheet>
+		<UploadTray open={uploadTray} uploads={uploads} onClose={() => setUploadTray(false)} onPause={(item) => { setUploads((current) => current.map((value) => value.localId === item.localId ? { ...value, paused: true, manualPause: true } : value)); uploadControllers.current.get(item.localId)?.abort(); }} onResume={(item) => void runUpload(item)} onCancel={async (item) => { if (!api) return; uploadControllers.current.get(item.localId)?.abort(); await api.cancelUpload(item.session.id).catch(() => undefined); await forgetUpload(uploadNamespaceRef.current, item.localId); setUploads((current) => current.filter((value) => value.localId !== item.localId)); }} />
 		<Sheet open={historyDrawer} title="AI history" onClose={() => setHistoryDrawer(false)}>{conversations.length ? conversations.map((conversation) => <button className="history-row" key={conversation.conversation_id} onClick={() => void selectConversation(conversation)}><Icon name="chat_bubble" /><span><strong>{conversation.title}</strong><small>{new Date(conversation.timestamp).toLocaleDateString()}</small></span><Icon name="chevron_right" /></button>) : <div className="empty-mini">No previous conversations</div>}</Sheet>
 	</div>;
 }

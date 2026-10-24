@@ -15,6 +15,7 @@ import { ObsidianRevision } from '../model/obsidian_revision.js';
 import { AuditLog } from '../model/audit_log.js';
 import { Tenant } from '../modules/tenancy.js';
 import { Project } from '../model/project.js';
+import mongoose from '../model/mongoose.js';
 import { requireObsidianAccess, requireProjectManager } from '../routes/obsidian_api.js';
 import { __test as oauthRouteTest } from '../routes/oauth.js';
 import { readBlob, storeBuffer } from '../services/obsidian_blob_service.js';
@@ -106,14 +107,18 @@ test('registers a device on the connection already loaded by connection creation
 });
 
 test('returns the newly created connection after registering its first device', async (t) => {
-	const originals = { projectFindOne: Project.findOne, connectionFindOne: ObsidianConnection.findOne, connectionCreate: ObsidianConnection.create, auditCreate: AuditLog.create };
+	const originals = { projectFindOne: Project.findOneAndUpdate, projectUpdateOne: Project.updateOne, connectionFindOne: ObsidianConnection.findOne, connectionCreate: ObsidianConnection.create, auditCreate: AuditLog.create, transaction: mongoose.connection.transaction };
 	const connection = { _id: 'connection-1', project: 'project-1', host_id: 'host-1', name: 'Vault', streamient_folder: 'Streamient/Project', enabled: true, sequence: 0, devices: [], async save() { return this; } };
-	Project.findOne = () => ({ select: () => ({ read() { return this; }, lean: async () => ({ _id: 'project-1' }) }) });
+	Project.findOneAndUpdate = () => ({ select: () => ({ read() { return this; }, lean: async () => ({ _id: 'project-1' }) }) });
+	Project.updateOne = () => Promise.resolve({ matchedCount: 1 });
+	mongoose.connection.transaction = async (callback) => callback(undefined);
 	ObsidianConnection.findOne = () => mockQuery(null);
 	ObsidianConnection.create = async () => connection;
 	AuditLog.create = async () => ({});
 	t.after(() => {
-		Project.findOne = originals.projectFindOne;
+		Project.findOneAndUpdate = originals.projectFindOne;
+		Project.updateOne = originals.projectUpdateOne;
+		mongoose.connection.transaction = originals.transaction;
 		ObsidianConnection.findOne = originals.connectionFindOne;
 		ObsidianConnection.create = originals.connectionCreate;
 		AuditLog.create = originals.auditCreate;
@@ -164,14 +169,9 @@ test('round-trips saved URL metadata without including crawler content', () => {
 	assert.throws(() => syncTest.parsedMarkdown('---\nstreamient_type: url\n---\n', 'Missing.md'), /valid url field/);
 });
 
-test('uses primary reads throughout manifest reconciliation', () => {
+test('manifest reconciliation uses replica reads without primary overrides', () => {
 	const source = fs.readFileSync(new URL('../services/obsidian_sync_service.js', import.meta.url), 'utf8');
-	assert.match(source, /Note\.find\(query\)\.read\('primary'\)\.lean\(\)/);
-	assert.match(source, /Memory\.find\(query\)\.read\('primary'\)\.lean\(\)/);
-	assert.match(source, /Url\.find\(query\)\.read\('primary'\)\.lean\(\)/);
-	assert.match(source, /ObsidianManifestBatch\.find\([\s\S]*?\.read\('primary'\)\.lean\(\)/);
-	assert.match(source, /const batch = await ObsidianFile\.find\(query\)[\s\S]*?\.read\('primary'\)\.lean\(\)/);
-	assert.doesNotMatch(source, /const remote = await ObsidianFile\.findOne\(\{ connection: connection\._id, host_id: hostId, path: filePath \}\)/);
+	assert.doesNotMatch(source, /\.read\(['"]primary['"]\)/);
 });
 
 test('sanitizes rendered canonical Markdown without changing stored source', () => {
@@ -348,7 +348,9 @@ test('applies newest-wins conflicts and keeps repeated operations idempotent', a
 		connectionFindOneAndUpdate: ObsidianConnection.findOneAndUpdate,
 		connectionUpdateOne: ObsidianConnection.updateOne,
 		fileFindOne: ObsidianFile.findOne,
+		fileFindOneAndUpdate: ObsidianFile.findOneAndUpdate,
 		revisionCreate: ObsidianRevision.create,
+		transaction: mongoose.connection.transaction,
 	};
 	const createdChanges = [];
 	const connection = { _id: 'connection-1', project: 'project-1', owner: 'user-1', host_id: 'host-1', sequence: 0, storage_bytes: 1 };
@@ -367,14 +369,18 @@ test('applies newest-wins conflicts and keeps repeated operations idempotent', a
 	ObsidianConnection.findOneAndUpdate = async (_query, update) => ({ ...connection, sequence: connection.sequence += update.$inc.sequence });
 	ObsidianConnection.updateOne = async () => ({ modifiedCount: 1 });
 	ObsidianFile.findOne = (query) => mockQuery(query._id || query.path === file.path ? file : null);
+	ObsidianFile.findOneAndUpdate = async (filter, update) => ({ ...file, ...update.$set });
 	ObsidianRevision.create = async (data) => data;
+	mongoose.connection.transaction = async (callback) => callback(undefined);
 	t.after(() => {
 		ObsidianChange.findOne = originals.changeFindOne;
 		ObsidianChange.create = originals.changeCreate;
 		ObsidianConnection.findOneAndUpdate = originals.connectionFindOneAndUpdate;
 		ObsidianConnection.updateOne = originals.connectionUpdateOne;
 		ObsidianFile.findOne = originals.fileFindOne;
+		ObsidianFile.findOneAndUpdate = originals.fileFindOneAndUpdate;
 		ObsidianRevision.create = originals.revisionCreate;
+		mongoose.connection.transaction = originals.transaction;
 	});
 
 	const older = await syncTest.applyMutation(connection, 'user-1', { operation_id: 'older', operation: 'trash', file_id: file._id, path: file.path, base_revision: 1, modified_at: new Date(currentTime - 60_000), device_id: 'device-1' });

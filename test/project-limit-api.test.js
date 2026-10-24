@@ -77,7 +77,7 @@ describe('stored account project limit', () => {
 				lean: async () => [{ _id: { toString: () => 'membership-1' }, role: 'owner', tenant }],
 			}),
 		});
-		TenantMember.findOneAndUpdate = async () => null;
+		TenantMember.findOneAndUpdate = async (filter) => filter._id ? { role: 'owner' } : null;
 		Tenant.findOne = (filter) => {
 			if (filter?.is_active === true) return tenant;
 			return { select: () => ({ lean: async () => tenant }) };

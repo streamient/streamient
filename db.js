@@ -17,6 +17,7 @@ function parsePositiveIntegerEnv(name, fallback) {
 
 function getMongoConnectOptions() {
 	return {
+		...config.mongoOptions,
 		serverSelectionTimeoutMS: MONGO_SERVER_SELECTION_TIMEOUT_MS,
 	};
 }

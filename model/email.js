@@ -27,6 +27,7 @@ const emailSchema = new mongoose.Schema(
 		owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 		host_id: { type: String, required: true, index: true },
 		is_indexed: { type: Boolean, default: false },
+		index_claim: { type: String, default: null },
 		in_trash: { type: Boolean, default: false },
 		trashed_at: { type: Date, default: null },
 	},
@@ -38,7 +39,7 @@ emailSchema.index({ host_id: 1, in_trash: 1, project: 1, updatedAt: -1, _id: -1 
 emailSchema.index({ host_id: 1, in_trash: 1, mailbox: 1, updatedAt: -1 });
 emailSchema.index({ host_id: 1, in_trash: 1, labels: 1 });
 emailSchema.index({ is_indexed: 1, in_trash: 1 });
-emailSchema.index({ message_id: 1 }, { unique: true, partialFilterExpression: { message_id: { $type: 'string', $ne: '' } } });
+emailSchema.index({ host_id: 1, message_id: 1 }, { unique: true, name: 'host_message_id_unique', partialFilterExpression: { message_id: { $type: 'string', $gt: '' } } });
 emailSchema.index({ host_id: 1, references: 1 });
 
 emailSchema.plugin(textSanitizerPlugin);

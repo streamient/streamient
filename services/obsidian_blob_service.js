@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, readdir, rename, rm, statfs } from 'node:fs/promises';
+import { link, mkdir, readdir, rename, rm, statfs } from 'node:fs/promises';
 import { once } from 'node:events';
 
 import config from '../config.js';
@@ -37,10 +37,6 @@ function storageRoot() {
 
 function uploadDir(hostId, uploadId) {
 	return path.join(storageRoot(), 'uploads', cleanSegment(hostId), cleanSegment(uploadId));
-}
-
-function uploadChunkPath(hostId, uploadId, offset) {
-	return path.join(uploadDir(hostId, uploadId), `${offset}.part`);
 }
 
 function blobDir(hostId, sha256) {
@@ -188,7 +184,7 @@ async function hashUpload(upload) {
 	let offset = 0;
 	for (const chunk of chunks) {
 		if (chunk.offset !== offset) throw new ObsidianBlobError(`Upload incomplete at offset ${offset}`, 409, 'upload_incomplete');
-		for await (const plain of plainChunkStream(uploadChunkPath(upload.host_id, upload._id, chunk.offset), chunk)) hash.update(plain);
+		for await (const plain of plainChunkStream(path.join(uploadDir(upload.host_id, upload._id), chunk.file_name), chunk)) hash.update(plain);
 		offset += chunk.size;
 	}
 	if (offset !== upload.total_bytes) throw new ObsidianBlobError(`Upload incomplete at offset ${offset}`, 409, 'upload_incomplete');
@@ -224,7 +220,7 @@ export async function appendUploadChunk(userId, hostId, id, req) {
 	const offset = safeLength(req.headers['upload-offset'], 'Upload-Offset');
 	const uploadLength = safeLength(req.headers['upload-length'], 'Upload-Length');
 	const suppliedChecksum = req.headers['upload-checksum'] || req.headers['x-upload-checksum'] || req.headers.digest;
-	const upload = await queryForSave(ObsidianUpload.findOne(ownershipFilter(id, userId, hostId)));
+	const upload = await ObsidianUpload.findOneAndUpdate(ownershipFilter(id, userId, hostId), { $set: { expires_at: expiryDate() } }, { returnDocument: 'after' }).lean();
 	if (!upload) throw new ObsidianBlobError('Upload not found', 404, 'upload_not_found');
 	if (upload.state !== 'uploading') throw new ObsidianBlobError(`Upload is ${upload.state}`, 409, 'invalid_state');
 	if (uploadLength !== upload.total_bytes) throw new ObsidianBlobError('Upload-Length does not match the session', 409, 'length_conflict');
@@ -236,9 +232,10 @@ export async function appendUploadChunk(userId, hostId, id, req) {
 	}
 	if (offset !== upload.received_bytes) throw new ObsidianBlobError(`Expected offset ${upload.received_bytes}`, 409, 'offset_conflict');
 	const remaining = upload.total_bytes - offset;
+	if (!remaining) { req.resume?.(); return publicUpload(upload); }
 	const maximumBytes = Math.min(OBSIDIAN_UPLOAD_CHUNK_SIZE, remaining);
 	await ensureStorageAvailable(uploadDir(hostId, upload._id), maximumBytes);
-	const temporary = path.join(uploadDir(hostId, upload._id), `${offset}.${crypto.randomUUID()}.tmp`);
+	const temporary = path.join(uploadDir(hostId, upload._id), `${offset}.${crypto.randomUUID()}.part`);
 	const stored = await encryptRequestChunk(req, temporary, maximumBytes);
 	if (stored.size !== maximumBytes && remaining > OBSIDIAN_UPLOAD_CHUNK_SIZE) {
 		await rm(temporary, { force: true });
@@ -252,17 +249,19 @@ export async function appendUploadChunk(userId, hostId, id, req) {
 		await rm(temporary, { force: true });
 		throw new ObsidianBlobError('Chunk checksum does not match', 409, 'chunk_integrity_conflict');
 	}
-	const fileName = `${offset}.part`;
-	await rename(temporary, uploadChunkPath(hostId, upload._id, offset));
-	upload.chunks.push({ offset, size: stored.size, checksum: stored.checksum, iv: stored.iv, tag: stored.tag, file_name: fileName });
-	upload.received_bytes += stored.size;
-	upload.expires_at = expiryDate();
-	await upload.save();
-	return publicUpload(upload);
+	const chunk = { offset, size: stored.size, checksum: stored.checksum, iv: stored.iv, tag: stored.tag, file_name: path.basename(temporary) };
+	// Keep attempt bytes if acknowledgement is uncertain; a committed write may reference them.
+	const current = await ObsidianUpload.findOneAndUpdate({ ...ownershipFilter(id, userId, hostId), state: 'uploading', received_bytes: offset }, { $push: { chunks: chunk }, $inc: { received_bytes: stored.size }, $set: { expires_at: expiryDate() } }, { returnDocument: 'after' }).lean();
+	if (current) return publicUpload(current);
+	const latest = await ObsidianUpload.findOneAndUpdate(ownershipFilter(id, userId, hostId), { $inc: { __v: 0 } }, { returnDocument: 'after', timestamps: false }).lean();
+	await rm(temporary, { force: true });
+	const accepted = latest?.chunks.find((value) => value.offset === offset);
+	if (accepted?.checksum === stored.checksum && accepted.size === stored.size) return publicUpload(latest);
+	throw new ObsidianBlobError('Upload changed while storing the chunk', 409, 'offset_conflict');
 }
 
 export async function completeUpload(userId, hostId, id) {
-	const upload = await queryForSave(ObsidianUpload.findOne(ownershipFilter(id, userId, hostId)));
+	const upload = await queryForSave(ObsidianUpload.findOneAndUpdate(ownershipFilter(id, userId, hostId), { $set: { expires_at: expiryDate() } }, { returnDocument: 'after' }));
 	if (!upload) throw new ObsidianBlobError('Upload not found', 404, 'upload_not_found');
 	if (upload.state === 'complete') return publicUpload(upload);
 	if (upload.state !== 'uploading') throw new ObsidianBlobError(`Upload is ${upload.state}`, 409, 'invalid_state');
@@ -274,14 +273,15 @@ export async function completeUpload(userId, hostId, id) {
 		await upload.save();
 		throw new ObsidianBlobError(upload.error, 409, 'file_integrity_conflict');
 	}
-	let blob = await ObsidianBlob.findOne({ host_id: hostId, sha256 }).read('primary').lean();
+	let blob = await ObsidianBlob.findOneAndUpdate({ host_id: hostId, sha256 }, { $inc: { __v: 0 } }, { timestamps: false, returnDocument: 'after' }).lean();
 	if (!blob) {
 		const destination = blobDir(hostId, sha256);
 		let installed = false;
 		await mkdir(path.dirname(destination), { recursive: true });
 		try {
-			await rename(uploadDir(hostId, upload._id), destination);
+			await mkdir(destination);
 			installed = true;
+			for (const chunk of upload.chunks) await link(path.join(uploadDir(hostId, upload._id), chunk.file_name), path.join(destination, chunk.file_name));
 			blob = await ObsidianBlob.create({
 				host_id: hostId,
 				sha256,
@@ -291,7 +291,7 @@ export async function completeUpload(userId, hostId, id) {
 				chunks: upload.chunks,
 			});
 		} catch (err) {
-			blob = await ObsidianBlob.findOne({ host_id: hostId, sha256 }).read('primary').lean();
+			blob = await ObsidianBlob.findOneAndUpdate({ host_id: hostId, sha256 }, { $inc: { __v: 0 } }, { timestamps: false, returnDocument: 'after' }).lean();
 			if (!blob) throw err;
 			if (installed && blob.storage_key !== path.relative(storageRoot(), destination)) await rm(destination, { recursive: true, force: true });
 			await rm(uploadDir(hostId, upload._id), { recursive: true, force: true }).catch(() => {});
@@ -299,6 +299,7 @@ export async function completeUpload(userId, hostId, id) {
 	} else {
 		await rm(uploadDir(hostId, upload._id), { recursive: true, force: true }).catch(() => {});
 	}
+	await rm(uploadDir(hostId, upload._id), { recursive: true, force: true });
 	upload.state = 'complete';
 	upload.blob = blob._id;
 	upload.error = '';
@@ -310,7 +311,7 @@ export async function storeBuffer(hostId, value, mimeType = 'application/octet-s
 	const buffer = Buffer.isBuffer(value) ? value : Buffer.from(value);
 	if (config.obsidian.maxFileBytes && buffer.length > config.obsidian.maxFileBytes) throw new ObsidianBlobError('File exceeds the configured Obsidian sync limit', 413, 'file_too_large');
 	const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
-	const existing = await ObsidianBlob.findOne({ host_id: hostId, sha256 }).read('primary').lean();
+	const existing = await ObsidianBlob.findOne({ host_id: hostId, sha256 }).lean();
 	if (existing) return existing;
 	const temporary = path.join(storageRoot(), 'server', cleanSegment(hostId), crypto.randomUUID());
 	await mkdir(temporary, { recursive: true });
@@ -337,7 +338,7 @@ export async function storeBuffer(hostId, value, mimeType = 'application/octet-s
 				chunks,
 			});
 		} catch (err) {
-			const raced = await ObsidianBlob.findOne({ host_id: hostId, sha256 }).read('primary').lean();
+			const raced = await ObsidianBlob.findOneAndUpdate({ host_id: hostId, sha256 }, { $inc: { __v: 0 } }, { timestamps: false, returnDocument: 'after' }).lean();
 			if (!raced) throw err;
 			if (installed && raced.storage_key !== path.relative(storageRoot(), destination)) await rm(destination, { recursive: true, force: true });
 			await rm(temporary, { recursive: true, force: true });
@@ -407,18 +408,15 @@ export async function materializeBlob(blob, hostId) {
 	}
 }
 
-export async function deleteBlob(blob) {
-	if (!blob) return;
-	await rm(path.join(storageRoot(), blob.storage_key), { recursive: true, force: true });
-	await ObsidianBlob.deleteOne({ _id: blob._id, host_id: blob.host_id });
-}
-
 export async function cleanupOrphanedUploads(now = new Date()) {
-	const uploads = await ObsidianUpload.find({ expires_at: { $lte: now } }).select('_id host_id').lean();
-	for (const upload of uploads) await rm(uploadDir(upload.host_id, upload._id), { recursive: true, force: true }).catch(() => {});
-	if (uploads.length) await ObsidianUpload.deleteMany({ _id: { $in: uploads.map((upload) => upload._id) } });
+	let removed = 0;
+	while (true) {
+		const upload = await ObsidianUpload.findOneAndDelete({ expires_at: { $lte: now } }).lean();
+		if (!upload) break;
+		await rm(uploadDir(upload.host_id, upload._id), { recursive: true, force: true });
+		removed++;
+	}
 	const root = path.join(storageRoot(), 'uploads');
-	let removed = uploads.length;
 	const hosts = await readdir(root, { withFileTypes: true }).catch(() => []);
 	for (const host of hosts) {
 		if (!host.isDirectory()) continue;
@@ -426,10 +424,9 @@ export async function cleanupOrphanedUploads(now = new Date()) {
 		const directories = await readdir(hostPath, { withFileTypes: true }).catch(() => []);
 		const ids = directories.filter((entry) => entry.isDirectory() && /^[a-f0-9]{24}$/i.test(entry.name)).map((entry) => entry.name);
 		if (!ids.length) continue;
-		const active = await ObsidianUpload.find({ _id: { $in: ids }, host_id: host.name }).select('_id').lean();
-		const activeIds = new Set(active.map((upload) => String(upload._id)));
 		for (const id of ids) {
-			if (activeIds.has(id)) continue;
+			const active = await ObsidianUpload.findOneAndUpdate({ _id: id, host_id: host.name }, { $inc: { __v: 0 } }, { timestamps: false, returnDocument: 'after' }).select('_id').lean();
+			if (active) continue;
 			await rm(path.join(hostPath, id), { recursive: true, force: true });
 			removed++;
 		}

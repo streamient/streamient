@@ -1,4 +1,5 @@
 import mongoose from '../model/mongoose.js';
+import { acquireProjectWrite, resolveRestoreProject } from './project_service.js';
 import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
 import { Url } from '../model/url.js';
@@ -77,24 +78,26 @@ function uniqueIds(ids) {
 	return [...new Set((ids || []).map((value) => String(value || '')).filter(Boolean))];
 }
 
-async function findPrimaryLean(model, query, fields = '') {
+async function findLean(model, query, fields = '') {
 	try {
-		let mongoQuery = model.findOne(query);
+		let mongoQuery = model.findOneAndUpdate(query, { $inc: { __v: 0 } }, { timestamps: false, returnDocument: 'after' });
 		if (fields) mongoQuery = mongoQuery.select(fields);
-		return await mongoQuery.read('primary').lean();
+		return await mongoQuery.lean();
 	} catch (err) {
 		if (err?.name === 'CastError') return null;
 		throw err;
 	}
 }
 
-async function findExistingPrimary(model, host_id, ids, batchSize = 250) {
+async function findExisting(model, host_id, ids, batchSize = 250) {
 	const validIds = uniqueIds(ids).filter((id) => mongoose.isObjectIdOrHexString(id));
 	const existing = [];
 	for (let index = 0; index < validIds.length; index += batchSize) {
 		const batch = validIds.slice(index, index + batchSize);
-		const docs = await model.find({ _id: { $in: batch }, host_id }).read('primary').lean();
-		existing.push(...docs);
+		for (const id of batch) {
+			const doc = await findLean(model, { _id: id, host_id });
+			if (doc) existing.push(doc);
+		}
 	}
 	return existing;
 }
@@ -103,12 +106,6 @@ async function cleanupGraphLinks(host_id, ids) {
 	const values = uniqueIds(ids);
 	if (!values.length) return;
 	await removeLinksForItems(host_id, values);
-}
-
-async function markIndexed(model, host_id, ids) {
-	const uniqueIds = [...new Set(ids.map((id) => String(id || '')).filter(Boolean))];
-	if (!uniqueIds.length) return;
-	await model.updateMany({ _id: { $in: uniqueIds }, host_id }, { $set: { is_indexed: true } }, { timestamps: false });
 }
 
 async function markIndexPending(model, host_id, docs) {
@@ -128,31 +125,52 @@ async function restoreItemsByType(host_id, type, ids, deps = {}) {
 
 	for (const id of uniqueIds(ids)) {
 		let doc;
+		// Resolve the destination project before restoring so the write lease can
+		// fence deleteProject from deactivating it mid-restore.
+		let existing;
 		try {
-			doc = await model.findOneAndUpdate(
-				{ _id: id, host_id, in_trash: true },
-				{ $set: { in_trash: false, is_indexed: false }, $unset: { trashed_at: '' } },
-				{ returnDocument: 'after' },
-			);
+			existing = await model.findOneAndUpdate({ _id: id, host_id }, { $inc: { __v: 0 } }, { timestamps: false, returnDocument: 'after' });
 		} catch (err) {
 			if (err?.name !== 'CastError') throw err;
-			doc = null;
+			existing = null;
+		}
+		if (!existing) {
+			missingIds.push(id);
+			continue;
+		}
+		// Resolve the destination before restoring so the write lease can fence
+		// deleteProject. An already-inactive/missing original project falls back
+		// to the host's active Default project; anything ambiguous fails closed.
+		const destination = await resolveRestoreProject(host_id, existing.project);
+		const { release, publish } = await acquireProjectWrite(host_id, destination);
+		try {
+			try {
+				doc = await publish(async (session) => model.findOneAndUpdate(
+					{ _id: id, host_id, in_trash: true },
+					{ $set: { in_trash: false, is_indexed: false, ...(String(destination) !== String(existing.project) ? { project: destination } : {}) }, $unset: { trashed_at: '' } },
+					{ returnDocument: 'after', ...(session ? { session } : {}) },
+				));
+			} catch (err) {
+				if (err?.name !== 'CastError') throw err;
+				doc = null;
+			}
+		} finally {
+			await release();
 		}
 		if (doc) {
 			docs.push(doc);
 			continue;
 		}
-		const current = await findPrimaryLean(model, { _id: id, host_id });
-		if (current) currentDocs.push(current);
-		else missingIds.push(id);
+		currentDocs.push(existing);
 	}
 
 	const indexDocs = [...docs, ...currentDocs];
 	if (indexDocs.length) {
 		await markIndexPending(model, host_id, indexDocs);
+		// bulkIndexDocuments now runs the shared claim/version-conditional
+		// protocol, marking each row indexed only when its own claim + captured
+		// version still holds.
 		const results = await bulkIndexFn(host_id, tsType, indexDocs);
-		const successIds = results.filter((result) => result.success).map((result) => result.id);
-		await markIndexed(model, host_id, successIds);
 		const failed = results.filter((result) => !result.success);
 		if (failed.length) log.error({ failed, type, host_id }, 'Typesense bulk restore index error');
 		for (const doc of docs) {
@@ -192,19 +210,18 @@ async function permanentDeleteItemsByType(host_id, type, ids, deps = {}) {
 			docs.push(doc);
 			continue;
 		}
-		const current = await findPrimaryLean(model, { _id: id, host_id });
+		const current = await findLean(model, { _id: id, host_id });
 		if (current) currentDocs.push(current);
 		else missingIds.push(id);
 	}
 
 	const deletedIds = docs.map((doc) => doc._id?.toString?.() || String(doc._id || ''));
 	await removeGraphLinks(host_id, [...deletedIds, ...missingIds]);
-	await bulkRemoveFn(host_id, tsType, requestedIds);
+	const absentIds = [...deletedIds, ...missingIds];
+	if (absentIds.length) await bulkRemoveFn(host_id, tsType, absentIds);
 	if (currentDocs.length) {
 		await markIndexPending(model, host_id, currentDocs);
 		const results = await bulkIndexFn(host_id, tsType, currentDocs, { removeExisting: false });
-		const successIds = results.filter((result) => result.success).map((result) => result.id);
-		await markIndexed(model, host_id, successIds);
 		const failed = results.filter((result) => !result.success);
 		if (failed.length) log.error({ failed, type, host_id }, 'Typesense stale trash repair error');
 	}
@@ -276,20 +293,23 @@ export async function emptyTrash(host_id, deps = {}) {
 	for (const [type, { model, tsType }] of Object.entries(TRASH_MODEL_MAP)) {
 		const indexedDocs = await exportFn(host_id, tsType);
 		const indexedIds = uniqueIds(indexedDocs.map((doc) => doc.source_id || doc.id));
-		const mongoDocs = await model.find({ host_id, in_trash: true }).select('_id').read('primary').lean();
+		const mongoDocs = [];
+		while (true) {
+			const doc = await model.findOneAndDelete({ host_id, in_trash: true });
+			if (!doc) break;
+			mongoDocs.push(doc);
+		}
 		const mongoIds = uniqueIds(mongoDocs.map((doc) => doc._id));
-		await model.deleteMany({ host_id, in_trash: true });
 
 		const candidateIds = uniqueIds([...indexedIds, ...mongoIds]);
-		const remainingDocs = await findExistingPrimary(model, host_id, candidateIds);
+		const remainingDocs = await findExisting(model, host_id, candidateIds);
 		const remainingIds = new Set(remainingDocs.map((doc) => String(doc._id)));
 		const absentIds = candidateIds.filter((id) => !remainingIds.has(id));
 		await removeGraphLinks(host_id, absentIds);
 		await removeByFilterFn(host_id, tsType, 'in_trash:=true', { batch_size: 250 });
 		if (remainingDocs.length) {
 			await markIndexPending(model, host_id, remainingDocs);
-			const results = await bulkIndexFn(host_id, tsType, remainingDocs, { removeExisting: false });
-			await markIndexed(model, host_id, results.filter((result) => result.success).map((result) => result.id));
+			await bulkIndexFn(host_id, tsType, remainingDocs, { removeExisting: false });
 		}
 		for (const id of absentIds) emitToTenant(host_id, `${eventTypeForTrashType(type)}:deleted`, { _id: id });
 		deleted += absentIds.length;

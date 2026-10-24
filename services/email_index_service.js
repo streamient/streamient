@@ -1,4 +1,3 @@
-import { Email } from '../model/email.js';
 import { bulkIndexDocuments, bulkRemoveDocuments } from '../modules/typesense.js';
 import { createLogger } from '../modules/logger.js';
 
@@ -66,27 +65,6 @@ async function runRemoveEmails(hostId, ids, options) {
 	return bulkRemoveDocuments(hostId, 'emails', ids);
 }
 
-async function markEmailsIndexed(hostId, ids, options = {}) {
-	const uniqueIds = [...new Set(ids.map((id) => String(id || '')).filter(Boolean))];
-	if (!uniqueIds.length) return;
-
-	const update = { $set: { is_indexed: true } };
-	const updateManyFn = options.updateManyFn || options.bulkUpdateFn;
-	if (updateManyFn) {
-		await updateManyFn({ _id: { $in: uniqueIds }, host_id: hostId }, update, { timestamps: false });
-		return;
-	}
-	if (uniqueIds.length > 1 && !options.updateFn) {
-		await Email.updateMany({ _id: { $in: uniqueIds }, host_id: hostId }, update, { timestamps: false });
-		return;
-	}
-
-	const updateFn = options.updateFn || Email.updateOne.bind(Email);
-	await Promise.all(
-		uniqueIds.map((id) => updateFn({ _id: id, host_id: hostId }, update, { timestamps: false })),
-	);
-}
-
 export async function indexEmailsNow(hostId, emails, options = {}) {
 	const emailList = (Array.isArray(emails) ? emails : [emails]).filter((email) => hostId && emailIndexId(email));
 	if (!emailList.length) return [];
@@ -97,7 +75,6 @@ export async function indexEmailsNow(hostId, emails, options = {}) {
 		results.push(...await runIndexEmails(hostId, emailList, options));
 
 		const successIds = results.filter((result) => result.success).map((result) => result.id);
-		await markEmailsIndexed(hostId, successIds, options);
 
 		const failed = results.filter((result) => !result.success);
 		if (failed.length) {
@@ -125,7 +102,6 @@ export async function removeEmailsFromIndexNow(hostId, emailOrIds, options = {})
 	try {
 		const results = await runRemoveEmails(hostId, ids, options);
 		const successIds = results.filter((result) => result.success).map((result) => result.id);
-		await markEmailsIndexed(hostId, successIds, options);
 
 		const failed = results.filter((result) => !result.success);
 		if (failed.length) {

@@ -4,11 +4,16 @@ import express from 'express';
 
 import config from '../config.js';
 import importRoutes from '../routes/import.js';
+import { mockTenantWork } from './helpers/tenant-work.js';
 import { GraphLink } from '../model/graph_link.js';
 import { Project } from '../model/project.js';
 import { Email } from '../model/email.js';
 import { AuditLog } from '../model/audit_log.js';
 import { Tenant } from '../modules/tenancy.js';
+
+let restoreAccountWork;
+beforeEach(() => { restoreAccountWork = mockTenantWork(); });
+afterEach(() => { restoreAccountWork(); });
 
 function createServer() {
 	const app = express();
@@ -29,17 +34,21 @@ function request(server, body) {
 describe('Email forwarding import route', () => {
 	const projectId = '507f1f77bcf86cd799439011';
 	const originalEmailForwardDomain = config.emailForwardDomain;
-	const originalProjectFindOne = Project.findOne;
+	const originalProjectRead = Project.findOne;
+	const originalProjectFindOne = Project.findOneAndUpdate;
 	const originalEmailFindOne = Email.findOne;
 	const originalEmailCreate = Email.create;
+	const originalEmailUpsert = Email.findOneAndUpdate;
 	const originalEmailFind = Email.find;
 	const originalGraphLinkUpdateOne = GraphLink.updateOne;
 	const originalTenantFindOne = Tenant.findOne;
 	const originalAuditLogCreate = AuditLog.create;
+	const originalProjectUpdateOne = Project.updateOne;
 
 	beforeEach(() => {
 		config.emailForwardDomain = 'email.streamient.com';
-		Project.findOne = () => ({
+		Project.findOne = (...args) => Project.findOneAndUpdate(...args);
+		Project.findOneAndUpdate = () => ({
 			select() { return this; },
 			read() { return this; },
 			lean: async () => ({
@@ -50,7 +59,9 @@ describe('Email forwarding import route', () => {
 				email_filter: '',
 			}),
 		});
-		Email.findOne = async () => null;
+		Project.updateOne = async () => ({ matchedCount: 1, modifiedCount: 1 });
+		Email.findOne = () => ({ lean: async () => null });
+		Email.findOneAndUpdate = async (_filter, update) => ({ value: await Email.create(update.$set), lastErrorObject: { updatedExisting: false } });
 		Email.create = async (payload) => ({
 			_id: { toString: () => '507f1f77bcf86cd799439101' },
 			...payload,
@@ -73,9 +84,12 @@ describe('Email forwarding import route', () => {
 
 	afterEach(() => {
 		config.emailForwardDomain = originalEmailForwardDomain;
-		Project.findOne = originalProjectFindOne;
+		Project.findOneAndUpdate = originalProjectFindOne;
+		Project.findOne = originalProjectRead;
+		Project.updateOne = originalProjectUpdateOne;
 		Email.findOne = originalEmailFindOne;
 		Email.create = originalEmailCreate;
+		Email.findOneAndUpdate = originalEmailUpsert;
 		Email.find = originalEmailFind;
 		GraphLink.updateOne = originalGraphLinkUpdateOne;
 		Tenant.findOne = originalTenantFindOne;
@@ -152,8 +166,20 @@ describe('Email forwarding import route', () => {
 		}
 	});
 
+	it('acknowledges a tenant Message-ID conflict without exposing the database error', async () => {
+		Email.findOneAndUpdate = async () => { throw Object.assign(new Error('duplicate database key'), { code: 11000, keyPattern: { host_id: 1, message_id: 1 } }); };
+		const server = createServer();
+		try {
+			const response = await request(server, JSON.stringify({ message_id: '<duplicate@example.com>', from: 'sender@example.com', to: `${projectId}@email.streamient.com`, subject: 'Duplicate', text: 'Body' }));
+			assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+			assert.deepEqual(await response.json(), { accepted: false });
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
 	it('moves filtered imported email to trash', async () => {
-		Project.findOne = () => ({
+		Project.findOneAndUpdate = () => ({
 			select() { return this; },
 			read() { return this; },
 			lean: async () => ({

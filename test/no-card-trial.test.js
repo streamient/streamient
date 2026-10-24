@@ -276,7 +276,7 @@ describe('no-card trial scheduler lifecycle', () => {
 			},
 			updateOne: async (query, update) => {
 				updateOneCalls.push({ query, update });
-				return { modifiedCount: 1 };
+				return { matchedCount: 1, modifiedCount: 1 };
 			},
 		};
 		const threeDayEmails = [];
@@ -338,10 +338,10 @@ describe('email retention scheduler cleanup', () => {
 				};
 				return chain;
 			},
-			deleteMany: async (query) => {
+			findOneAndDelete: (query) => ({ lean: async () => {
 				deleteQueries.push(query);
-				return { deletedCount: 3 };
-			},
+				return [trashEmail, secondTrashEmail, spamEmail].find((doc) => doc._id === query.$and[1]._id);
+			} }),
 		};
 
 		const summary = await runEmailRetentionCleanup({
@@ -355,24 +355,14 @@ describe('email retention scheduler cleanup', () => {
 		assert.equal(summary.deleted, 3);
 		assert.equal(summary.cutoff.toISOString(), '2026-01-01T02:30:00.000Z');
 		assert.equal(findLimits[0], 25);
-		assert.deepEqual(readPreferences, ['primary', 'primary']);
+		assert.deepEqual(readPreferences, []);
 		assert.deepEqual(findQueries[0], {
 			$or: [
 				{ in_trash: true, trashed_at: { $lte: summary.cutoff } },
 				{ in_trash: { $ne: true }, mailbox: 'spam', updatedAt: { $lte: summary.cutoff } },
 			],
 		});
-		assert.deepEqual(deleteQueries, [{
-			$and: [
-				findQueries[0],
-				{
-					$or: [
-						{ host_id: 'host-1', _id: { $in: ['trash-email', 'trash-email-2'] } },
-						{ host_id: 'host-2', _id: { $in: ['spam-email'] } },
-					],
-				},
-			],
-		}]);
+		assert.deepEqual(deleteQueries, [trashEmail, secondTrashEmail, spamEmail].map((doc) => ({ $and: [findQueries[0], { _id: doc._id, host_id: doc.host_id }] })));
 		assert.deepEqual(removedSearchDocs, [
 			{ hostId: 'host-1', type: 'emails', ids: ['trash-email', 'trash-email-2'] },
 			{ hostId: 'host-2', type: 'emails', ids: ['spam-email'] },
@@ -451,4 +441,25 @@ describe('account deletion requires a durable request', () => {
 		const models = { Tenant: { findOne: () => ({ read() { return this; }, lean: async () => ({ _id: 'tenant-1', host_id: 'host-1' }) }) } };
 		await assert.rejects(deleteTenantData('host-1', 'tenant-1', { models }), /must be requested/);
 	});
+});
+
+it('trial expiry rechecks eligibility and skips a paid upgrade, extended trial, or existing lock', async () => {
+	const now = new Date('2026-01-01T09:00:00Z');
+	for (const change of [{ subscription_status: 'active' }, { trial_source: 'stripe' }, { trial_ends_at: new Date('2026-02-01') }, { trial_locked_at: now }, {}]) {
+		const current = { _id: 'trial', trial_source: 'no_card', subscription_status: 'trialing', trial_ends_at: new Date('2025-12-31'), trial_locked_at: null, ...change };
+		let reads = 0;
+		let emails = 0;
+		const summary = await runTrialLifecycle({ now, userModel: {
+			find: async () => ++reads === 3 ? [{ _id: 'trial', trial_ends_at: new Date('2025-12-31') }] : [],
+			updateOne: async (filter, update) => {
+				assert.deepEqual(filter, { _id: 'trial', trial_source: 'no_card', subscription_status: 'trialing', trial_ends_at: { $lte: now }, trial_locked_at: null });
+				const matched = current.trial_source === filter.trial_source && current.subscription_status === filter.subscription_status && current.trial_ends_at <= filter.trial_ends_at.$lte && current.trial_locked_at === null;
+				if (matched) Object.assign(current, update.$set);
+				return { matchedCount: Number(matched) };
+			},
+		}, sendExpiredEmail: async () => { emails++; } });
+		assert.equal(emails, Object.keys(change).length ? 0 : 1);
+		assert.equal(summary.expired, emails);
+		assert.equal(current.subscription_status, change.subscription_status || (emails ? 'trial_expired' : 'trialing'));
+	}
 });

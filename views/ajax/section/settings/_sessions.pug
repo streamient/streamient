@@ -1,0 +1,7 @@
+.card.mb-5
+	.card-body
+		.d-flex.flex-wrap.align-items-center.justify-content-between.gap-3.mb-3
+			h3.card-title.mb-0 Sessions
+			button.btn.btn-outline-danger.btn-sm.ms-auto#revoke-other-sessions(type="button" disabled) Sign out all other sessions
+		p.text-muted Browsers where you are signed in. Revoke a session to sign that browser out.
+		#session-list(data-url="/ajax/settings/sessions")

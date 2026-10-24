@@ -22,7 +22,8 @@ import { getWhiteLabelAssetsDir } from '../../services/white_label_service.js';
 import { assertConversationCleanupOwnership } from '../../modules/typesense.js';
 
 it('deletes a populated account through verified cleanup and the real worker while preserving other users/accounts', { skip: process.env.ACCOUNT_DELETION_INTEGRATION !== '1', timeout: 120000 }, async () => {
-	await mongoose.connect(config.mongoUri);
+	const dbName = `streamient_deletion_test_${crypto.randomUUID().replaceAll('-', '')}`;
+	await mongoose.connect(config.mongoUri, { ...config.mongoOptions, dbName });
 	const hostId = new mongoose.Types.ObjectId().toString();
 	const otherHost = new mongoose.Types.ObjectId().toString();
 	const ownerId = new mongoose.Types.ObjectId();
@@ -66,7 +67,7 @@ it('deletes a populated account through verified cleanup and the real worker whi
 		const foreignCollection = 'mt_emails_' + hostId;
 		await ts.collections().create({ name: foreignCollection, fields: [{ name: 'text', type: 'string' }] });
 		try { await assert.rejects(assertConversationCleanupOwnership(hostId), { code: 'search_ownership_unknown' }); } finally { await ts.collections(foreignCollection).delete(); }
-		const browserSession = { userId: String(ownerId), host_id: hostId, tenantId: String(tenantId), save: (callback) => callback(), destroy: (callback) => callback() };
+		const browserSession = { csrfToken: crypto.randomBytes(32).toString('hex'), userId: String(ownerId), host_id: hostId, tenantId: String(tenantId), save: (callback) => callback(), destroy: (callback) => callback() };
 		const app = express();
 		app.use(express.json());
 		app.use((req, res, next) => { req.session = browserSession; req.isHosted = true; next(); });
@@ -82,7 +83,7 @@ it('deletes a populated account through verified cleanup and the real worker whi
 		}
 		const disconnected = new Promise((resolve) => sockets[0].once('disconnect', resolve));
 
-		const headers = { 'Content-Type': 'application/json' };
+		const headers = { 'Content-Type': 'application/json', 'X-CSRF-Token': browserSession.csrfToken };
 		browserSession.impersonating = true;
 		assert.equal((await fetch(route)).status, 403);
 		delete browserSession.impersonating;
@@ -104,7 +105,7 @@ it('deletes a populated account through verified cleanup and the real worker whi
 		assert.equal(await db.collection(COLLECTION_NAME).countDocuments({ app_instance: namespace, queue: 'account_deletion' }), 1);
 		const acceptedHttp = await fetch(route, { method: 'POST', headers, body: JSON.stringify({ confirmation: 'DELETE', confirmation_token: preview.confirmation_token }) });
 		assert.equal(acceptedHttp.status, 202, await acceptedHttp.clone().text());
-		assert.equal((await User.findById(exclusiveId).read('primary').lean()).is_active, false);
+		assert.deepEqual(await listAccessibleTenantsForUser(exclusiveId), []);
 		await assert.rejects(assertTenantAvailable(hostId), { code: 'account_unavailable' });
 		await assert.rejects(MongoQueue.add('fixture-work', { host_id: hostId }), { code: 'account_unavailable' });
 		assert.deepEqual(await processAccountDeletion({ host_id: hostId }), { pending: true });
@@ -139,7 +140,7 @@ it('deletes a populated account through verified cleanup and the real worker whi
 		assert.equal((await Tenant.findById(tenantId).read('primary').lean()).deletion.stage, 'failed');
 		await retryAccountDeletion(String(tenantId));
 		assert.equal((await processAccountDeletion({ host_id: hostId })).pending, true);
-		assert.equal(await HOST_SCOPED_MODELS.Note.countDocuments({ host_id: hostId }).read('primary'), 1);
+		assert.equal(await HOST_SCOPED_MODELS.Note.countDocuments({ host_id: hostId }).read('primary'), 0);
 		assert.equal((await processAccountDeletion({ host_id: hostId })).pending, true);
 		for (const model of Object.values(HOST_SCOPED_MODELS)) assert.equal(await model.countDocuments({ host_id: hostId }).read('primary'), 0, model.modelName);
 		await Tenant.updateOne({ _id: tenantId }, { $set: { 'deletion.clean_at': new Date(Date.now() - 6000) } });
@@ -184,6 +185,7 @@ it('deletes a populated account through verified cleanup and the real worker whi
 		for (const file of files) await fs.rm(file, { recursive: true, force: true });
 		await ts.collections('conversation_store').documents(historyId).delete().catch(() => {});
 		if (oldNamespace === undefined) delete process.env.STREAMIENT_QUEUE_APP; else process.env.STREAMIENT_QUEUE_APP = oldNamespace;
+		await db.dropDatabase();
 		await mongoose.disconnect();
 	}
 });

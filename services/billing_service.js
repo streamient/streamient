@@ -1,6 +1,6 @@
 import { acquireTenantWork, assertTenantAvailable } from '../modules/tenancy.js';
 import { getStripe } from '../modules/stripe.js';
-import { queryForSave } from '../model/mongoose.js';
+import mongoose from '../model/mongoose.js';
 import { User } from '../model/user.js';
 import { Tenant } from '../modules/tenancy.js';
 import config from '../config.js';
@@ -30,7 +30,7 @@ export function isDeletionTrackingSubscription(subscription, tenant, settings = 
 
 export async function checkAccountDeletionBilling(tenant, options = {}) {
 	const settings = options.config || config;
-	const user = options.user || await User.findById(tenant.owner).select('+stripe_customer_id +stripe_subscription_id +stripe_free_subscription_id subscription_status trial_source').read('primary').lean();
+	const user = options.user || await User.findById(tenant.owner).select('+stripe_customer_id +stripe_subscription_id +stripe_free_subscription_id subscription_status trial_source').lean();
 	const knownSubscription = Boolean(user?.stripe_subscription_id || user?.stripe_free_subscription_id || ['active', 'past_due', 'unpaid', 'canceled', 'incomplete_expired', 'paused'].includes(user?.subscription_status) || (user?.subscription_status === 'trialing' && user?.trial_source !== 'no_card'));
 	if (!settings.stripe.secretKey && !options.stripe) {
 		if (user?.stripe_customer_id || knownSubscription) throw Object.assign(new Error('Unable to verify Stripe billing. Please try again later.'), { status: 503, code: 'billing_unavailable' });
@@ -262,20 +262,71 @@ export async function cancelFreeSubscriptionForUser(userId, options = {}) {
 	return true;
 }
 
-export async function applySubscriptionToUser(userId, subscription, stripeCustomerId = undefined) {
-	const owner = await User.findById(userId).select('host_id').read('primary').lean();
+/**
+ * Conditional match for a Checkout apply. A `checkout.session.completed` or
+ * GET /billing/success apply must never overwrite a terminal `canceled` state
+ * for the SAME subscription (Stripe can never reactivate a canceled id), but a
+ * genuinely DIFFERENT subscription still applies over a canceled one and
+ * re-applying the current active subscription stays idempotent. The condition
+ * is tested against the document's state at write time, not a stale pre-read.
+ */
+function buildCheckoutApplyFilter(userId, subscriptionId) {
+	return {
+		_id: userId,
+		$or: [
+			{ stripe_subscription_id: subscriptionId, subscription_status: { $ne: 'canceled' } },
+			{ stripe_subscription_id: { $ne: subscriptionId } },
+		],
+	};
+}
+
+/**
+ * Pipeline update for a Checkout apply. Clears the per-subscription event fence
+ * only when the applied subscription differs from the one currently stored (a
+ * real new subscription); re-applying the same subscription keeps the fence so a
+ * delayed older event stays blocked. Decided from the matched document itself,
+ * not a stale pre-read.
+ */
+function buildCheckoutApplyUpdate(subscription, stripeCustomerId = undefined) {
+	return [
+		{
+			$set: {
+				...buildSubscriptionUserUpdate(subscription, stripeCustomerId),
+				stripe_subscription_event_at: {
+					$cond: [
+						{ $eq: ['$stripe_subscription_id', subscription.id] },
+						{ $ifNull: ['$stripe_subscription_event_at', '$$REMOVE'] },
+						'$$REMOVE',
+					],
+				},
+			},
+		},
+	];
+}
+
+/**
+ * Apply a Checkout subscription to the owner's user and the tenant's plan in one
+ * atomic unit (conditional User write + Tenant plan write). Callers pass a
+ * transaction `session`; Stripe I/O and reads stay outside.
+ */
+export async function applyCheckoutSubscriptionPlan(userId, subscription, stripeCustomerId = undefined, { userModel = User, tenantModel = Tenant, session } = {}) {
+	const user = await userModel.findOneAndUpdate(
+		buildCheckoutApplyFilter(userId, subscription.id),
+		buildCheckoutApplyUpdate(subscription, stripeCustomerId),
+		{ returnDocument: 'after', updatePipeline: true, ...(session ? { session } : {}) },
+	);
+	if (!user?.host_id) return null;
+	await publishTenantPlan(user.host_id, resolvePlanFromSubscription(subscription), { tenantModel, session });
+	return user;
+}
+
+export async function applySubscriptionToUser(userId, subscription, stripeCustomerId = undefined, options = {}) {
+	const userModel = options.userModel || User;
+	const owner = await userModel.findById(userId).select('host_id').lean();
 	if (!owner) return null;
 	await assertTenantAvailable(owner.host_id);
-	const plan = resolvePlanFromSubscription(subscription);
-	const user = await User.findByIdAndUpdate(
-		userId,
-		buildSubscriptionUserUpdate(subscription, stripeCustomerId),
-		{ returnDocument: 'after' },
-	);
-	if (user?.host_id) {
-		await Tenant.findOneAndUpdate({ host_id: user.host_id }, { plan });
-	}
-	return user;
+	return runSubscriptionEventTransaction((session) =>
+		applyCheckoutSubscriptionPlan(userId, subscription, stripeCustomerId, { userModel, tenantModel: options.tenantModel || Tenant, session }));
 }
 
 export function buildCheckoutSessionParams(user, customerId, priceId) {
@@ -312,6 +363,126 @@ export function buildSubscriptionUserUpdate(subscription, stripeCustomerId = und
 		update.stripe_customer_id = stripeCustomerId;
 	}
 	return update;
+}
+
+/**
+ * Ordering guard for Stripe subscription events. A write only matches when the
+ * incoming event is newer than the last event already recorded for that
+ * subscription. The conditional write is atomic across replicas, so a delayed
+ * older event can never overwrite newer persisted state.
+ *
+ * Cancellation is terminal: a `deleted` event ties (same `event.created`
+ * second) with a prior `updated` and must still win, so the terminal path uses
+ * `$lte` while non-terminal `updated` events stay strictly `$lt`.
+ */
+function buildSubscriptionEventFilter(subscriptionId, eventCreated, terminal = false) {
+	const ordered = terminal
+		? { stripe_subscription_event_at: { $lte: eventCreated } }
+		: { stripe_subscription_event_at: { $lt: eventCreated } };
+	return {
+		stripe_subscription_id: subscriptionId,
+		$or: [
+			ordered,
+			{ stripe_subscription_event_at: { $exists: false } },
+		],
+	};
+}
+
+/**
+ * Apply a customer.subscription.updated event only when it is newer than the
+ * last event recorded for that subscription. Returns the updated user, or null
+ * when the event is stale and was ignored.
+ */
+export async function applySubscriptionUpdatedEvent(subscription, eventCreated, options = {}) {
+	const userModel = options.userModel || User;
+	return userModel.findOneAndUpdate(
+		buildSubscriptionEventFilter(subscription.id, eventCreated, false),
+		{ $set: { ...buildSubscriptionUserUpdate(subscription), stripe_subscription_event_at: eventCreated } },
+		{ returnDocument: 'after', ...(options.session ? { session: options.session } : {}) },
+	);
+}
+
+/**
+ * Apply a customer.subscription.deleted event only when it is newer than (or
+ * ties with) the last event recorded for that subscription. Returns the updated
+ * user, or null when the event is stale and was ignored.
+ */
+export async function applySubscriptionDeletedEvent(subscription, eventCreated, options = {}) {
+	const userModel = options.userModel || User;
+	return userModel.findOneAndUpdate(
+		buildSubscriptionEventFilter(subscription.id, eventCreated, true),
+		{ $set: {
+			subscription_status: 'canceled',
+			trial_source: null,
+			trial_ends_at: null,
+			trial_reminder_3d_sent_at: null,
+			trial_reminder_24h_sent_at: null,
+			trial_locked_at: null,
+			stripe_subscription_event_at: eventCreated,
+		} },
+		{ returnDocument: 'after', ...(options.session ? { session: options.session } : {}) },
+	).select('+stripe_customer_id +stripe_free_subscription_id');
+}
+
+/**
+ * Mark a subscription past_due only when the invoice's subscription is still the
+ * user's current, entitled subscription and the payment_failed event is newer
+ * than the last applied subscription event. A delayed payment_failed for a
+ * canceled subscription must never restore entitled (past_due) state.
+ */
+export async function applyInvoicePaymentFailed(subscriptionId, eventCreated, options = {}) {
+	const userModel = options.userModel || User;
+	return userModel.findOneAndUpdate(
+		{
+			stripe_subscription_id: subscriptionId,
+			subscription_status: { $in: ['active', 'trialing'] },
+			$or: [
+				{ stripe_subscription_event_at: { $lt: eventCreated } },
+				{ stripe_subscription_event_at: { $exists: false } },
+			],
+		},
+		{ $set: { subscription_status: 'past_due', stripe_subscription_event_at: eventCreated } },
+		{ returnDocument: 'after' },
+	);
+}
+
+/**
+ * Write the tenant's plan for a subscription publication. Kept as the shared
+ * publication root so the User/Tenant pair stays one atomic unit for both the
+ * webhook event path and the Checkout apply path.
+ */
+async function publishTenantPlan(hostId, plan, { tenantModel = Tenant, session } = {}) {
+	await tenantModel.updateOne({ host_id: hostId }, { $set: { plan } }, session ? { session } : {});
+}
+
+/**
+ * Apply a subscription.updated/deleted event to the owner's user and the
+ * tenant's plan in one atomic unit. Callers pass a transaction `session` so the
+ * conditional User write and the Tenant plan write cannot interleave with a
+ * concurrent newer event; external Stripe calls run outside the transaction.
+ */
+export async function applySubscriptionPlanEvent(subscription, eventCreated, { terminal = false, userModel = User, tenantModel = Tenant, session } = {}) {
+	const user = terminal
+		? await applySubscriptionDeletedEvent(subscription, eventCreated, { userModel, session })
+		: await applySubscriptionUpdatedEvent(subscription, eventCreated, { userModel, session });
+	if (user?.host_id) {
+		await publishTenantPlan(user.host_id, terminal ? 'free' : resolvePlanFromSubscription(subscription), { tenantModel, session });
+	}
+	return user;
+}
+
+/**
+ * Run a write-only subscription publication in a MongoDB transaction. Only the
+ * conditional User write and the Tenant plan write belong inside; Stripe I/O and
+ * other reads stay outside so the transaction is short and never holds a lease.
+ */
+async function runSubscriptionEventTransaction(callback) {
+	const session = await mongoose.connection.startSession();
+	try {
+		return await session.withTransaction(() => callback(session));
+	} finally {
+		await session.endSession();
+	}
 }
 
 /**
@@ -374,7 +545,7 @@ export async function handleWebhook(rawBody, sig) {
 	const object = event.data.object;
 	const customerId = typeof object.customer === 'string' ? object.customer : object.customer?.id;
 	const subscriptionId = object.object === 'subscription' ? object.id : object.subscription;
-	const user = await User.findOne({ $or: [...(customerId ? [{ stripe_customer_id: customerId }] : []), ...(subscriptionId ? [{ stripe_subscription_id: subscriptionId }] : []), { _id: null }] }).select('host_id').read('primary').lean();
+	const user = await User.findOne({ $or: [...(customerId ? [{ stripe_customer_id: customerId }] : []), ...(subscriptionId ? [{ stripe_subscription_id: subscriptionId }] : []), { _id: null }] }).select('host_id').lean();
 	const hostId = object.metadata?.host_id || user?.host_id;
 	if (!hostId) return;
 	let release;
@@ -405,13 +576,7 @@ export async function handleWebhook(rawBody, sig) {
             const subscription = event.data.object;
             // The $0 tracking subscription never drives plan or status.
             if (isFreePriceSubscription(subscription)) break;
-            const user = await queryForSave(User.findOne({ stripe_subscription_id: subscription.id }));
-            if (user) {
-                Object.assign(user, buildSubscriptionUserUpdate(subscription));
-                await user.save();
-                const plan = resolvePlanFromSubscription(subscription);
-                await Tenant.findOneAndUpdate({ host_id: user.host_id }, { plan });
-            }
+            await runSubscriptionEventTransaction((session) => applySubscriptionPlanEvent(subscription, event.created, { terminal: false, session }));
             break;
         }
 
@@ -420,18 +585,8 @@ export async function handleWebhook(rawBody, sig) {
             // Deleting the $0 tracking subscription (e.g. on upgrade) must not
             // re-enter paid-cancellation handling or re-create anything.
             if (isFreePriceSubscription(subscription)) break;
-            const user = await queryForSave(
-                User.findOne({ stripe_subscription_id: subscription.id }).select('+stripe_customer_id +stripe_free_subscription_id'),
-            );
-            if (user) {
-                user.subscription_status = 'canceled';
-                user.trial_source = null;
-                user.trial_ends_at = null;
-                user.trial_reminder_3d_sent_at = null;
-                user.trial_reminder_24h_sent_at = null;
-                user.trial_locked_at = null;
-                await user.save();
-                await Tenant.findOneAndUpdate({ host_id: user.host_id }, { plan: 'free' });
+            const user = await runSubscriptionEventTransaction((session) => applySubscriptionPlanEvent(subscription, event.created, { terminal: true, session }));
+            if (user?.host_id) {
                 // Back on Free — resume tracking with a fresh $0 subscription.
                 try {
                     await ensureFreeSubscriptionForAccountHolder(user, null, { stripe });
@@ -445,11 +600,7 @@ export async function handleWebhook(rawBody, sig) {
         case 'invoice.payment_failed': {
             const invoice = event.data.object;
             if (invoice.subscription) {
-                const user = await queryForSave(User.findOne({ stripe_subscription_id: invoice.subscription }));
-                if (user) {
-                    user.subscription_status = 'past_due';
-                    await user.save();
-                }
+                await applyInvoicePaymentFailed(invoice.subscription, event.created);
             }
             break;
         }

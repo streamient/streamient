@@ -23,6 +23,8 @@ export default function csrfProtection(req, res, next) {
 	const expected = req.session.csrfToken;
 	if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token) || !crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected))) return res.status(403).json({ error: 'Your request could not be verified. Refresh the page and try again.', code: 'csrf_invalid' });
 	if (req.headers['sec-fetch-site'] === 'cross-site') return res.status(403).json({ error: 'Cross-site requests are not allowed', code: 'csrf_origin' });
+	// Browser-set and unforgeable; some navigations (e.g. OAuth consent opened from another site) send Origin: null.
+	if (req.headers['sec-fetch-site'] === 'same-origin') return next();
 	const source = req.headers.origin || req.headers.referer;
 	if (source) {
 		try {

@@ -200,7 +200,7 @@ router.put('/api/accounts/:id', async (req, res) => {
 
 router.get('/api/accounts/:id/deletion', async (req, res) => {
 	try {
-		const tenant = await Tenant.findById(req.params.id).select('host_id deletion').read('primary').lean();
+		const tenant = await Tenant.findById(req.params.id).select('host_id deletion').lean();
 		res.json({ host_id: tenant?.host_id || '', deletion: tenant ? publicDeletionState(tenant) : { stage: 'complete' } });
 	} catch { res.status(400).json({ error: 'Invalid account ID' }); }
 });

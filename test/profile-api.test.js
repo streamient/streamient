@@ -83,7 +83,7 @@ describe('profile API', () => {
 			catch: (reject) => Promise.resolve(profileUser).catch(reject),
 		});
 		User.findByIdAndUpdate = async () => null;
-		TenantMember.findOneAndUpdate = async () => null;
+		TenantMember.findOneAndUpdate = async (filter) => filter._id ? { role: 'owner' } : null;
 		TenantMember.find = () => ({
 			populate: () => ({
 				lean: async () => [{

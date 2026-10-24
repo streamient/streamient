@@ -16,6 +16,8 @@ import {
 	checkRequestScopes,
 	extractRequestAuth,
 	getRequiredScopesForRequestBody,
+	isAppRestrictedToken,
+	sessionBindingKeyForContext,
 } from '../../apps/mcp/lib/http-auth.js';
 
 function buildScopeTestTools() {
@@ -105,6 +107,25 @@ describe('MCP HTTP auth helper', () => {
 		assert.equal(result.tokenClaims.sub, 'user-1');
 		assert.equal(result.apiAuth.scheme, 'Bearer');
 		assert.ok(result.apiAuth.token);
+	});
+
+	it('mints a fresh bridge token per request so long-lived sessions never reuse a stale 60s credential', () => {
+		const token = signMcpAccessToken({
+			userId: 'user-1',
+			tenantId: 'tenant-1',
+			host_id: 'host-1',
+			clientId: 'client-1',
+			scopes: ['mcp:read'],
+			audience: getMcpEndpointUrl(),
+		});
+		const first = authenticateHttpRequest({ headers: { authorization: `Bearer ${token}` } });
+		const second = authenticateHttpRequest({ headers: { authorization: `Bearer ${token}` } });
+
+		assert.equal(first.ok, true);
+		assert.equal(second.ok, true);
+		// Each request re-mints from the validated identity instead of caching
+		// the connection-time bridge, so the 60s upstream credential never ages.
+		assert.notEqual(first.apiAuth.token, second.apiAuth.token);
 	});
 
 	it('authenticates OAuth tokens with request-derived public audience', () => {
@@ -216,5 +237,43 @@ describe('MCP HTTP auth helper', () => {
 		assert.equal(response.status, 403);
 		assert.ok(response.headers['WWW-Authenticate'].includes('insufficient_scope'));
 		assert.deepEqual(response.body.required_scopes, ['mcp:read', 'mcp:write']);
+	});
+
+	it('binds OAuth sessions to tenant, audience, and scopes — not just user and client', () => {
+		const base = {
+			sub: 'user-1',
+			client_id: 'client-1',
+			host_id: 'host-a',
+			tenantId: 'tenant-a',
+			aud: getMcpEndpointUrl(),
+			scope: 'mcp:read',
+		};
+		const a = sessionBindingKeyForContext({ mode: 'oauth', tokenClaims: base });
+		assert.equal(a, sessionBindingKeyForContext({ mode: 'oauth', tokenClaims: { ...base, scope: 'mcp:read' } }));
+
+		// A different tenant for the same user+client must never share a session.
+		const otherTenant = sessionBindingKeyForContext({ mode: 'oauth', tokenClaims: { ...base, host_id: 'host-b', tenantId: 'tenant-b' } });
+		assert.notEqual(a, otherTenant);
+
+		// A different audience/resource must not share the session either.
+		const otherAudience = sessionBindingKeyForContext({ mode: 'oauth', tokenClaims: { ...base, aud: getMcpAppEndpointUrl() } });
+		assert.notEqual(a, otherAudience);
+
+		// A write grant differs from a read grant and must not drive a read session.
+		const writeGrant = sessionBindingKeyForContext({ mode: 'oauth', tokenClaims: { ...base, scope: 'mcp:read mcp:write' } });
+		assert.notEqual(a, writeGrant);
+	});
+
+	it('binds legacy PAT sessions to the exact token', () => {
+		assert.equal(sessionBindingKeyForContext({ mode: 'legacy', apiAuth: 'pat-1' }), 'legacy:pat-1');
+		assert.notEqual(sessionBindingKeyForContext({ mode: 'legacy', apiAuth: 'pat-1' }), sessionBindingKeyForContext({ mode: 'legacy', apiAuth: 'pat-2' }));
+		assert.equal(sessionBindingKeyForContext(null), 'anon');
+	});
+
+	it('recognizes app-restricted OAuth tokens by audience', () => {
+		assert.equal(isAppRestrictedToken({ mode: 'oauth', tokenClaims: { aud: getMcpAppEndpointUrl() } }), true);
+		assert.equal(isAppRestrictedToken({ mode: 'oauth', tokenClaims: { aud: getMcpEndpointUrl() } }), false);
+		assert.equal(isAppRestrictedToken({ mode: 'legacy', apiAuth: 'pat-1' }), false);
+		assert.equal(isAppRestrictedToken(null), false);
 	});
 });

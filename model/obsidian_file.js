@@ -20,6 +20,7 @@ const obsidianFileSchema = new mongoose.Schema({
 	projection_detached: { type: Boolean, default: false },
 	text_content: { type: String, default: '' },
 	is_indexed: { type: Boolean, default: false },
+	index_claim: { type: String, default: null },
 	extraction_status: { type: String, enum: ['not_needed', 'pending', 'processing', 'complete', 'failed'], default: 'not_needed' },
 	extraction_error: { type: String, default: '' },
 	in_trash: { type: Boolean, default: false },

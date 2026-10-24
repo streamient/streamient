@@ -1,5 +1,5 @@
 import { attachItemHtml } from '../modules/item_html.js';
-import { requireActiveProject } from './project_service.js';
+import { requireActiveProject, acquireProjectWrite } from './project_service.js';
 import { Note } from '../model/note.js';
 import { searchCollection, indexDocument, removeDocument } from '../modules/typesense.js';
 import { emitToTenant } from '../modules/socket.js';
@@ -13,28 +13,21 @@ const log = createLogger('note');
 export async function createNote(userId, host_id, data, ctx = {}) {
 	ctx.signal?.throwIfAborted();
 	await ctx.assertOwnership?.();
-	const project = await requireActiveProject(host_id, data.project);
-	const persist = async (session) => {
-		const lookup = () => {
-			const query = Note.findOne({ _id: ctx.idempotency_id, host_id, project }).read('primary');
-			return (session ? query.session(session) : query).lean();
+	const { projectId: project, release, publish } = await acquireProjectWrite(host_id, data.project, ctx);
+	let note;
+	try {
+		const persist = async (session) => {
+			ctx.signal?.throwIfAborted();
+			if (!session) await ctx.assertOwnership?.();
+			const payload = { ...(ctx.idempotency_id ? { _id: ctx.idempotency_id } : {}), title: data.title, content: data.content || '', text_content: data.text_content || '', tags: data.tags || [], project, owner: userId, host_id, is_indexed: false };
+			if (ctx.idempotency_id) return Note.findOneAndUpdate({ _id: ctx.idempotency_id, host_id, project }, { $setOnInsert: { ...payload, createdAt: new Date(), updatedAt: new Date() } }, { upsert: true, returnDocument: 'after', session, timestamps: false }).lean();
+			if (session) return (await Note.create([payload], { session }))[0];
+			return Note.create(payload);
 		};
-		let note = ctx.idempotency_id ? await lookup() : null;
-		if (note) return note;
-		ctx.signal?.throwIfAborted();
-		await ctx.assertOwnership?.();
-		const payload = { ...(ctx.idempotency_id ? { _id: ctx.idempotency_id } : {}), title: data.title, content: data.content || '', text_content: data.text_content || '', tags: data.tags || [], project, owner: userId, host_id, is_indexed: false };
-		try {
-			if (session) [note] = await Note.create([payload], { session });
-			else note = await Note.create(payload);
-		} catch (err) {
-			if (session || err.code !== 11000 || !ctx.idempotency_id) throw err;
-			note = await lookup();
-			if (!note) throw err;
-		}
-		return note;
-	};
-	const note = ctx.withOwnership ? await ctx.withOwnership(persist) : await persist();
+		note = await publish(persist);
+	} finally {
+		await release();
+	}
 	ctx.signal?.throwIfAborted();
 	await ctx.assertOwnership?.();
 
@@ -87,15 +80,24 @@ export async function updateNote(host_id, noteId, data, ctx = {}) {
 
 	const before = ctx.user_id ? await Note.findOne({ _id: noteId, host_id }).lean() : null;
 
-	const note = await Note.findOneAndUpdate(
-		{ _id: noteId, host_id, ...(ctx.expected_updated_at ? { updatedAt: new Date(ctx.expected_updated_at), in_trash: { $ne: true } } : {}) },
-		{ $set: update },
-		{ returnDocument: 'after' },
-	);
+	// A move must hold the destination project's write lease across the update,
+	// fenced atomically with the record write so a deactivated project is rejected.
+	const write = data.project !== undefined ? await acquireProjectWrite(host_id, data.project) : null;
+	let note;
+	try {
+		const apply = (session) => Note.findOneAndUpdate(
+			{ _id: noteId, host_id, ...(ctx.expected_updated_at ? { updatedAt: new Date(ctx.expected_updated_at), in_trash: { $ne: true } } : {}) },
+			{ $set: update },
+			{ returnDocument: 'after', ...(session ? { session } : {}) },
+		);
+		note = write ? await write.publish(apply) : await apply();
+	} finally {
+		if (write) await write.release();
+	}
 
 	let syncWarning;
 	if (note) {
-		removeDocument(host_id, 'notes', noteId).catch((err) => log.error({ err }, 'Typesense remove error'));
+		removeDocument(host_id, 'notes', noteId, { claim: note.index_claim || null }).catch((err) => log.error({ err }, 'Typesense remove error'));
 		emitToTenant(host_id, 'note:updated', attachItemHtml('note', note));
 		invalidateGraphCache(host_id).catch(() => {});
 		if (ctx.user_id) {

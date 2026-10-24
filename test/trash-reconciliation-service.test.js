@@ -5,6 +5,7 @@ import { reconcileActiveTrashTenants, reconcileTrashForTenant } from '../service
 
 function fakeModel(docs, observations) {
 	return {
+		findOneAndUpdate: (query) => ({ lean: async () => docs.find((doc) => doc.host_id === query.host_id && String(doc._id) === String(query._id)) || null }),
 		find: (query) => {
 			observations.queries.push(query);
 			const chain = {
@@ -94,10 +95,10 @@ describe('trash reconciliation service', () => {
 		assert.deepEqual(new Set(indexCalls[0].ids), new Set(['stale', 'missing-anchor', 'missing-ts']));
 		assert.equal(applied.totals.deleted, 2);
 		assert.equal(applied.totals.reindexed, 3);
-		assert.ok(observations.reads.every((preference) => preference === 'primary'));
+		assert.deepEqual(observations.reads, []);
 		assert.ok(observations.leans > 0);
-		assert.equal(observations.updates.length, 2);
-		assert.deepEqual(observations.updates.map((update) => update.update.$set.is_indexed), [false, true]);
+		assert.equal(observations.updates.length, 1);
+		assert.deepEqual(observations.updates.map((update) => update.update.$set.is_indexed), [false]);
 		assert.ok(observations.queries.every((query) => query.host_id === 'host-1'));
 	});
 
@@ -155,7 +156,7 @@ describe('trash reconciliation service', () => {
 		assert.equal(summary.types.notes.errors[0].operation, 'delete_orphan_graph_links');
 	});
 
-	it('enumerates only active tenants from a primary lean read', async () => {
+	it('enumerates only active tenants from an ordinary replica read', async () => {
 		const observations = { filter: null, select: '', read: '', lean: false };
 		const query = {
 			select: (fields) => {
@@ -178,8 +179,29 @@ describe('trash reconciliation service', () => {
 
 		assert.deepEqual(observations.filter, { is_active: { $ne: false } });
 		assert.equal(observations.select, 'host_id');
-		assert.equal(observations.read, 'primary');
+		assert.equal(observations.read, '');
 		assert.equal(observations.lean, true);
 		assert.deepEqual(calls, [{ hostId: 'host-1', options: { dryRun: false } }]);
+	});
+});
+
+describe('trash reconciliation under replica lag', () => {
+	it('never overwrites current restored or deleted records with stale trash candidates', async () => {
+		const current = { _id: 'restored', host_id: 'host', in_trash: false, title: 'Current content' };
+		const indexed = [];
+		const model = {
+			find: () => ({ lean: async () => [{ ...current, in_trash: true, title: 'Old content' }, { _id: 'deleted', host_id: 'host', in_trash: true }] }),
+			findOneAndUpdate: (filter) => ({ lean: async () => filter._id === current._id ? current : null }),
+			updateMany: async () => ({}),
+		};
+		await reconcileTrashForTenant('host', {
+			models: { notes: { model, tsType: 'notes' } }, dryRun: false, isValidId: () => true,
+			exportDocuments: async () => [{ source_id: current._id, chunk_index: 0, in_trash: true }],
+			indexDocuments: async (_host, _type, docs) => { indexed.push(...docs); return docs.map((doc) => ({ id: doc._id, success: true })); },
+			removeSearchDocuments: async () => {}, removeGraphLinks: async () => {},
+		});
+		assert.equal(indexed.length, 1);
+		assert.equal(indexed[0].in_trash, false);
+		assert.equal(indexed[0].title, 'Current content');
 	});
 });

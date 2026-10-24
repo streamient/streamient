@@ -12,6 +12,8 @@ import { ObsidianBlob } from '../model/obsidian_blob.js';
 import { ObsidianConnection } from '../model/obsidian_connection.js';
 import { ObsidianChange } from '../model/obsidian_change.js';
 import { ObsidianRevision } from '../model/obsidian_revision.js';
+import { ObsidianFile } from '../model/obsidian_file.js';
+import mongoose from '../model/mongoose.js';
 import { __test as syncTest } from '../services/obsidian_sync_service.js';
 
 afterEach(() => mock.restoreAll());
@@ -25,6 +27,8 @@ describe('Obsidian record projection ownership', () => {
 		mock.method(ObsidianConnection, 'updateOne', async () => ({}));
 		mock.method(ObsidianChange, 'create', async (value) => value);
 		mock.method(ObsidianBlob, 'findOne', () => { throw new Error('An export must not read the blob for reimport'); });
+		mock.method(mongoose.connection, 'transaction', async (callback) => callback(undefined));
+		mock.method(ObsidianFile, 'findOneAndUpdate', async (filter, update) => ({ ...file, ...update.$set }));
 		const mutation = mock.method(Memory, 'findOneAndUpdate', () => { throw new Error('An export must not rewrite or trash its record'); });
 		for (const operation of ['create', 'update', 'trash', 'restore']) await syncTest.commitFile(connection, file, operation, { modifiedAt: new Date(), source: 'streamient', updateRecord: false, operationId: operation });
 		assert.equal(mutation.mock.callCount(), 0);
@@ -35,12 +39,10 @@ describe('Obsidian record projection ownership', () => {
 	it('rejects late content or type changes when the linked record moved or was relinked', async () => {
 		for (const [type, Model] of [['note', Note], ['memory', Memory], ['url', Url]]) {
 			const record = { _id: 'record', project: 'destination', updatedAt: new Date() };
-			mock.method(Model, 'findOne', () => ({ lean: async () => record }));
 			const write = mock.method(Model, 'findOneAndUpdate', async (filter) => {
 				assert.equal(filter.project, 'source');
 				assert.equal(filter.host_id, 'tenant');
 				assert.equal(filter['obsidian_source.file_id'], 'old-file');
-				assert.equal(filter.updatedAt, record.updatedAt);
 				return null;
 			});
 			const file = { _id: 'old-file', host_id: 'tenant', project: 'source', connection: 'old-connection', path: 'Old.md', [type]: 'record', modified_at: new Date() };
@@ -56,8 +58,8 @@ describe('Obsidian record projection ownership', () => {
 	});
 	it('publishes the updated record after genuine Markdown edits while retaining URL crawl fields', async () => {
 		const original = { _id: 'record', project: 'project', updatedAt: new Date(), title: 'Old', text_content: 'Crawler text', crawl_enabled: true };
-		mock.method(Url, 'findOne', () => ({ lean: async () => original }));
 		mock.method(Url, 'findOneAndUpdate', async (filter, update, options) => {
+			if (update.$inc) return original;
 			assert.equal(options.returnDocument, 'after');
 			assert.equal(options.timestamps, false);
 			assert.equal(update.$set.text_content, undefined);

@@ -454,6 +454,59 @@
 		return div.innerHTML;
 	}
 
+	// ---- Login sessions ----
+
+	var sessionList = document.getElementById('session-list');
+
+	async function loadSessions() {
+		if (!sessionList) return;
+		try {
+			const res = await fetch(sessionList.dataset.url, { headers: { Accept: 'text/html' } });
+			if (!res.ok) throw new Error('Failed to load sessions');
+			sessionList.innerHTML = await res.text();
+			window.StreamientDateFormat?.refresh(sessionList);
+			document.getElementById('revoke-other-sessions')?.removeAttribute('disabled');
+		} catch (err) {
+			showError(err.message);
+		}
+	}
+
+	function removeSessionRows(ids) {
+		ids.forEach((id) => sessionList.querySelector(`[data-session-id="${CSS.escape(id)}"].list-group-item`)?.remove());
+	}
+
+	sessionList?.addEventListener('click', async (event) => {
+		const btn = event.target.closest('.revoke-session');
+		if (!btn || btn.disabled) return;
+		if (!await confirmAction('Revoke session', 'That browser will be signed out.')) return;
+		btn.disabled = true;
+		try {
+			const data = await api('DELETE', `/sessions/${encodeURIComponent(btn.dataset.sessionId)}`);
+			removeSessionRows(data.revoked || []);
+			showSuccess('Session revoked');
+		} catch (err) {
+			btn.disabled = false;
+			showError(err.message);
+		}
+	});
+
+	document.getElementById('revoke-other-sessions')?.addEventListener('click', async (event) => {
+		const btn = event.currentTarget;
+		if (!await confirmAction('Sign out all other sessions', 'Every other browser will be signed out. This browser stays signed in.')) return;
+		btn.disabled = true;
+		try {
+			const data = await api('DELETE', '/sessions');
+			removeSessionRows(data.revoked || []);
+			showSuccess(data.revoked?.length ? 'Other sessions signed out' : 'No other sessions');
+		} catch (err) {
+			showError(err.message);
+		} finally {
+			btn.disabled = false;
+		}
+	});
+
+	loadSessions();
+
 	function detectBrowserInfo() {
 		var ua = navigator.userAgent;
 		var browser = 'Unknown';

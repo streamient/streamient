@@ -20,6 +20,7 @@ class BlobFixture {
 		config.obsidian.vaultsDir = this.root;
 		config.obsidian.encryptionKey = 'a'.repeat(64);
 		t.mock.method(ObsidianBlob, 'findOne', (filter) => BlobFixture.query(this.rows.get(filter.host_id + ':' + filter.sha256) || null));
+		t.mock.method(ObsidianBlob, 'findOneAndUpdate', (filter) => BlobFixture.query(this.rows.get(filter.host_id + ':' + filter.sha256) || null));
 		t.mock.method(ObsidianBlob, 'create', async (data) => {
 			await this.beforeCreate(data);
 			const key = data.host_id + ':' + data.sha256;
@@ -30,6 +31,7 @@ class BlobFixture {
 			return blob;
 		});
 		t.mock.method(ObsidianUpload, 'findOne', (filter) => BlobFixture.query(this.uploads.get(filter._id) || null));
+		t.mock.method(ObsidianUpload, 'findOneAndUpdate', (filter) => BlobFixture.query(this.uploads.get(filter._id) || null));
 		t.after(() => {
 			config.obsidian.vaultsDir = original.dir;
 			config.obsidian.encryptionKey = original.key;
@@ -136,5 +138,18 @@ describe('Obsidian blob publication', () => {
 		const blob = await storeBuffer('host', plain);
 		assert.deepEqual(await readBlobBuffer(blob, 'host'), plain);
 		assert.equal(fixture.rows.size, 1);
+	});
+});
+
+describe('completed upload publication', () => {
+	it('publishes only accepted chunk files, excluding overlapping attempts', async (t) => {
+		const fixture = new BlobFixture(t);
+		const plain = Buffer.from('Accepted final chunk');
+		await fixture.stageUpload(plain, 'overlap');
+		fs.writeFileSync(path.join(fixture.root, 'uploads', 'host', 'overlap', 'unaccepted.part'), 'Unaccepted concurrent bytes');
+		await completeUpload('owner', 'host', 'overlap');
+		const blob = [...fixture.rows.values()][0];
+		assert.deepEqual(fs.readdirSync(path.join(fixture.root, blob.storage_key)).sort(), blob.chunks.map((chunk) => chunk.file_name).sort());
+		assert.deepEqual(await readBlobBuffer(blob, 'host'), plain);
 	});
 });

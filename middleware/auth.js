@@ -2,6 +2,7 @@ import { holdTenantRequest } from '../modules/tenancy.js';
 import jwt from 'jsonwebtoken';
 import config from '../config.js';
 import csrfProtection from './csrf.js';
+import { publicSessionId } from '../services/user_session_service.js';
 import { User } from '../model/user.js';
 import { buildBearerChallenge, getApiProtectedResourceMetadataUrl, hasRequiredScopes, verifyApiAccessToken, verifyMcpBridgeToken } from '../modules/oauth.js';
 import { applyTenantContextToSession, ensureOwnerMembershipForUser, initializeSessionTenant, resolveActiveTenantContext } from '../modules/tenancy.js';
@@ -102,10 +103,11 @@ export async function requireAuth(req, res, next) {
 
 	if (authHeader?.startsWith('Token ')) {
 		const accessToken = authHeader.slice(6);
-		const user = await User.findOne(
+		const user = await User.findOneAndUpdate(
 			{ 'access_tokens.token': accessToken, is_active: true },
-			'host_id tenant access_tokens',
-		);
+			{ $set: { is_active: true } },
+			{ returnDocument: 'after', timestamps: false },
+		).select('host_id tenant access_tokens').lean();
 		if (user) {
 			await ensureOwnerMembershipForUser(user);
 			req.userId = user._id.toString();
@@ -145,8 +147,8 @@ export function generateToken(userId, host_id, tenantId = null) {
 	return jwt.sign({ userId, host_id, tenantId }, config.jwtSecret, { expiresIn: '7d' });
 }
 
-export function generateSocketToken(userId, host_id, tenantId = null) {
-	return jwt.sign({ userId, host_id, tenantId }, config.jwtSecret, { expiresIn: SOCKET_TOKEN_EXPIRES_IN_SECONDS, audience: 'streamient-socket' });
+export function generateSocketToken(userId, host_id, tenantId = null, sessionId = null) {
+	return jwt.sign({ userId, host_id, tenantId, ...(sessionId ? { sid: publicSessionId(sessionId) } : {}) }, config.jwtSecret, { expiresIn: SOCKET_TOKEN_EXPIRES_IN_SECONDS, audience: 'streamient-socket' });
 }
 
 

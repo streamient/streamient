@@ -6,7 +6,7 @@ import { Project } from '../model/project.js';
 import { Url } from '../model/url.js';
 
 test('URL create and update reject unsafe or malformed URLs with safe JSON and no writes', async (t) => {
-	t.mock.method(Project, 'findOne', () => ({ select() { return this; }, read() { return this; }, lean: async () => ({ _id: 'project' }) }));
+	t.mock.method(Project, 'findOneAndUpdate', () => ({ select() { return this; }, read() { return this; }, lean: async () => ({ _id: 'project' }) }));
 	t.mock.method(Url, 'findOne', () => ({ select() { return this; }, read() { return this; }, lean: async () => ({ _id: 'url', project: 'project', url: 'https://example.com' }) }));
 	let writes = 0;
 	t.mock.method(Url, 'create', () => { writes++; throw new Error('must not write'); });

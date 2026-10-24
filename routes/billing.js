@@ -15,6 +15,25 @@ const log = createLogger('billing');
 
 const router = Router();
 
+// Billing management (checkout, trial, success, cancel, portal) is a browser
+// flow only. OAuth/MCP/API bearer tokens — including knowledge and API tokens —
+// must never reach it; requireAuth already resolved req.authMethod, and only a
+// cookie-backed session qualifies.
+function requireBrowserSession(req, res, next) {
+	if (req.authMethod === 'session') return next();
+	if (req.accepts('html')) return res.redirect('/login');
+	return res.status(401).json({ error: 'Authentication required', code: 'browser_session_required' });
+}
+
+// Billing (checkout, trial, success, cancel, portal) is owner-only. The billing
+// user is resolved from the tenant owner (getBillingUserForHost), so an ordinary
+// member or admin must never start, change, or manage the owner's subscription.
+export function requireBillingOwner(req, res, next) {
+	if (req.memberRole === 'owner') return next();
+	if (req.accepts('html')) return res.redirect('/settings/subscription');
+	return res.status(403).json({ error: 'Only the account owner can manage billing', code: 'billing_owner_required' });
+}
+
 // ---- Webhook (raw body, no auth — Stripe verifies via signature) ----
 
 router.post(
@@ -35,7 +54,7 @@ router.post(
 
 // ---- Checkout, success, cancel, portal (authenticated) ----
 
-router.use('/billing', requireAuth, requireTenant, (req, res, next) => {
+router.use('/billing', requireAuth, requireTenant, requireBrowserSession, requireBillingOwner, (req, res, next) => {
 	if (!getStreamientDemoSession(req)) return next();
 	req.managaniSkip = true;
 	if (req.method === 'GET') return res.redirect('/dashboard');
@@ -124,8 +143,9 @@ router.get('/billing/success', async (req, res) => {
             const stripe = getStripe();
             const session = await stripe.checkout.sessions.retrieve(sessionId);
 
-            if (session.subscription) {
+            if (session.status === 'complete' && session.mode === 'subscription' && session.metadata?.streamient_user_id === String(billingUser._id) && billingUser.host_id === req.host_id && billingUser.stripe_customer_id && session.customer === billingUser.stripe_customer_id && session.subscription) {
                 const subscription = await stripe.subscriptions.retrieve(session.subscription);
+                if (subscription.customer !== billingUser.stripe_customer_id || !['active', 'trialing'].includes(subscription.status)) return res.redirect('/dashboard');
                 await applySubscriptionToUser(billingUser._id, subscription, session.customer);
                 return res.redirect('/dashboard');
             }
