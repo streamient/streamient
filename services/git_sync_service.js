@@ -867,9 +867,10 @@ async function trashDeletedGitItems(gitRepo, hostId, activeFilePaths, summary) {
 			summary.skipped++;
 			continue;
 		}
-		await syncMutation((session) => Note.findByIdAndUpdate(note._id, {
+		const trashed = await syncMutation((session) => Note.findOneAndUpdate({ _id: note._id, host_id: hostId, in_trash: { $ne: true }, updatedAt: note.updatedAt }, {
 			$set: { in_trash: true, trashed_at: new Date(), is_indexed: false },
 		}, { session }));
+		if (!trashed) { recordConflict(summary, 'note', filePath, 'Changed locally while syncing'); continue; }
 		summary.trashed_items++;
 	}
 
@@ -884,9 +885,10 @@ async function trashDeletedGitItems(gitRepo, hostId, activeFilePaths, summary) {
 			summary.skipped++;
 			continue;
 		}
-		await syncMutation((session) => Memory.findByIdAndUpdate(memory._id, {
+		const trashed = await syncMutation((session) => Memory.findOneAndUpdate({ _id: memory._id, host_id: hostId, in_trash: { $ne: true }, updatedAt: memory.updatedAt }, {
 			$set: { in_trash: true, trashed_at: new Date(), is_indexed: false },
 		}, { session }));
+		if (!trashed) { recordConflict(summary, 'memory', filePath, 'Changed locally while syncing'); continue; }
 		summary.trashed_items++;
 	}
 }
@@ -1036,7 +1038,15 @@ async function pushToGit(git, dir, syncBase, gitRepo, userId, hostId, token, sum
 				},
 				{ timestamps: false, session },
 			));
-			if (applied) summary.exported_files++;
+			if (applied) { summary.exported_files++; continue; }
+			// A concurrent edit changed the captured version. Retain the repo/path claim without
+			// the content acknowledgement so the next sync imports the same file instead of
+			// duplicating it, but never clobber a concurrent project move, relink, or trash/delete.
+			await syncMutation((session) => Model.findOneAndUpdate(
+				{ _id: upd.id, host_id: hostId, project: gitRepo.project, in_trash: { $ne: true }, $or: [{ 'git_source.repo_id': { $exists: false } }, { 'git_source.repo_id': null }, { 'git_source.repo_id': gitRepo._id }] },
+				{ $set: { 'git_source.repo_id': gitRepo._id, 'git_source.file_path': upd.relPath, 'git_source.origin': 'push' } },
+				{ timestamps: false, session },
+			));
 		}
 	}
 }
