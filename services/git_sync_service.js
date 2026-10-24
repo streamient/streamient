@@ -1044,7 +1044,7 @@ async function pushToGit(git, dir, syncBase, gitRepo, userId, hostId, token, sum
 			// duplicating it, but never clobber a concurrent project move, relink, or trash/delete.
 			await syncMutation((session) => Model.findOneAndUpdate(
 				{ _id: upd.id, host_id: hostId, project: gitRepo.project, in_trash: { $ne: true }, $or: [{ 'git_source.repo_id': { $exists: false } }, { 'git_source.repo_id': null }, { 'git_source.repo_id': gitRepo._id }] },
-				{ $set: { 'git_source.repo_id': gitRepo._id, 'git_source.file_path': upd.relPath, 'git_source.origin': 'push' } },
+				{ $set: { 'git_source.repo_id': gitRepo._id, 'git_source.file_path': upd.relPath } },
 				{ timestamps: false, session },
 			));
 		}

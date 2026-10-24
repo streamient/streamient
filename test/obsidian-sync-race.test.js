@@ -159,6 +159,32 @@ test('commitFileAtomic defers socket events to the committed attempt buffer', as
 	assert.equal(commitBuffer.length, 2, 'file-changed and counts:refresh were deferred to the buffer');
 });
 
+test('commit-phase transaction retry discards the aborted attempt socket buffer', async () => {
+	const file = { _id: 'file', connection: 'conn', host_id: 'host', path: 'a.png', kind: 'image', size: 1, revision: 1, blob: 'old', sha256: 'old', modified_at: new Date(1000), in_trash: false };
+	const buffers = [];
+	let phantomFlushes = 0;
+	mock.method(ObsidianRevision, 'create', async (data) => data);
+	mock.method(ObsidianConnection, 'findOneAndUpdate', async () => ({ sequence: 1 }));
+	mock.method(ObsidianConnection, 'updateOne', async () => ({ matchedCount: 1 }));
+	mock.method(ObsidianBlob, 'findOneAndUpdate', async () => null);
+	mock.method(ObsidianFile, 'findOneAndUpdate', async (_filter, update) => ({ ...file, ...update.$set }));
+	mock.method(ObsidianChange, 'create', async (data) => {
+		buffers.push(syncTest.emitBuffer.getStore());
+		return data;
+	});
+	mock.method(mongoose.connection, 'transaction', async (callback) => {
+		await callback('aborted-session');
+		const phantom = { event: 'aborted-event', payload: {} };
+		Object.defineProperty(phantom, 'hostId', { get() { phantomFlushes++; return 'host'; } });
+		buffers[0].push(phantom);
+		return callback('committed-session');
+	});
+	await syncTest.commitFileAtomic({ _id: 'conn', host_id: 'host', project: 'project', storage_bytes: 1 }, file, 'update', { blob: { _id: 'new', sha256: 'new', total_bytes: 1 }, modifiedAt: new Date(2000), source: 'obsidian', operationId: 'op' });
+	assert.equal(buffers.length, 2);
+	assert.notEqual(buffers[0], buffers[1]);
+	assert.equal(phantomFlushes, 0);
+});
+
 test('buffered socket events are deferred to an active attempt buffer', async () => {
 	const buffer = [];
 	await syncTest.emitBuffer.run(buffer, async () => {

@@ -102,7 +102,7 @@ test('Git import does not overwrite a memory edited during the git-history await
 test('Git export acknowledges only the captured version and leaves a concurrent edit pending', async () => {
 	let clock = 5000;
 	class ClockDate extends Date { constructor(...args) { super(...(args.length ? args : [clock])); } static now() { return clock; } }
-	const row = { _id: 'note', title: 'Title', content: 'snapshot A', updatedAt: new Date(4000), git_source: { repo_id: 'repo', file_path: 'notes/a.md', last_synced_at: new Date(0), last_sha: 'old' } };
+	const row = { _id: 'note', title: 'Title', content: 'snapshot A', updatedAt: new Date(4000), git_source: { repo_id: 'repo', file_path: 'notes/a.md', last_synced_at: new Date(0), last_sha: 'old', origin: 'import' } };
 	const files = new Map();
 	let pushed = 0;
 	const Note = {
@@ -139,6 +139,7 @@ test('Git export acknowledges only the captured version and leaves a concurrent 
 	assert.equal(row.updatedAt.getTime(), 10000);
 	assert.equal(context.isLocalChangeNewer(row), true);
 	assert.equal(row.git_source.last_sha, 'old');
+	assert.equal(row.git_source.origin, 'import');
 	assert.equal(summary.exported_files, 0);
 
 	files.clear();

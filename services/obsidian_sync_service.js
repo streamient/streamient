@@ -581,11 +581,12 @@ async function commitFile(connection, file, operation, options, { session } = {}
 async function commitFileAtomic(connection, file, operation, options) {
 	let attempt = 0;
 	while (true) {
-		const buffer = [];
 		try {
-			const result = await emitBuffer.run(buffer, () => mongoose.connection.transaction(async (session) => {
-				return await commitFile(connection, file, operation, options, { session });
-			}));
+			const { result, buffer } = await mongoose.connection.transaction(async (session) => {
+				const buffer = [];
+				const result = await emitBuffer.run(buffer, () => commitFile(connection, file, operation, options, { session }));
+				return { result, buffer };
+			});
 			for (const entry of buffer) emitToTenant(entry.hostId, entry.event, entry.payload);
 			connection.storage_bytes = Math.max(0, Number(connection.storage_bytes || 0) + result.storageDelta);
 			if (file.extraction_status === 'pending') await enqueueExtraction(file).catch(async (err) => {
@@ -737,10 +738,11 @@ async function applyMutation(connection, userId, mutation, source = 'obsidian') 
 			conflictReason: renameConflict ? 'Another file claimed the requested path' : file.revision > 0 && baseRevision !== file.revision ? 'Incoming file is newer' : '',
 		};
 		try {
-			const buffer = [];
-			const result = await emitBuffer.run(buffer, () => mongoose.connection.transaction(async (session) => {
-				return await commitFile(connection, file, operation === 'create' && file.revision ? 'update' : operation, commitOptions, { session });
-			}));
+			const { result, buffer } = await mongoose.connection.transaction(async (session) => {
+				const buffer = [];
+				const result = await emitBuffer.run(buffer, () => commitFile(connection, file, operation === 'create' && file.revision ? 'update' : operation, commitOptions, { session }));
+				return { result, buffer };
+			});
 			for (const entry of buffer) emitToTenant(entry.hostId, entry.event, entry.payload);
 			connection.storage_bytes = Math.max(0, Number(connection.storage_bytes || 0) + result.storageDelta);
 			// Extraction enqueue runs after a committed transaction so its queue writes never survive a rollback.
