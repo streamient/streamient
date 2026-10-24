@@ -131,7 +131,7 @@ describe('Email ingest storage service', () => {
 		assert.notEqual(results[0]._id, results[1]._id);
 	});
 
-	it('propagates a Message-ID unique-index conflict without an in-transaction fallback read', async () => {
+	it('maps a tenant Message-ID conflict without an in-transaction fallback read', async () => {
 		let calls = 0;
 		Email.findOneAndUpdate = async (filter) => {
 			assert.equal(filter.host_id, 'host-1');
@@ -139,10 +139,19 @@ describe('Email ingest storage service', () => {
 			throw Object.assign(new Error('duplicate'), { code: 11000, keyPattern: { host_id: 1, message_id: 1 } });
 		};
 		const data = { project: '507f1f77bcf86cd799439011', parsed_email: { message_id: 'race@example.com', text: 'Race' } };
-		await assert.rejects(ingestEmail('507f1f77bcf86cd799439012', 'host-1', data, { skipSideEffects: true }), /duplicate/);
+		await assert.rejects(ingestEmail('507f1f77bcf86cd799439012', 'host-1', data, { skipSideEffects: true }), (err) => err.code === 'email_already_exists' && err.status === 409);
 		assert.equal(calls, 1);
 		Email.findOneAndUpdate = async () => { throw Object.assign(new Error('unrelated index'), { code: 11000, keyPattern: { message_id: 1 } }); };
 		await assert.rejects(ingestEmail('507f1f77bcf86cd799439012', 'host-1', data, { skipSideEffects: true }), /unrelated index/);
+	});
+
+	it('creates a replacement when the hash-deduplicated row was deleted before persistence', async () => {
+		Email.findOne = () => ({ lean: async () => ({ _id: 'deleted-email' }) });
+		Email.findOneAndUpdate = async () => null;
+		Email.create = async (payload) => Array.isArray(payload) ? [{ _id: 'replacement-email', ...payload[0] }] : { _id: 'replacement-email', ...payload };
+		const email = await ingestEmail('507f1f77bcf86cd799439012', 'host-1', { project: '507f1f77bcf86cd799439011', parsed_email: { raw_hash: 'hash', subject: 'Replacement', text: 'Body' } }, { skipSideEffects: true });
+		assert.equal(email._id, 'replacement-email');
+		assert.equal(email.subject, 'Replacement');
 	});
 
 	it('fences publication so a deactivated destination project inserts nothing', async () => {

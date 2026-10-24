@@ -32,8 +32,6 @@ function emailIndexOptions(ctx = {}) {
 		indexManyFn: ctx.indexEmailsFn || ctx.indexEmailManyFn,
 		removeFn: ctx.removeEmailIndexFn,
 		removeManyFn: ctx.removeEmailIndexManyFn || ctx.removeEmailsIndexFn,
-		updateFn: ctx.updateEmailIndexStateFn,
-		updateManyFn: ctx.updateEmailIndexManyStateFn,
 	};
 }
 
@@ -558,7 +556,7 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 
 			if (existingByHash) {
 				const result = await Email.findOneAndUpdate({ _id: existingByHash._id, host_id }, { $set: payload }, { returnDocument: 'after', session });
-				return { email: result, created: false };
+				if (result) return { email: result, created: false };
 			}
 
 			const createdDoc = session ? (await Email.create([payload], { session }))[0] : await Email.create(payload);
@@ -567,6 +565,9 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 		const outcome = await publish(persist);
 		email = outcome.email;
 		created = outcome.created;
+	} catch (err) {
+		if (err?.code === 11000 && err.keyPattern?.host_id && err.keyPattern?.message_id) throw Object.assign(new Error('Email message already exists'), { code: 'email_already_exists', status: 409 });
+		throw err;
 	} finally {
 		await release();
 	}

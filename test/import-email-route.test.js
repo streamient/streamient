@@ -166,6 +166,18 @@ describe('Email forwarding import route', () => {
 		}
 	});
 
+	it('acknowledges a tenant Message-ID conflict without exposing the database error', async () => {
+		Email.findOneAndUpdate = async () => { throw Object.assign(new Error('duplicate database key'), { code: 11000, keyPattern: { host_id: 1, message_id: 1 } }); };
+		const server = createServer();
+		try {
+			const response = await request(server, JSON.stringify({ message_id: '<duplicate@example.com>', from: 'sender@example.com', to: `${projectId}@email.streamient.com`, subject: 'Duplicate', text: 'Body' }));
+			assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+			assert.deepEqual(await response.json(), { accepted: false });
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
 	it('moves filtered imported email to trash', async () => {
 		Project.findOneAndUpdate = () => ({
 			select() { return this; },
