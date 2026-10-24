@@ -13,7 +13,7 @@ describe('Streamient Mobile source contracts', () => {
 
 		assert.match(app, /function upsertRecord\(/);
 		assert.match(app, /setRecords\(\(current\) => upsertRecord\(current, result\.record, activeProjectId, filter\)\)/);
-		assert.match(realtimeBlock, /setRecords\(\(current\) => upsertRecord\(current, record, activeProjectId, filter\)\)/);
+		assert.match(realtimeBlock, /setRecords\(\(current\) => \(epoch === sessionEpoch\.current \? upsertRecord\(current, record, activeProjectId, filter\) : current\)\)/);
 		assert.match(app, /filter !== "all" && record\.type !== filter/);
 		assert.match(realtimeBlock, /event === "counts:refresh"[\s\S]*refreshCounts\(\)/);
 		assert.match(realtimeBlock, /api\.record\(type, id\)[\s\S]*refreshCounts\(\)/);

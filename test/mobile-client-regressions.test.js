@@ -451,4 +451,86 @@ describe('Streamient Mobile client regressions', () => {
 		assert.equal(element('result-modal-title').textContent, 'B');
 		assert.equal(context.rmCurrentId, 'B');
 	});
+
+	it('MF-A: a realtime record fetch under A cannot upsert into B feed', async () => {
+		const sessionEpoch = { current: 0 };
+		const base = {
+			sessionEpoch, activeProjectId: 'P', filter: 'all',
+			refreshCounts: noop, applyChanges: noop, setUploads: noop,
+			upsertRecord: (items, rec) => [rec, ...items.filter((item) => item.key !== rec.key)],
+		};
+		const start = app.indexOf('realtimeEventHandler.current = (event, payload) => {');
+		const end = app.indexOf('\n\tconst realtimeHostId =', start);
+		const src = app.slice(start, end) + '\nexport { realtimeEventHandler };';
+
+		let resolveRecord;
+		let setRecordsCalls = 0;
+		const state = { records: [record('B-note', 'P')] };
+		const realtime1 = { current: null };
+		await compile(src, { ...base, realtimeEventHandler: realtime1,
+			api: { record: () => new Promise((resolve) => { resolveRecord = resolve; }) },
+			setRecords: (fn) => { setRecordsCalls++; state.records = fn(state.records); },
+		});
+		realtime1.current('note:updated', { _id: 'A1' });
+		await new Promise((resolve) => setImmediate(resolve));
+		sessionEpoch.current++;
+		resolveRecord({ record: record('A1') });
+		await new Promise((resolve) => setImmediate(resolve));
+		assert.equal(setRecordsCalls, 0);
+		assert.deepEqual(state.records.map((item) => item.id), ['B-note']);
+
+		sessionEpoch.current = 0;
+		let queuedUpdater = null;
+		const realtime2 = { current: null };
+		await compile(src, { ...base, realtimeEventHandler: realtime2,
+			api: { record: () => Promise.resolve({ record: record('A1') }) },
+			setRecords: (updater) => { queuedUpdater = updater; },
+		});
+		realtime2.current('note:updated', { _id: 'A1' });
+		await new Promise((resolve) => setImmediate(resolve));
+		assert.ok(queuedUpdater);
+		sessionEpoch.current++;
+		assert.deepEqual(queuedUpdater([record('B-note', 'P')]).map((item) => item.id), ['B-note']);
+	});
+
+	it('MF-B: a settings refresh under A cannot apply its bootstrap to B', async () => {
+		const sessionEpoch = { current: 0 };
+		let resolveBootstrap;
+		let applied = 0;
+		let loaded = 0;
+		const start = app.indexOf('onRefresh={async () => {');
+		const end = app.indexOf('}} onSignOut', start);
+		const body = app.slice(start + 'onRefresh={async () => {'.length, end);
+		const { exports: f } = await compile('async function onRefresh() {\n' + body + '\n}\nexport { onRefresh };', {
+			api: { bootstrap: () => new Promise((resolve) => { resolveBootstrap = resolve; }) },
+			sessionEpoch,
+			applyBootstrap: () => { applied++; },
+			loadFeed: async () => { loaded++; },
+		});
+		const pending = f.onRefresh();
+		await new Promise((resolve) => setImmediate(resolve));
+		sessionEpoch.current++;
+		resolveBootstrap({ value: { user: { _id: 'A' }, projects: [] }, offline: false });
+		await pending;
+		assert.equal(applied, 0);
+		assert.equal(loaded, 0);
+	});
+
+	it('MF-C: a profile save under A cannot merge its user into B after identity change', async () => {
+		const sessionEpoch = { current: 0 };
+		let queuedUpdater = null;
+		const start = app.indexOf('onSave={async (data) => {');
+		const end = app.indexOf('}} onRefresh', start);
+		const body = app.slice(start + 'onSave={async (data) => {'.length, end);
+		const { exports: f } = await compile('async function onSave(data) {\n' + body + '\n}\nexport { onSave };', {
+			api: { updateProfile: () => Promise.resolve({ user: { _id: 'A', name: 'A user' } }) },
+			sessionEpoch,
+			setBootstrap: (updater) => { queuedUpdater = updater; },
+		});
+		await f.onSave({ name: 'A user' });
+		assert.ok(queuedUpdater);
+		sessionEpoch.current++;
+		const current = { user: { _id: 'B', name: 'B user' }, projects: [] };
+		assert.deepEqual(queuedUpdater(current), current);
+	});
 });

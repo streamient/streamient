@@ -362,7 +362,13 @@ export function App() {
 		const type = ({ note: "notes", memory: "memories", url: "urls", email: "emails" } as const)[match[1] as "note" | "memory" | "url" | "email"];
 		const id = String(payload._id || payload.id || "");
 		if (match[2] === "deleted") setRecords((current) => current.filter((item) => item.key !== `${type}:${id}`));
-		else if (id) void api.record(type, id).then(({ record }) => setRecords((current) => upsertRecord(current, record, activeProjectId, filter))).catch(() => undefined);
+		else if (id) {
+			const epoch = sessionEpoch.current;
+			void api.record(type, id).then(({ record }) => {
+				if (epoch !== sessionEpoch.current) return;
+				setRecords((current) => (epoch === sessionEpoch.current ? upsertRecord(current, record, activeProjectId, filter) : current));
+			}).catch(() => undefined);
+		}
 		void refreshCounts();
 	};
 
@@ -648,7 +654,27 @@ export function App() {
 
 		{view === "search" && <SearchScreen query={searchQuery} setQuery={setSearchQuery} allProjects={searchAllProjects} setAllProjects={setSearchAllProjects} type={searchType} setType={setSearchType} filters={visibleFilters} results={searchResults} searching={searching} onBack={() => setView("projects")} onSearch={() => void runSearch()} onOpen={(record) => void openRecord(record)} />}
 		{view === "ai" && <AiScreen project={activeProject} allProjects={chatAllProjects} setAllProjects={setChatAllProjects} messages={chatMessages} query={chatQuery} setQuery={setChatQuery} chatting={chatting} onHome={showAllRecords} onSend={() => void sendChat()} onHistory={() => void openHistory()} onNew={() => { setChatMessages([]); setConversationId(""); }} onOpen={(record) => void openRecord(record)} />}
-		{view === "settings" && <SettingsScreen bootstrap={bootstrap} server={server} appearance={appearance} setAppearance={setAppearance} onBack={() => setView("projects")} onSave={async (data) => { if (!api) return; const result = await api.updateProfile(data); setBootstrap((current) => current ? { ...current, user: { ...current.user, ...result.user } } : current); }} onRefresh={async () => { if (!api) return; applyBootstrap((await api.bootstrap()).value); await loadFeed(); }} onSignOut={() => void signOut()} />}
+		{view === "settings" && <SettingsScreen bootstrap={bootstrap} server={server} appearance={appearance} setAppearance={setAppearance} onBack={() => setView("projects")} onSave={async (data) => {
+			if (!api) return;
+			const epoch = sessionEpoch.current;
+			const apiRef = api;
+			try {
+				const result = await apiRef.updateProfile(data);
+				if (epoch !== sessionEpoch.current) return;
+				setBootstrap((current) => (epoch === sessionEpoch.current && current) ? { ...current, user: { ...current.user, ...result.user } } : current);
+			} catch (saveError) {
+				if (epoch !== sessionEpoch.current) return;
+				throw saveError;
+			}
+		}} onRefresh={async () => {
+			if (!api) return;
+			const epoch = sessionEpoch.current;
+			const apiRef = api;
+			const result = await apiRef.bootstrap();
+			if (epoch !== sessionEpoch.current) return;
+			applyBootstrap(result.value);
+			await loadFeed();
+		}} onSignOut={() => void signOut()} />}
 
 		<BottomNav active={view} onProjects={() => setProjectDrawer(true)} onAdd={() => openAdd()} onAi={() => changeView("ai")} />
 
