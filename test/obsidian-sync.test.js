@@ -107,14 +107,18 @@ test('registers a device on the connection already loaded by connection creation
 });
 
 test('returns the newly created connection after registering its first device', async (t) => {
-	const originals = { projectFindOne: Project.findOneAndUpdate, connectionFindOne: ObsidianConnection.findOne, connectionCreate: ObsidianConnection.create, auditCreate: AuditLog.create };
+	const originals = { projectFindOne: Project.findOneAndUpdate, projectUpdateOne: Project.updateOne, connectionFindOne: ObsidianConnection.findOne, connectionCreate: ObsidianConnection.create, auditCreate: AuditLog.create, transaction: mongoose.connection.transaction };
 	const connection = { _id: 'connection-1', project: 'project-1', host_id: 'host-1', name: 'Vault', streamient_folder: 'Streamient/Project', enabled: true, sequence: 0, devices: [], async save() { return this; } };
 	Project.findOneAndUpdate = () => ({ select: () => ({ read() { return this; }, lean: async () => ({ _id: 'project-1' }) }) });
+	Project.updateOne = () => Promise.resolve({ matchedCount: 1 });
+	mongoose.connection.transaction = async (callback) => callback(undefined);
 	ObsidianConnection.findOne = () => mockQuery(null);
 	ObsidianConnection.create = async () => connection;
 	AuditLog.create = async () => ({});
 	t.after(() => {
 		Project.findOneAndUpdate = originals.projectFindOne;
+		Project.updateOne = originals.projectUpdateOne;
+		mongoose.connection.transaction = originals.transaction;
 		ObsidianConnection.findOne = originals.connectionFindOne;
 		ObsidianConnection.create = originals.connectionCreate;
 		AuditLog.create = originals.auditCreate;

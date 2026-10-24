@@ -1,4 +1,4 @@
-import { requireActiveProject } from './project_service.js';
+import { requireActiveProject, acquireProjectWrite } from './project_service.js';
 import { acquireTenantWork } from '../modules/tenancy.js';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -357,7 +357,6 @@ async function removeOtherMarkdownProjections(file, retainedType, session) {
 }
 
 async function projectMarkdownFile(file, raw, ownerId, session) {
-	await requireActiveProject(file.host_id, file.project);
 	if (file.projection_detached) return null;
 	const parsed = parsedMarkdown(raw, file.path);
 	const now = file.modified_at || new Date();
@@ -576,16 +575,32 @@ async function commitFile(connection, file, operation, options, { session } = {}
 	return { file, change, storageDelta };
 }
 
+// Default transaction opener for a bare publication. Callers holding a project write lease
+// pass gate.publish instead so the lease fence and the file/change write share one transaction.
+const plainTransaction = (callback) => mongoose.connection.transaction(callback);
+
+// Acquire the destination project's write lease outside any transaction, then run `persist`
+// in a single write-only transaction that re-verifies the lease (active, no pending deletion,
+// unexpired) before the record write. One lease per publication/item; never nest.
+async function withProjectGate(connection, persist) {
+	const gate = await acquireProjectWrite(connection.host_id, connection.project, { withOwnership: plainTransaction });
+	try {
+		return await persist(gate.publish);
+	} finally {
+		await gate.release();
+	}
+}
+
 // Commit a file publication atomically inside one write-only transaction, buffering socket
 // events per attempt and flushing only after a successful commit. A concurrent writer that
 // advances the revision aborts the attempt; the caller reloads authoritatively and retries.
-async function commitFileAtomic(connection, file, operation, options) {
+async function commitFileAtomic(connection, file, operation, options, publish = plainTransaction) {
 	let attempt = 0;
 	while (true) {
 		const original = { note: null, memory: null, url: null, ...fileDelta(file) };
 		const wasNew = file.isNew;
 		try {
-			const { result, buffer } = await mongoose.connection.transaction(async (session) => {
+			const { result, buffer } = await publish(async (session) => {
 				Object.assign(file, original);
 				file.isNew = wasNew;
 				const buffer = [];
@@ -632,7 +647,7 @@ function conflictPath(value, source) {
 	return `${stem} (${source} conflict ${suffix})${extension}`;
 }
 
-async function resolveRenamePath(connection, file, requestedPath, modifiedAt, options) {
+async function resolveRenamePath(connection, file, requestedPath, modifiedAt, options, publish = plainTransaction) {
 	const collision = await queryForSave(ObsidianFile.findOne({ connection: connection._id, host_id: connection.host_id, path: requestedPath, _id: { $ne: file._id } }));
 	if (!collision) return { path: requestedPath, conflict: false };
 	await ObsidianConnection.updateOne({ _id: connection._id, host_id: connection.host_id }, { $inc: { conflict_count: 1 } });
@@ -648,7 +663,7 @@ async function resolveRenamePath(connection, file, requestedPath, modifiedAt, op
 		revisionReason: 'Rename path collision',
 		conflict: true,
 		conflictReason: 'Another file claimed this path',
-	});
+	}, publish);
 	return { path: requestedPath, conflict: true };
 }
 
@@ -682,7 +697,7 @@ async function recordLosingConflict(connection, file, mutation, blob, modifiedAt
 	return { accepted: false, conflict: true, file: publicFile(file), change: publicChange(change) };
 }
 
-async function applyMutation(connection, userId, mutation, source = 'obsidian') {
+async function applyMutation(connection, userId, mutation, source = 'obsidian', publish = plainTransaction) {
 	const operationId = String(mutation.operation_id || '').trim();
 	if (!operationId || operationId.length > 200) throw new ObsidianSyncError('operation_id is required', 400, 'operation_id_required');
 	const previous = await ObsidianChange.findOne({ connection: connection._id, host_id: connection.host_id, operation_id: operationId }).lean();
@@ -726,7 +741,7 @@ async function applyMutation(connection, userId, mutation, source = 'obsidian') 
 		const previousPath = file.path;
 		let renameConflict = false;
 		if (operation === 'rename') {
-			const rename = await resolveRenamePath(connection, file, requestedPath, modifiedAt, { source, deviceId, operationId });
+			const rename = await resolveRenamePath(connection, file, requestedPath, modifiedAt, { source, deviceId, operationId }, publish);
 			requestedPath = rename.path;
 			renameConflict = rename.conflict;
 		}
@@ -745,7 +760,7 @@ async function applyMutation(connection, userId, mutation, source = 'obsidian') 
 		const original = { note: null, memory: null, url: null, ...fileDelta(file) };
 		const wasNew = file.isNew;
 		try {
-			const { result, buffer } = await mongoose.connection.transaction(async (session) => {
+			const { result, buffer } = await publish(async (session) => {
 				Object.assign(file, original);
 				file.isNew = wasNew;
 				const buffer = [];
@@ -772,7 +787,7 @@ async function applyMutation(connection, userId, mutation, source = 'obsidian') 
 	}
 }
 
-async function exportProjectItem(connection, type, item, options = {}) {
+async function exportProjectItem(connection, type, item, options = {}, publish = plainTransaction) {
 	const folder = type === 'memory' ? `${connection.streamient_folder}/Memories` : type === 'url' ? `${connection.streamient_folder}/URLs` : connection.streamient_folder;
 	const filePath = `${folder}/${safeFileName(item.title)}.md`;
 	const file = new ObsidianFile({
@@ -817,7 +832,7 @@ async function exportProjectItem(connection, type, item, options = {}) {
 			source: 'streamient',
 			updateRecord: typeof options.markdown === 'string',
 			operationId: `streamient:${type}:${item._id}:create:${file._id}`,
-		});
+		}, publish);
 		item.obsidian_source = claimed.obsidian_source;
 		return file;
 	} catch (err) {
@@ -981,23 +996,32 @@ export async function listConnections(hostId, projectId = null) {
 }
 
 export async function createConnection(userId, hostId, data, ctx = {}) {
-	const project = { _id: await requireActiveProject(hostId, data.project_id) };
-	let connection = await queryForSave(ObsidianConnection.findOne({ host_id: hostId, project: project._id }));
-	if (!connection) {
-		try {
-			connection = await ObsidianConnection.create({
-				project: project._id,
-				owner: userId,
-				host_id: hostId,
-				name: String(data.name || 'Obsidian vault').trim().slice(0, 200),
-				streamient_folder: normalizeVaultPath(data.streamient_folder || 'Streamient'),
-			});
-			audit.log({ action: 'create', resource: 'obsidian_connection', resource_id: connection._id.toString(), user_id: userId, host_id: hostId, ...ctx });
-		} catch (err) {
-			if (err?.code !== 11000) throw err;
-			connection = await queryForSave(ObsidianConnection.findOne({ host_id: hostId, project: project._id }));
-			if (!connection) throw err;
+	const { projectId: project, release, publish } = await acquireProjectWrite(hostId, data.project_id, ctx);
+	let connection;
+	try {
+		connection = await queryForSave(ObsidianConnection.findOne({ host_id: hostId, project }));
+		if (!connection) {
+			try {
+				connection = await publish(async (session) => {
+					const payload = {
+						project,
+						owner: userId,
+						host_id: hostId,
+						name: String(data.name || 'Obsidian vault').trim().slice(0, 200),
+						streamient_folder: normalizeVaultPath(data.streamient_folder || 'Streamient'),
+					};
+					if (session) return (await ObsidianConnection.create([payload], { session }))[0];
+					return ObsidianConnection.create(payload);
+				});
+				audit.log({ action: 'create', resource: 'obsidian_connection', resource_id: connection._id.toString(), user_id: userId, host_id: hostId, ...ctx });
+			} catch (err) {
+				if (err?.code !== 11000) throw err;
+				connection = await queryForSave(ObsidianConnection.findOne({ host_id: hostId, project }));
+				if (!connection) throw err;
+			}
 		}
+	} finally {
+		await release();
 	}
 	if (data.device_id) await registerDeviceOnConnection(connection, data);
 	return publicConnection(connection);
@@ -1211,7 +1235,7 @@ export async function applyMutations(userId, hostId, connectionId, data) {
 	const mutations = Array.isArray(data.mutations) ? data.mutations : [];
 	if (!mutations.length || mutations.length > 100) throw new ObsidianSyncError('Provide 1 to 100 mutations', 400, 'invalid_mutation_count');
 	const results = [];
-	for (const mutation of mutations) results.push(await applyMutation(connection, userId, mutation));
+	for (const mutation of mutations) results.push(await withProjectGate(connection, (publish) => applyMutation(connection, userId, mutation, 'obsidian', publish)));
 	if (data.device_id) await registerDevice(hostId, connection._id, data);
 	return { results, cursor: connection.sequence || 0 };
 }
@@ -1301,7 +1325,7 @@ export async function syncStreamientItem(type, itemId, hostId, options = {}) {
 			const previousConnection = await ObsidianConnection.findOne({ _id: file.connection, host_id: hostId }).lean();
 			if (!previousConnection) throw new ObsidianSyncError('The original vault connection is unavailable', 409, 'connection_not_found');
 			file.projection_detached = true;
-			await commitFileAtomic(previousConnection, file, 'trash', { modifiedAt: item.updatedAt || new Date(), source: 'streamient', updateRecord: false, operationId: `streamient:${type}:${item._id}:${file._id}:move:${file.revision + 1}` });
+			await withProjectGate(previousConnection, (publish) => commitFileAtomic(previousConnection, file, 'trash', { modifiedAt: item.updatedAt || new Date(), source: 'streamient', updateRecord: false, operationId: `streamient:${type}:${item._id}:${file._id}:move:${file.revision + 1}` }, publish));
 		}
 		const detached = await Model.updateOne({ _id: itemId, host_id: hostId, project: item.project, updatedAt: item.updatedAt, 'obsidian_source.file_id': item.obsidian_source.file_id }, { $unset: { obsidian_source: '' } }, { timestamps: false });
 		if (!detached.modifiedCount) return null;
@@ -1309,28 +1333,28 @@ export async function syncStreamientItem(type, itemId, hostId, options = {}) {
 		file = null;
 	}
 	if (!connection) return null;
-	if (!file) return item.in_trash ? null : exportProjectItem(connection, type, item, { ...options, existingRaw });
+	if (!file) return item.in_trash ? null : withProjectGate(connection, (publish) => exportProjectItem(connection, type, item, { ...options, existingRaw }, publish));
 	if (new Date(file.modified_at).getTime() > new Date(item.updatedAt).getTime() && typeof options.markdown !== 'string') return file;
 	if (item.in_trash) {
 		const changeTime = item.trashed_at || new Date();
-		await commitFileAtomic(connection, file, 'trash', {
+		await withProjectGate(connection, (publish) => commitFileAtomic(connection, file, 'trash', {
 			modifiedAt: changeTime,
 			source: 'streamient',
 			updateRecord: false,
 			operationId: `streamient:${type}:${item._id}:${file._id}:trash:${file.revision + 1}`,
-		});
+		}, publish));
 		return file;
 	}
 	const raw = typeof options.markdown === 'string' ? options.markdown : itemMarkdown(type, item, existingRaw);
 	const blob = await storeBuffer(hostId, Buffer.from(raw), 'text/markdown');
 	const changeTime = typeof options.markdown === 'string' ? new Date() : item.updatedAt || new Date();
-	await commitFileAtomic(connection, file, file.in_trash ? 'restore' : 'update', {
+	await withProjectGate(connection, (publish) => commitFileAtomic(connection, file, file.in_trash ? 'restore' : 'update', {
 		blob,
 		modifiedAt: changeTime,
 		source: 'streamient',
 		updateRecord: typeof options.markdown === 'string',
 		operationId: `streamient:${type}:${item._id}:${file._id}:update:${file.revision + 1}`,
-	});
+	}, publish));
 	return file;
 	} finally { await releaseAccountWork(); }
 }

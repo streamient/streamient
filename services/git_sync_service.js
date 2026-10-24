@@ -1,4 +1,4 @@
-import { requireActiveProject } from './project_service.js';
+import { requireActiveProject, acquireProjectWrite } from './project_service.js';
 import { acquireTenantWork } from '../modules/tenancy.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -480,26 +480,35 @@ export async function backfillGitSyncMode() {
 export async function createGitRepo(userId, hostId, data, ctx = {}) {
 	validateRepoPaths(data);
 	if (config.isHosted && data.repo_url !== undefined) validatePublicUrl(data.repo_url);
-	const project = await requireActiveProject(hostId, data.project);
 	const tokenEncrypted = data.auth_token ? encrypt(data.auth_token) : '';
-	const repo = await GitRepo.create({
-		project,
-		owner: userId,
-		host_id: hostId,
-		name: data.name || '',
-		repo_url: data.repo_url,
-		branch: data.branch || 'main',
-		auth_token: tokenEncrypted,
-		sync_interval: data.sync_interval || 10,
-		enabled: data.enabled !== false,
-		sync_mode: data.sync_mode === 'read_write' ? 'read_write' : 'read_only',
-		notes_path: data.notes_path || 'notes',
-		memories_path: data.memories_path || 'memories',
-		sync_path: data.sync_path || '/',
-		trash_on_delete: data.trash_on_delete !== false,
-		commit_sync_enabled: data.commit_sync_enabled !== false,
-		commit_history_days: data.commit_history_days || 90,
-	});
+	const { projectId: project, release, publish } = await acquireProjectWrite(hostId, data.project, ctx);
+	let repo;
+	try {
+		repo = await publish(async (session) => {
+			const payload = {
+				project,
+				owner: userId,
+				host_id: hostId,
+				name: data.name || '',
+				repo_url: data.repo_url,
+				branch: data.branch || 'main',
+				auth_token: tokenEncrypted,
+				sync_interval: data.sync_interval || 10,
+				enabled: data.enabled !== false,
+				sync_mode: data.sync_mode === 'read_write' ? 'read_write' : 'read_only',
+				notes_path: data.notes_path || 'notes',
+				memories_path: data.memories_path || 'memories',
+				sync_path: data.sync_path || '/',
+				trash_on_delete: data.trash_on_delete !== false,
+				commit_sync_enabled: data.commit_sync_enabled !== false,
+				commit_history_days: data.commit_history_days || 90,
+			};
+			if (session) return (await GitRepo.create([payload], { session }))[0];
+			return GitRepo.create(payload);
+		});
+	} finally {
+		await release();
+	}
 	audit.log({ action: 'create', resource: 'git_repo', resource_id: repo._id.toString(), user_id: userId, host_id: hostId, ...ctx });
 	return repo;
 }
@@ -789,18 +798,23 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, sum
 				if (!applied) { recordConflict(summary, 'memory', relPath, 'Changed locally while syncing'); continue; }
 				summary.imported_files++;
 			} else {
-				await syncMutation((session) => Memory.create([{
-					title,
-					content: parsed.body,
-					tags: parsed.tags.length ? parsed.tags : ['git-sync'],
-					project: gitRepo.project,
-					owner: userId,
-					host_id: hostId,
-					git_source: { repo_id: gitRepo._id, file_path: relPath, last_sha: sha, last_synced_at: now, origin: 'import' },
-					createdAt: fileDates.createdAt,
-					updatedAt: fileDates.updatedAt,
-				}], { session }));
-				summary.imported_files++;
+				const gate = await acquireProjectWrite(hostId, gitRepo.project, { withOwnership: syncMutation });
+				try {
+					await gate.publish((session) => Memory.create([{
+						title,
+						content: parsed.body,
+						tags: parsed.tags.length ? parsed.tags : ['git-sync'],
+						project: gitRepo.project,
+						owner: userId,
+						host_id: hostId,
+						git_source: { repo_id: gitRepo._id, file_path: relPath, last_sha: sha, last_synced_at: now, origin: 'import' },
+						createdAt: fileDates.createdAt,
+						updatedAt: fileDates.updatedAt,
+					}], { session }));
+					summary.imported_files++;
+				} finally {
+					await gate.release();
+				}
 			}
 		} else {
 			const html = marked.parse(parsed.body);
@@ -825,19 +839,24 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, sum
 				if (!applied) { recordConflict(summary, 'note', relPath, 'Changed locally while syncing'); continue; }
 				summary.imported_files++;
 			} else {
-				await syncMutation((session) => Note.create([{
-					title,
-					content: html,
-					text_content: text,
-					tags: parsed.tags.length ? parsed.tags : ['git-sync'],
-					project: gitRepo.project,
-					owner: userId,
-					host_id: hostId,
-					git_source: { repo_id: gitRepo._id, file_path: relPath, last_sha: sha, last_synced_at: now, origin: 'import' },
-					createdAt: fileDates.createdAt,
-					updatedAt: fileDates.updatedAt,
-				}], { session }));
-				summary.imported_files++;
+				const gate = await acquireProjectWrite(hostId, gitRepo.project, { withOwnership: syncMutation });
+				try {
+					await gate.publish((session) => Note.create([{
+						title,
+						content: html,
+						text_content: text,
+						tags: parsed.tags.length ? parsed.tags : ['git-sync'],
+						project: gitRepo.project,
+						owner: userId,
+						host_id: hostId,
+						git_source: { repo_id: gitRepo._id, file_path: relPath, last_sha: sha, last_synced_at: now, origin: 'import' },
+						createdAt: fileDates.createdAt,
+						updatedAt: fileDates.updatedAt,
+					}], { session }));
+					summary.imported_files++;
+				} finally {
+					await gate.release();
+				}
 			}
 		}
 	}
@@ -1138,32 +1157,37 @@ async function importCommits(git, gitRepo, userId, hostId, summary) {
 		if (repoTag) tags.push(`git-repo-${repoTag}`);
 		if (branchTag) tags.push(`git-branch-${branchTag}`);
 
-		await syncMutation((session) => Memory.create([{
-			title: `Commit ${commit.short_sha}: ${commit.subject || '(no subject)'}`,
-			content: commitMemoryContent(commit, message, changedFiles, gitRepo),
-			tags,
-			source: 'git-sync',
-			project: gitRepo.project,
-			owner: userId,
-			host_id: hostId,
-			createdAt: commit.committed_at,
-			updatedAt: commit.committed_at,
-			git_commit: {
-				repo_id: gitRepo._id,
-				sha: commit.sha,
-				short_sha: commit.short_sha,
-				branch: gitRepo.branch || 'main',
-				author_name: commit.author_name,
-				author_email: commit.author_email,
-				authored_at: commit.authored_at,
-				committer_name: commit.committer_name,
-				committer_email: commit.committer_email,
-				committed_at: commit.committed_at,
-				files: changedFiles,
-			},
-		}], { session }));
+		const gate = await acquireProjectWrite(hostId, gitRepo.project, { withOwnership: syncMutation });
+		try {
+			await gate.publish((session) => Memory.create([{
+				title: `Commit ${commit.short_sha}: ${commit.subject || '(no subject)'}`,
+				content: commitMemoryContent(commit, message, changedFiles, gitRepo),
+				tags,
+				source: 'git-sync',
+				project: gitRepo.project,
+				owner: userId,
+				host_id: hostId,
+				createdAt: commit.committed_at,
+				updatedAt: commit.committed_at,
+				git_commit: {
+					repo_id: gitRepo._id,
+					sha: commit.sha,
+					short_sha: commit.short_sha,
+					branch: gitRepo.branch || 'main',
+					author_name: commit.author_name,
+					author_email: commit.author_email,
+					authored_at: commit.authored_at,
+					committer_name: commit.committer_name,
+					committer_email: commit.committer_email,
+					committed_at: commit.committed_at,
+					files: changedFiles,
+				},
+			}], { session }));
+			summary.imported_commits++;
+		} finally {
+			await gate.release();
+		}
 		latestCommit = commit;
-		summary.imported_commits++;
 	}
 
 	if (latestCommit) {
