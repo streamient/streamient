@@ -201,7 +201,8 @@ async function permanentDeleteItemsByType(host_id, type, ids, deps = {}) {
 
 	const deletedIds = docs.map((doc) => doc._id?.toString?.() || String(doc._id || ''));
 	await removeGraphLinks(host_id, [...deletedIds, ...missingIds]);
-	await bulkRemoveFn(host_id, tsType, requestedIds);
+	const absentIds = [...deletedIds, ...missingIds];
+	if (absentIds.length) await bulkRemoveFn(host_id, tsType, absentIds);
 	if (currentDocs.length) {
 		await markIndexPending(model, host_id, currentDocs);
 		const results = await bulkIndexFn(host_id, tsType, currentDocs, { removeExisting: false });
