@@ -9,7 +9,7 @@ import TurndownService from 'turndown';
 import sanitizeHtml from 'sanitize-html';
 
 import config from '../config.js';
-import { queryForSave } from '../model/mongoose.js';
+import mongoose, { queryForSave } from '../model/mongoose.js';
 import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
 import { Url } from '../model/url.js';
@@ -57,6 +57,14 @@ export class ObsidianSyncError extends Error {
 		super(message);
 		this.status = status;
 		this.code = code;
+	}
+}
+
+// A concurrent writer committed the same file first. The losing caller reloads and re-arbitrates newest-wins.
+class ObsidianFileRevisionLostError extends Error {
+	constructor(fileId, baseRevision) {
+		super(`Obsidian file revision changed concurrently (${fileId}:${baseRevision})`);
+		this.name = 'ObsidianFileRevisionLostError';
 	}
 }
 
@@ -287,18 +295,18 @@ async function releaseManifestLock(lock) {
 	await getMongoCoordinator().releaseLock(lock);
 }
 
-async function nextSequence(connection) {
+async function nextSequence(connection, session) {
 	const updated = await ObsidianConnection.findOneAndUpdate(
 		{ _id: connection._id, host_id: connection.host_id },
 		{ $inc: { sequence: 1 } },
-		{ returnDocument: 'after' },
+		{ returnDocument: 'after', session },
 	);
 	if (!updated) throw new ObsidianSyncError('Obsidian connection disappeared', 404, 'connection_not_found');
 	connection.sequence = updated.sequence;
 	return updated.sequence;
 }
 
-async function preserveRevision(file, reason) {
+async function preserveRevision(file, reason, session) {
 	if (!file?.revision || (!file.blob && !file.sha256)) return null;
 	return ObsidianRevision.create({
 		connection: file.connection,
@@ -312,7 +320,7 @@ async function preserveRevision(file, reason) {
 		source: file.last_source,
 		reason,
 		expires_at: new Date(Date.now() + OBSIDIAN_REVISION_RETENTION_MS),
-	});
+	}, session ? { session } : undefined);
 }
 
 const MARKDOWN_PROJECTIONS = [
@@ -325,17 +333,17 @@ function markdownProjection(type) {
 	return MARKDOWN_PROJECTIONS.find((projection) => projection.type === type);
 }
 
-async function removeOtherMarkdownProjections(file, retainedType) {
+async function removeOtherMarkdownProjections(file, retainedType, session) {
 	for (const projection of MARKDOWN_PROJECTIONS) {
 		if (projection.type === retainedType || !file[projection.field]) continue;
-		const removed = await projection.Model.findOneAndDelete({ _id: file[projection.field], host_id: file.host_id, project: file.project, 'obsidian_source.file_id': file._id });
+		const removed = await projection.Model.findOneAndDelete({ _id: file[projection.field], host_id: file.host_id, project: file.project, 'obsidian_source.file_id': file._id }, session ? { session } : undefined);
 		if (!removed) throw new ObsidianSyncError('The linked record changed project or vault; synchronize again.', 409, 'projection_changed');
 		emitToTenant(file.host_id, `${projection.type}:deleted`, { _id: file[projection.field] });
 		file[projection.field] = null;
 	}
 }
 
-async function projectMarkdownFile(file, raw, ownerId) {
+async function projectMarkdownFile(file, raw, ownerId, session) {
 	await requireActiveProject(file.host_id, file.project);
 	if (file.projection_detached) return null;
 	const parsed = parsedMarkdown(raw, file.path);
@@ -343,7 +351,7 @@ async function projectMarkdownFile(file, raw, ownerId) {
 	const currentProjectionType = file.url ? 'url' : file.memory ? 'memory' : file.note ? 'note' : '';
 	const changesUrlBoundary = Boolean(currentProjectionType) && (currentProjectionType === 'url') !== (parsed.type === 'url');
 	if (changesUrlBoundary) throw new ObsidianSyncError('Create a separate file instead of changing a saved URL record type', 409, 'url_type_change');
-	await removeOtherMarkdownProjections(file, parsed.type);
+	await removeOtherMarkdownProjections(file, parsed.type, session);
 	const projection = markdownProjection(parsed.type);
 	let record = file[projection.field] ? await projection.Model.findOne({ _id: file[projection.field], host_id: file.host_id }).lean() : null;
 	const created = !record;
@@ -366,10 +374,10 @@ async function projectMarkdownFile(file, raw, ownerId) {
 		data.text_content = striptags(data.content, [], ' ').replace(/\s+/g, ' ').trim();
 	}
 	if (record) {
-		record = await projection.Model.findOneAndUpdate({ _id: record._id, host_id: file.host_id, project: file.project, 'obsidian_source.file_id': file._id, updatedAt: record.updatedAt }, { $set: data }, { returnDocument: 'after', timestamps: false });
+		record = await projection.Model.findOneAndUpdate({ _id: record._id, host_id: file.host_id, project: file.project, 'obsidian_source.file_id': file._id, updatedAt: record.updatedAt }, { $set: data }, { returnDocument: 'after', timestamps: false, session });
 		if (!record) throw new ObsidianSyncError('The linked record changed project or vault; synchronize again.', 409, 'projection_changed');
 	} else {
-		record = await projection.Model.create(data);
+		record = await projection.Model.create(data, session ? { session } : undefined);
 		file[projection.field] = record._id;
 	}
 	emitToTenant(file.host_id, `${parsed.type}:${created ? 'created' : 'updated'}`, record);
@@ -405,14 +413,14 @@ async function extractFileText(file, blob, signal) {
 	}
 }
 
-async function updateProjection(file, ownerId) {
+async function updateProjection(file, ownerId, session) {
 	if (file.projection_detached) return;
 	if (file.in_trash) {
 		file.extraction_status = 'not_needed';
 		file.extraction_error = '';
 		for (const projection of MARKDOWN_PROJECTIONS) {
 			if (!file[projection.field]) continue;
-			const record = await projection.Model.findOneAndUpdate({ _id: file[projection.field], host_id: file.host_id, project: file.project, 'obsidian_source.file_id': file._id }, { $set: { in_trash: true, trashed_at: file.trashed_at || new Date(), is_indexed: false } });
+			const record = await projection.Model.findOneAndUpdate({ _id: file[projection.field], host_id: file.host_id, project: file.project, 'obsidian_source.file_id': file._id }, { $set: { in_trash: true, trashed_at: file.trashed_at || new Date(), is_indexed: false } }, session ? { session } : undefined);
 			if (record) emitToTenant(file.host_id, `${projection.type}:deleted`, { _id: file[projection.field] });
 		}
 		file.is_indexed = file.kind === 'markdown';
@@ -422,7 +430,7 @@ async function updateProjection(file, ownerId) {
 	if (!blob) return;
 	if (file.kind === 'markdown') {
 		const raw = (await readBlobBuffer(blob, file.host_id)).toString('utf8');
-		await projectMarkdownFile(file, raw, ownerId);
+		await projectMarkdownFile(file, raw, ownerId, session);
 		file.text_content = '';
 		file.extraction_status = 'not_needed';
 		file.extraction_error = '';
@@ -447,35 +455,52 @@ async function enqueueExtraction(file) {
 	await MongoQueue.add(OBSIDIAN_EXTRACTION_QUEUE, { file_id: String(file._id), host_id: file.host_id }, { dedupKey: `${file._id}:${file.revision}`, maxAttempts: 3 });
 }
 
-async function recordChange(connection, file, operation, options = {}) {
-	const sequence = await nextSequence(connection);
-	const change = await ObsidianChange.create({
-		connection: connection._id,
-		file: file._id,
-		host_id: connection.host_id,
-		sequence,
-		operation,
-		path: file.path,
-		previous_path: options.previousPath || '',
-		revision: file.revision,
-		sha256: file.sha256,
-		modified_at: file.modified_at,
-		source: options.source || file.last_source,
-		device_id: options.deviceId || file.last_device_id || '',
-		operation_id: options.operationId || crypto.randomUUID(),
-		conflict: Boolean(options.conflict),
-		conflict_reason: options.conflictReason || '',
-		losing_revision: options.losingRevision || null,
-	});
-	return change;
+// Allocate the connection sequence and insert the change in one write-only transaction so a
+// poller can never advance past an allocated-but-uninserted sequence.
+async function recordChange(connection, file, operation, options = {}, session) {
+	const insert = async (writeSession) => {
+		const sequence = await nextSequence(connection, writeSession);
+		const created = await ObsidianChange.create({
+			connection: connection._id,
+			file: file._id,
+			host_id: connection.host_id,
+			sequence,
+			operation,
+			path: file.path,
+			previous_path: options.previousPath || '',
+			revision: file.revision,
+			sha256: file.sha256,
+			modified_at: file.modified_at,
+			source: options.source || file.last_source,
+			device_id: options.deviceId || file.last_device_id || '',
+			operation_id: options.operationId || crypto.randomUUID(),
+			conflict: Boolean(options.conflict),
+			conflict_reason: options.conflictReason || '',
+			losing_revision: options.losingRevision || null,
+		}, writeSession ? { session: writeSession } : undefined);
+		return created;
+	};
+	if (session) return insert(session);
+	return mongoose.connection.transaction((writeSession) => insert(writeSession));
 }
 
-async function commitFile(connection, file, operation, options) {
+function fileDelta(file) {
+	const fields = ['path', 'kind', 'mime_type', 'size', 'sha256', 'blob', 'revision', 'modified_at', 'last_source', 'last_device_id', 'note', 'memory', 'url', 'projection_detached', 'text_content', 'is_indexed', 'extraction_status', 'extraction_error', 'in_trash', 'trashed_at'];
+	const delta = {};
+	for (const field of fields) {
+		const value = file[field];
+		if (value !== undefined) delta[field] = value;
+	}
+	return delta;
+}
+
+async function commitFile(connection, file, operation, options, { session } = {}) {
+	const baseRevision = file.revision;
 	const previousSize = file.size || 0;
 	const nextSize = options.blob ? options.blob.total_bytes : previousSize;
 	const projectedStorage = Number(connection.storage_bytes || 0) - previousSize + nextSize;
 	if (config.obsidian.maxVaultBytes && projectedStorage > config.obsidian.maxVaultBytes) throw new ObsidianSyncError('Vault exceeds the configured Streamient storage limit', 413, 'vault_too_large');
-	const previousRevision = file.revision ? await preserveRevision(file, options.revisionReason || 'File updated') : null;
+	const previousRevision = file.revision ? await preserveRevision(file, options.revisionReason || 'File updated', session) : null;
 	if (options.path) file.path = options.path;
 	if (options.blob) {
 		file.blob = options.blob._id;
@@ -501,21 +526,34 @@ async function commitFile(connection, file, operation, options) {
 		file.extraction_status = 'not_needed';
 		file.extraction_error = '';
 		file.is_indexed = true;
-	} else await updateProjection(file, connection.owner);
-	await file.save();
-	await enqueueExtraction(file).catch(async (err) => {
-		log.error({ err, file_id: file._id }, 'Obsidian file extraction queue failed');
-		file.extraction_status = 'failed';
-		file.extraction_error = err.message || String(err);
-		file.is_indexed = false;
-		await file.save();
-	});
+	} else await updateProjection(file, connection.owner, session);
+
+	// Atomic conditional file publication: the observed revision is the fence. A concurrent
+	// writer that already advanced the revision loses here and its whole transaction rolls back.
+	if (file.isNew) {
+		await file.save(session ? { session } : undefined);
+	} else {
+		const published = await ObsidianFile.findOneAndUpdate(
+			{ _id: file._id, connection: connection._id, host_id: connection.host_id, revision: baseRevision },
+			{ $set: fileDelta(file) },
+			{ returnDocument: 'after', timestamps: false, session },
+		);
+		if (!published) throw new ObsidianFileRevisionLostError(file._id, baseRevision);
+		Object.assign(file, published.toObject ? published.toObject() : published);
+	}
+
+	if (!session) {
+		await enqueueExtraction(file).catch(async (err) => {
+			log.error({ err, file_id: file._id }, 'Obsidian file extraction queue failed');
+			await ObsidianFile.findOneAndUpdate({ _id: file._id, host_id: connection.host_id }, { $set: { extraction_status: 'failed', extraction_error: err.message || String(err), is_indexed: false } }, { timestamps: false });
+		});
+	}
 	const storageDelta = (file.size || 0) - previousSize;
 	const updates = { $set: { last_synced_at: new Date(), last_sync_status: 'success', last_sync_error: '', sync_requested_at: null } };
 	if (storageDelta) updates.$inc = { storage_bytes: storageDelta };
-	await ObsidianConnection.updateOne({ _id: connection._id, host_id: connection.host_id }, updates);
+	await ObsidianConnection.updateOne({ _id: connection._id, host_id: connection.host_id }, updates, session ? { session } : undefined);
 	connection.storage_bytes = Math.max(0, Number(connection.storage_bytes || 0) + storageDelta);
-	const change = await recordChange(connection, file, operation, { ...options, losingRevision: options.conflict ? previousRevision?._id : null });
+	const change = await recordChange(connection, file, operation, { ...options, losingRevision: options.conflict ? previousRevision?._id : null }, session);
 	emitToTenant(connection.host_id, 'obsidian:file-changed', publicChange(change));
 	emitToTenant(connection.host_id, 'counts:refresh', { project: String(connection.project) });
 	return { file, change };
@@ -629,30 +667,51 @@ async function applyMutation(connection, userId, mutation, source = 'obsidian') 
 		});
 	}
 	const baseRevision = Number(mutation.base_revision || 0);
-	if (file.revision && baseRevision !== file.revision && modifiedAt.getTime() <= new Date(file.modified_at).getTime()) {
-		return recordLosingConflict(connection, file, { ...mutation, operation, operation_id: operationId }, blob, modifiedAt, source, deviceId);
+	let attempt = 0;
+	while (true) {
+		if (file.revision && baseRevision !== file.revision && modifiedAt.getTime() <= new Date(file.modified_at).getTime()) {
+			return recordLosingConflict(connection, file, { ...mutation, operation, operation_id: operationId }, blob, modifiedAt, source, deviceId);
+		}
+		if (file.revision && baseRevision !== file.revision) await ObsidianConnection.updateOne({ _id: connection._id, host_id: connection.host_id }, { $inc: { conflict_count: 1 } });
+		const previousPath = file.path;
+		let renameConflict = false;
+		if (operation === 'rename') {
+			const rename = await resolveRenamePath(connection, file, requestedPath, modifiedAt, { source, deviceId, operationId });
+			requestedPath = rename.path;
+			renameConflict = rename.conflict;
+		}
+		const commitOptions = {
+			path: requestedPath,
+			blob,
+			modifiedAt,
+			source,
+			deviceId,
+			operationId,
+			previousPath: operation === 'rename' ? previousPath : '',
+			revisionReason: baseRevision !== file.revision ? 'Won newest-wins conflict' : 'File updated',
+			conflict: renameConflict || file.revision > 0 && baseRevision !== file.revision,
+			conflictReason: renameConflict ? 'Another file claimed the requested path' : file.revision > 0 && baseRevision !== file.revision ? 'Incoming file is newer' : '',
+		};
+		try {
+			const result = await mongoose.connection.transaction(async (session) => {
+				return await commitFile(connection, file, operation === 'create' && file.revision ? 'update' : operation, commitOptions, { session });
+			});
+			// Extraction enqueue runs after a committed transaction so its queue writes never survive a rollback.
+			if (file.extraction_status === 'pending') await enqueueExtraction(file).catch(async (err) => {
+				log.error({ err, file_id: file._id }, 'Obsidian file extraction queue failed');
+				await ObsidianFile.findOneAndUpdate({ _id: file._id, host_id: connection.host_id }, { $set: { extraction_status: 'failed', extraction_error: err.message || String(err), is_indexed: false } }, { timestamps: false });
+			});
+			return { accepted: true, conflict: Boolean(result.change.conflict), file: publicFile(result.file), change: publicChange(result.change) };
+		} catch (err) {
+			if (!(err instanceof ObsidianFileRevisionLostError)) throw err;
+			// A concurrent writer committed this file; reload and re-arbitrate newest-wins.
+			const reloaded = await findFileForMutation(connection, { file_id: file._id });
+			if (!reloaded) throw new ObsidianSyncError('Synchronized file not found', 404, 'file_not_found');
+			file = reloaded;
+			requestedPath = mutation.path ? normalizeVaultPath(mutation.path) : file.path;
+			if (++attempt > 5) throw new ObsidianSyncError('Too many concurrent Obsidian file updates', 409, 'sync_contention');
+		}
 	}
-	if (file.revision && baseRevision !== file.revision) await ObsidianConnection.updateOne({ _id: connection._id, host_id: connection.host_id }, { $inc: { conflict_count: 1 } });
-	const previousPath = file.path;
-	let renameConflict = false;
-	if (operation === 'rename') {
-		const rename = await resolveRenamePath(connection, file, requestedPath, modifiedAt, { source, deviceId, operationId });
-		requestedPath = rename.path;
-		renameConflict = rename.conflict;
-	}
-	const result = await commitFile(connection, file, operation === 'create' && file.revision ? 'update' : operation, {
-		path: requestedPath,
-		blob,
-		modifiedAt,
-		source,
-		deviceId,
-		operationId,
-		previousPath: operation === 'rename' ? previousPath : '',
-		revisionReason: baseRevision !== file.revision ? 'Won newest-wins conflict' : 'File updated',
-		conflict: renameConflict || file.revision > 0 && baseRevision !== file.revision,
-		conflictReason: renameConflict ? 'Another file claimed the requested path' : file.revision > 0 && baseRevision !== file.revision ? 'Incoming file is newer' : '',
-	});
-	return { accepted: true, conflict: Boolean(result.change.conflict), file: publicFile(result.file), change: publicChange(result.change) };
 }
 
 async function exportProjectItem(connection, type, item, options = {}) {
@@ -1274,4 +1333,4 @@ export async function deleteObsidianHostDirectory(hostId) {
 	for (const area of ['blobs', 'uploads', 'server', 'extract']) await rm(path.resolve(config.obsidian.vaultsDir, area, String(hostId)), { recursive: true, force: true });
 }
 
-export const __test = { normalizedModifiedAt, parsedMarkdown, itemMarkdown, projectMarkdownFile, commitFile, renderCanonicalMarkdown, canvasText, conflictPath, publicFile, publicChange, applyMutation, normalizeSyncScope, pathInSyncScope, summarizeActions, registerDeviceOnConnection, reconcileManifestEntries, scopeMongoFilter };
+export const __test = { normalizedModifiedAt, parsedMarkdown, itemMarkdown, projectMarkdownFile, commitFile, recordChange, nextSequence, renderCanonicalMarkdown, canvasText, conflictPath, publicFile, publicChange, applyMutation, normalizeSyncScope, pathInSyncScope, summarizeActions, registerDeviceOnConnection, reconcileManifestEntries, scopeMongoFilter };

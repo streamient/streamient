@@ -15,6 +15,7 @@ import { ObsidianRevision } from '../model/obsidian_revision.js';
 import { AuditLog } from '../model/audit_log.js';
 import { Tenant } from '../modules/tenancy.js';
 import { Project } from '../model/project.js';
+import mongoose from '../model/mongoose.js';
 import { requireObsidianAccess, requireProjectManager } from '../routes/obsidian_api.js';
 import { __test as oauthRouteTest } from '../routes/oauth.js';
 import { readBlob, storeBuffer } from '../services/obsidian_blob_service.js';
@@ -343,7 +344,9 @@ test('applies newest-wins conflicts and keeps repeated operations idempotent', a
 		connectionFindOneAndUpdate: ObsidianConnection.findOneAndUpdate,
 		connectionUpdateOne: ObsidianConnection.updateOne,
 		fileFindOne: ObsidianFile.findOne,
+		fileFindOneAndUpdate: ObsidianFile.findOneAndUpdate,
 		revisionCreate: ObsidianRevision.create,
+		transaction: mongoose.connection.transaction,
 	};
 	const createdChanges = [];
 	const connection = { _id: 'connection-1', project: 'project-1', owner: 'user-1', host_id: 'host-1', sequence: 0, storage_bytes: 1 };
@@ -362,14 +365,18 @@ test('applies newest-wins conflicts and keeps repeated operations idempotent', a
 	ObsidianConnection.findOneAndUpdate = async (_query, update) => ({ ...connection, sequence: connection.sequence += update.$inc.sequence });
 	ObsidianConnection.updateOne = async () => ({ modifiedCount: 1 });
 	ObsidianFile.findOne = (query) => mockQuery(query._id || query.path === file.path ? file : null);
+	ObsidianFile.findOneAndUpdate = async (filter, update) => ({ ...file, ...update.$set });
 	ObsidianRevision.create = async (data) => data;
+	mongoose.connection.transaction = async (callback) => callback(undefined);
 	t.after(() => {
 		ObsidianChange.findOne = originals.changeFindOne;
 		ObsidianChange.create = originals.changeCreate;
 		ObsidianConnection.findOneAndUpdate = originals.connectionFindOneAndUpdate;
 		ObsidianConnection.updateOne = originals.connectionUpdateOne;
 		ObsidianFile.findOne = originals.fileFindOne;
+		ObsidianFile.findOneAndUpdate = originals.fileFindOneAndUpdate;
 		ObsidianRevision.create = originals.revisionCreate;
+		mongoose.connection.transaction = originals.transaction;
 	});
 
 	const older = await syncTest.applyMutation(connection, 'user-1', { operation_id: 'older', operation: 'trash', file_id: file._id, path: file.path, base_revision: 1, modified_at: new Date(currentTime - 60_000), device_id: 'device-1' });

@@ -24,8 +24,8 @@ export const EXPORT_QUEUE = 'account-export';
 const EXPIRY_MS = 24 * 60 * 60 * 1000;
 const ACTIVE_STATUSES = ['pending', 'processing'];
 
-async function enqueueExport(doc) {
-	return MongoQueue.add(EXPORT_QUEUE, { export_id: String(doc._id), host_id: doc.host_id }, { jobId: String(doc._id), dedupKey: String(doc._id), maxAttempts: 3 });
+async function enqueueExport(doc, { recover = false } = {}) {
+	return MongoQueue.add(EXPORT_QUEUE, { export_id: String(doc._id), host_id: doc.host_id }, { jobId: String(doc._id), dedupKey: String(doc._id), maxAttempts: 3, ...(recover ? { requeueCompleted: true, requeueFailed: true } : {}) });
 }
 
 export async function startExport(userId, hostId, userEmail, userName) {
@@ -44,7 +44,8 @@ export async function startExport(userId, hostId, userEmail, userName) {
 export async function recoverExports() {
 	for await (const doc of Export.find({ $or: [{ status: { $in: ACTIVE_STATUSES } }, { status: 'ready', email_sent_at: null }] }).lean().cursor()) {
 		try {
-			await enqueueExport(doc);
+			// A ready-but-unsent export must resurrect a completed or failed job so its notification is attempted.
+			await enqueueExport(doc, { recover: doc.status === 'ready' });
 			const existing = await MongoQueue.getJob(String(doc._id));
 			if (ACTIVE_STATUSES.includes(doc.status) && (existing?.status === 'failed' || existing?.status === 'completed')) await Export.updateOne({ _id: doc._id, status: { $in: ACTIVE_STATUSES } }, { $set: { status: 'failed', error: 'Export interrupted; please retry' } });
 		} catch (err) { if (err.code !== 'account_unavailable') throw err; }
@@ -116,8 +117,8 @@ export async function processExport(exportId, hostId, { signal, assertOwnership,
 			const user = doc.user_email ? null : await User.findById(doc.owner).select('email name').lean();
 			signal?.throwIfAborted();
 			await assertOwnership?.();
-			try { await sendExportReadyEmail(doc.user_email || user?.email, doc.user_name || user?.name, doc.token); await withOwnership((session) => Export.updateOne({ _id: doc._id }, { $set: { email_sent_at: new Date() } }, { session })); }
-			catch (err) { log.warn({ err, export_id: doc._id }, 'Export email failed'); }
+			await sendExportReadyEmail(doc.user_email || user?.email, doc.user_name || user?.name, doc.token);
+			await withOwnership((session) => Export.updateOne({ _id: doc._id }, { $set: { email_sent_at: new Date() } }, { session }));
 		}
 	} catch (err) {
 		if (!isOwner || await isOwner()) await withOwnership((session) => Export.updateOne({ _id: doc._id, status: { $in: ACTIVE_STATUSES } }, { $set: { status: attempts < maxAttempts ? 'pending' : 'failed', error: String(err.message || err).slice(0, 1000) } }, { session }), { allowAborted: true });

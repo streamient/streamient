@@ -222,6 +222,14 @@ function isLocalChangeNewer(doc) {
 	return updatedAt > lastSyncedAt + LOCAL_CHANGE_GRACE_MS;
 }
 
+// The version guard for a conditional import write: the record must still be exactly the
+// snapshot this run read, so a concurrent user edit during the git-history await loses the write.
+function importVersionGuard(existing, hostId) {
+	const guard = { _id: existing._id, host_id: hostId, updatedAt: existing.updatedAt };
+	if (existing.git_source?.last_sha !== undefined) guard['git_source.last_sha'] = existing.git_source.last_sha;
+	return guard;
+}
+
 function cleanRepoPath(value, fallback = '') {
 	const candidate = value || fallback;
 	if (typeof candidate !== 'string' || candidate.includes('\\') || candidate.includes('\0') || path.posix.isAbsolute(candidate) || /^[a-z]:/i.test(candidate) || candidate.split('/').some((part) => part === '..' || part === '.')) throw new Error('Unsafe Git repository path');
@@ -375,15 +383,17 @@ async function getFileGitDates(git, syncBase, relPath) {
 	};
 }
 
-async function normalizeImportedTimestamps(Model, doc, dates, { includeCreatedAt = false } = {}) {
+async function normalizeImportedTimestamps(Model, doc, dates, { includeCreatedAt = false, guard } = {}) {
 	const createdAt = validDateOrNull(dates?.createdAt);
 	const updatedAt = validDateOrNull(dates?.updatedAt);
 	const $set = {};
 	if (updatedAt && timestampsDiffer(doc.updatedAt, updatedAt)) $set.updatedAt = updatedAt;
 	if (includeCreatedAt && createdAt && timestampsDiffer(doc.createdAt, createdAt)) $set.createdAt = createdAt;
-	if (Object.keys($set).length === 0) return;
+	if (Object.keys($set).length === 0) return true;
 
-	await syncMutation((session) => Model.findByIdAndUpdate(doc._id, { $set }, { timestamps: false, overwriteImmutable: includeCreatedAt, session }));
+	const filter = guard ? { ...guard, _id: doc._id } : { _id: doc._id };
+	const result = await syncMutation((session) => Model.findOneAndUpdate(filter, { $set }, { timestamps: false, overwriteImmutable: includeCreatedAt, session }));
+	return Boolean(result);
 }
 
 function commitDates(commitDate) {
@@ -744,7 +754,8 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, sum
 
 		if (existing && existing.git_source?.last_sha === sha) {
 			if (!isLocalChangeNewer(existing) || importedContentMatchesGit(existing, existingNote ? 'note' : 'memory', parsed, title)) {
-				await normalizeImportedTimestamps(existingNote ? Note : Memory, existing, fileDates, { includeCreatedAt: existing.git_source?.origin === 'import' });
+				const applied = await normalizeImportedTimestamps(existingNote ? Note : Memory, existing, fileDates, { includeCreatedAt: existing.git_source?.origin === 'import', guard: importVersionGuard(existing, hostId) });
+				if (!applied) recordConflict(summary, existingNote ? 'note' : 'memory', relPath, 'Changed locally while syncing');
 			}
 			continue; // No change
 		}
@@ -772,9 +783,10 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, sum
 				};
 				const overwriteImmutable = existingMemory.git_source?.origin === 'import';
 				if (overwriteImmutable) update.createdAt = fileDates.createdAt;
-				await syncMutation((session) => Memory.findByIdAndUpdate(existingMemory._id, {
+				const applied = await syncMutation((session) => Memory.findOneAndUpdate(importVersionGuard(existingMemory, hostId), {
 					$set: update,
 				}, { timestamps: false, overwriteImmutable, session }));
+				if (!applied) { recordConflict(summary, 'memory', relPath, 'Changed locally while syncing'); continue; }
 				summary.imported_files++;
 			} else {
 				await syncMutation((session) => Memory.create([{
@@ -807,9 +819,10 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, sum
 				};
 				const overwriteImmutable = existingNote.git_source?.origin === 'import';
 				if (overwriteImmutable) update.createdAt = fileDates.createdAt;
-				await syncMutation((session) => Note.findByIdAndUpdate(existingNote._id, {
+				const applied = await syncMutation((session) => Note.findOneAndUpdate(importVersionGuard(existingNote, hostId), {
 					$set: update,
 				}, { timestamps: false, overwriteImmutable, session }));
+				if (!applied) { recordConflict(summary, 'note', relPath, 'Changed locally while syncing'); continue; }
 				summary.imported_files++;
 			} else {
 				await syncMutation((session) => Note.create([{
@@ -942,7 +955,7 @@ async function pushToGit(git, dir, syncBase, gitRepo, userId, hostId, token, sum
 		const fd = fs.openSync(containedRepoPath(dir, syncBase, relPath), fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | fs.constants.O_NOFOLLOW);
 		try { fs.writeFileSync(fd, md, 'utf8'); } finally { fs.closeSync(fd); }
 
-		pendingUpdates.push({ model: 'Note', id: note._id, relPath, sha });
+		pendingUpdates.push({ model: 'Note', id: note._id, relPath, sha, updatedAt: note.updatedAt });
 		hasChanges = true;
 	}
 
@@ -990,7 +1003,7 @@ async function pushToGit(git, dir, syncBase, gitRepo, userId, hostId, token, sum
 		const fd = fs.openSync(containedRepoPath(dir, syncBase, relPath), fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | fs.constants.O_NOFOLLOW);
 		try { fs.writeFileSync(fd, md, 'utf8'); } finally { fs.closeSync(fd); }
 
-		pendingUpdates.push({ model: 'Memory', id: mem._id, relPath, sha });
+		pendingUpdates.push({ model: 'Memory', id: mem._id, relPath, sha, updatedAt: mem.updatedAt });
 		hasChanges = true;
 	}
 
@@ -1009,16 +1022,21 @@ async function pushToGit(git, dir, syncBase, gitRepo, userId, hostId, token, sum
 		const now = new Date();
 		for (const upd of pendingUpdates) {
 			const Model = upd.model === 'Note' ? Note : Memory;
-			await syncMutation((session) => Model.findByIdAndUpdate(upd.id, {
-				$set: {
-					'git_source.repo_id': gitRepo._id,
-					'git_source.file_path': upd.relPath,
-					'git_source.last_sha': upd.sha,
-					'git_source.last_synced_at': now,
-					'git_source.origin': 'push',
+			// Acknowledge only the version captured before the network push; a concurrent edit keeps the item pending.
+			const applied = await syncMutation((session) => Model.findOneAndUpdate(
+				{ _id: upd.id, host_id: hostId, updatedAt: upd.updatedAt },
+				{
+					$set: {
+						'git_source.repo_id': gitRepo._id,
+						'git_source.file_path': upd.relPath,
+						'git_source.last_sha': upd.sha,
+						'git_source.last_synced_at': now,
+						'git_source.origin': 'push',
+					},
 				},
-			}, { session }));
-			summary.exported_files++;
+				{ timestamps: false, session },
+			));
+			if (applied) summary.exported_files++;
 		}
 	}
 }

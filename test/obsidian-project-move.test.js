@@ -12,6 +12,8 @@ import { ObsidianBlob } from '../model/obsidian_blob.js';
 import { ObsidianConnection } from '../model/obsidian_connection.js';
 import { ObsidianChange } from '../model/obsidian_change.js';
 import { ObsidianRevision } from '../model/obsidian_revision.js';
+import { ObsidianFile } from '../model/obsidian_file.js';
+import mongoose from '../model/mongoose.js';
 import { __test as syncTest } from '../services/obsidian_sync_service.js';
 
 afterEach(() => mock.restoreAll());
@@ -25,6 +27,8 @@ describe('Obsidian record projection ownership', () => {
 		mock.method(ObsidianConnection, 'updateOne', async () => ({}));
 		mock.method(ObsidianChange, 'create', async (value) => value);
 		mock.method(ObsidianBlob, 'findOne', () => { throw new Error('An export must not read the blob for reimport'); });
+		mock.method(mongoose.connection, 'transaction', async (callback) => callback(undefined));
+		mock.method(ObsidianFile, 'findOneAndUpdate', async (filter, update) => ({ ...file, ...update.$set }));
 		const mutation = mock.method(Memory, 'findOneAndUpdate', () => { throw new Error('An export must not rewrite or trash its record'); });
 		for (const operation of ['create', 'update', 'trash', 'restore']) await syncTest.commitFile(connection, file, operation, { modifiedAt: new Date(), source: 'streamient', updateRecord: false, operationId: operation });
 		assert.equal(mutation.mock.callCount(), 0);

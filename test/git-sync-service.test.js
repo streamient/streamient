@@ -110,6 +110,7 @@ function installModelMocks(state) {
 		find: Note.find,
 		create: Note.create,
 		findByIdAndUpdate: Note.findByIdAndUpdate,
+		findOneAndUpdate: Note.findOneAndUpdate,
 		countDocuments: Note.countDocuments,
 	};
 	originals.Memory = {
@@ -117,6 +118,7 @@ function installModelMocks(state) {
 		find: Memory.find,
 		create: Memory.create,
 		findByIdAndUpdate: Memory.findByIdAndUpdate,
+		findOneAndUpdate: Memory.findOneAndUpdate,
 		countDocuments: Memory.countDocuments,
 	};
 
@@ -141,6 +143,13 @@ function installModelMocks(state) {
 		};
 		Model.findByIdAndUpdate = async (id, update, options = {}) => {
 			const doc = collection.find((candidate) => sameValue(candidate._id, id));
+			if (!doc) return null;
+			for (const [key, value] of Object.entries(update.$set || {})) setValue(doc, key, value);
+			if (options.timestamps !== false && !Object.hasOwn(update.$set || {}, 'updatedAt')) doc.updatedAt = now();
+			return doc;
+		};
+		Model.findOneAndUpdate = async (filter, update, options = {}) => {
+			const doc = collection.find((candidate) => matches(candidate, filter));
 			if (!doc) return null;
 			for (const [key, value] of Object.entries(update.$set || {})) setValue(doc, key, value);
 			if (options.timestamps !== false && !Object.hasOwn(update.$set || {}, 'updatedAt')) doc.updatedAt = now();
