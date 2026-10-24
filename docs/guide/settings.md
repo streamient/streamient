@@ -102,6 +102,8 @@ Use this if search results seem incomplete or out of sync. Requires confirmation
 
 Owners and admins can start full account exports from **Settings > Export**.
 
+Ready exports remain available to download from Settings while valid. If the notification email cannot be delivered, Streamient retries delivery; an email failure does not remove the downloadable export.
+
 ## Usage
 
 View your storage usage dashboard showing total counts of:

@@ -32,6 +32,8 @@ The [Streamient CLI](/cli/) exposes the same live catalog to shells, scripts, CI
 
 Public app submissions can use the curated `/mcp/app` endpoint on the same server. It exposes only private notes, memories, and project metadata tools; URL, email, git sync, graph, broad search, and chat orchestration tools remain available only on the full `/mcp` endpoint.
 
+App-only authorization stays restricted when a client changes endpoints. Each OAuth connection is bound to the account and permissions approved during sign-in; reconnect when changing that account or authorization.
+
 ## How it works
 
 1. **Connect once** — add the Streamient MCP server to your AI client.
