@@ -56,10 +56,12 @@ test('idempotent imports reuse a scoped identity and reject cancellation before 
 test('import publication uses the owning queue transaction and retries keep one identity', async (t) => {
 	const restore = mockTenantWork(); t.after(restore);
 	const projectFind = Project.findOneAndUpdate;
+	const projectUpdate = Project.updateOne;
 	const noteFind = Note.findOneAndUpdate;
 	const noteCreate = Note.create;
-	t.after(() => { Project.findOneAndUpdate = projectFind; Note.findOneAndUpdate = noteFind; Note.create = noteCreate; });
+	t.after(() => { Project.findOneAndUpdate = projectFind; Project.updateOne = projectUpdate; Note.findOneAndUpdate = noteFind; Note.create = noteCreate; });
 	Project.findOneAndUpdate = (filter) => query({ _id: filter._id });
+	Project.updateOne = () => Promise.resolve({ matchedCount: 1, modifiedCount: 1 });
 	const session = { owner: 'job-claim' };
 	let stored;
 	let transactions = 0;

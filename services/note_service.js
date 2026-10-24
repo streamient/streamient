@@ -1,5 +1,5 @@
 import { attachItemHtml } from '../modules/item_html.js';
-import { requireActiveProject } from './project_service.js';
+import { requireActiveProject, acquireProjectWrite } from './project_service.js';
 import { Note } from '../model/note.js';
 import { searchCollection, indexDocument, removeDocument } from '../modules/typesense.js';
 import { emitToTenant } from '../modules/socket.js';
@@ -13,16 +13,21 @@ const log = createLogger('note');
 export async function createNote(userId, host_id, data, ctx = {}) {
 	ctx.signal?.throwIfAborted();
 	await ctx.assertOwnership?.();
-	const project = await requireActiveProject(host_id, data.project);
-	const persist = async (session) => {
-		ctx.signal?.throwIfAborted();
-		if (!session) await ctx.assertOwnership?.();
-		const payload = { ...(ctx.idempotency_id ? { _id: ctx.idempotency_id } : {}), title: data.title, content: data.content || '', text_content: data.text_content || '', tags: data.tags || [], project, owner: userId, host_id, is_indexed: false };
-		if (ctx.idempotency_id) return Note.findOneAndUpdate({ _id: ctx.idempotency_id, host_id, project }, { $setOnInsert: { ...payload, createdAt: new Date(), updatedAt: new Date() } }, { upsert: true, returnDocument: 'after', session, timestamps: false }).lean();
-		if (session) return (await Note.create([payload], { session }))[0];
-		return Note.create(payload);
-	};
-	const note = ctx.withOwnership ? await ctx.withOwnership(persist) : await persist();
+	const { projectId: project, release } = await acquireProjectWrite(host_id, data.project);
+	let note;
+	try {
+		const persist = async (session) => {
+			ctx.signal?.throwIfAborted();
+			if (!session) await ctx.assertOwnership?.();
+			const payload = { ...(ctx.idempotency_id ? { _id: ctx.idempotency_id } : {}), title: data.title, content: data.content || '', text_content: data.text_content || '', tags: data.tags || [], project, owner: userId, host_id, is_indexed: false };
+			if (ctx.idempotency_id) return Note.findOneAndUpdate({ _id: ctx.idempotency_id, host_id, project }, { $setOnInsert: { ...payload, createdAt: new Date(), updatedAt: new Date() } }, { upsert: true, returnDocument: 'after', session, timestamps: false }).lean();
+			if (session) return (await Note.create([payload], { session }))[0];
+			return Note.create(payload);
+		};
+		note = ctx.withOwnership ? await ctx.withOwnership(persist) : await persist();
+	} finally {
+		await release();
+	}
 	ctx.signal?.throwIfAborted();
 	await ctx.assertOwnership?.();
 
@@ -75,11 +80,18 @@ export async function updateNote(host_id, noteId, data, ctx = {}) {
 
 	const before = ctx.user_id ? await Note.findOne({ _id: noteId, host_id }).lean() : null;
 
-	const note = await Note.findOneAndUpdate(
-		{ _id: noteId, host_id, ...(ctx.expected_updated_at ? { updatedAt: new Date(ctx.expected_updated_at), in_trash: { $ne: true } } : {}) },
-		{ $set: update },
-		{ returnDocument: 'after' },
-	);
+	// A move must hold the destination project's write lease across the update.
+	const release = data.project !== undefined ? (await acquireProjectWrite(host_id, data.project)).release : null;
+	let note;
+	try {
+		note = await Note.findOneAndUpdate(
+			{ _id: noteId, host_id, ...(ctx.expected_updated_at ? { updatedAt: new Date(ctx.expected_updated_at), in_trash: { $ne: true } } : {}) },
+			{ $set: update },
+			{ returnDocument: 'after' },
+		);
+	} finally {
+		if (release) await release();
+	}
 
 	let syncWarning;
 	if (note) {

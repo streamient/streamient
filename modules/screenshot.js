@@ -37,6 +37,27 @@ export function urlToFilename(url) {
     return `${hash}.png`;
 }
 
+// Public (server-captured) screenshots are URL-only and globally reused.
+// Private (client-provided) screenshots are scoped to a tenant so one tenant's
+// paywalled capture can never be served or overwritten by another tenant.
+const PUBLIC_SCREENSHOT_RE = /^pub-[a-f0-9]{64}\.png$/i;
+const PRIVATE_SCREENSHOT_RE = /^[a-f0-9]{24}-[a-f0-9]{64}\.png$/i;
+
+function publicScreenshotFilename(url) {
+	return `pub-${urlToFilename(url)}`;
+}
+
+function privateScreenshotFilename(hostId, url) {
+	if (!/^[a-f0-9]{24}$/i.test(String(hostId || ''))) throw new Error('Invalid tenant for screenshot storage');
+	return `${hostId}-${urlToFilename(url)}`;
+}
+
+// Legacy bare `{hash}.png` files predate tenant scoping and are ambiguous
+// (they may hold a private capture). Fail closed: never serve or sign them.
+function isStoredScreenshotFilename(filename) {
+	return typeof filename === 'string' && (PUBLIC_SCREENSHOT_RE.test(filename) || PRIVATE_SCREENSHOT_RE.test(filename));
+}
+
 /**
  * Call the screenshot service and return the image buffer, or null on failure.
  */
@@ -47,13 +68,14 @@ export async function captureScreenshot(url) {
 
 /**
  * Save a screenshot for the given URL.
- * Returns the filename (hash.png) if successful, null otherwise.
- * Cross-tenant dedup: if the file already exists on disk, skip capture.
+ * Returns the filename (pub-{hash}.png) if successful, null otherwise.
+ * Public screenshots are URL-only and globally reused, but never read from or
+ * write to a tenant's private screenshot location.
  */
 export async function saveScreenshot(url) {
     if (!config.screenshotUrl) return null;
 
-    const filename = urlToFilename(url);
+    const filename = publicScreenshotFilename(url);
     const filePath = path.join(SCREENSHOTS_DIR, filename);
 
     // Dedup: file already exists for this URL
@@ -67,14 +89,16 @@ export async function saveScreenshot(url) {
     const buffer = await captureScreenshot(url);
     if (!buffer) return null;
 
-	return writeScreenshotThumbnail(url, buffer, { overwrite: false });
+	return writeScreenshotThumbnail(url, buffer, { overwrite: false, filename });
 }
 
 /**
- * Save a client-provided screenshot data URL for the given URL.
- * Used by browser extensions when the logged-in user's session can see paywalled pages.
+ * Save a client-provided screenshot data URL for the given URL, scoped to a
+ * tenant. Used by browser extensions when the logged-in user's session can see
+ * paywalled pages. The tenant-scoped filename keeps it separate from the
+ * globally reused public screenshot for the same URL.
  */
-export async function saveScreenshotDataUrl(url, dataUrl) {
+export async function saveScreenshotDataUrl(url, dataUrl, hostId) {
 	if (!dataUrl) return null;
 
 	const match = String(dataUrl).match(/^data:image\/(?:png|jpe?g|webp);base64,([a-z0-9+/=]+)$/i);
@@ -83,17 +107,18 @@ export async function saveScreenshotDataUrl(url, dataUrl) {
 	}
 
 	const buffer = Buffer.from(match[1], 'base64');
-	return writeScreenshotThumbnail(url, buffer, { overwrite: true });
+	const filename = privateScreenshotFilename(hostId, url);
+	return writeScreenshotThumbnail(url, buffer, { overwrite: true, filename });
 }
 
-async function writeScreenshotThumbnail(url, buffer, { overwrite = false } = {}) {
-	const filename = urlToFilename(url);
-	const filePath = path.join(SCREENSHOTS_DIR, filename);
+async function writeScreenshotThumbnail(url, buffer, { overwrite = false, filename } = {}) {
+	const target = filename || urlToFilename(url);
+	const filePath = path.join(SCREENSHOTS_DIR, target);
 
 	if (!overwrite) {
 		try {
 			await fs.promises.access(filePath);
-			return filename;
+			return target;
 		} catch {
 			// File doesn't exist — proceed with write
 		}
@@ -104,14 +129,16 @@ async function writeScreenshotThumbnail(url, buffer, { overwrite = false } = {})
 		.png()
 		.toFile(filePath);
 
-	return filename;
+	return target;
 }
 
 /**
  * Generate a signed URL for a screenshot file.
- * Uses HMAC-SHA256 with an expiration timestamp.
+ * Uses HMAC-SHA256 with an expiration timestamp. Returns null for legacy
+ * ambiguous (bare hash) filenames so they are never served.
  */
 export function signScreenshotUrl(filename, expiresInSeconds = 3600) {
+    if (!isStoredScreenshotFilename(filename)) return null;
     const expires = Math.floor(Date.now() / 1000) + expiresInSeconds;
     const payload = `${filename}:${expires}`;
     const sig = crypto.createHmac('sha256', config.screenshotSecret).update(payload).digest('hex');
@@ -124,6 +151,7 @@ export function signScreenshotUrl(filename, expiresInSeconds = 3600) {
  */
 export function verifyScreenshotSignature(filename, expires, sig) {
     if (!filename || !expires || !sig) return false;
+    if (!isStoredScreenshotFilename(filename)) return false;
 
     const now = Math.floor(Date.now() / 1000);
     if (parseInt(expires, 10) < now) return false;
@@ -135,10 +163,11 @@ export function verifyScreenshotSignature(filename, expires, sig) {
 
 /**
  * Resolve the absolute file path for a screenshot filename.
- * Returns null if the filename contains path traversal characters.
+ * Returns null for path traversal and for legacy ambiguous (bare hash) names,
+ * which predate tenant scoping and may hold a private capture.
  */
 export function resolveScreenshotPath(filename) {
     if (!filename || /[\/\\]|\.\./.test(filename)) return null;
-    if (!/^[a-f0-9]{64}\.png$/.test(filename)) return null;
+    if (!isStoredScreenshotFilename(filename)) return null;
     return path.join(SCREENSHOTS_DIR, filename);
 }

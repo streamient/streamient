@@ -5,6 +5,7 @@ import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
 import { Url } from '../model/url.js';
 import { Email } from '../model/email.js';
+import { Project } from '../model/project.js';
 import { batchRestore, emptyTrash, getTrashCount, listTrash, permanentDelete, restoreItem } from '../services/trash_service.js';
 
 function cloneDoc(doc) {
@@ -93,13 +94,15 @@ describe('Trash service Typesense bulk writes', () => {
 			noteUpdateMany: Note.updateMany,
 			memoryFindOneAndUpdate: Memory.findOneAndUpdate,
 			memoryUpdateMany: Memory.updateMany,
+			projectFindOneAndUpdate: Project.findOneAndUpdate,
+			projectUpdateOne: Project.updateOne,
 		};
 		const notes = new Map([
-			['note-1', { _id: 'note-1', host_id: 'host-1', title: 'Note 1', in_trash: true }],
-			['note-2', { _id: 'note-2', host_id: 'host-1', title: 'Note 2', in_trash: true }],
+			['note-1', { _id: 'note-1', host_id: 'host-1', project: 'project-1', title: 'Note 1', in_trash: true }],
+			['note-2', { _id: 'note-2', host_id: 'host-1', project: 'project-1', title: 'Note 2', in_trash: true }],
 		]);
 		const memories = new Map([
-			['memory-1', { _id: 'memory-1', host_id: 'host-1', title: 'Memory 1', in_trash: true }],
+			['memory-1', { _id: 'memory-1', host_id: 'host-1', project: 'project-1', title: 'Memory 1', in_trash: true }],
 		]);
 		const indexCalls = [];
 		const stateUpdates = [];
@@ -120,6 +123,8 @@ describe('Trash service Typesense bulk writes', () => {
 		};
 		Note.updateMany = async (query, update, options) => stateUpdates.push({ type: 'notes', query, update, options });
 		Memory.updateMany = async (query, update, options) => stateUpdates.push({ type: 'memory', query, update, options });
+		Project.findOneAndUpdate = () => ({ select() { return this; }, lean: async () => ({ _id: 'project-1' }) });
+		Project.updateOne = async () => ({ matchedCount: 1, modifiedCount: 1 });
 
 		try {
 			const restored = await batchRestore('host-1', [
@@ -150,6 +155,8 @@ describe('Trash service Typesense bulk writes', () => {
 			Note.updateMany = originals.noteUpdateMany;
 			Memory.findOneAndUpdate = originals.memoryFindOneAndUpdate;
 			Memory.updateMany = originals.memoryUpdateMany;
+			Project.findOneAndUpdate = originals.projectFindOneAndUpdate;
+			Project.updateOne = originals.projectUpdateOne;
 		}
 	});
 

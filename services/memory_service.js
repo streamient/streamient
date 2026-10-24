@@ -1,5 +1,5 @@
 import { attachItemHtml } from '../modules/item_html.js';
-import { requireActiveProject } from './project_service.js';
+import { requireActiveProject, acquireProjectWrite } from './project_service.js';
 import { Memory } from '../model/memory.js';
 import mongoose from '../model/mongoose.js';
 import { searchCollection, indexDocument, removeDocument } from '../modules/typesense.js';
@@ -30,17 +30,22 @@ function maybeObjectId(value) {
 }
 
 export async function storeMemory(userId, host_id, data, ctx = {}) {
-	const project = await requireActiveProject(host_id, data.project);
-	const mem = await Memory.create({
-		title: data.title,
-		content: data.content || '',
-		tags: data.tags || [],
-		source: data.source || '',
-		project,
-		owner: userId,
-		host_id,
-		is_indexed: false,
-	});
+	const { projectId: project, release } = await acquireProjectWrite(host_id, data.project);
+	let mem;
+	try {
+		mem = await Memory.create({
+			title: data.title,
+			content: data.content || '',
+			tags: data.tags || [],
+			source: data.source || '',
+			project,
+			owner: userId,
+			host_id,
+			is_indexed: false,
+		});
+	} finally {
+		await release();
+	}
 
 	emitToTenant(host_id, 'memory:created', attachItemHtml('memory', mem));
 	invalidateGraphCache(host_id).catch(() => {});
@@ -88,11 +93,18 @@ export async function updateMemory(host_id, memoryId, data, ctx = {}) {
 
 	const before = ctx.user_id ? await Memory.findOne({ _id: memoryId, host_id }).lean() : null;
 
-	const mem = await Memory.findOneAndUpdate(
-		{ _id: memoryId, host_id, ...(ctx.expected_updated_at ? { updatedAt: new Date(ctx.expected_updated_at), in_trash: { $ne: true } } : {}) },
-		{ $set: update },
-		{ returnDocument: 'after' },
-	);
+	// A move must hold the destination project's write lease across the update.
+	const release = data.project !== undefined ? (await acquireProjectWrite(host_id, data.project)).release : null;
+	let mem;
+	try {
+		mem = await Memory.findOneAndUpdate(
+			{ _id: memoryId, host_id, ...(ctx.expected_updated_at ? { updatedAt: new Date(ctx.expected_updated_at), in_trash: { $ne: true } } : {}) },
+			{ $set: update },
+			{ returnDocument: 'after' },
+		);
+	} finally {
+		if (release) await release();
+	}
 
 	let syncWarning;
 	if (mem) {

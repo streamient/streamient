@@ -39,6 +39,11 @@ describe('Typesense import handling', () => {
 				if (matches) record.is_indexed = update.$set.is_indexed;
 				return { modifiedCount: matches ? 1 : 0 };
 			},
+			findOneAndUpdate(filter, update) {
+				const matches = filter.host_id === record.host_id && String(filter._id) === record._id && filter.updatedAt && filter.updatedAt.getTime() === record.updatedAt.getTime();
+				if (matches) record.is_indexed = update.$set.is_indexed;
+				return { select() { return this; }, lean: async () => (matches ? { _id: record._id } : null) };
+			},
 		};
 		const { runStreamientIndexer } = await import(`../modules/typesense.js?move-during-import=${Date.now()}`);
 		assert.equal(await runStreamientIndexer({ Note: Model }), 0);

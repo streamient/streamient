@@ -28,7 +28,7 @@ import { crawlSite } from '../modules/crawler.js';
 import { getProjectCounts } from '../services/project_service.js';
 import { reindexHost, getReindexStatus, searchCollection, getFilteredCount, getIndexedPage, listIndexedPages, removeDocumentsByFilter } from '../modules/typesense.js';
 import { emitToTenant } from '../modules/socket.js';
-import { queryForSave } from '../model/mongoose.js';
+import mongoose, { queryForSave } from '../model/mongoose.js';
 import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
 import { Url } from '../model/url.js';

@@ -1,4 +1,4 @@
-import { searchAll, conversationSearch, getCollectionCounts } from '../modules/typesense.js';
+import { searchAll, conversationSearch } from '../modules/typesense.js';
 import { SearchResults } from '../modules/search_results.js';
 import { SearchFilters } from '../modules/search_filters.js';
 import { nlSearchCompletion, chatModelCompletion, parseStreamChunks, hasLlmApiKey } from '../modules/llm_client.js';
@@ -6,7 +6,8 @@ import * as noteService from './note_service.js';
 import * as memoryService from './memory_service.js';
 import * as urlService from './url_service.js';
 import * as emailIngestService from './email_ingest_service.js';
-import { listProjects } from './project_service.js';
+import { listProjects, getProjectCounts } from './project_service.js';
+import { ObsidianFile } from '../model/obsidian_file.js';
 import { createLogger } from '../modules/logger.js';
 
 const log = createLogger('ai-chat');
@@ -289,7 +290,7 @@ export async function processChatStream({ hostId, userId, query, conversationId,
 		}
 
 		case 'stats': {
-			const result = await handleStatsStream({ hostId, query, conversationId, includeEmails, llmScope });
+			const result = await handleStatsStream({ hostId, query, conversationId, projectId, includeEmails, llmScope });
 			return { stream: result.stream, answer: null, metadata: { results: [], action: null, conversationId: result.conversationId, displayIn: 'chat' } };
 		}
 
@@ -333,9 +334,8 @@ async function handleSearch({ hostId, query, projectId, intent, includeEmails = 
 // Stats Handler
 // ────────────────────────────────────────────────────────────────────
 
-async function handleStats({ hostId, query, conversationId, includeEmails = true, llmScope = 'global' }) {
-	const counts = await getCollectionCounts(hostId);
-	if (!includeEmails) counts.emails = 0;
+async function handleStats({ hostId, query, conversationId, projectId, includeEmails = true, llmScope = 'global' }) {
+	const counts = await getActiveStats(hostId, projectId, includeEmails);
 	const total = Object.values(counts).reduce((sum, n) => sum + n, 0);
 
 	const statsContext = `Collection counts: ${counts.notes} notes, ${counts.memory} memories, ${counts.urls} URLs, ${counts.emails || 0} emails. Total items: ${total}.`;
@@ -412,9 +412,8 @@ async function handleAnalysis({ hostId, userId, query, conversationId, projectId
 // Streaming Stats Handler
 // ────────────────────────────────────────────────────────────────────
 
-async function handleStatsStream({ hostId, query, conversationId, includeEmails = true, llmScope = 'global' }) {
-	const counts = await getCollectionCounts(hostId);
-	if (!includeEmails) counts.emails = 0;
+async function handleStatsStream({ hostId, query, conversationId, projectId, includeEmails = true, llmScope = 'global' }) {
+	const counts = await getActiveStats(hostId, projectId, includeEmails);
 	const total = Object.values(counts).reduce((sum, n) => sum + n, 0);
 	const statsContext = `Collection counts: ${counts.notes} notes, ${counts.memory} memories, ${counts.urls} URLs, ${counts.emails || 0} emails. Total items: ${total}.`;
 
@@ -436,6 +435,26 @@ async function handleStatsStream({ hostId, query, conversationId, includeEmails 
 		stream: parseStreamChunks(body),
 		conversationId: conversationId || null,
 	};
+}
+
+// Count active (non-trashed) records per project from MongoDB, scoped to a
+// single project when one is requested, instead of physical Typesense chunks.
+// Emails are gated by `includeEmails`; active vault files stay in the total.
+async function getActiveStats(hostId, projectId, includeEmails) {
+	const perProject = await getProjectCounts(hostId);
+	const scope = projectId ? [String(projectId)] : Object.keys(perProject);
+	const counts = { notes: 0, memory: 0, urls: 0, emails: 0 };
+	for (const pid of scope) {
+		const entry = perProject[pid] || {};
+		counts.notes += entry.notes || 0;
+		counts.memory += entry.memory || 0;
+		counts.urls += entry.urls || 0;
+		if (includeEmails) counts.emails += entry.emails || 0;
+	}
+	const vaultFilter = { host_id: hostId, in_trash: { $ne: true } };
+	if (projectId) vaultFilter.project = projectId;
+	counts.vault_files = await ObsidianFile.countDocuments(vaultFilter);
+	return counts;
 }
 
 // ────────────────────────────────────────────────────────────────────

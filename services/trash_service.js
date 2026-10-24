@@ -1,4 +1,5 @@
 import mongoose from '../model/mongoose.js';
+import { acquireProjectWrite } from './project_service.js';
 import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
 import { Url } from '../model/url.js';
@@ -130,23 +131,39 @@ async function restoreItemsByType(host_id, type, ids, deps = {}) {
 
 	for (const id of uniqueIds(ids)) {
 		let doc;
+		// Resolve the destination project before restoring so the write lease can
+		// fence deleteProject from deactivating it mid-restore.
+		let existing;
 		try {
-			doc = await model.findOneAndUpdate(
-				{ _id: id, host_id, in_trash: true },
-				{ $set: { in_trash: false, is_indexed: false }, $unset: { trashed_at: '' } },
-				{ returnDocument: 'after' },
-			);
+			existing = await model.findOneAndUpdate({ _id: id, host_id }, { $inc: { __v: 0 } }, { timestamps: false, returnDocument: 'after' });
 		} catch (err) {
 			if (err?.name !== 'CastError') throw err;
-			doc = null;
+			existing = null;
+		}
+		if (!existing) {
+			missingIds.push(id);
+			continue;
+		}
+		const { release } = await acquireProjectWrite(host_id, existing.project);
+		try {
+			try {
+				doc = await model.findOneAndUpdate(
+					{ _id: id, host_id, in_trash: true },
+					{ $set: { in_trash: false, is_indexed: false }, $unset: { trashed_at: '' } },
+					{ returnDocument: 'after' },
+				);
+			} catch (err) {
+				if (err?.name !== 'CastError') throw err;
+				doc = null;
+			}
+		} finally {
+			await release();
 		}
 		if (doc) {
 			docs.push(doc);
 			continue;
 		}
-		const current = await findLean(model, { _id: id, host_id });
-		if (current) currentDocs.push(current);
-		else missingIds.push(id);
+		currentDocs.push(existing);
 	}
 
 	const indexDocs = [...docs, ...currentDocs];

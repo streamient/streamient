@@ -1,4 +1,4 @@
-import { requireActiveProject } from './project_service.js';
+import { requireActiveProject, acquireProjectWrite } from './project_service.js';
 import { validatePublicUrl } from '../modules/public_url.js';
 import { Url } from '../model/url.js';
 import { queryForSave } from '../model/mongoose.js';
@@ -53,7 +53,7 @@ export async function saveUrl(userId, host_id, data, ctx = {}) {
 			existingUrl.normalized_url = normalizedUrl;
 			shouldSaveExisting = true;
 		}
-		if (await attachClientScreenshot(existingUrl, rawUrl, data.screenshot_data_url)) {
+		if (await attachClientScreenshot(existingUrl, rawUrl, data.screenshot_data_url, host_id)) {
 			shouldSaveExisting = true;
 		}
 		if (shouldSaveExisting && typeof existingUrl.save === 'function') {
@@ -71,22 +71,28 @@ export async function saveUrl(userId, host_id, data, ctx = {}) {
 		log.error({ err }, 'URL extraction error');
 	}
 
-	const screenshot = await saveClientScreenshot(rawUrl, data.screenshot_data_url);
+	const screenshot = await saveClientScreenshot(rawUrl, data.screenshot_data_url, host_id);
 
-	const urlDoc = await persistUrl(userId, host_id, {
-		url: rawUrl,
-		normalized_url: normalizedUrl,
-		title: data.title || extracted.title || rawUrl,
-		description: data.description || extracted.description || '',
-		tags: data.tags || [],
-		og_image: extracted.og_image || '',
-		screenshot: screenshot || '',
-		text_content: extracted.text_content || '',
-		crawl_enabled: data.crawl_enabled || false,
-		project,
-		owner: userId,
-		host_id,
-	}, ctx);
+	const { release } = await acquireProjectWrite(host_id, project);
+	let urlDoc;
+	try {
+		urlDoc = await persistUrl(userId, host_id, {
+			url: rawUrl,
+			normalized_url: normalizedUrl,
+			title: data.title || extracted.title || rawUrl,
+			description: data.description || extracted.description || '',
+			tags: data.tags || [],
+			og_image: extracted.og_image || '',
+			screenshot: screenshot || '',
+			text_content: extracted.text_content || '',
+			crawl_enabled: data.crawl_enabled || false,
+			project,
+			owner: userId,
+			host_id,
+		}, ctx);
+	} finally {
+		await release();
+	}
 
 	if (!screenshot) {
 		// Fire-and-forget: capture screenshot in background
@@ -112,13 +118,17 @@ async function persistUrl(userId, host_id, payload, ctx) {
 }
 
 export async function copyUrl(userId, host_id, source, project, ctx = {}) {
-	await requireActiveProject(host_id, project);
-	validatePublicUrl(source.url);
-	return persistUrl(userId, host_id, { url: source.url, normalized_url: normalizeUrl(source.url), title: source.title, description: source.description, tags: source.tags || [], og_image: source.og_image || '', screenshot: source.screenshot || '', text_content: source.text_content || '', crawl_enabled: false, project, owner: userId, host_id, is_indexed: false }, ctx);
+	const { release } = await acquireProjectWrite(host_id, project);
+	try {
+		validatePublicUrl(source.url);
+		return await persistUrl(userId, host_id, { url: source.url, normalized_url: normalizeUrl(source.url), title: source.title, description: source.description, tags: source.tags || [], og_image: source.og_image || '', screenshot: source.screenshot || '', text_content: source.text_content || '', crawl_enabled: false, project, owner: userId, host_id, is_indexed: false }, ctx);
+	} finally {
+		await release();
+	}
 }
 
-async function attachClientScreenshot(urlDoc, rawUrl, dataUrl) {
-	const screenshot = await saveClientScreenshot(rawUrl, dataUrl);
+async function attachClientScreenshot(urlDoc, rawUrl, dataUrl, host_id) {
+	const screenshot = await saveClientScreenshot(rawUrl, dataUrl, host_id);
 	if (screenshot) {
 		urlDoc.screenshot = screenshot;
 		return true;
@@ -126,13 +136,13 @@ async function attachClientScreenshot(urlDoc, rawUrl, dataUrl) {
 	return false;
 }
 
-async function saveClientScreenshot(rawUrl, dataUrl) {
+async function saveClientScreenshot(rawUrl, dataUrl, host_id) {
 	if (!dataUrl) {
 		return '';
 	}
 
 	try {
-		return await saveScreenshotDataUrl(rawUrl, dataUrl);
+		return await saveScreenshotDataUrl(rawUrl, dataUrl, host_id);
 	} catch (err) {
 		log.error({ err }, 'Client screenshot save error');
 		return '';
@@ -178,11 +188,18 @@ export async function updateUrl(host_id, urlId, data, ctx = {}) {
 
 	const before = ctx.user_id ? await Url.findOne({ _id: urlId, host_id }).lean() : null;
 
-	const urlDoc = await Url.findOneAndUpdate(
-		{ _id: urlId, host_id, ...(ctx.expected_updated_at ? { updatedAt: new Date(ctx.expected_updated_at), in_trash: { $ne: true } } : {}) },
-		{ $set: update },
-		{ returnDocument: 'after' },
-	);
+	// A move must hold the destination project's write lease across the update.
+	const release = data.project !== undefined ? (await acquireProjectWrite(host_id, data.project)).release : null;
+	let urlDoc;
+	try {
+		urlDoc = await Url.findOneAndUpdate(
+			{ _id: urlId, host_id, ...(ctx.expected_updated_at ? { updatedAt: new Date(ctx.expected_updated_at), in_trash: { $ne: true } } : {}) },
+			{ $set: update },
+			{ returnDocument: 'after' },
+		);
+	} finally {
+		if (release) await release();
+	}
 
 	let syncWarning;
 	if (urlDoc) {
