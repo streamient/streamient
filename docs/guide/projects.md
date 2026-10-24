@@ -37,6 +37,8 @@ Click the delete icon next to a project name. The **Default** project cannot be 
 Only empty projects can be deleted. Move or trash active items and remove Git repositories and Obsidian connections first. Saves, moves, restores, and sync work must finish before deletion can proceed.
 :::
 
+If you later restore a trashed item whose project was deleted, Streamient restores it into the same account's active **Default** project. A restore cannot enter a project while that project is being deleted.
+
 ## Project Counts
 
 The sidebar shows document counts (notes, memories, URLs) next to each project so you can see the size of each collection at a glance.
