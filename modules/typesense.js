@@ -908,6 +908,7 @@ export async function removeDocument(host_id, type, docId, options = {}) {
 	const sourceId = String(docId);
 	if (!sourceId) return null;
 	if (options.claim) {
+		await ensureCollections(host_id);
 		await removeDocumentsBySourceIds(host_id, type, [sourceId], { claim: options.claim });
 	} else {
 		await removeLegacyClaimlessChunks(host_id, type, sourceId);
@@ -990,6 +991,7 @@ async function removeLegacyClaimlessChunks(host_id, type, sourceId) {
 export async function publishClaimedDocuments(host_id, type, model, docs, options = {}) {
 	const sourceDocs = (Array.isArray(docs) ? docs : [docs]).filter(Boolean);
 	if (!sourceDocs.length || !model) return [];
+	await ensureCollections(host_id);
 
 	const sourceIdOf = (doc) => String(doc?._id ?? doc?.id ?? '');
 	const results = new Map();

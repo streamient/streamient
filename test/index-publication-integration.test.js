@@ -6,7 +6,7 @@ import config from '../config.js';
 import { Note } from '../model/note.js';
 import { Project } from '../model/project.js';
 import { Tenant } from '../modules/tenancy.js';
-import { buildCollectionName, bulkIndexDocuments, ensureCollections, getTypesenseClient } from '../modules/typesense.js';
+import { buildCollectionName, bulkIndexDocuments, getTypesenseClient } from '../modules/typesense.js';
 
 test('real Mongo and Typesense preserve a fresh publication after a delayed stale import', { skip: process.env.STREAMIENT_AUDIT_INTEGRATION !== '1', timeout: 60000 }, async (t) => {
 	assert.ok(process.env.MONGO_URI);
@@ -30,7 +30,8 @@ test('real Mongo and Typesense preserve a fresh publication after a delayed stal
 	await Tenant.create({ host_id: hostId, name: 'Isolated index test', owner });
 	const project = await Project.create({ host_id: hostId, name: 'Index', owner });
 	const old = await Note.create({ host_id: hostId, project: project._id, owner, title: 'Old A', text_content: 'Old content. '.repeat(600) });
-	await ensureCollections(hostId);
+	// Existing installations can publish before the scheduler patches their schema.
+	await client.collections().create({ name: buildCollectionName('notes', hostId), fields: [{ name: 'title', type: 'string' }] });
 	const documents = client.collections(buildCollectionName('notes', hostId)).documents();
 	const search = async () => (await documents.search({ q: '*', query_by: 'title', filter_by: `source_id:=\`${old._id}\``, exclude_fields: 'embedding', per_page: 250 })).hits.map((hit) => hit.document);
 	const originalImport = documents.import;
