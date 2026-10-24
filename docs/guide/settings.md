@@ -49,6 +49,14 @@ See every browser where you are signed in. Each entry shows the browser and oper
 
 Signing out revokes the current browser session. Revoking a session signs that browser out on its next request and disconnects its live updates, including connections that were still signing in. Apps connected through OAuth and personal access tokens are not sessions. Manage them under **Settings > Access Tokens**.
 
+### Mobile sessions and uploads
+
+In the mobile app, open **Settings** to sign out. Signing out clears the current account's records, chat, search results, and upload tray from the app. Saved upload progress belongs to the account and server that started it.
+
+Use **Advanced > Custom server URL** on the sign-in screen to connect to a self-hosted server. The app remembers the new server after sign-in succeeds. Canceling sign-in keeps the previous server selection.
+
+Temporary connection or server failures keep your session available. Retry an interrupted upload from the upload tray; the app checks its progress before resuming. You can close a record while it loads, and its delayed response will not reopen it.
+
 ## Access Tokens
 
 Create and manage API access tokens. The Access Tokens screen now includes two tabs:
