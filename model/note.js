@@ -26,7 +26,7 @@ const noteSchema = new mongoose.Schema(
 			file_id: { type: mongoose.Schema.Types.ObjectId, ref: 'ObsidianFile' },
 		},
 	},
-	{ timestamps: true },
+	{ timestamps: true, read: 'secondaryPreferred' },
 );
 
 noteSchema.index({ host_id: 1, in_trash: 1, project: 1 });

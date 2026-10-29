@@ -17,7 +17,7 @@ const oauthAuthorizationCodeSchema = new mongoose.Schema(
 		expires_at: { type: Date, required: true },
 		used_at: { type: Date },
 	},
-	{ timestamps: true },
+	{ timestamps: true, read: 'secondaryPreferred' },
 );
 
 oauthAuthorizationCodeSchema.index({ expires_at: 1 }, { expireAfterSeconds: 0 });

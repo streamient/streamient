@@ -81,7 +81,7 @@ const tenantSchema = new mongoose.Schema(
 			},
 		},
 	},
-	{ timestamps: true },
+	{ timestamps: true, read: 'secondaryPreferred' },
 );
 
 tenantSchema.index(

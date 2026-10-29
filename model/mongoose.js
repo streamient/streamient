@@ -1,6 +1,5 @@
 import mongoose from 'mongoose';
 import mongooseLeanVirtuals from 'mongoose-lean-virtuals';
-import config from '../config.js';
 
 const STREAMIENT_MONGOOSE_DEFAULTS = Symbol.for('streamient.mongoose.defaults');
 const STREAMIENT_SCHEMA_DEFAULTS = Symbol.for('streamient.mongoose.schema.defaults');
@@ -21,7 +20,6 @@ function applySchemaDefaults(schema) {
 	schema[STREAMIENT_SCHEMA_DEFAULTS] = true;
 
 	schema.set('usePushEach', true);
-	schema.set('read', new mongoose.mongo.ReadPreference(config.mongoOptions.readPreference, undefined, { maxStalenessSeconds: config.mongoOptions.maxStalenessSeconds }));
 
 	const toJSON = schema.get('toJSON') || {};
 	schema.set('toJSON', { ...toJSON, virtuals: true });

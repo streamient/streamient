@@ -17,7 +17,7 @@ const oauthConsentSchema = new mongoose.Schema(
 		last_used_at: { type: Date },
 		revoked_at: { type: Date },
 	},
-	{ timestamps: true },
+	{ timestamps: true, read: 'secondaryPreferred' },
 );
 
 oauthConsentSchema.index({ user: 1, host_id: 1, client_id: 1, resource: 1 }, { unique: true });

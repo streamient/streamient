@@ -12,7 +12,7 @@ const graphLinkSchema = new mongoose.Schema(
 		owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 		host_id: { type: String, required: true, index: true },
 	},
-	{ timestamps: true },
+	{ timestamps: true, read: 'secondaryPreferred' },
 );
 
 graphLinkSchema.index({ host_id: 1, source_id: 1, target_id: 1 }, { unique: true });

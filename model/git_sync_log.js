@@ -9,7 +9,7 @@ const gitSyncLogSchema = new mongoose.Schema(
 		message: { type: String, required: true },
 		details: { type: mongoose.Schema.Types.Mixed, default: {} },
 	},
-	{ timestamps: true },
+	{ timestamps: true, read: 'secondaryPreferred' },
 );
 
 gitSyncLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 14 * 24 * 60 * 60 });

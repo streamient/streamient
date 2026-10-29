@@ -9,7 +9,7 @@ const emailLabelSchema = new mongoose.Schema(
 		is_active: { type: Boolean, default: true },
 		host_id: { type: String, required: true, index: true },
 	},
-	{ timestamps: true },
+	{ timestamps: true, read: 'secondaryPreferred' },
 );
 
 emailLabelSchema.index({ host_id: 1, slug: 1 }, { unique: true });

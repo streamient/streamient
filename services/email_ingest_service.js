@@ -518,8 +518,7 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 
 	const inTrash = Boolean(data.in_trash);
 
-	// Content-hash dedup is a best-effort read; keep it out of the project-write
-	// transaction because secondaryPreferred transaction reads are forbidden.
+	// Content-hash dedup is a best-effort read; keep it out of the project-write transaction.
 	const existingByHash = !normalized.message_id && normalized.raw_hash
 		? await Email.findOne({ raw_hash: normalized.raw_hash, host_id }).lean()
 		: null;

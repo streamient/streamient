@@ -22,7 +22,7 @@ const noteImportUploadSchema = new mongoose.Schema({
 	error: { type: String, default: '' },
 	last_activity_at: { type: Date, default: Date.now },
 	expires_at: { type: Date, required: true },
-}, { timestamps: true });
+}, { timestamps: true, read: 'secondaryPreferred' });
 
 noteImportUploadSchema.index({ host_id: 1, user: 1, state: 1 });
 noteImportUploadSchema.index({ host_id: 1, project: 1, updatedAt: -1 });

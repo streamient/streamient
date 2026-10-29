@@ -17,7 +17,7 @@ test('replica policy keeps token revocation and transactional import retries cor
 	const dbName = `streamient_read_policy_test_${crypto.randomUUID().replaceAll('-', '')}`;
 	await mongoose.connect(process.env.MONGO_URI, { ...config.mongoOptions, dbName });
 	t.after(async () => { await mongoose.connection.dropDatabase(); await mongoose.disconnect(); });
-	assert.equal(mongoose.connection.getClient().options.readPreference.mode, 'secondaryPreferred');
+	assert.equal(mongoose.connection.getClient().options.readPreference.mode, 'primary');
 	assert.equal(mongoose.connection.getClient().options.readConcern.level, 'majority');
 	await Promise.all([User.init(), Tenant.init(), TenantMember.init(), Project.init(), Note.init()]);
 	const user = await User.create({ email: 'replica-policy@example.invalid', name: 'Replica policy', password: 'integration-only', is_active: true, access_tokens: [{ token: 'test-token', name: 'Test key' }] });

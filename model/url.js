@@ -31,7 +31,7 @@ const urlSchema = new mongoose.Schema(
 			file_id: { type: mongoose.Schema.Types.ObjectId, ref: 'ObsidianFile' },
 		},
 	},
-	{ timestamps: true },
+	{ timestamps: true, read: 'secondaryPreferred' },
 );
 
 urlSchema.index({ host_id: 1, in_trash: 1, project: 1 });

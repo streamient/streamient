@@ -85,7 +85,7 @@ const userSchema = new mongoose.Schema(
 		last_login: { type: Date },
 		product_updates_seen_at: { type: Date, default: Date.now, select: false },
 	},
-	{ timestamps: true },
+	{ timestamps: true, read: 'secondaryPreferred' },
 );
 
 userSchema.pre('save', async function () {

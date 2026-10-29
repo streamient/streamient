@@ -43,7 +43,7 @@ const memorySchema = new mongoose.Schema(
 			}],
 		},
 	},
-	{ timestamps: true },
+	{ timestamps: true, read: 'secondaryPreferred' },
 );
 
 memorySchema.index({ host_id: 1, in_trash: 1, project: 1 });

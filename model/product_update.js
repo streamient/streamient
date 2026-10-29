@@ -12,7 +12,7 @@ const productUpdateSchema = new mongoose.Schema(
 		show_modal: { type: Boolean, default: false },
 		active: { type: Boolean, default: true },
 	},
-	{ timestamps: true, collection: 'product_updates' },
+	{ timestamps: true, collection: 'product_updates', read: 'secondaryPreferred' },
 );
 
 productUpdateSchema.index({ active: 1, published_at: -1, _id: -1 });

@@ -8,7 +8,7 @@ const magicLinkSchema = new mongoose.Schema(
 		expires_at: { type: Date, required: true },
 		used: { type: Boolean, default: false },
 	},
-	{ timestamps: true },
+	{ timestamps: true, read: 'secondaryPreferred' },
 );
 
 magicLinkSchema.statics.generate = async function (userId) {

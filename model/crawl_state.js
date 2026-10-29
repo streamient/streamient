@@ -17,7 +17,7 @@ const crawlStateSchema = new mongoose.Schema(
 		visited_at: { type: Date, default: null },
 		failed_at: { type: Date, default: null },
 	},
-	{ timestamps: true },
+	{ timestamps: true, read: 'secondaryPreferred' },
 );
 
 crawlStateSchema.index({ host_id: 1, parent_url_id: 1, normalized_url: 1 }, { unique: true });

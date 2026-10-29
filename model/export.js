@@ -14,7 +14,7 @@ const exportSchema = new mongoose.Schema(
 		expires_at: { type: Date, default: null },
 		error: { type: String, default: '' },
 	},
-	{ timestamps: true },
+	{ timestamps: true, read: 'secondaryPreferred' },
 );
 
 exportSchema.index({ host_id: 1, status: 1 });
