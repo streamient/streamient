@@ -150,8 +150,8 @@ export class StreamientApi {
 		return this.cached<RecordsResponse>(key, () => this.request(`/api/v1/mobile/records?${params}`));
 	}
 
-	changes(cursor: string, projectId: string) {
-		const params = new URLSearchParams({ cursor, project_id: projectId });
+	changes(cursor: string) {
+		const params = new URLSearchParams({ cursor });
 		return this.request<ChangesResponse>(`/api/v1/mobile/records/changes?${params}`);
 	}
 

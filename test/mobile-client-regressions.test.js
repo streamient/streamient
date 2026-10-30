@@ -10,7 +10,7 @@ function read(relativePath) {
 
 async function compile(src, globals = {}) {
 	const code = (await transform(src.replace(/^import .*\n/gm, ''), { loader: 'ts', format: 'cjs', target: 'es2022' })).code;
-	const context = vm.createContext({ module: { exports: {} }, console, URL, URLSearchParams, Headers, Response, Blob, TextDecoder, TextEncoder, DOMException, Error, TypeError, atob, btoa, crypto, navigator: { onLine: true }, sessionApi: { current: null }, liveEvents: { current: new Map() }, catchupEvents: { current: new Set() }, feedLoad: { current: Promise.resolve() }, feedKey: { current: "P:all" }, setError: noop, ...globals });
+	const context = vm.createContext({ module: { exports: {} }, console, URL, URLSearchParams, Headers, Response, Blob, TextDecoder, TextEncoder, DOMException, Error, TypeError, atob, btoa, crypto, navigator: { onLine: true }, searchSeq: { current: 0 }, chatBusy: { current: false }, chatSeq: { current: 0 }, sessionApi: { current: null }, liveEvents: { current: new Map() }, catchupEvents: { current: new Set() }, feedLoad: { current: Promise.resolve() }, feedKey: { current: "P:all" }, setError: noop, ...globals });
 	vm.runInContext(code, context);
 	return { exports: context.module.exports, context };
 }
@@ -827,4 +827,124 @@ it('cancellation persists canceled state before cleanup and retries cleanup with
 	await f.cancelImport(item);
 	assert.equal(requests, 1);
 	assert.equal(item, undefined);
+});
+
+it('pending feed pages preserve live deletions and updates even after their live handlers finish', async () => {
+	let rows = [record('first'), record('updated')];
+	let release;
+	const handler = { current: null };
+	const { exports: f } = await compile(block('function upsertRecord(', '\nfunction relativeTime') + block('const loadFeed = useCallback', '\n\tuseEffect(() => { if (view === "projects")') + block('realtimeEventHandler.current =', '\n\tconst realtimeHostId') + '\nexport { loadFeed };', {
+		api: { records: () => new Promise((resolve) => { release = resolve; }), record: async () => ({ record: { ...record('updated'), title: 'new title' } }) }, activeProjectId: 'P', filter: 'all', feedSeq: { current: 0 }, sessionEpoch: { current: 0 }, useCallback: (fn) => fn,
+		setRecords: (fn) => { rows = fn(rows); }, setLoadingMore: noop, setFeedLoading: noop, setNextCursor: noop, setOffline: noop, realtimeEventHandler: handler, refreshCounts: async () => {}, setUploads: noop,
+	});
+	const pending = f.loadFeed('page2');
+	handler.current('note:deleted', { id: 'deleted' });
+	handler.current('note:updated', { id: 'updated' });
+	await new Promise((resolve) => setImmediate(resolve));
+	release({ value: { records: [record('deleted'), record('updated'), record('older')], next_cursor: null }, offline: false });
+	await pending;
+	assert.equal(rows.some((row) => row.id === 'deleted'), false);
+	assert.equal(rows.find((row) => row.id === 'updated').title, 'new title');
+	assert.equal(rows.some((row) => row.id === 'older'), true);
+});
+
+it('tenant-wide catch-up removes moved-out records on every continuation and protects pending feed pages', async () => {
+	let rows = [record('moved')];
+	let release;
+	let calls = 0;
+	const { exports: f } = await compile(block('function upsertRecord(', '\nfunction relativeTime') + block('const loadFeed = useCallback', '\n\tuseEffect(() => { if (view === "projects")') + block('const applyChanges = useCallback', '\n\trealtimeEventHandler.current =') + '\nexport { loadFeed, applyChanges };', {
+		api: { records: () => new Promise((resolve) => { release = resolve; }), changes: async (...args) => { assert.equal(args.length, 1); calls++; return { changes: [{ key: 'notes:moved', action: 'update', record: record('moved', 'OTHER') }], next_cursor: `page${calls}`, has_more: calls === 1 }; } }, activeProjectId: 'P', filter: 'all', feedSeq: { current: 0 }, sessionEpoch: { current: 0 }, changeCursor: { current: 'start' }, useCallback: (fn) => fn,
+		setRecords: (fn) => { rows = fn(rows); }, setLoadingMore: noop, setFeedLoading: noop, setNextCursor: noop, setOffline: noop,
+	});
+	const pending = f.loadFeed('page2');
+	await f.applyChanges();
+	release({ value: { records: [record('moved')], next_cursor: null }, offline: false });
+	await pending;
+	assert.equal(calls, 2);
+	assert.equal(rows.length, 0);
+	const urls = [];
+	const { exports: { StreamientApi } } = await compile(read('apps/mobile/src/lib/api.ts'), { fetch: async (url) => { urls.push(url); return Response.json({}); } });
+	await new StreamientApi(serverA, { access_token: 'opaque' }, noop).changes('cursor');
+	assert.equal(new URL(urls[0]).searchParams.has('project_id'), false);
+});
+
+it('terminal cleanup failures retain retry entries while restoring other uploads', async () => {
+	const values = new Map();
+	const localStorage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+	let failed = true;
+	const { exports: uploads } = await compile(read('apps/mobile/src/lib/uploads.ts'), { localStorage, removeSharedFile: async () => { if (failed) throw new Error('busy'); } });
+	for (const state of ['complete', 'canceled', 'uploading']) await uploads.rememberUpload('ns', state, { id: state, state }, { uri: state, name: state, mimeType: 'text/plain' }, state, 'text/plain');
+	const restored = await uploads.restoreUploads('ns');
+	assert.equal(restored.length, 3);
+	assert.equal(restored[0].source, null);
+	assert.equal(restored[1].source, null);
+	assert.equal(restored[2].source.uri, 'uploading');
+	failed = false;
+	assert.deepEqual(Array.from(await uploads.restoreUploads('ns'), (item) => item.saved.local_id), ['uploading']);
+});
+
+it('search sequence fences stale results, errors and loading; changed context invalidates pending searches', async () => {
+	let requests = [], results = [], loading = false, errors = [];
+	const searchSeq = { current: 0 };
+	const globals = { api: { search: () => new Promise((resolve, reject) => requests.push({ resolve, reject })) }, searchSeq, sessionEpoch: { current: 0 }, searchQuery: 'term', activeProjectId: 'P', searchAllProjects: false, searchType: 'all', setSearching: (value) => { loading = value; }, setSearchResults: (value) => { results = value; }, Swal: { fire: (value) => errors.push(value) } };
+	const { exports: f } = await compile(block('async function runSearch()', '\n\tasync function sendChat()') + '\nexport { runSearch };', globals);
+	let a = f.runSearch(), b = f.runSearch();
+	requests[0].reject(new Error('stale'));
+	await a;
+	assert.equal(loading, true);
+	assert.equal(errors.length, 0);
+	requests[1].resolve({ results: ['newest'] }); await b;
+	a = f.runSearch(); b = f.runSearch();
+	requests[3].resolve({ results: ['newer'] }); await b;
+	requests[2].resolve({ results: ['older'] }); await a;
+	assert.deepEqual(results, ['newer']);
+	const pending = f.runSearch();
+	await compile(block('useEffect(() => {\n\t\tsearchSeq.current++;', '\n\tasync function runSearch()'), { ...globals, useEffect: (fn) => fn() });
+	requests[4].resolve({ results: ['old project'] }); await pending;
+	assert.equal(results.length, 0);
+	assert.equal(loading, false);
+	assert.match(app, /\[activeProjectId, searchQuery, searchAllProjects, searchType, api\]/);
+});
+
+it('chat switching is blocked throughout streaming, including already-open history and late history reads', async () => {
+	let releaseChat, releaseHistory, token;
+	let messages = [], id = 'old';
+	const chatBusy = { current: false }, chatSeq = { current: 0 };
+	const { exports: f } = await compile(block('async function sendChat()', '\n\tasync function signOut()') + '\nexport { sendChat, selectConversation };', {
+		api: { chat: async (query, options, cb) => { token = cb; return new Promise((resolve) => { releaseChat = resolve; }); }, conversationMessages: () => new Promise((resolve) => { releaseHistory = resolve; }) }, chatBusy, chatSeq, chatQuery: 'question', online: true, activeProjectId: 'P', chatAllProjects: false, conversationId: 'old', sessionEpoch: { current: 0 },
+		setChatQuery: noop, setChatting: noop, setChatMessages: (next) => { messages = typeof next === 'function' ? next(messages) : next; }, setConversationId: (next) => { id = next; }, setHistoryDrawer: noop,
+	});
+	const history = f.selectConversation({ conversation_id: 'history' });
+	const stream = f.sendChat();
+	await f.selectConversation({ conversation_id: 'blocked' });
+	token('answer');
+	releaseChat({ conversation_id: 'stream', results: [] }); await stream;
+	releaseHistory({ messages: [{ message: 'history' }] }); await history;
+	assert.equal(id, 'stream');
+	assert.equal(messages.at(-1).message, 'answer');
+	assert.match(app, /onNew=\{\(\) => \{ if \(chatBusy.current\) return;/);
+	assert.match(app, /className="history-row" disabled=\{chatting\}/);
+	assert.match(app, /aria-label="New chat" disabled=\{props.chatting\}/);
+});
+
+it('complete cleanup retry never cancels the completed import', async () => {
+	let item = { localId: 'done', session: { id: 'u', state: 'complete' } };
+	const { exports: f } = await compile(block('async function cancelImport(', '\n\tasync function runUpload(') + '\nexport { cancelImport };', {
+		api: { cancelUpload: () => assert.fail('completed import must not be canceled') },
+		uploadNamespaceRef: { current: 'ns' }, sessionEpoch: { current: 0 }, uploadControllers: { current: new Map() },
+		updateRememberedUpload: async () => {}, forgetUpload: async () => {}, setUploads: (fn) => { item = fn([item])[0]; },
+	});
+	await f.cancelImport(item);
+	assert.equal(item, undefined);
+});
+
+it('a completed import stays complete when native cleanup or count refresh fails', async () => {
+	let item = { localId: 'done', source: new Blob(['file']), session: { id: 'u', state: 'complete' } };
+	const { exports: f } = await compile(block('async function runUpload(', '\n\tuseEffect(() => {\n\t\tif (!api || !online)') + '\nexport { runUpload };', {
+		api: {}, online: true, AbortController, sessionEpoch: { current: 0 }, uploadNamespaceRef: { current: 'ns' }, uploadControllers: { current: new Map() },
+		setUploads: (fn) => { item = fn([item])[0]; }, updateUpload: (id, session) => { item.session = session; },
+		forgetUpload: async () => { throw new Error('copy busy'); }, refreshCounts: async () => { throw new Error('offline'); },
+	});
+	await f.runUpload(item);
+	assert.equal(item.session.state, 'complete');
 });

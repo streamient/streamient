@@ -141,7 +141,10 @@ export async function restoreUploads(namespace: string, validateUpload?: (sessio
 	await migrateLegacyUploads(namespace, validateUpload);
 	const result: { saved: SavedUpload; source: UploadSource | null }[] = [];
 	for (const saved of registry(namespace)) {
-		if (["complete", "canceled"].includes(saved.session.state)) { await forgetUpload(namespace, saved.local_id); continue; }
+		if (["complete", "canceled"].includes(saved.session.state)) {
+			try { await forgetUpload(namespace, saved.local_id); } catch { result.push({ saved, source: null }); }
+			continue;
+		}
 		const source = saved.source_kind === "uri" && saved.uri ? { uri: saved.uri, name: saved.name, mimeType: saved.mime_type } : await loadBlob(saved.local_id);
 		result.push({ saved, source });
 	}
