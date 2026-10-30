@@ -113,25 +113,6 @@ export function getRequestPath(request) {
 	return strippedPath;
 }
 
-function getBearerToken(request) {
-	const authHeader = request.headers?.authorization || '';
-	if (!/^(Bearer|Token)\s+/i.test(authHeader)) return null;
-	return authHeader.replace(/^(Bearer|Token)\s+/i, '').trim();
-}
-
-function getBasicAuthName(request) {
-	const authHeader = request.headers?.authorization || '';
-	if (!/^Basic\s+/i.test(authHeader)) return null;
-
-	try {
-		const decoded = Buffer.from(authHeader.replace(/^Basic\s+/i, '').trim(), 'base64').toString('utf8');
-		const separatorIndex = decoded.indexOf(':');
-		return separatorIndex === -1 ? decoded : decoded.slice(0, separatorIndex);
-	} catch {
-		return null;
-	}
-}
-
 export function getClientIp(request) {
 	return normalizeIp(
 		request.headers?.['cf-connecting-ip'] ||
@@ -146,22 +127,15 @@ export function getClientIp(request) {
 	);
 }
 
+// Authorization headers are unverified before auth runs; keying by them lets random tokens mint fresh buckets.
 export function getRateLimitKey(request) {
-	const basicAuthName = getBasicAuthName(request);
-	if (basicAuthName) return `basic:${hashValue(basicAuthName)}`;
-
-	const bearerToken = getBearerToken(request);
-	if (bearerToken) return `bearer:${hashValue(bearerToken)}`;
-
-	const accessToken = request.headers?.['x-access-token'] || request.headers?.['access-token'];
-	if (accessToken) return `access:${hashValue(accessToken)}`;
-
+	if (request.session?.userId) return `user:${hashValue(request.session.userId)}`;
 	return `ip:${hashValue(getClientIp(request))}`;
 }
 
-function getCacheStore(prefix) {
+function getCacheStore(prefix, windowMs) {
 	try {
-		return getRateLimitStore(prefix, getConfig().windowMs);
+		return getRateLimitStore(prefix, windowMs || getConfig().windowMs);
 	} catch (err) {
 		log.warn({ err, prefix }, 'API rate limit Memcached store unavailable; using memory store');
 		return undefined;
@@ -280,6 +254,28 @@ export function createGeneralApiLimiter() {
 		limit: rateLimitConfig.generalPerMinute,
 		skip: function skipGeneral(request) {
 			return shouldSkipCommon(request) || isSearchReadApi(request) || isMobileUploadChunk(request) || isObsidianSyncApi(request);
+		},
+	});
+}
+
+const AUTH_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
+const AUTH_ATTEMPT_LIMIT = 10;
+
+/** Brute-force guard for credential endpoints: 10 attempts per 15 minutes per IP and account. Always on. */
+export function createAuthAttemptLimiter(name, { view = null, account = (request) => request.body?.email, store } = {}) {
+	return rateLimit({
+		windowMs: AUTH_ATTEMPT_WINDOW_MS,
+		limit: AUTH_ATTEMPT_LIMIT,
+		keyGenerator: (request) => hashValue(`${getClientIp(request)}|${String(account(request) || '').trim().toLowerCase()}`),
+		store: store || getCacheStore(name, AUTH_ATTEMPT_WINDOW_MS),
+		passOnStoreError: true,
+		standardHeaders: 'draft-7',
+		legacyHeaders: false,
+		handler: (request, response) => {
+			const error = 'Too many attempts. Please wait 15 minutes and try again.';
+			log.warn({ method: request.method, path: getRequestPath(request), bucket: name }, 'Auth attempt limit exceeded');
+			if (view && request.is('application/x-www-form-urlencoded')) return response.status(429).render(view, { error });
+			return response.status(429).json({ error });
 		},
 	});
 }

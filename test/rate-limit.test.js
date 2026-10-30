@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import express from 'express';
+import { MemoryStore } from 'express-rate-limit';
 
 import * as ApiRateLimit from '../middleware/rate_limit.js';
 import * as McpRateLimit from '../modules/mcp_rate_limit.js';
@@ -178,29 +179,49 @@ describe('API rate-limit helpers', () => {
 		assert.throws(() => ApiRateLimit.getConfig(), /env 'API_RATE_LIMIT_WINDOW_MS' must be an integer >= 1/);
 	});
 
-	it('keys by hashed credential before IP fallback', () => {
-		const basicKey = ApiRateLimit.getRateLimitKey(request({
-			headers: { authorization: `Basic ${Buffer.from('api-user:secret').toString('base64')}` },
-		}));
-		const bearerKey = ApiRateLimit.getRateLimitKey(request({
-			headers: { authorization: 'Bearer raw-bearer-token' },
-		}));
-		const tokenKey = ApiRateLimit.getRateLimitKey(request({
-			headers: { authorization: 'Token raw-token' },
-		}));
-		const accessKey = ApiRateLimit.getRateLimitKey(request({
-			headers: { 'x-access-token': 'raw-access-token' },
-		}));
-		const ipKey = ApiRateLimit.getRateLimitKey(request({ ip: '203.0.113.20' }));
-
-		assert.match(basicKey, /^basic:[a-f0-9]{64}$/);
-		assert.match(bearerKey, /^bearer:[a-f0-9]{64}$/);
-		assert.match(tokenKey, /^bearer:[a-f0-9]{64}$/);
-		assert.match(accessKey, /^access:[a-f0-9]{64}$/);
+	it('keys by verified session user, otherwise by IP, never by unverified credentials', () => {
+		const ip = '203.0.113.20';
+		const ipKey = ApiRateLimit.getRateLimitKey(request({ ip }));
 		assert.match(ipKey, /^ip:[a-f0-9]{64}$/);
-		assert.equal(basicKey.includes('api-user'), false);
-		assert.equal(bearerKey.includes('raw-bearer-token'), false);
-		assert.equal(accessKey.includes('raw-access-token'), false);
+		assert.equal(ApiRateLimit.getRateLimitKey(request({ ip, headers: { authorization: 'Bearer raw-bearer-token' } })), ipKey);
+		assert.equal(ApiRateLimit.getRateLimitKey(request({ ip, headers: { authorization: `Basic ${Buffer.from('api-user:secret').toString('base64')}` } })), ipKey);
+		assert.equal(ApiRateLimit.getRateLimitKey(request({ ip, headers: { 'x-access-token': 'raw-access-token' } })), ipKey);
+		const userKey = ApiRateLimit.getRateLimitKey(request({ ip, session: { userId: 'user-1' } }));
+		assert.match(userKey, /^user:[a-f0-9]{64}$/);
+		assert.equal(userKey.includes('user-1'), false);
+	});
+
+	it('puts random bearer tokens from one IP in the same bucket', async () => {
+		setEnv({ ...API_RATE_LIMIT_ENV, API_RATE_LIMIT_GENERAL_PER_MINUTE: '2' });
+		const app = express();
+		app.use('/api/v1', ...ApiRateLimit.createApiLimiters(), (_req, res) => res.json({ success: true }));
+		const server = await listen(app);
+		try {
+			const base = `http://127.0.0.1:${server.address().port}/api/v1`;
+			const statuses = [];
+			for (let i = 0; i < 3; i += 1) statuses.push((await fetch(`${base}/projects`, { headers: { authorization: `Bearer random-${i}-${Math.random()}` } })).status);
+			assert.deepEqual(statuses, [200, 200, 429]);
+		} finally {
+			await closeServer(server);
+		}
+	});
+
+	it('limits auth attempts per IP and account email', async () => {
+		const app = express();
+		app.use(express.json());
+		app.post('/login', ApiRateLimit.createAuthAttemptLimiter('test-auth-login', { store: new MemoryStore() }), (_req, res) => res.status(401).json({ error: 'Invalid credentials' }));
+		const server = await listen(app);
+		try {
+			const url = `http://127.0.0.1:${server.address().port}/login`;
+			const attempt = (email) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, password: 'wrong' }) });
+			for (let i = 0; i < 10; i += 1) assert.equal((await attempt(i % 2 ? 'Victim@Example.com' : ' victim@example.com')).status, 401);
+			const blocked = await attempt('victim@example.com');
+			assert.equal(blocked.status, 429);
+			assert.match((await blocked.json()).error, /Too many attempts/);
+			assert.equal((await attempt('other@example.com')).status, 401);
+		} finally {
+			await closeServer(server);
+		}
 	});
 
 	it('detects skip, search/read, expensive, and upload APIs', () => {
@@ -244,7 +265,7 @@ describe('API rate-limit helpers', () => {
 			assert.equal((await fetch(`${base}/obsidian/connections/connection-1/changes`, { headers: obsidianHeaders })).status, 200);
 			assert.equal((await fetch(`${base}/obsidian/projects`, { headers: obsidianHeaders })).status, 429);
 
-			const uploadHeaders = { authorization: 'Bearer obsidian-upload-token', 'content-type': 'application/json' };
+			const uploadHeaders = { authorization: 'Bearer obsidian-upload-token', 'cf-connecting-ip': '198.51.100.2', 'content-type': 'application/json' };
 			assert.equal((await fetch(`${base}/obsidian/uploads`, { method: 'POST', headers: uploadHeaders, body: '{}' })).status, 200);
 			assert.equal((await fetch(`${base}/obsidian/uploads/upload-1/complete`, { method: 'POST', headers: uploadHeaders, body: '{}' })).status, 200);
 
