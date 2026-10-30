@@ -61,7 +61,7 @@ describe('Email forwarding import route', () => {
 		});
 		Project.updateOne = async () => ({ matchedCount: 1, modifiedCount: 1 });
 		Email.findOne = () => ({ lean: async () => null });
-		Email.findOneAndUpdate = async (_filter, update) => ({ value: await Email.create(update.$set), lastErrorObject: { updatedExisting: false } });
+		Email.findOneAndUpdate = async (_filter, update) => ({ value: await Email.create({ ...update.$setOnInsert, ...update.$set }), lastErrorObject: { updatedExisting: false } });
 		Email.create = async (payload) => ({
 			_id: { toString: () => '507f1f77bcf86cd799439101' },
 			...payload,

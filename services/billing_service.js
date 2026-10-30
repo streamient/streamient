@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { acquireTenantWork, assertTenantAvailable } from '../modules/tenancy.js';
 import { getStripe } from '../modules/stripe.js';
 import mongoose from '../model/mongoose.js';
@@ -262,20 +263,16 @@ export async function cancelFreeSubscriptionForUser(userId, options = {}) {
 	return true;
 }
 
-/**
- * Conditional match for a Checkout apply. A `checkout.session.completed` or
- * GET /billing/success apply must never overwrite a terminal `canceled` state
- * for the SAME subscription (Stripe can never reactivate a canceled id), but a
- * genuinely DIFFERENT subscription still applies over a canceled one and
- * re-applying the current active subscription stays idempotent. The condition
- * is tested against the document's state at write time, not a stale pre-read.
- */
-function buildCheckoutApplyFilter(userId, subscriptionId) {
+/** Checkout can fill an empty slot or replace a terminal subscription, never a live different one. */
+function buildCheckoutApplyFilter(userId, subscription, stripeCustomerId) {
+	const subscriptionId = subscription.id;
 	return {
 		_id: userId,
+		...(stripeCustomerId ? { stripe_customer_id: stripeCustomerId } : {}),
 		$or: [
-			{ stripe_subscription_id: subscriptionId, subscription_status: { $ne: 'canceled' } },
-			{ stripe_subscription_id: { $ne: subscriptionId } },
+			{ stripe_subscription_id: subscriptionId, subscription_status: subscription.status },
+			{ stripe_subscription_id: { $ne: subscriptionId }, subscription_status: { $in: ['canceled', 'incomplete_expired'] } },
+			{ stripe_subscription_id: null },
 		],
 	};
 }
@@ -310,8 +307,9 @@ function buildCheckoutApplyUpdate(subscription, stripeCustomerId = undefined) {
  * transaction `session`; Stripe I/O and reads stay outside.
  */
 export async function applyCheckoutSubscriptionPlan(userId, subscription, stripeCustomerId = undefined, { userModel = User, tenantModel = Tenant, session } = {}) {
+	if (!subscription?.id || !['active', 'trialing'].includes(subscription.status) || isFreePriceSubscription(subscription)) return null;
 	const user = await userModel.findOneAndUpdate(
-		buildCheckoutApplyFilter(userId, subscription.id),
+		buildCheckoutApplyFilter(userId, subscription, stripeCustomerId),
 		buildCheckoutApplyUpdate(subscription, stripeCustomerId),
 		{ returnDocument: 'after', updatePipeline: true, ...(session ? { session } : {}) },
 	);
@@ -490,6 +488,7 @@ async function runSubscriptionEventTransaction(callback) {
  * Returns the Checkout URL to redirect the user to.
  */
 export async function createCheckoutSession(user, options = {}) {
+	if (user.stripe_subscription_id && !['canceled', 'incomplete_expired'].includes(user.subscription_status)) throw new Error('Manage your existing subscription in the billing portal.');
     const priceId = resolveCheckoutPriceId();
     if (!priceId) {
         throw new Error('Stripe price ID is not configured for the Pro plan (STRIPE_PRO_PRICE_ID).');
@@ -507,9 +506,49 @@ export async function createCheckoutSession(user, options = {}) {
         });
     }
 
-    const session = await stripe.checkout.sessions.create(buildCheckoutSessionParams(user, customerId, priceId));
-
-    return session.url;
+	while (true) {
+		const subscriptions = await listDeletionBillingObjects(stripe.subscriptions, { customer: customerId, status: 'all' });
+		if (subscriptions.some((subscription) => !['canceled', 'incomplete_expired'].includes(subscription.status) && !isFreePriceSubscription(subscription))) throw new Error('Manage your existing subscription in the billing portal.');
+		const userModel = options.userModel || User;
+		const now = Math.floor(Date.now() / 1000);
+		const sessions = await listDeletionBillingObjects(stripe.checkout.sessions, { customer: customerId, status: 'open' });
+		const open = sessions.filter((session) => session.mode === 'subscription');
+		if (open.length > 1) throw new Error('Multiple open checkout sessions require billing support.');
+		const candidate = { key: randomUUID(), session_id: open[0]?.id, params: { ...buildCheckoutSessionParams(user, customerId, priceId), expires_at: now + 3600 } };
+		// Persist exact parameters or the adopted session before Stripe I/O; all processes use the winner.
+		const reserved = await userModel.findOneAndUpdate({ _id: user._id }, [{ $set: { stripe_checkout_attempt: { $ifNull: ['$stripe_checkout_attempt', { $literal: candidate }] } } }], { new: true, updatePipeline: true }).select('+stripe_checkout_attempt').lean();
+		if (!reserved) throw new Error('Billing owner is unavailable');
+		const attempt = reserved.stripe_checkout_attempt;
+		if (attempt.session_id) {
+			const existing = await stripe.checkout.sessions.retrieve(attempt.session_id);
+			if (existing.status === 'open' && existing.url) return existing.url;
+			if (existing.status === 'complete' && existing.subscription) {
+				const subscription = await stripe.subscriptions.retrieve(typeof existing.subscription === 'string' ? existing.subscription : existing.subscription.id);
+				if (['canceled', 'incomplete_expired'].includes(subscription.status)) {
+					// Only retire this attempt; a concurrent caller may already own its replacement.
+					await userModel.updateOne({ _id: user._id, 'stripe_checkout_attempt.key': attempt.key }, { $unset: { stripe_checkout_attempt: '' } });
+					continue;
+				}
+			}
+			if (existing.status !== 'expired') throw new Error('Checkout is already complete. Please refresh billing.');
+			await userModel.updateOne({ _id: user._id, 'stripe_checkout_attempt.key': attempt.key }, { $unset: { stripe_checkout_attempt: '' } });
+			throw new Error('Checkout expired. Please try again.');
+		}
+		// Fixed expiry makes a delayed old request unable to create a payable session after rotation.
+		if (attempt.params.expires_at <= now) {
+			await userModel.updateOne({ _id: user._id, 'stripe_checkout_attempt.key': attempt.key }, { $unset: { stripe_checkout_attempt: '' } });
+			throw new Error('Checkout expired. Please try again.');
+		}
+		const created = await stripe.checkout.sessions.create(attempt.params, { idempotencyKey: attempt.key });
+		await userModel.updateOne({ _id: user._id, 'stripe_checkout_attempt.key': attempt.key }, { $set: { 'stripe_checkout_attempt.session_id': created.id } });
+		const session = await stripe.checkout.sessions.retrieve(created.id);
+		if (session.status === 'expired') {
+			await userModel.updateOne({ _id: user._id, 'stripe_checkout_attempt.key': attempt.key }, { $unset: { stripe_checkout_attempt: '' } });
+			throw new Error('Checkout expired. Please try again.');
+		}
+		if (session.status !== 'open' || !session.url) throw new Error('Checkout is already complete or expired. Please refresh billing.');
+		return session.url;
+	}
 	} finally { if (release) await release(); }
 }
 
@@ -544,7 +583,8 @@ export async function handleWebhook(rawBody, sig) {
 
 	const object = event.data.object;
 	const customerId = typeof object.customer === 'string' ? object.customer : object.customer?.id;
-	const subscriptionId = object.object === 'subscription' ? object.id : object.subscription;
+	const subscriptionReference = object.object === 'subscription' ? object.id : (object.parent?.subscription_details?.subscription || object.subscription);
+	const subscriptionId = typeof subscriptionReference === 'string' ? subscriptionReference : subscriptionReference?.id;
 	const user = await User.findOne({ $or: [...(customerId ? [{ stripe_customer_id: customerId }] : []), ...(subscriptionId ? [{ stripe_subscription_id: subscriptionId }] : []), { _id: null }] }).select('host_id').lean();
 	const hostId = object.metadata?.host_id || user?.host_id;
 	if (!hostId) return;
@@ -561,7 +601,9 @@ export async function handleWebhook(rawBody, sig) {
                 // Checkout only sells Pro; a free-price session would be a
                 // misconfiguration and must not grant a paid plan.
                 if (isFreePriceSubscription(subscription)) break;
-                await applySubscriptionToUser(userId, subscription);
+                if (subscription.customer !== customerId || !['active', 'trialing'].includes(subscription.status)) break;
+                const applied = await applySubscriptionToUser(userId, subscription, customerId);
+                if (!applied) break;
                 // The paid subscription replaces the $0 tracking subscription.
                 try {
                     await cancelFreeSubscriptionForUser(userId, { stripe });
@@ -598,9 +640,8 @@ export async function handleWebhook(rawBody, sig) {
         }
 
         case 'invoice.payment_failed': {
-            const invoice = event.data.object;
-            if (invoice.subscription) {
-                await applyInvoicePaymentFailed(invoice.subscription, event.created);
+            if (subscriptionId) {
+                await applyInvoicePaymentFailed(subscriptionId, event.created);
             }
             break;
         }

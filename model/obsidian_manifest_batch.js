@@ -19,7 +19,7 @@ const obsidianManifestBatchSchema = new mongoose.Schema({
 	batch_index: { type: Number, required: true, min: 0 },
 	files: { type: [manifestEntrySchema], default: [] },
 	expires_at: { type: Date, required: true },
-}, { timestamps: true });
+}, { timestamps: true, read: 'secondaryPreferred' });
 
 obsidianManifestBatchSchema.index({ host_id: 1, user: 1, connection: 1, manifest_id: 1, batch_index: 1 }, { unique: true });
 obsidianManifestBatchSchema.index({ expires_at: 1 }, { expireAfterSeconds: 0 });

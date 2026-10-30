@@ -38,7 +38,7 @@ export function memoryTools(api, defaultProjectId) {
         content: z.string().describe('Memory content'),
         tags: z.array(z.string()).optional().describe('Tags for categorization'),
         source: z.string().optional().describe('Where this memory came from'),
-        project_id: z.string().optional().describe('Project ID (defaults to the default project)'),
+        project_id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').optional().describe('Project ID (defaults to the default project)'),
       },
       handler: async (args) => {
         const { project_id, ...rest } = args;
@@ -54,7 +54,7 @@ export function memoryTools(api, defaultProjectId) {
       inputSchema: {
         ...MCP_SEARCH_FILTER_SCHEMA,
         query: z.string().describe('What to search for'),
-        project_id: z.string().optional().describe('Filter results to a specific project (optional; omit to search all projects)'),
+        project_id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').optional().describe('Filter results to a specific project (optional; omit to search all projects)'),
         per_page: MCP_PER_PAGE_SCHEMA,
       },
       handler: async (args) => {
@@ -80,7 +80,7 @@ export function memoryTools(api, defaultProjectId) {
       inputSchema: {
         ...MCP_SEARCH_FILTER_SCHEMA,
         query: z.string().describe('What to search for'),
-        project_id: z.string().optional().describe('Filter results to a specific project (optional; omit to search all projects)'),
+        project_id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').optional().describe('Filter results to a specific project (optional; omit to search all projects)'),
         per_page: MCP_PER_PAGE_SCHEMA,
       },
       handler: async (args) => {
@@ -104,7 +104,7 @@ export function memoryTools(api, defaultProjectId) {
       annotations: READ_ONLY,
       outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
-        id: z.string().describe('Memory ID'),
+        id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').describe('Memory ID'),
       },
       handler: async (args) => {
         const { memory } = await api.get(`/memories/${args.id}`);
@@ -117,7 +117,7 @@ export function memoryTools(api, defaultProjectId) {
       annotations: OVERWRITE_INTERNAL,
       outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
-        id: z.string().describe('Memory ID'),
+        id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').describe('Memory ID'),
         title: z.string().optional(),
         content: z.string().optional(),
         tags: z.array(z.string()).optional(),
@@ -134,7 +134,7 @@ export function memoryTools(api, defaultProjectId) {
       annotations: OVERWRITE_INTERNAL,
       outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
-        id: z.string().describe('Memory ID'),
+        id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').describe('Memory ID'),
       },
       handler: async (args) => {
         await api.delete(`/memories/${args.id}`);
@@ -148,7 +148,7 @@ export function memoryTools(api, defaultProjectId) {
       outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
         query: z.string().optional().describe('Tag prefix to match'),
-        project_id: z.string().optional().describe('Project ID (defaults to the default project)'),
+        project_id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').optional().describe('Project ID (defaults to the default project)'),
         limit: z.number().optional().describe('Maximum tags to return (default 50, max 100)'),
       },
       handler: async (args = {}) => {
@@ -172,7 +172,7 @@ export function memoryTools(api, defaultProjectId) {
       inputSchema: {
         ...MCP_SEARCH_FILTER_SCHEMA,
         query: z.string().describe('Search query'),
-        project_id: z.string().optional().describe('Filter results to a specific project (optional)'),
+        project_id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').optional().describe('Filter results to a specific project (optional)'),
         per_page: MCP_PER_PAGE_SCHEMA,
       },
       handler: async (args) => {
@@ -198,7 +198,7 @@ export function memoryTools(api, defaultProjectId) {
       inputSchema: {
         query: z.string().describe('User message, search query, or command (e.g. "create a note about X", "remember that Y", "find my notes about Z")'),
         conversation_id: z.string().optional().describe('Continue an existing conversation (optional)'),
-        project_id: z.string().optional().describe('Scope search/actions to a project (optional)'),
+        project_id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').optional().describe('Scope search/actions to a project (optional)'),
       },
       handler: async (args) => {
         const res = await api.post('/chat', {

@@ -263,7 +263,10 @@ export async function appendUploadChunk(userId, hostId, id, req) {
 export async function completeUpload(userId, hostId, id) {
 	const upload = await queryForSave(ObsidianUpload.findOneAndUpdate(ownershipFilter(id, userId, hostId), { $set: { expires_at: expiryDate() } }, { returnDocument: 'after' }));
 	if (!upload) throw new ObsidianBlobError('Upload not found', 404, 'upload_not_found');
-	if (upload.state === 'complete') return publicUpload(upload);
+	if (upload.state === 'complete') {
+		await rm(uploadDir(hostId, upload._id), { recursive: true, force: true }).catch(() => {});
+		return publicUpload(upload);
+	}
 	if (upload.state !== 'uploading') throw new ObsidianBlobError(`Upload is ${upload.state}`, 409, 'invalid_state');
 	if (upload.received_bytes !== upload.total_bytes) throw new ObsidianBlobError(`Upload incomplete at offset ${upload.received_bytes}`, 409, 'upload_incomplete');
 	const sha256 = await hashUpload(upload);
@@ -293,17 +296,14 @@ export async function completeUpload(userId, hostId, id) {
 		} catch (err) {
 			blob = await ObsidianBlob.findOneAndUpdate({ host_id: hostId, sha256 }, { $inc: { __v: 0 } }, { timestamps: false, returnDocument: 'after' }).lean();
 			if (!blob) throw err;
-			if (installed && blob.storage_key !== path.relative(storageRoot(), destination)) await rm(destination, { recursive: true, force: true });
-			await rm(uploadDir(hostId, upload._id), { recursive: true, force: true }).catch(() => {});
+			if (installed && blob.storage_key !== path.relative(storageRoot(), destination)) await rm(destination, { recursive: true, force: true }).catch(() => {});
 		}
-	} else {
-		await rm(uploadDir(hostId, upload._id), { recursive: true, force: true }).catch(() => {});
 	}
-	await rm(uploadDir(hostId, upload._id), { recursive: true, force: true });
 	upload.state = 'complete';
 	upload.blob = blob._id;
 	upload.error = '';
 	await upload.save();
+	await rm(uploadDir(hostId, upload._id), { recursive: true, force: true }).catch(() => {});
 	return publicUpload(upload);
 }
 

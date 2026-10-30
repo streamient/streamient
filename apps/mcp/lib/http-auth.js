@@ -47,6 +47,7 @@ export function getToolNameFromRequestBody(body) {
 }
 
 export function getRequiredScopesForRequestBody(body) {
+	if (Array.isArray(body)) return [...new Set([...MCP_BASELINE_SCOPES, ...body.flatMap(getRequiredScopesForRequestBody)])];
 	const toolName = getToolNameFromRequestBody(body);
 	if (!toolName) return MCP_BASELINE_SCOPES;
 	return getRequiredScopesForTool(toolName);

@@ -18,8 +18,9 @@ import { resolveRequestHosted } from './config.js';
 import { installIconLocals } from './modules/icons.js';
 import managani from './modules/managani.js';
 
-import { createApiLimiters } from './middleware/rate_limit.js';
+import { createApiAuthFailureLimiter, createApiLimiters } from './middleware/rate_limit.js';
 import securityHeaders from './middleware/security_headers.js';
+import { requireAuth } from './middleware/auth.js';
 import { browserCsrfProtection } from './middleware/csrf.js';
 import { isSessionRevoked, publicSessionId } from './services/user_session_service.js';
 import { verifyScreenshotSignature, resolveScreenshotPath } from './modules/screenshot.js';
@@ -273,7 +274,8 @@ app.get('/api/v1/screenshots/:filename', (req, res) => {
 app.use('/', authRoutes);
 app.use('/', billingRoutes);
 app.use('/admin', adminRoutes);
-app.use('/api/v1', createApiLimiters(), apiRoutes);
+// Usage limiters run after auth so each verified user or token owner gets its own bucket.
+app.use('/api/v1', createApiAuthFailureLimiter(), requireAuth, ...createApiLimiters(), apiRoutes);
 
 app.get('/', (req, res) => {
 	if (req.session?.userId) {

@@ -20,7 +20,7 @@ const oauthClientSchema = new mongoose.Schema(
 		created_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 		last_used_at: { type: Date },
 	},
-	{ timestamps: true },
+	{ timestamps: true, read: 'secondaryPreferred' },
 );
 
 oauthClientSchema.index({ host_id: 1, createdAt: -1 });

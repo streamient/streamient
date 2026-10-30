@@ -26,12 +26,13 @@ const noteSchema = new mongoose.Schema(
 			file_id: { type: mongoose.Schema.Types.ObjectId, ref: 'ObsidianFile' },
 		},
 	},
-	{ timestamps: true },
+	{ timestamps: true, read: 'secondaryPreferred' },
 );
 
 noteSchema.index({ host_id: 1, in_trash: 1, project: 1 });
 noteSchema.index({ host_id: 1, in_trash: 1, project: 1, updatedAt: -1, _id: -1 });
 noteSchema.index({ is_indexed: 1, in_trash: 1 });
+noteSchema.index({ host_id: 1, is_indexed: 1, updatedAt: -1 });
 noteSchema.index({ 'git_source.repo_id': 1, 'git_source.file_path': 1 }, { sparse: true });
 noteSchema.index({ 'obsidian_source.connection_id': 1, 'obsidian_source.file_id': 1 }, { sparse: true });
 

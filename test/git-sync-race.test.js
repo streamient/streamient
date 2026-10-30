@@ -29,27 +29,26 @@ function setValue(obj, key, value) {
 }
 
 test('Git import does not overwrite a note edited during the git-history await', async () => {
-	const row = { _id: 'note', title: 'old', content: 'old', updatedAt: new Date(1000), git_source: { last_sha: 'old', last_synced_at: new Date(2000), origin: 'import' } };
+	const row = { _id: 'note', title: 'old', content: 'old', updatedAt: new Date(1000), git_source: { file_path: 'notes/a.md', last_sha: 'old', last_synced_at: new Date(2000), origin: 'import' } };
 	const conflicts = [];
 	const Note = {
-		find: async () => [],
-		findOne: async () => structuredClone(row),
+		find: () => ({ lean: async () => [structuredClone(row)] }),
 		findOneAndUpdate: async (filter, update) => {
 			if (filter.updatedAt.getTime() !== row.updatedAt.getTime()) return null;
 			for (const [key, value] of Object.entries(update.$set || {})) setValue(row, key, value);
 			return row;
 		},
 	};
-	const context = load(['validDateOrNull', 'timestampsDiffer', 'isLocalChangeNewer', 'importVersionGuard', 'normalizeImportedTimestamps', 'pullFromGit'], {
+	const context = load(['validDateOrNull', 'timestampsDiffer', 'isLocalChangeNewer', 'importVersionGuard', 'normalizeImportedTimestamps', 'importedTags', 'pullFromGit'], {
 		LOCAL_CHANGE_GRACE_MS: 1000,
 		Note,
-		Memory: { find: async () => [], findOne: async () => null },
+		Memory: { find: () => ({ lean: async () => [] }) },
 		findMarkdownFiles: () => ['notes/a.md'],
 		containedRepoPath: (...parts) => path.join(...parts),
 		fs: { constants: fs.constants, openSync: () => 1, readFileSync: () => 'remote content', closeSync: () => {} },
 		fileSha: () => 'remote-sha',
 		parseMarkdownFile: () => ({ type: 'note', title: 'remote', body: 'remote content', tags: [] }),
-		getFileGitDates: async () => { row.content = 'new local edit'; row.updatedAt = new Date(9000); return { createdAt: new Date(3000), updatedAt: new Date(3000) }; },
+		getFileGitDates: async () => { row.content = 'new local edit'; row.updatedAt = new Date(9000); return new Map([['notes/a.md', { createdAt: new Date(3000), updatedAt: new Date(3000) }]]); },
 		marked: { parse: (text) => text },
 		striptags: (text) => text,
 		syncMutation: (callback) => callback(undefined),
@@ -66,26 +65,25 @@ test('Git import does not overwrite a note edited during the git-history await',
 });
 
 test('Git import does not overwrite a memory edited during the git-history await', async () => {
-	const row = { _id: 'memory', title: 'old', content: 'old', updatedAt: new Date(1000), git_source: { last_sha: 'old', last_synced_at: new Date(2000), origin: 'import' } };
+	const row = { _id: 'memory', title: 'old', content: 'old', updatedAt: new Date(1000), git_source: { file_path: 'memories/a.md', last_sha: 'old', last_synced_at: new Date(2000), origin: 'import' } };
 	const Memory = {
-		find: async () => [],
-		findOne: async () => structuredClone(row),
+		find: () => ({ lean: async () => [structuredClone(row)] }),
 		findOneAndUpdate: async (filter, update) => {
 			if (filter.updatedAt.getTime() !== row.updatedAt.getTime()) return null;
 			for (const [key, value] of Object.entries(update.$set || {})) setValue(row, key, value);
 			return row;
 		},
 	};
-	const context = load(['validDateOrNull', 'timestampsDiffer', 'isLocalChangeNewer', 'importVersionGuard', 'normalizeImportedTimestamps', 'pullFromGit'], {
+	const context = load(['validDateOrNull', 'timestampsDiffer', 'isLocalChangeNewer', 'importVersionGuard', 'normalizeImportedTimestamps', 'importedTags', 'pullFromGit'], {
 		LOCAL_CHANGE_GRACE_MS: 1000,
-		Note: { find: async () => [], findOne: async () => null },
+		Note: { find: () => ({ lean: async () => [] }) },
 		Memory,
 		findMarkdownFiles: () => ['memories/a.md'],
 		containedRepoPath: (...parts) => path.join(...parts),
 		fs: { constants: fs.constants, openSync: () => 1, readFileSync: () => 'remote memory', closeSync: () => {} },
 		fileSha: () => 'remote-sha',
 		parseMarkdownFile: () => ({ type: 'memory', title: 'remote', body: 'remote memory', tags: [] }),
-		getFileGitDates: async () => { row.content = 'new local memory edit'; row.updatedAt = new Date(9000); return { createdAt: new Date(3000), updatedAt: new Date(3000) }; },
+		getFileGitDates: async () => { row.content = 'new local memory edit'; row.updatedAt = new Date(9000); return new Map([['memories/a.md', { createdAt: new Date(3000), updatedAt: new Date(3000) }]]); },
 		marked: { parse: (text) => text },
 		striptags: (text) => text,
 		syncMutation: (callback) => callback(undefined),
@@ -209,20 +207,19 @@ test('Git import does not duplicate a note whose path was claimed but whose cont
 	const row = { _id: 'note', title: 'Title', content: 'new local B', updatedAt: new Date(9000), git_source: { repo_id: 'repo', file_path: 'notes/Title.md', origin: 'push' } };
 	let created = 0;
 	const Note = {
-		find: async () => [],
-		findOne: async () => structuredClone(row),
+		find: () => ({ lean: async () => [structuredClone(row)] }),
 		create: async () => { created++; return [{}]; },
 	};
-	const context = load(['validDateOrNull', 'timestampsDiffer', 'isLocalChangeNewer', 'importVersionGuard', 'normalizeImportedTimestamps', 'pullFromGit'], {
+	const context = load(['validDateOrNull', 'timestampsDiffer', 'isLocalChangeNewer', 'importVersionGuard', 'normalizeImportedTimestamps', 'importedTags', 'pullFromGit'], {
 		LOCAL_CHANGE_GRACE_MS: 1000,
 		Note,
-		Memory: { find: async () => [], findOne: async () => null },
+		Memory: { find: () => ({ lean: async () => [] }) },
 		findMarkdownFiles: () => ['notes/Title.md'],
 		containedRepoPath: (...parts) => path.join(...parts),
 		fs: { constants: fs.constants, openSync: () => 1, readFileSync: () => 'snapshot A', closeSync: () => {} },
 		fileSha: () => 'old-sha',
 		parseMarkdownFile: () => ({ type: 'note', title: 'Title', body: 'snapshot A', tags: [] }),
-		getFileGitDates: async () => ({ createdAt: new Date(3000), updatedAt: new Date(3000) }),
+		getFileGitDates: async () => new Map([['notes/Title.md', { createdAt: new Date(3000), updatedAt: new Date(3000) }]]),
 		marked: { parse: (text) => text },
 		striptags: (text) => text,
 		syncMutation: (callback) => callback(undefined),
@@ -252,7 +249,7 @@ test('trashDeletedGitItems preserves a note edited after the local-change check'
 		recordConflict: (summary) => { summary.conflicts = (summary.conflicts || 0) + 1; },
 	});
 	const summary = { trashed_items: 0, conflicts: 0, skipped: 0 };
-	await context.trashDeletedGitItems({ _id: 'repo', trash_on_delete: true }, 'host', new Set(), summary);
+	await context.trashDeletedGitItems({ _id: 'repo', trash_on_delete: true }, 'host', new Set(), summary, [row], []);
 	assert.equal(summary.trashed_items, 0, 'the concurrent edit wins and the note is not trashed');
 	assert.equal(summary.conflicts, 1);
 	assert.equal(row.in_trash, undefined);

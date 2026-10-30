@@ -219,17 +219,13 @@ export async function appendChunk(userId, host_id, id, req) {
 	await ensureStorageAvailable(chunkDir(upload._id), maximumBytes);
 	const temporaryPath = path.join(chunkDir(upload._id), `${offset}.${crypto.randomUUID()}.tmp`);
 	const received = await hashAndStoreRequest(req, temporaryPath, maximumBytes);
-	if (!received.size && remaining) {
+	if (!received.size) {
 		await rm(temporaryPath, { force: true });
 		throw new NoteImportError('Chunk is empty', 400, 'empty_chunk');
 	}
 	if (!checksumMatches(checksum, received.hash)) {
 		await rm(temporaryPath, { force: true });
 		throw new NoteImportError('Chunk checksum mismatch', 460, 'checksum_mismatch');
-	}
-	if (received.size !== maximumBytes) {
-		await rm(temporaryPath, { force: true });
-		throw new NoteImportError(`Chunk must contain exactly ${maximumBytes} bytes`, 409, 'chunk_size_conflict');
 	}
 	if (offset + received.size > upload.total_bytes) {
 		await rm(temporaryPath, { force: true });
@@ -266,27 +262,49 @@ export async function appendChunk(userId, host_id, id, req) {
 	throw new NoteImportError('Upload offset changed while writing the chunk', 409, 'offset_conflict');
 }
 
+function importJobId(upload) {
+	return upload.queue_attempt ? `${upload._id}:retry:${upload.queue_attempt}` : String(upload._id);
+}
+
+async function enqueueImport(upload) {
+	const jobId = importJobId(upload);
+	await MongoQueue.add(NOTE_IMPORT_QUEUE, { upload_id: String(upload._id), host_id: upload.host_id }, { jobId, dedupKey: jobId, maxAttempts: 3 });
+}
+
+export async function recoverNoteImports() {
+	for await (const upload of NoteImportUpload.find({ state: 'processing' }).lean().cursor()) {
+		try {
+			await enqueueImport(upload);
+			const job = await MongoQueue.getJob(importJobId(upload), { queue: NOTE_IMPORT_QUEUE });
+			if (job?.status === 'failed' || job?.status === 'completed') {
+				const failed = await NoteImportUpload.findOneAndUpdate({ _id: upload._id, state: 'processing', queue_attempt: upload.queue_attempt || { $in: [null, 0] } }, { $set: { state: 'failed', error: 'Import interrupted; please retry' } }, { returnDocument: 'after' }).lean();
+				if (failed) emitToTenant(upload.host_id, 'note-import:failed', publicUpload(failed));
+			}
+		} catch (err) { if (err.code !== 'account_unavailable') throw err; }
+	}
+}
+
 export async function completeUpload(userId, host_id, id) {
 	const upload = await NoteImportUpload.findOne(ownershipFilter(id, userId, host_id)).lean();
 	if (!upload) throw new NoteImportError('Import session not found', 404, 'upload_not_found');
-	if (upload.state === 'processing' || upload.state === 'complete') return publicUpload(upload);
+	if (upload.state === 'complete') return publicUpload(upload);
+	if (upload.state === 'processing') { await enqueueImport(upload); return publicUpload(upload); }
 	if (!['uploading', 'failed'].includes(upload.state)) throw new NoteImportError(`Import is ${upload.state}`, 409, 'invalid_state');
 	if (upload.received_bytes !== upload.total_bytes) throw new NoteImportError(`Upload incomplete at offset ${upload.received_bytes}`, 409, 'upload_incomplete');
 	await verifyCompleteUpload(upload);
 	const updated = await NoteImportUpload.findOneAndUpdate(
-		{ ...ownershipFilter(id, userId, host_id), state: upload.state, received_bytes: upload.total_bytes },
-		{ $set: { state: 'processing', error: '', last_activity_at: new Date(), expires_at: expiryDate() } },
+		{ ...ownershipFilter(id, userId, host_id), state: upload.state, received_bytes: upload.total_bytes, queue_attempt: upload.queue_attempt || { $in: [null, 0] } },
+		{ $set: { state: 'processing', error: '', last_activity_at: new Date(), expires_at: expiryDate() }, ...(upload.state === 'failed' ? { $inc: { queue_attempt: 1 } } : {}) },
 		{ returnDocument: 'after' },
 	).lean();
 	if (!updated) return getUpload(userId, host_id, id);
-	const dedupKey = upload.state === 'failed' ? `${updated._id}:retry:${Date.now()}` : String(updated._id);
-	await MongoQueue.add(NOTE_IMPORT_QUEUE, { upload_id: String(updated._id) }, { dedupKey, maxAttempts: 3 });
+	await enqueueImport(updated);
 	emitToTenant(host_id, 'note-import:processing', publicUpload(updated));
 	return publicUpload(updated);
 }
 
 export async function cancelUpload(userId, host_id, id) {
-	const upload = await NoteImportUpload.findOneAndUpdate(
+	let upload = await NoteImportUpload.findOneAndUpdate(
 		{ ...ownershipFilter(id, userId, host_id), state: { $in: ['uploading', 'failed'] } },
 		{ $set: { state: 'canceled', last_activity_at: new Date(), expires_at: expiryDate() } },
 		{ returnDocument: 'after' },
@@ -294,7 +312,8 @@ export async function cancelUpload(userId, host_id, id) {
 	if (!upload) {
 		const existing = await NoteImportUpload.findOne(ownershipFilter(id, userId, host_id)).lean();
 		if (!existing) throw new NoteImportError('Import session not found', 404, 'upload_not_found');
-		throw new NoteImportError(`Import is ${existing.state}`, 409, 'invalid_state');
+		if (existing.state !== 'canceled') throw new NoteImportError(`Import is ${existing.state}`, 409, 'invalid_state');
+		upload = existing;
 	}
 	await rm(uploadDir(upload._id), { recursive: true, force: true });
 	emitToTenant(host_id, 'note-import:canceled', publicUpload(upload));

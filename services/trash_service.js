@@ -4,7 +4,7 @@ import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
 import { Url } from '../model/url.js';
 import { Email } from '../model/email.js';
-import { bulkIndexDocuments, bulkRemoveDocuments, exportTrashDocuments, listTrashDocuments, removeDocumentsByFilter } from '../modules/typesense.js';
+import { bulkIndexDocuments, bulkRemoveDocuments, exportTrashDocuments, listTrashDocuments } from '../modules/typesense.js';
 import { emitToTenant } from '../modules/socket.js';
 import { removeLinksForItems } from './graph_service.js';
 import { createLogger } from '../modules/logger.js';
@@ -93,11 +93,7 @@ async function findExisting(model, host_id, ids, batchSize = 250) {
 	const validIds = uniqueIds(ids).filter((id) => mongoose.isObjectIdOrHexString(id));
 	const existing = [];
 	for (let index = 0; index < validIds.length; index += batchSize) {
-		const batch = validIds.slice(index, index + batchSize);
-		for (const id of batch) {
-			const doc = await findLean(model, { _id: id, host_id });
-			if (doc) existing.push(doc);
-		}
+		existing.push(...await model.find({ _id: { $in: validIds.slice(index, index + batchSize) }, host_id }).lean());
 	}
 	return existing;
 }
@@ -181,7 +177,7 @@ async function restoreItemsByType(host_id, type, ids, deps = {}) {
 		}
 	}
 	if (missingIds.length) {
-		await removeGraphLinks(host_id, missingIds);
+		await removeGraphLinks(host_id, missingIds).catch((err) => log.error({ err, type, host_id }, 'Trash graph cleanup failed'));
 		await bulkRemoveFn(host_id, tsType, missingIds);
 	}
 
@@ -216,7 +212,7 @@ async function permanentDeleteItemsByType(host_id, type, ids, deps = {}) {
 	}
 
 	const deletedIds = docs.map((doc) => doc._id?.toString?.() || String(doc._id || ''));
-	await removeGraphLinks(host_id, [...deletedIds, ...missingIds]);
+	await removeGraphLinks(host_id, [...deletedIds, ...missingIds]).catch((err) => log.error({ err, type, host_id }, 'Trash graph cleanup failed'));
 	const absentIds = [...deletedIds, ...missingIds];
 	if (absentIds.length) await bulkRemoveFn(host_id, tsType, absentIds);
 	if (currentDocs.length) {
@@ -285,7 +281,7 @@ export async function batchPermanentDelete(host_id, items, deps = {}) {
 
 export async function emptyTrash(host_id, deps = {}) {
 	const exportFn = deps.exportTrashDocuments || exportTrashDocuments;
-	const removeByFilterFn = deps.removeDocumentsByFilter || removeDocumentsByFilter;
+	const bulkRemoveFn = deps.bulkRemoveDocuments || bulkRemoveDocuments;
 	const bulkIndexFn = deps.bulkIndexDocuments || bulkIndexDocuments;
 	const removeGraphLinks = deps.removeGraphLinks || cleanupGraphLinks;
 	let deleted = 0;
@@ -293,20 +289,20 @@ export async function emptyTrash(host_id, deps = {}) {
 	for (const [type, { model, tsType }] of Object.entries(TRASH_MODEL_MAP)) {
 		const indexedDocs = await exportFn(host_id, tsType);
 		const indexedIds = uniqueIds(indexedDocs.map((doc) => doc.source_id || doc.id));
-		const mongoDocs = [];
+		const mongoIds = [];
 		while (true) {
 			const doc = await model.findOneAndDelete({ host_id, in_trash: true });
 			if (!doc) break;
-			mongoDocs.push(doc);
+			mongoIds.push(doc._id);
 		}
-		const mongoIds = uniqueIds(mongoDocs.map((doc) => doc._id));
 
 		const candidateIds = uniqueIds([...indexedIds, ...mongoIds]);
 		const remainingDocs = await findExisting(model, host_id, candidateIds);
 		const remainingIds = new Set(remainingDocs.map((doc) => String(doc._id)));
 		const absentIds = candidateIds.filter((id) => !remainingIds.has(id));
-		await removeGraphLinks(host_id, absentIds);
-		await removeByFilterFn(host_id, tsType, 'in_trash:=true', { batch_size: 250 });
+		await removeGraphLinks(host_id, absentIds).catch((err) => log.error({ err, type, host_id }, 'Trash graph cleanup failed'));
+		// Remove only IDs deleted here; items trashed while this ran keep their rows.
+		if (absentIds.length) await bulkRemoveFn(host_id, tsType, absentIds);
 		if (remainingDocs.length) {
 			await markIndexPending(model, host_id, remainingDocs);
 			await bulkIndexFn(host_id, tsType, remainingDocs, { removeExisting: false });

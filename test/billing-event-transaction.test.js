@@ -102,3 +102,38 @@ test('checkout apply cannot reactivate a canceled same subscription but applies 
 	assert.equal(resubscribed.stripe_subscription_event_at, undefined);
 	assert.equal((await Tenant.findById(tenant._id).lean()).plan, 'pro');
 });
+
+test('concurrent project creates cannot exceed the stored limit', { skip: process.env.STREAMIENT_BILLING_INTEGRATION !== '1', timeout: 30000 }, async (t) => {
+	assert.ok(process.env.MONGO_URI);
+	const { Project } = await import('../model/project.js');
+	const { createProject } = await import('../services/project_service.js');
+	const dbName = `streamient_quota_test_${crypto.randomUUID().replaceAll('-', '')}`;
+	await mongoose.connect(process.env.MONGO_URI, { ...config.mongoOptions, dbName });
+	t.after(async () => { await mongoose.connection.dropDatabase(); await mongoose.disconnect(); });
+	await Promise.all([Tenant.init(), Project.init()]);
+	const owner = new mongoose.Types.ObjectId();
+	await Tenant.create({ owner, host_id: 'quota-host', name: 'Quota', limit_projects: 2 });
+	const existing = await Project.create({ owner, host_id: 'quota-host', name: 'Existing' });
+	const results = await Promise.allSettled(Array.from({ length: 6 }, (_, i) => createProject(owner, 'quota-host', { name: `Concurrent ${i}` }, {}, { isHosted: true })));
+	assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1);
+	for (const result of results.filter((r) => r.status === 'rejected')) assert.equal(result.reason.code, 'ACCOUNT_LIMIT');
+	assert.equal(await Project.countDocuments({ host_id: 'quota-host' }), 2);
+	assert.ok(await Project.findById(existing._id));
+});
+
+test('concurrent team creates enforce quota and roll back new users', { skip: process.env.STREAMIENT_BILLING_INTEGRATION !== '1', timeout: 30000 }, async (t) => {
+ assert.ok(process.env.MONGO_URI);
+ const { TenantMember } = await import('../model/tenant_member.js');
+ const { createTeamMember } = await import('../services/team_service.js');
+ const dbName = `streamient_team_quota_test_${crypto.randomUUID().replaceAll('-', '')}`;
+ await mongoose.connect(process.env.MONGO_URI, { ...config.mongoOptions, dbName });
+ t.after(async () => { await mongoose.connection.dropDatabase(); await mongoose.disconnect(); });
+ await Promise.all([User.init(), Tenant.init(), TenantMember.init()]);
+ const owner = await User.create({ email: 'owner@example.test', name: 'Owner', password: 'password123', is_active: true });
+ await Tenant.create({ owner: owner._id, host_id: 'team-quota', name: 'Quota', limit_users: 2 });
+ const results = await Promise.allSettled(Array.from({ length: 6 }, (_, i) => createTeamMember(owner._id, 'team-quota', { email: `member${i}@example.test`, name: `Member ${i}`, password: 'password123' }, {}, { isHosted: true })));
+ assert.equal(results.filter(r => r.status === 'fulfilled').length, 1);
+ for (const result of results.filter(r => r.status === 'rejected')) assert.equal(result.reason.code, 'ACCOUNT_LIMIT');
+ assert.equal(await TenantMember.countDocuments({ host_id: 'team-quota' }), 1);
+ assert.equal(await User.countDocuments({}), 2);
+});

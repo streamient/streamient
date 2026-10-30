@@ -39,6 +39,7 @@ emailSchema.index({ host_id: 1, in_trash: 1, project: 1, updatedAt: -1, _id: -1 
 emailSchema.index({ host_id: 1, in_trash: 1, mailbox: 1, updatedAt: -1 });
 emailSchema.index({ host_id: 1, in_trash: 1, labels: 1 });
 emailSchema.index({ is_indexed: 1, in_trash: 1 });
+emailSchema.index({ host_id: 1, is_indexed: 1, updatedAt: -1 });
 emailSchema.index({ host_id: 1, message_id: 1 }, { unique: true, name: 'host_message_id_unique', partialFilterExpression: { message_id: { $type: 'string', $gt: '' } } });
 emailSchema.index({ host_id: 1, references: 1 });
 

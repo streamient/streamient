@@ -23,7 +23,7 @@ const obsidianUploadSchema = new mongoose.Schema({
 	blob: { type: mongoose.Schema.Types.ObjectId, ref: 'ObsidianBlob', default: null },
 	error: { type: String, default: '' },
 	expires_at: { type: Date, required: true },
-}, { timestamps: true });
+}, { timestamps: true, read: 'secondaryPreferred' });
 
 obsidianUploadSchema.index({ host_id: 1, user: 1, state: 1 });
 obsidianUploadSchema.index({ expires_at: 1 }, { expireAfterSeconds: 0 });

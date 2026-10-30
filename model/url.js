@@ -11,6 +11,8 @@ const urlSchema = new mongoose.Schema(
 		og_image: { type: String, default: '' },
 		screenshot: { type: String, default: '' },
 		text_content: { type: String, default: '' },
+		crawl_claim: { type: String, default: null },
+		crawl_claim_expires_at: { type: Date, default: null },
 		crawl_enabled: { type: Boolean, default: false },
 		last_crawled: { type: Date },
 		crawl_frontier: { type: [String], default: [] },
@@ -31,13 +33,14 @@ const urlSchema = new mongoose.Schema(
 			file_id: { type: mongoose.Schema.Types.ObjectId, ref: 'ObsidianFile' },
 		},
 	},
-	{ timestamps: true },
+	{ timestamps: true, read: 'secondaryPreferred' },
 );
 
 urlSchema.index({ host_id: 1, in_trash: 1, project: 1 });
 urlSchema.index({ host_id: 1, in_trash: 1, project: 1, createdAt: -1, _id: -1 });
 urlSchema.index({ host_id: 1, project: 1, normalized_url: 1, in_trash: 1 });
 urlSchema.index({ is_indexed: 1, in_trash: 1 });
+urlSchema.index({ host_id: 1, is_indexed: 1, updatedAt: -1 });
 urlSchema.index({ crawl_enabled: 1, crawl_partial: 1, last_crawled: 1 });
 urlSchema.index({ 'obsidian_source.connection_id': 1, 'obsidian_source.file_id': 1 }, { sparse: true });
 

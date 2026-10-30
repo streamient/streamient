@@ -13,7 +13,7 @@ import { cleanupExpiredExports, createExportWorker, recoverExports } from '../se
 import { runScheduledSync } from '../services/git_sync_service.js';
 import { reconcileActiveTrashTenants } from '../services/trash_reconciliation_service.js';
 import { runEmailRetentionCleanup, runTrashRetentionCleanup } from '../services/trash_retention_service.js';
-import { cleanupOrphanedImportFiles, createNoteImportWorker, logImportWorkerError } from '../services/note_import_service.js';
+import { cleanupOrphanedImportFiles, createNoteImportWorker, logImportWorkerError, recoverNoteImports } from '../services/note_import_service.js';
 import { startHelpmonksSignupSequenceWorker } from '../services/helpmonks_signup_sequence_service.js';
 import { cleanupOrphanedUploads } from '../services/obsidian_blob_service.js';
 import { cleanupObsidianRetention, createObsidianExtractionWorker } from '../services/obsidian_sync_service.js';
@@ -28,9 +28,21 @@ const log = createLogger('scheduler');
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 async function sendTrialReminder(userModel, user, fieldName, now, sendEmail) {
+	// shortcut: a crash after claiming can skip delivery; use an idempotent mail outbox if retries are required.
+	const claim = await userModel.updateOne({ _id: user._id, trial_source: 'no_card', subscription_status: 'trialing', trial_ends_at: user.trial_ends_at, [fieldName]: null }, { $set: { [fieldName]: now } });
+	if (!claim.matchedCount) return false;
 	const endDate = new Date(user.trial_ends_at).toLocaleDateString();
-	await sendEmail(user.email, user.name, endDate);
-	await userModel.updateOne({ _id: user._id }, { $set: { [fieldName]: now } });
+	try {
+		const result = await sendEmail(user.email, user.name, endDate);
+		if (result?.accepted?.length === 0) throw Object.assign(new Error('Reminder was not accepted'), { deliveryConfirmedFailed: true });
+	} catch (error) {
+		// SMTP rejection or a failure before DATA confirms nondelivery; a lost DATA reply does not.
+		if (error.deliveryConfirmedFailed || error.responseCode >= 400 || ['CONN', 'AUTH', 'MAIL FROM', 'RCPT TO'].includes(error.command)) {
+			await userModel.updateOne({ _id: user._id, trial_ends_at: user.trial_ends_at, [fieldName]: now }, { $unset: { [fieldName]: '' } });
+		}
+		throw error;
+	}
+	return true;
 }
 
 export async function runTrialLifecycle({
@@ -54,8 +66,7 @@ export async function runTrialLifecycle({
 	let reminders3d = 0;
 	for (const user of threeDayUsers) {
 		try {
-			await sendTrialReminder(userModel, user, 'trial_reminder_3d_sent_at', now, send3DayEmail);
-			reminders3d++;
+			if (await sendTrialReminder(userModel, user, 'trial_reminder_3d_sent_at', now, send3DayEmail)) reminders3d++;
 		} catch (err) {
 			log.warn({ err, email: user.email }, '3-day trial reminder failed');
 		}
@@ -71,8 +82,7 @@ export async function runTrialLifecycle({
 	let reminders24h = 0;
 	for (const user of twentyFourHourUsers) {
 		try {
-			await sendTrialReminder(userModel, user, 'trial_reminder_24h_sent_at', now, send24HourEmail);
-			reminders24h++;
+			if (await sendTrialReminder(userModel, user, 'trial_reminder_24h_sent_at', now, send24HourEmail)) reminders24h++;
 		} catch (err) {
 			log.warn({ err, email: user.email }, '24-hour trial reminder failed');
 		}
@@ -134,6 +144,8 @@ export function startScheduler() {
 	new Cron('*/30 * * * * *', () => recoverExports().catch((err) => log.error({ err }, 'Export recovery failed')));
 	const noteImportWorker = createNoteImportWorker();
 	noteImportWorker.start().catch(logImportWorkerError);
+	void recoverNoteImports().catch(logImportWorkerError);
+	new Cron('*/30 * * * * *', () => recoverNoteImports().catch(logImportWorkerError));
 	startHelpmonksSignupSequenceWorker().catch((err) => log.error({ err }, 'Helpmonks signup sequence worker failed to start'));
 	if (config.obsidian.enabled) {
 		const obsidianExtractionWorker = createObsidianExtractionWorker();

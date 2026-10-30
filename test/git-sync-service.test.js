@@ -133,7 +133,10 @@ function installModelMocks(state) {
 
 	for (const [Model, collection] of [[Note, state.notes], [Memory, state.memories]]) {
 		Model.findOne = async (query) => collection.find((doc) => matches(doc, query)) || null;
-		Model.find = async (query) => collection.filter((doc) => matches(doc, query));
+		Model.find = (query) => {
+			const result = collection.filter((doc) => matches(doc, query));
+			return Object.assign(Promise.resolve(result), { lean: async () => result.map((doc) => ({ ...doc, git_source: doc.git_source && { ...doc.git_source } })) });
+		};
 		Model.countDocuments = async (query) => collection.filter((doc) => matches(doc, query)).length;
 		Model.create = async (data) => {
 			if (Array.isArray(data)) data = data[0];
@@ -358,6 +361,7 @@ test('trashes synced items when their git file is deleted', async (t) => {
 	const remote = await createRemoteRepo();
 	t.after(() => fs.rmSync(remote.root, { recursive: true, force: true }));
 	fs.mkdirSync(path.join(remote.work, 'notes'), { recursive: true });
+	fs.writeFileSync(path.join(remote.work, 'notes', 'keep.md'), 'Keep\n');
 	fs.writeFileSync(path.join(remote.work, 'notes', 'delete-me.md'), '---\ntitle: Delete Me\n---\n\nBody\n');
 	await commitAll(remote.work, 'add note');
 	await git(remote.work, ['push']);
@@ -374,7 +378,7 @@ test('trashes synced items when their git file is deleted', async (t) => {
 	const summary = await syncRepo(repo._id.toString(), 'user-1', repo.host_id, { skip_lock: true, skip_audit: true });
 
 	assert.equal(summary.trashed_items, 1);
-	assert.equal(state.notes[0].in_trash, true);
+	assert.equal(state.notes.find((note) => note.title === 'Delete Me').in_trash, true);
 });
 
 test('records conflict and skips overwrite when git and local item both changed', async (t) => {
@@ -582,4 +586,59 @@ test('scheduler recovers crashed in_progress syncs, but leaves a live lock owner
 		cleanupClone(repo.host_id);
 		fs.rmSync(remote.root, { recursive: true, force: true });
 	}
+});
+
+for (const sync_path of ['/', 'missing']) test(`empty Markdown tree at ${sync_path} preserves linked notes and memories`, async (t) => {
+	const remote = await createRemoteRepo();
+	t.after(() => fs.rmSync(remote.root, { recursive: true, force: true }));
+	const repo = makeRepo(remote, { sync_path, commit_sync_enabled: false });
+	t.after(() => cleanupClone(repo.host_id));
+	const source = { repo_id: repo._id, file_path: 'missing.md', last_synced_at: now(5000) };
+	const note = makeDoc({ _id: oid('note'), host_id: repo.host_id, git_source: { ...source } });
+	const memory = makeDoc({ _id: oid('memory'), host_id: repo.host_id, git_source: { ...source } });
+	installModelMocks({ repos: [repo], notes: [note], memories: [memory] });
+	const summary = await syncRepo(repo._id.toString(), 'user-1', repo.host_id, { skip_lock: true, skip_audit: true });
+	assert.equal(summary.trashed_items, 0);
+	assert.equal(summary.conflicts, 2);
+	assert.equal(summary.conflict_details.every((item) => /no Markdown files/.test(item.reason)), true);
+	assert.equal(note.in_trash, undefined);
+	assert.equal(memory.in_trash, undefined);
+});
+
+test('empty Markdown tree with only trashed linked items records no conflicts', async (t) => {
+	const remote = await createRemoteRepo();
+	t.after(() => fs.rmSync(remote.root, { recursive: true, force: true }));
+	const repo = makeRepo(remote, { sync_path: 'missing', commit_sync_enabled: false });
+	t.after(() => cleanupClone(repo.host_id));
+	const source = { repo_id: repo._id, file_path: 'missing.md', last_synced_at: now(5000) };
+	const note = makeDoc({ _id: oid('note'), host_id: repo.host_id, in_trash: true, git_source: { ...source } });
+	installModelMocks({ repos: [repo], notes: [note], memories: [] });
+	const summary = await syncRepo(repo._id.toString(), 'user-1', repo.host_id, { skip_lock: true, skip_audit: true });
+	assert.equal(summary.conflicts, 0);
+	assert.equal(summary.trashed_items, 0);
+});
+
+test('tagless note and memory updates retain fallback tags and match imported content', async (t) => {
+	const remote = await createRemoteRepo();
+	t.after(() => fs.rmSync(remote.root, { recursive: true, force: true }));
+	for (const folder of ['notes', 'memories']) {
+		fs.mkdirSync(path.join(remote.work, folder));
+		fs.writeFileSync(path.join(remote.work, folder, 'a.md'), 'Original\n');
+	}
+	await commitAll(remote.work, 'original', now(-10000));
+	await git(remote.work, ['push']);
+	const repo = makeRepo(remote, { sync_mode: 'read_only', commit_sync_enabled: false });
+	t.after(() => cleanupClone(repo.host_id));
+	const state = { repos: [repo], notes: [], memories: [] };
+	installModelMocks(state);
+	await syncRepo(repo._id.toString(), 'user-1', repo.host_id, { skip_lock: true, skip_audit: true });
+	for (const folder of ['notes', 'memories']) fs.writeFileSync(path.join(remote.work, folder, 'a.md'), 'Updated\n');
+	const date = now(-5000);
+	await commitAll(remote.work, 'update', date);
+	await git(remote.work, ['push']);
+	const summary = await syncRepo(repo._id.toString(), 'user-1', repo.host_id, { skip_lock: true, skip_audit: true });
+	assert.equal(summary.imported_files, 2);
+	for (const doc of [...state.notes, ...state.memories]) { assert.deepEqual(doc.tags, ['git-sync']); doc.updatedAt = now(5000); }
+	await syncRepo(repo._id.toString(), 'user-1', repo.host_id, { skip_lock: true, skip_audit: true });
+	for (const doc of [...state.notes, ...state.memories]) assert.equal(doc.updatedAt.toISOString(), gitDate(date).toISOString());
 });

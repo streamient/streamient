@@ -51,4 +51,16 @@ Invoices are generated automatically for each billing cycle. Download past invoi
 
 You can cancel your subscription at any time from **Settings > Billing**. Your data remains accessible until the end of the current billing period.
 
+After your subscription ends, you can subscribe again from **Settings > Billing**. Streamient checks that the previous checkout subscription has ended before opening a new payment session.
+
 After cancellation, you can export your data or move to a [self-hosted installation](/selfhosted/) without changing how Streamient works for your team.
+
+## Subscription and access safeguards
+
+Use the billing portal to manage an existing subscription, including overdue payments. Checkout cannot replace a different current paid subscription.
+
+Email lists, counts, search results, and AI chat context require Pro or an active Pro trial on Cloud. Self-hosted access is unchanged. Concurrent project creation respects the account's stored project limit.
+
+Repeated checkout requests reuse the account’s open payment session. If checkout cannot confirm its state, it stops instead of opening another payable session. Concurrent team additions respect the user limit; rejected additions do not create user accounts.
+
+Trial reminders retry confirmed delivery failures. An interrupted send with an unknown delivery result is not retried automatically, to avoid duplicate messages.

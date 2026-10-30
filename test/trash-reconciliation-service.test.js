@@ -5,7 +5,7 @@ import { reconcileActiveTrashTenants, reconcileTrashForTenant } from '../service
 
 function fakeModel(docs, observations) {
 	return {
-		findOneAndUpdate: (query) => ({ lean: async () => docs.find((doc) => doc.host_id === query.host_id && String(doc._id) === String(query._id)) || null }),
+		findOneAndUpdate: () => { throw new Error('Reconciliation must batch reads instead of per-item no-op writes'); },
 		find: (query) => {
 			observations.queries.push(query);
 			const chain = {
@@ -137,7 +137,7 @@ describe('trash reconciliation service', () => {
 		assert.equal(summary.totals.errors, 1);
 	});
 
-	it('keeps an orphan indexed when graph cleanup fails so a later run can retry', async () => {
+	it('removes an orphan from search even when graph cleanup fails', async () => {
 		const observations = { queries: [], reads: [], leans: 0, updates: [] };
 		let searchDeletes = 0;
 		const summary = await reconcileTrashForTenant('host-1', {
@@ -150,8 +150,8 @@ describe('trash reconciliation service', () => {
 			isValidId: () => true,
 		});
 
-		assert.equal(searchDeletes, 0);
-		assert.equal(summary.totals.deleted, 0);
+		assert.equal(searchDeletes, 1);
+		assert.equal(summary.totals.deleted, 1);
 		assert.equal(summary.totals.errors, 1);
 		assert.equal(summary.types.notes.errors[0].operation, 'delete_orphan_graph_links');
 	});
@@ -190,7 +190,7 @@ describe('trash reconciliation under replica lag', () => {
 		const current = { _id: 'restored', host_id: 'host', in_trash: false, title: 'Current content' };
 		const indexed = [];
 		const model = {
-			find: () => ({ lean: async () => [{ ...current, in_trash: true, title: 'Old content' }, { _id: 'deleted', host_id: 'host', in_trash: true }] }),
+			find: (query) => ({ lean: async () => query._id ? [current] : [{ ...current, in_trash: true, title: 'Old content' }, { _id: 'deleted', host_id: 'host', in_trash: true }] }),
 			findOneAndUpdate: (filter) => ({ lean: async () => filter._id === current._id ? current : null }),
 			updateMany: async () => ({}),
 		};

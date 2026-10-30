@@ -108,6 +108,7 @@ describe('no-card trial signup and billing helpers', () => {
 		let createdPayload;
 		let updateCall;
 		const stripe = {
+			subscriptions: { list: async () => ({ data: [], has_more: false }) },
 			customers: {
 				create: async (payload) => {
 					createdPayload = payload;
@@ -116,6 +117,7 @@ describe('no-card trial signup and billing helpers', () => {
 			},
 		};
 		const userModel = {
+			findOneAndUpdate(filter, pipeline) { return { select() { return this; }, lean: async () => ({ stripe_checkout_attempt: pipeline[0].$set.stripe_checkout_attempt.$ifNull[1].$literal }) }; },
 			findByIdAndUpdate: async (...args) => {
 				updateCall = args;
 				return null;
@@ -141,6 +143,7 @@ describe('no-card trial signup and billing helpers', () => {
 		let retrieveId;
 		let updateCall;
 		const stripe = {
+			subscriptions: { list: async () => ({ data: [], has_more: false }) },
 			customers: {
 				create: async () => {
 					const err = new Error('Customer already exists');
@@ -154,6 +157,7 @@ describe('no-card trial signup and billing helpers', () => {
 			},
 		};
 		const userModel = {
+			findOneAndUpdate(filter, pipeline) { return { select() { return this; }, lean: async () => ({ stripe_checkout_attempt: pipeline[0].$set.stripe_checkout_attempt.$ifNull[1].$literal }) }; },
 			findByIdAndUpdate: async (...args) => {
 				updateCall = args;
 				return null;
@@ -179,6 +183,7 @@ describe('no-card trial signup and billing helpers', () => {
 		let createCalled = false;
 		let updateCalled = false;
 		const stripe = {
+			subscriptions: { list: async () => ({ data: [], has_more: false }) },
 			customers: {
 				create: async () => {
 					createCalled = true;
@@ -212,19 +217,24 @@ describe('no-card trial signup and billing helpers', () => {
 		let checkoutParams;
 		let updateCall;
 		const stripe = {
+			subscriptions: { list: async () => ({ data: [], has_more: false }) },
 			customers: {
 				create: async (payload) => ({ id: payload.id }),
 			},
 			checkout: {
 				sessions: {
+					list: async () => ({ data: [], has_more: false }),
+					retrieve: async () => ({ id: 'cs_one', status: 'open', url: 'https://checkout.example/session' }),
 					create: async (params) => {
 						checkoutParams = params;
-						return { url: 'https://checkout.example/session' };
+						return { id: 'cs_one', status: 'open', url: 'https://checkout.example/session' };
 					},
 				},
 			},
 		};
 		const userModel = {
+			updateOne: async () => ({ matchedCount: 1 }),
+			findOneAndUpdate(filter, pipeline) { return { select() { return this; }, lean: async () => ({ stripe_checkout_attempt: pipeline[0].$set.stripe_checkout_attempt.$ifNull[1].$literal }) }; },
 			findByIdAndUpdate: async (...args) => {
 				updateCall = args;
 				return null;
@@ -462,4 +472,32 @@ it('trial expiry rechecks eligibility and skips a paid upgrade, extended trial, 
 		assert.equal(summary.expired, emails);
 		assert.equal(current.subscription_status, change.subscription_status || (emails ? 'trial_expired' : 'trialing'));
 	}
+});
+
+it('concurrent schedulers claim a reminder once before sending', async () => {
+	const now = new Date();
+	const user = { _id: 'trial', trial_ends_at: new Date(now.getTime() + 3.5 * 86400000) };
+	let claimed = false;
+	let sends = 0;
+	const userModel = {
+		find: async (filter) => filter.trial_reminder_3d_sent_at === null ? [user] : [],
+		updateOne: async (filter) => {
+			assert.equal(filter.trial_source, 'no_card');
+			assert.equal(filter.subscription_status, 'trialing');
+			assert.equal(filter.trial_ends_at, user.trial_ends_at);
+			const matchedCount = Number(!claimed);
+			claimed = true;
+			return { matchedCount };
+		},
+	};
+	const results = await Promise.all(Array.from({ length: 8 }, () => runTrialLifecycle({ now, userModel, send3DayEmail: async () => { assert.equal(claimed, true); sends++; } })));
+	assert.equal(sends, 1);
+	assert.equal(results.reduce((sum, result) => sum + result.reminders_3d, 0), 1);
+});
+it('checkout rejects a remote past-due subscription before creating a session', async () => {
+	const original = config.stripe.proPriceId;
+	config.stripe.proPriceId = 'price_pro';
+	try {
+		await assert.rejects(createCheckoutSession({ stripe_customer_id: 'cus_1' }, { userModel: {}, stripe: { subscriptions: { list: async () => ({ data: [{ id: 'sub_paid', status: 'past_due' }], has_more: false }) }, checkout: { sessions: { create: () => assert.fail('duplicate checkout') } } } }), /existing subscription/);
+	} finally { config.stripe.proPriceId = original; }
 });

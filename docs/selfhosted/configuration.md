@@ -7,11 +7,11 @@ description: "Configure self-hosted Streamient with Docker Compose environment v
 
 All configuration is managed through environment variables in `compose.prod.yml`. The recommended approach is to use the production Compose file from the [GitHub repository](https://github.com/streamient/streamient) and set your secrets via shell environment or a Docker secrets workflow.
 
-## MongoDB Replica Reads
+## MongoDB Read Preference
 
-Streamient uses `secondaryPreferred` for ordinary reads, with a 90-second maximum staleness setting. Reads use majority-committed data. Writes require majority acknowledgement. The main connection, session store, and socket client share these settings.
+Each Mongoose model sets its read preference with the schema `read` option. Most models use `secondaryPreferred`; emails and passkeys use the driver default. The connection does not set a read preference. Reads use majority-committed data. Writes require majority acknowledgement. The main connection, session store, and socket client share these settings.
 
-Authentication, revocation, and cleanup use conditional writes when a stale result could grant access or delete current data. Transactions use write results instead of primary-read overrides. After a mutation, responses use the acknowledged result rather than rereading a lagging replica.
+Transaction reads use `.session(session).read('primary')`. After a mutation, responses use the write result instead of a second read.
 
 ## Compose File
 

@@ -93,9 +93,9 @@ function makeModel(state, { gateRead = false, gateClaim = false, gateMark = fals
 function fakeTypesense(store) {
 	const original = Typesense.Client;
 	Typesense.Client = class {
-		collections() {
+		collections(name) {
 			return {
-				retrieve: async () => ({ fields: [] }),
+				retrieve: async () => name ? { fields: [] } : [],
 				update: async () => ({}),
 				documents: () => ({
 					delete: async ({ filter_by }) => {

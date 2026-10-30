@@ -38,15 +38,12 @@ function groupIdsByHost(docs) {
 
 async function cleanupReferences(type, tsType, docs, removeSearchDocuments, removeGraphLinks, errors) {
 	for (const [hostId, ids] of groupIdsByHost(docs)) {
-		let graphCleaned = false;
 		try {
 			await removeGraphLinks(hostId, ids);
-			graphCleaned = true;
 		} catch (err) {
 			errors.push({ type, operation: 'graph_cleanup', host_id: hostId, count: ids.length, message: err?.message || String(err) });
 			log.error({ err, type, host_id: hostId, count: ids.length }, 'Trash retention graph cleanup error');
 		}
-		if (!graphCleaned) continue;
 		try {
 			await removeSearchDocuments(hostId, tsType, ids);
 		} catch (err) {

@@ -25,9 +25,10 @@ const obsidianFileSchema = new mongoose.Schema({
 	extraction_error: { type: String, default: '' },
 	in_trash: { type: Boolean, default: false },
 	trashed_at: { type: Date, default: null },
-}, { timestamps: true });
+}, { timestamps: true, read: 'secondaryPreferred' });
 
 obsidianFileSchema.index({ host_id: 1, connection: 1, path: 1 }, { unique: true });
 obsidianFileSchema.index({ host_id: 1, project: 1, in_trash: 1, updatedAt: -1 });
+obsidianFileSchema.index({ host_id: 1, is_indexed: 1, updatedAt: -1 });
 
 export const ObsidianFile = mongoose.model('ObsidianFile', obsidianFileSchema);

@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import express from 'express';
+import { MemoryStore } from 'express-rate-limit';
 
+import { ApiClient } from '../apps/mcp/lib/api-client.js';
 import * as ApiRateLimit from '../middleware/rate_limit.js';
 import * as McpRateLimit from '../modules/mcp_rate_limit.js';
 
@@ -178,29 +180,49 @@ describe('API rate-limit helpers', () => {
 		assert.throws(() => ApiRateLimit.getConfig(), /env 'API_RATE_LIMIT_WINDOW_MS' must be an integer >= 1/);
 	});
 
-	it('keys by hashed credential before IP fallback', () => {
-		const basicKey = ApiRateLimit.getRateLimitKey(request({
-			headers: { authorization: `Basic ${Buffer.from('api-user:secret').toString('base64')}` },
-		}));
-		const bearerKey = ApiRateLimit.getRateLimitKey(request({
-			headers: { authorization: 'Bearer raw-bearer-token' },
-		}));
-		const tokenKey = ApiRateLimit.getRateLimitKey(request({
-			headers: { authorization: 'Token raw-token' },
-		}));
-		const accessKey = ApiRateLimit.getRateLimitKey(request({
-			headers: { 'x-access-token': 'raw-access-token' },
-		}));
-		const ipKey = ApiRateLimit.getRateLimitKey(request({ ip: '203.0.113.20' }));
-
-		assert.match(basicKey, /^basic:[a-f0-9]{64}$/);
-		assert.match(bearerKey, /^bearer:[a-f0-9]{64}$/);
-		assert.match(tokenKey, /^bearer:[a-f0-9]{64}$/);
-		assert.match(accessKey, /^access:[a-f0-9]{64}$/);
+	it('keys by verified session user, otherwise by IP, never by unverified credentials', () => {
+		const ip = '203.0.113.20';
+		const ipKey = ApiRateLimit.getRateLimitKey(request({ ip }));
 		assert.match(ipKey, /^ip:[a-f0-9]{64}$/);
-		assert.equal(basicKey.includes('api-user'), false);
-		assert.equal(bearerKey.includes('raw-bearer-token'), false);
-		assert.equal(accessKey.includes('raw-access-token'), false);
+		assert.equal(ApiRateLimit.getRateLimitKey(request({ ip, headers: { authorization: 'Bearer raw-bearer-token' } })), ipKey);
+		assert.equal(ApiRateLimit.getRateLimitKey(request({ ip, headers: { authorization: `Basic ${Buffer.from('api-user:secret').toString('base64')}` } })), ipKey);
+		assert.equal(ApiRateLimit.getRateLimitKey(request({ ip, headers: { 'x-access-token': 'raw-access-token' } })), ipKey);
+		const userKey = ApiRateLimit.getRateLimitKey(request({ ip, session: { userId: 'user-1' } }));
+		assert.match(userKey, /^user:[a-f0-9]{64}$/);
+		assert.equal(userKey.includes('user-1'), false);
+	});
+
+	it('puts random bearer tokens from one IP in the same bucket', async () => {
+		setEnv({ ...API_RATE_LIMIT_ENV, API_RATE_LIMIT_GENERAL_PER_MINUTE: '2' });
+		const app = express();
+		app.use('/api/v1', ...ApiRateLimit.createApiLimiters(), (_req, res) => res.json({ success: true }));
+		const server = await listen(app);
+		try {
+			const base = `http://127.0.0.1:${server.address().port}/api/v1`;
+			const statuses = [];
+			for (let i = 0; i < 3; i += 1) statuses.push((await fetch(`${base}/projects`, { headers: { authorization: `Bearer random-${i}-${Math.random()}` } })).status);
+			assert.deepEqual(statuses, [200, 200, 429]);
+		} finally {
+			await closeServer(server);
+		}
+	});
+
+	it('limits auth attempts per IP and account email', async () => {
+		const app = express();
+		app.use(express.json());
+		app.post('/login', ApiRateLimit.createAuthAttemptLimiter('test-auth-login', { store: new MemoryStore() }), (_req, res) => res.status(401).json({ error: 'Invalid credentials' }));
+		const server = await listen(app);
+		try {
+			const url = `http://127.0.0.1:${server.address().port}/login`;
+			const attempt = (email) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, password: 'wrong' }) });
+			for (let i = 0; i < 10; i += 1) assert.equal((await attempt(i % 2 ? 'Victim@Example.com' : ' victim@example.com')).status, 401);
+			const blocked = await attempt('victim@example.com');
+			assert.equal(blocked.status, 429);
+			assert.match((await blocked.json()).error, /Too many attempts/);
+			assert.equal((await attempt('other@example.com')).status, 401);
+		} finally {
+			await closeServer(server);
+		}
 	});
 
 	it('detects skip, search/read, expensive, and upload APIs', () => {
@@ -239,16 +261,18 @@ describe('API rate-limit helpers', () => {
 		try {
 			const { port } = server.address();
 			const base = `http://127.0.0.1:${port}/api/v1`;
-			const obsidianHeaders = { authorization: 'Bearer obsidian-read-token' };
+			// Unauthenticated callers are keyed by IP and the store may be a shared Memcached, so give each bucket a fresh client IP.
+			const runIp = (n) => `198.51.${Math.floor(Math.random() * 250)}.${n}`;
+			const obsidianHeaders = { authorization: 'Bearer obsidian-read-token', 'cf-connecting-ip': runIp(1) };
 			assert.equal((await fetch(`${base}/obsidian/files/file-1/content`, { headers: obsidianHeaders })).status, 200);
 			assert.equal((await fetch(`${base}/obsidian/connections/connection-1/changes`, { headers: obsidianHeaders })).status, 200);
 			assert.equal((await fetch(`${base}/obsidian/projects`, { headers: obsidianHeaders })).status, 429);
 
-			const uploadHeaders = { authorization: 'Bearer obsidian-upload-token', 'content-type': 'application/json' };
+			const uploadHeaders = { authorization: 'Bearer obsidian-upload-token', 'cf-connecting-ip': runIp(2), 'content-type': 'application/json' };
 			assert.equal((await fetch(`${base}/obsidian/uploads`, { method: 'POST', headers: uploadHeaders, body: '{}' })).status, 200);
 			assert.equal((await fetch(`${base}/obsidian/uploads/upload-1/complete`, { method: 'POST', headers: uploadHeaders, body: '{}' })).status, 200);
 
-			const generalHeaders = { authorization: 'Bearer general-token' };
+			const generalHeaders = { authorization: 'Bearer general-token', 'cf-connecting-ip': runIp(3) };
 			assert.equal((await fetch(`${base}/projects`, { headers: generalHeaders })).status, 200);
 			assert.equal((await fetch(`${base}/notes`, { headers: generalHeaders })).status, 429);
 		} finally {
@@ -258,6 +282,51 @@ describe('API rate-limit helpers', () => {
 });
 
 describe('MCP rate-limit helpers', () => {
+	it('shares the API client IP trust policy and ignores public-peer spoofing', () => {
+		assert.equal(McpRateLimit.getClientIp, ApiRateLimit.getClientIp);
+		for (const header of ['cf-connecting-ip', 'fastly-client-ip', 'true-client-ip', 'x-real-ip', 'x-forwarded-for']) {
+			assert.equal(McpRateLimit.getClientIp({ socket: { remoteAddress: '8.8.8.8' }, headers: { [header]: '1.1.1.1' } }), '8.8.8.8');
+		}
+		assert.equal(McpRateLimit.getClientIp({ socket: { remoteAddress: '10.0.0.2' }, headers: { 'x-forwarded-for': '8.8.8.8' } }), '8.8.8.8');
+	});
+
+	it('keeps rejected MCP API tokens isolated by forwarded transport IP', async () => {
+		setEnv({ ...API_RATE_LIMIT_ENV, API_RATE_LIMIT_GENERAL_PER_MINUTE: '2' });
+		const app = express();
+		app.use(ApiRateLimit.createApiAuthFailureLimiter());
+		app.get('/api/v1/projects', (_req, res) => res.sendStatus(401));
+		const server = app.listen(0);
+		await new Promise((resolve) => server.once('listening', resolve));
+		const base = `http://127.0.0.1:${server.address().port}`;
+		try {
+			for (const token of ['invalid-a', 'invalid-b']) await assert.rejects(new ApiClient(base, token, '9.9.9.9').get('/projects'), { status: 401 });
+			await assert.rejects(new ApiClient(base, 'invalid-c', '9.9.9.9').get('/projects'), { status: 429 });
+			await assert.rejects(new ApiClient(base, 'invalid-d', '1.0.0.1').get('/projects'), { status: 401 });
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
+	it('counts rotating invalid tokens per IP without charging successful requests', async () => {
+		setEnv({ ...MCP_RATE_LIMIT_ENV, MCP_UNAUTH_PER_MINUTE: '2' });
+		const app = express();
+		app.use(McpRateLimit.createUnauthLimiter(`rotation-${Date.now()}`));
+		app.post('/mcp', (req, res) => res.sendStatus(req.headers.authorization === 'Token valid' ? 200 : 401));
+		const server = app.listen(0);
+		await new Promise((resolve) => server.once('listening', resolve));
+		const url = `http://127.0.0.1:${server.address().port}/mcp`;
+		const send = (token, ip = '8.8.4.4') => fetch(url, { method: 'POST', headers: { authorization: `Token ${token}`, 'x-forwarded-for': ip } });
+		try {
+			for (let i = 0; i < 3; i++) assert.equal((await send('valid')).status, 200);
+			assert.equal((await send('invalid-a')).status, 401);
+			assert.equal((await send('invalid-b')).status, 401);
+			assert.equal((await send('invalid-c')).status, 429);
+			assert.equal((await send('valid', '1.1.1.1')).status, 200);
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
 	it('requires env config and reads compose-provided values', () => {
 		assert.throws(() => McpRateLimit.getConfig(), /missing required env 'MCP_RATE_LIMIT_ENABLED'/);
 

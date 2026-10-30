@@ -75,22 +75,16 @@ async function resolveDefaultProjectId(api, projectIdOverride) {
 }
 
 async function resolveBootstrap(api, { projectId, cacheKey }) {
+  // Validate credentials on every request, including cached bootstrap and project overrides.
+  const { features } = await api.get('/features');
+  const emailFeatureEnabled = features?.email_ingest !== false;
+  const gitSyncFeatureEnabled = features?.git_sync !== false;
   const now = Date.now();
   if (cacheKey) {
     const cached = bootstrapCache.get(cacheKey);
-    if (cached && cached.expires > now) return { ...cached.value, cacheHit: true };
+    if (cached && cached.expires > now) return { ...cached.value, emailFeatureEnabled, gitSyncFeatureEnabled, cacheHit: true };
   }
   const defaultProjectId = await resolveDefaultProjectId(api, projectId);
-  let emailFeatureEnabled = true;
-  let gitSyncFeatureEnabled = true;
-  try {
-    const { features } = await api.get('/features');
-    emailFeatureEnabled = features?.email_ingest !== false;
-    gitSyncFeatureEnabled = features?.git_sync !== false;
-  } catch {
-    emailFeatureEnabled = true;
-    gitSyncFeatureEnabled = true;
-  }
   const value = { defaultProjectId, emailFeatureEnabled, gitSyncFeatureEnabled };
   if (cacheKey) {
     bootstrapCache.set(cacheKey, { value, expires: now + BOOTSTRAP_TTL_MS });
@@ -112,8 +106,8 @@ function buildToolMeta(name, tool) {
   };
 }
 
-async function createServer(apiAuth, { projectId, oauthClientId, cacheKey, toolProfile = MCP_TOOL_PROFILES.FULL, rateLimitKey = null } = {}) {
-  const api = new ApiClient(API_BASE_URL, apiAuth);
+async function createServer(apiAuth, { projectId, oauthClientId, cacheKey, toolProfile = MCP_TOOL_PROFILES.FULL, rateLimitKey = null, clientIp = null } = {}) {
+  const api = new ApiClient(API_BASE_URL, apiAuth, clientIp);
   const toolRateLimitKey = rateLimitKey || McpRateLimit.getApiClientRateLimitKey(MCP_PRODUCT, api);
   const bootstrapStart = Date.now();
   const { defaultProjectId, emailFeatureEnabled, gitSyncFeatureEnabled, cacheHit } =
@@ -252,7 +246,7 @@ if (transportArg === '--stdio' || !transportArg) {
       const authKey = sessionBindingKeyForContext(authContext);
       const rateLimitKey = McpRateLimit.getAuthContextRateLimitKey(MCP_PRODUCT, req, authContext);
       const cacheKey = `${authKey}:${projectId || ''}`;
-      const { server, api } = await createServer(authContext.apiAuth, { projectId, oauthClientId, cacheKey, rateLimitKey, toolProfile: resolveToolProfile(authContext) });
+      const { server, api } = await createServer(authContext.apiAuth, { clientIp: McpRateLimit.getClientIp(req), projectId, oauthClientId, cacheKey, rateLimitKey, toolProfile: resolveToolProfile(authContext) });
       const transport = new SSEServerTransport('/messages', res);
       sseTransports.set(transport.sessionId, {
 		server,
@@ -272,7 +266,7 @@ if (transportArg === '--stdio' || !transportArg) {
       recordException(err);
       log.error({ err }, 'Error starting Streamient MCP SSE connection');
       if (!res.headersSent) {
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(err.status === 401 ? 401 : 500).json({ error: err.status === 401 ? 'Invalid access token' : 'Internal server error' });
       }
     }
   });
@@ -288,6 +282,7 @@ if (transportArg === '--stdio' || !transportArg) {
       if (session.authKey !== sessionBindingKeyForContext(authContext)) {
 		return sendAuthResponse(res, authContext.response || { status: 401, body: { error: 'Session authentication mismatch' } });
 	}
+	if (session.api.clientIp !== McpRateLimit.getClientIp(req)) return res.status(401).json({ error: 'Session client address mismatch' });
 	const scopeResponse = checkRequestScopes(authContext, req.body);
 	if (scopeResponse) return sendAuthResponse(res, scopeResponse);
       // The bridge token minted at connection time expires long before the
@@ -302,7 +297,7 @@ if (transportArg === '--stdio' || !transportArg) {
       recordException(err);
       log.error({ err }, 'Error handling Streamient MCP SSE message');
       if (!res.headersSent) {
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(err.status === 401 ? 401 : 500).json({ error: err.status === 401 ? 'Invalid access token' : 'Internal server error' });
       }
     }
   });
@@ -324,7 +319,7 @@ if (transportArg === '--stdio' || !transportArg) {
       const oauthClientId = authContext.tokenClaims?.client_name || authContext.tokenClaims?.client_id || null;
       const effectiveProfile = resolveToolProfile(authContext, toolProfile);
       const cacheKey = `${sessionBindingKeyForContext(authContext)}:${projectId || ''}`;
-      const { server, bootstrapMs, bootstrapCacheHit } = await createServer(authContext.apiAuth, { projectId, oauthClientId, cacheKey, toolProfile: effectiveProfile, rateLimitKey });
+      const { server, bootstrapMs, bootstrapCacheHit } = await createServer(authContext.apiAuth, { clientIp: McpRateLimit.getClientIp(req), projectId, oauthClientId, cacheKey, toolProfile: effectiveProfile, rateLimitKey });
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
@@ -349,7 +344,7 @@ if (transportArg === '--stdio' || !transportArg) {
         error: err?.message || 'unknown',
       });
       if (!res.headersSent) {
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(err.status === 401 ? 401 : 500).json({ error: err.status === 401 ? 'Invalid access token' : 'Internal server error' });
       }
     }
   };

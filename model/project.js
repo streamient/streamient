@@ -12,7 +12,7 @@ const projectSchema = new mongoose.Schema(
 		active_work: { type: mongoose.Schema.Types.Mixed, default: {} },
 		deletion: { type: mongoose.Schema.Types.Mixed, default: null },
 	},
-	{ timestamps: true },
+	{ timestamps: true, read: 'secondaryPreferred' },
 );
 
 projectSchema.index({ host_id: 1, is_active: 1 });

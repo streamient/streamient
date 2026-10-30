@@ -43,22 +43,16 @@ function sourceFiles(dir) {
 
 const productionFiles = [
 	...['apps', 'middleware', 'model', 'modules', 'routes', 'scripts', 'services'].flatMap((dir) => sourceFiles(path.join(rootDir, dir))),
-	...['app.js', 'build.js', 'config.js', 'db.js', 'diag_chat2.mjs', 'swagger.js', 'tracing.js'].map((file) => path.join(rootDir, file)).filter((file) => fs.existsSync(file)),
+	...['app.js', 'build.js', 'config.js', 'db.js', 'swagger.js', 'tracing.js'].map((file) => path.join(rootDir, file)).filter((file) => fs.existsSync(file)),
 ].sort();
 const mongooseWrapperPath = path.join(modelDir, 'mongoose.js');
 
 describe('Mongoose defaults', () => {
-	it('uses the Helpmonks replica policy on native clients and schema reads', () => {
+	it('keeps read preference off native clients and on per-model schema options', () => {
 		const client = new MongoClient(config.mongoUri, config.mongoOptions);
-		assert.equal(client.options.readPreference.mode, 'secondaryPreferred');
-		assert.equal(client.options.readPreference.maxStalenessSeconds, 90);
+		assert.equal(client.options.readPreference.mode, 'primary');
 		assert.equal(client.options.readConcern.level, 'majority');
 		assert.equal(client.options.writeConcern.w, 'majority');
-		assert.equal(User.schema.options.read.maxStalenessSeconds, 90);
-		for (const file of productionFiles) {
-			const source = fs.readFileSync(file, 'utf8');
-			assert.doesNotMatch(source, /\.read\(\s*['"]primary['"]|readPreference\s*:\s*['"]primary['"]|primaryQuery|primaryTenantQuery/, file);
-		}
 		for (const name of ['db.js', 'app.js', 'modules/socket.js']) assert.match(fs.readFileSync(path.join(rootDir, name), 'utf8'), /config\.mongoOptions/, name);
 	});
 
@@ -88,12 +82,14 @@ describe('Mongoose defaults', () => {
 	});
 
 	it('applies read, toJSON, and usePushEach schema defaults to every model', () => {
+		// Matches Helpmonks: these models deliberately use the driver default.
+		const driverDefault = new Set(['Email', 'UserPasskey']);
 		const modelNames = mongoose.modelNames().sort();
 		assert.ok(modelNames.length >= modelFiles.length);
 
 		for (const modelName of modelNames) {
 			const schema = mongoose.model(modelName).schema;
-			assert.equal(readMode(schema), 'secondaryPreferred', `${modelName} read mode`);
+			assert.equal(readMode(schema), driverDefault.has(modelName) ? null : 'secondaryPreferred', `${modelName} read mode`);
 			assert.equal(schema.options.toJSON?.virtuals, true, `${modelName} toJSON virtuals`);
 			assert.equal(schema.options.usePushEach, true, `${modelName} usePushEach`);
 		}
@@ -125,6 +121,6 @@ describe('Mongoose defaults', () => {
 
 	it('applies schema read preference to aggregations', () => {
 		const aggregate = User.aggregate([{ $match: { email: 'a@example.com' } }]);
-		assert.equal(aggregate.options.readPreference?.mode, 'secondaryPreferred');
+		assert.equal(aggregate.options.readPreference, 'secondaryPreferred');
 	});
 });

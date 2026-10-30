@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import { getClientIp } from '../middleware/rate_limit.js';
+export { getClientIp } from '../middleware/rate_limit.js';
 import rateLimit from 'express-rate-limit';
 import { getCache, getMongoCoordinator, getRateLimitStore } from './cache.js';
 import { createLogger } from './logger.js';
@@ -83,35 +85,8 @@ export function getConfig() {
 	};
 }
 
-function firstHeaderValue(value) {
-	if (Array.isArray(value)) return value[0] || '';
-	return String(value || '').split(',')[0].trim();
-}
-
-function normalizeIp(value) {
-	let ip = firstHeaderValue(value) || '127.0.0.1';
-	if (ip.startsWith('::ffff:')) ip = ip.slice(7);
-	if (ip.startsWith('[')) ip = ip.slice(1, ip.indexOf(']') === -1 ? undefined : ip.indexOf(']'));
-	if (/^\d+\.\d+\.\d+\.\d+:\d+$/.test(ip)) ip = ip.slice(0, ip.lastIndexOf(':'));
-	return ip || '127.0.0.1';
-}
-
 export function getRequestPath(request) {
 	return (request.originalUrl || request.url || request.path || '').split('?')[0] || '/';
-}
-
-export function getClientIp(request) {
-	return normalizeIp(
-		request.headers?.['cf-connecting-ip'] ||
-		request.headers?.['fastly-client-ip'] ||
-		request.headers?.['true-client-ip'] ||
-		request.headers?.['x-real-ip'] ||
-		request.headers?.['x-forwarded-for'] ||
-		request['ip'] ||
-		request.connection?.remoteAddress ||
-		request.socket?.remoteAddress ||
-		'127.0.0.1'
-	);
 }
 
 function getCacheStore(prefix) {
@@ -187,10 +162,6 @@ function getCredential(request) {
 	return null;
 }
 
-function hasCredential(request) {
-	return !!getCredential(request);
-}
-
 function makeKey(product, type, value) {
 	return `${product}:${type}:${hashValue(`${product}:${type}:${value}`)}`;
 }
@@ -218,7 +189,7 @@ export function getApiClientRateLimitKey(product, apiClient) {
 	return makeKey(product, 'process', process.pid);
 }
 
-function createRequestLimiter(product, name, limit, keyGenerator, skip) {
+function createRequestLimiter(product, name, limit, keyGenerator, skip, options = {}) {
 	const rateLimitConfig = getConfig();
 	if (!rateLimitConfig.enabled) return createNoopLimiter();
 
@@ -234,6 +205,7 @@ function createRequestLimiter(product, name, limit, keyGenerator, skip) {
 		standardHeaders: 'draft-7',
 		legacyHeaders: false,
 		skip,
+		...options,
 		handler: function handleRateLimit(request, response) {
 			setRateLimitHeaders(response);
 			log.warn({ product, bucket: name, method: request.method, path: getRequestPath(request) }, 'MCP rate limit exceeded');
@@ -260,8 +232,8 @@ export function createUnauthLimiter(product) {
 	return createRequestLimiter(product, 'unauth', getConfig().unauthPerMinute, function keyByUnauthIp(request) {
 		return makeKey(product, 'ip', getClientIp(request));
 	}, function skipUnauth(request) {
-		return shouldSkipCommon(request) || hasCredential(request);
-	});
+		return shouldSkipCommon(request);
+	}, { skipSuccessfulRequests: true, requestWasSuccessful: (_request, response) => response.statusCode !== 401 });
 }
 
 export function createSseOpenLimiter(product) {

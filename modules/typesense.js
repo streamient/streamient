@@ -12,6 +12,7 @@ import { createLogger } from './logger.js';
 import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
 import { Url } from '../model/url.js';
+import { CrawlState } from '../model/crawl_state.js';
 import { Email } from '../model/email.js';
 import { ObsidianFile } from '../model/obsidian_file.js';
 
@@ -54,8 +55,7 @@ const _trash_query_by = {
 	urls: 'title',
 	emails: 'subject',
 };
-// Claim-managed Mongo-backed types. `pages` are populated by the crawler and
-// are not claim-stamped, so they are deliberately absent here.
+// Mongo-backed types use record claims. Pages use per-crawl claims instead.
 const INDEXED_TYPE_MODELS = {
 	notes: Note,
 	memory: Memory,
@@ -65,6 +65,8 @@ const INDEXED_TYPE_MODELS = {
 };
 const TYPESENSE_MAX_PAGE_SIZE = 250;
 const ensuredCollectionHosts = new Set();
+const collectionSetupPromises = new Map();
+const collectionSetupGenerations = new Map();
 
 function chunkMetadataFields() {
 	return [
@@ -714,9 +716,19 @@ const schemas = {
 };
 
 /**
- * Ensure all 4 collections exist for a given host.
+ * Ensure search collections exist for a given host.
  */
 export async function ensureCollections(host_id) {
+	const generation = collectionSetupGenerations.get(host_id);
+	let setup = collectionSetupPromises.get(host_id);
+	if (!setup) {
+	setup = (async () => {
+	if (ensuredCollectionHosts.has(host_id)) {
+		const collections = await getTypesenseClient().collections().retrieve();
+		if (collectionSetupGenerations.get(host_id) !== generation) return;
+		if (Object.values(schemas).every((schema) => collections.some((collection) => collection.name === schema(host_id).name))) return;
+		ensuredCollectionHosts.delete(host_id);
+	}
 	const releaseAccountWork = await acquireTenantWork(host_id);
 	try {
 	if (ensuredCollectionHosts.has(host_id)) return;
@@ -748,8 +760,13 @@ export async function ensureCollections(host_id) {
 			}
 		}
 	}
-	ensuredCollectionHosts.add(host_id);
+	if (collectionSetupGenerations.get(host_id) === generation) ensuredCollectionHosts.add(host_id);
 	} finally { await releaseAccountWork(); }
+	})();
+	collectionSetupPromises.set(host_id, setup);
+	}
+	try { await setup; } finally { if (collectionSetupPromises.get(host_id) === setup) collectionSetupPromises.delete(host_id); }
+	if (collectionSetupGenerations.get(host_id) !== generation) return ensureCollections(host_id);
 }
 
 /**
@@ -1004,6 +1021,7 @@ export async function publishClaimedDocuments(host_id, type, model, docs, option
 		if (!sourceId) continue;
 		const token = randomUUID();
 		const version = doc.updatedAt ? { updatedAt: doc.updatedAt } : { updatedAt: { $exists: false } };
+		const capturedPages = type === 'urls' && doc.in_trash ? await captureCrawledPageIds(host_id, sourceId) : [];
 		let prev;
 		try {
 			prev = await model.findOneAndUpdate(
@@ -1025,6 +1043,7 @@ export async function publishClaimedDocuments(host_id, type, model, docs, option
 		} else {
 			await removeLegacyClaimlessChunks(host_id, type, sourceId);
 		}
+		if (capturedPages.length) await removeDocumentsByIds(host_id, 'pages', capturedPages);
 		const chunks = toTypesenseDocs(type, doc, token);
 		chunkCounts.set(sourceId, chunks.length);
 		for (const chunk of chunks) sourceEntries.push({ sourceId, doc: chunk });
@@ -1125,6 +1144,12 @@ export async function removeDocumentsByFilter(host_id, type, filterBy, options =
 export async function removeDocumentsBySourceIds(host_id, type, sourceIds, options = {}) {
 	const ids = [...new Set((sourceIds || []).map((id) => String(id)).filter(Boolean))];
 	if (!ids.length) return null;
+	if (type === 'urls' && !options.claim) {
+		const outcomes = await Promise.allSettled([removeCrawledPages(host_id, ids), CrawlState.deleteMany({ host_id, parent_url_id: { $in: ids } }), removeDocumentsByFilter(host_id, type, `source_id:=[${ids.map(exactFilterValue).join(',')}]`, { batch_size: 250 })]);
+		const failures = outcomes.filter((entry) => entry.status === 'rejected');
+		if (failures.length) throw new AggregateError(failures.map((entry) => entry.reason), 'URL cleanup failed');
+		return outcomes[2].value;
+	}
 	const ts = getTypesenseClient();
 	const collectionName = buildCollectionName(type, host_id);
 	const filters = [`source_id:=[${ids.map(exactFilterValue).join(',')}]`];
@@ -1141,6 +1166,24 @@ export async function removeDocumentsBySourceIds(host_id, type, sourceIds, optio
 			}
 		},
 	);
+}
+
+export async function captureCrawledPageIds(host_id, parentId, sourceIds) {
+	const filter = [`parent_url_id:=${exactFilterValue(parentId)}`];
+	if (sourceIds) filter.push(`source_id:=[${sourceIds.map(exactFilterValue).join(',')}]`);
+	const data = await getTypesenseClient().collections(buildCollectionName('pages', host_id)).documents().export({ filter_by: filter.join(' && '), include_fields: 'id' }).catch((err) => { if (err.httpStatus === 404) return ''; throw err; });
+	return String(data || '').split('\n').filter(Boolean).map((line) => JSON.parse(line).id);
+}
+
+export async function removeCrawledPages(host_id, parentIds, options = {}) {
+	const ts = getTypesenseClient();
+	const collection = buildCollectionName('pages', host_id);
+	const filters = [`parent_url_id:=[${parentIds.map(exactFilterValue).join(',')}]`];
+	if (options.claim) filters.push(`claim:=${exactFilterValue(options.claim)}`);
+	return withTypesenseResilience(`delete crawled pages ${collection}`, async () => {
+		try { return await ts.collections(collection).documents().delete({ filter_by: filters.join(' && '), batch_size: 250 }); }
+		catch (err) { if (err.httpStatus !== 404) throw err; return null; }
+	});
 }
 
 export async function bulkRemoveDocuments(host_id, type, sourceIds) {
@@ -1605,30 +1648,6 @@ export async function quickSearch(host_id, query, options = {}) {
 }
 
 /**
- * Get document counts for each collection type for a host.
- * Uses Typesense collection stats.
- */
-export async function getCollectionCounts(host_id) {
-	const ts = getTypesenseClient();
-	const types = ['notes', 'memory', 'urls', 'emails', 'vault_files'];
-	const counts = {};
-	await Promise.all(types.map(async (type) => {
-		try {
-			const col = await withTypesenseResilience(
-				`collection stats ${buildCollectionName(type, host_id)}`,
-				() => ts.collections(buildCollectionName(type, host_id)).retrieve({ 'exclude_fields': 'fields' }),
-				{ fallback: { num_documents: 0 } },
-			);
-			counts[type] = col.num_documents || 0;
-		} catch (err) {
-			log.error({ err, collection: buildCollectionName(type, host_id) }, 'getCollectionCounts failed');
-			counts[type] = 0;
-		}
-	}));
-	return counts;
-}
-
-/**
  * Get document count for a specific collection, optionally filtered by project.
  * Uses Typesense search with per_page=0 to get only the count.
  */
@@ -1678,6 +1697,18 @@ export async function getFilteredCount(host_id, type, projectId) {
  * so runStreamientIndexer() can repopulate Typesense in batches.
  */
 export async function reindexHost(host_id, models) {
+	const previous = collectionSetupPromises.get(host_id);
+	collectionSetupGenerations.set(host_id, (collectionSetupGenerations.get(host_id) || 0) + 1);
+	ensuredCollectionHosts.delete(host_id);
+	const rebuild = (async () => {
+	await previous?.catch(() => {});
+	return rebuildHostCollections(host_id, models);
+	})();
+	collectionSetupPromises.set(host_id, rebuild);
+	try { return await rebuild; } finally { if (collectionSetupPromises.get(host_id) === rebuild) collectionSetupPromises.delete(host_id); }
+}
+
+async function rebuildHostCollections(host_id, models) {
 	const ts = getTypesenseClient();
 	const typeModelMap = getIndexedTypeModelMap(models);
 	const results = {};
@@ -1903,10 +1934,9 @@ export async function runStreamientIndexer(models) {
 	const hostProgress = new Map();
 
 	for (const { type, model, query: typeQuery = {} } of typeModelMap) {
-		// Fast aggregate: get host_ids that have unindexed docs, sorted by most-recently-updated first
+		// Fast aggregate: get host_ids that have unindexed docs
 		const hosts = await model.aggregate([
 			{ $match: { ...typeQuery, is_indexed: { $ne: true } } },
-			{ $sort: { updatedAt: -1 } },
 			{ $group: { _id: '$host_id' } },
 		]);
 
@@ -2419,7 +2449,7 @@ function parseConversationAnswer(raw) {
 export async function listConversations(hostId, userId, { limit = 10 } = {}) {
 	const ts = getTypesenseClient();
 	const collectionName = CONVERSATION_STORE_COLLECTION;
-	const modelId = getConversationModelId(hostId, userId);
+	const modelIds = ['', '-email'].map((suffix) => exactFilterValue(getConversationModelId(hostId, userId) + suffix)).join(',');
 
 	try {
 		const result = await withTypesenseResilience(
@@ -2427,7 +2457,7 @@ export async function listConversations(hostId, userId, { limit = 10 } = {}) {
 			() => ts.collections(collectionName).documents().search({
 				q: '*',
 				query_by: 'conversation_id',
-				filter_by: `model_id:=${exactFilterValue(modelId)}`,
+				filter_by: `model_id:=[${modelIds}]`,
 				sort_by: 'timestamp:desc',
 				per_page: limit * 5,
 				exclude_fields: _ts_exlude_default,
@@ -2484,7 +2514,7 @@ export async function listConversations(hostId, userId, { limit = 10 } = {}) {
 export async function getConversationMessages(hostId, userId, conversationId) {
 	const ts = getTypesenseClient();
 	const collectionName = CONVERSATION_STORE_COLLECTION;
-	const modelId = getConversationModelId(hostId, userId);
+	const modelIds = ['', '-email'].map((suffix) => exactFilterValue(getConversationModelId(hostId, userId) + suffix)).join(',');
 	const safeConversationId = exactFilterValue(assertValidConversationId(conversationId));
 
 	const result = await withTypesenseResilience(
@@ -2492,7 +2522,7 @@ export async function getConversationMessages(hostId, userId, conversationId) {
 		() => ts.collections(collectionName).documents().search({
 			q: '*',
 			query_by: 'conversation_id',
-			filter_by: `conversation_id:=${safeConversationId} && model_id:=${exactFilterValue(modelId)}`,
+			filter_by: `conversation_id:=${safeConversationId} && model_id:=[${modelIds}]`,
 			sort_by: 'timestamp:asc',
 			per_page: 200,
 			exclude_fields: _ts_exlude_default,
@@ -2515,12 +2545,12 @@ export async function getConversationMessages(hostId, userId, conversationId) {
 export async function deleteConversation(hostId, userId, conversationId) {
 	const ts = getTypesenseClient();
 	const collectionName = CONVERSATION_STORE_COLLECTION;
-	const modelId = getConversationModelId(hostId, userId);
+	const modelIds = ['', '-email'].map((suffix) => exactFilterValue(getConversationModelId(hostId, userId) + suffix)).join(',');
 	const safeConversationId = exactFilterValue(assertValidConversationId(conversationId));
 	return withTypesenseResilience(
 		`delete conversation ${collectionName}/${conversationId}`,
 		() => ts.collections(collectionName).documents().delete({
-			filter_by: `conversation_id:=${safeConversationId} && model_id:=${exactFilterValue(modelId)}`,
+			filter_by: `conversation_id:=${safeConversationId} && model_id:=[${modelIds}]`,
 		}),
 		{ fallback: null },
 	);

@@ -16,7 +16,7 @@ const oauthRefreshTokenSchema = new mongoose.Schema(
 		revoked_at: { type: Date },
 		replaced_by_token_hash: { type: String },
 	},
-	{ timestamps: true },
+	{ timestamps: true, read: 'secondaryPreferred' },
 );
 
 oauthRefreshTokenSchema.index({ expires_at: 1 }, { expireAfterSeconds: 0 });

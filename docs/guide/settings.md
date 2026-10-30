@@ -108,7 +108,7 @@ Use this if search results seem incomplete or out of sync. Requires confirmation
 
 ## Export
 
-Owners and admins can start full account exports from **Settings > Export**.
+Owners and admins can start account exports from **Settings > Export**. Exports include active notes, memories, URLs, and emails; records in trash are excluded.
 
 Ready exports remain available to download from Settings while valid. If the notification email cannot be delivered, Streamient retries delivery; an email failure does not remove the downloadable export.
 

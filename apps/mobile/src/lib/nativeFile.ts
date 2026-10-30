@@ -1,6 +1,7 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
 
 type NativeFileReaderPlugin = {
+	removeSharedFile(options: { uri: string }): Promise<void>;
 	stat(options: { uri: string }): Promise<{ size: number }>;
 	readChunk(options: { uri: string; offset: number; length: number }): Promise<{ data: string; bytesRead: number }>;
 };
@@ -34,4 +35,8 @@ export async function uriChunk(uri: string, offset: number, length: number) {
 	const blob = await response.blob();
 	if (response.status === 200 && offset > 0) return blob.slice(offset, offset + length);
 	return blob.slice(0, length);
+}
+
+export async function removeSharedFile(uri: string) {
+	if (Capacitor.getPlatform() === "ios") await NativeFileReader.removeSharedFile({ uri });
 }

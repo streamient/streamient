@@ -19,11 +19,13 @@ export function toSafeUser(user) {
 	const obj = typeof user?.toObject === 'function' ? user.toObject() : { ...(user || {}) };
 	obj.avatar_style = avatarStyleValues.includes(obj.avatar_style) ? obj.avatar_style : 'initials';
 	delete obj.password;
+	delete obj.pending_email_token;
 	delete obj.totp_secret;
 	delete obj.verification_token;
 	delete obj.password_reset_token;
 	delete obj.password_reset_expires;
 	delete obj.stripe_customer_id;
+	delete obj.stripe_checkout_attempt;
 	delete obj.stripe_subscription_id;
 	delete obj.stripe_free_subscription_id;
 	delete obj.stripe_subscription_event_at;
@@ -36,6 +38,7 @@ export function toSafeUser(user) {
 const userSchema = new mongoose.Schema(
 	{
 		email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+		pending_email_token: { type: String, select: false },
 		password: { type: String, required: true, select: false },
 		name: { type: String, required: true, trim: true },
 		avatar_style: { type: String, enum: avatarStyleValues, default: 'initials' },
@@ -55,6 +58,7 @@ const userSchema = new mongoose.Schema(
 		totp_enabled: { type: Boolean, default: false },
 		// Billing (hosted edition only)
 		stripe_customer_id: { type: String, select: false },
+		stripe_checkout_attempt: { type: mongoose.Schema.Types.Mixed, select: false },
 		stripe_subscription_id: { type: String, select: false },
 		// $0 tracking subscription for Free accounts — never mirrored into
 		// subscription_status, so it can't block checkout or the trial flow.
@@ -78,6 +82,7 @@ const userSchema = new mongoose.Schema(
 		access_tokens: [
 			{
 				token: { type: String },
+				token_hash: { type: String },
 				name: { type: String },
 				created_at: { type: Date, default: Date.now },
 			},
@@ -85,8 +90,12 @@ const userSchema = new mongoose.Schema(
 		last_login: { type: Date },
 		product_updates_seen_at: { type: Date, default: Date.now, select: false },
 	},
-	{ timestamps: true },
+	{ timestamps: true, read: 'secondaryPreferred' },
 );
+
+// Token auth looks users up by these fields; the plaintext index serves only legacy tokens until the hash migration runs.
+userSchema.index({ 'access_tokens.token_hash': 1 }, { sparse: true });
+userSchema.index({ 'access_tokens.token': 1 }, { sparse: true });
 
 userSchema.pre('save', async function () {
 	if (!this.isModified('password')) return;

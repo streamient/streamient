@@ -27,16 +27,16 @@ describe('Streamient Mobile source contracts', () => {
 		const uploads = read('apps/mobile/src/lib/uploads.ts');
 		const shares = read('apps/mobile/src/lib/shareTarget.ts');
 
-		assert.match(realtime, /socket\.io\.on\("reconnect"/);
+		assert.match(realtime, /socket\.on\("connect"[\s\S]*connection:reconnected/);
 		assert.match(app, /connection:reconnected[\s\S]*applyChanges\(\)/);
 		assert.match(app, /startRealtime\(api, server, \{ hostId: realtimeHostId, userId: realtimeUserId \}/);
 		assert.doesNotMatch(app, /startRealtime\(api, server, bootstrap/);
 		assert.match(uploads, /indexedDB\.open/);
 		assert.match(uploads, /api\.uploadStatus\(session\.id, true\)/);
-		assert.match(uploads, /Math\.min\(session\.chunk_size/);
+		assert.match(uploads, /Math\.min\(4_000_000, status\.chunk_size/);
 		assert.match(shares, /PENDING_SHARE_KEY/);
 		assert.match(app, /loadPendingShare\(\)/);
-		assert.match(app, /function closeAdd\(\)[\s\S]*clearPendingShare\(\)/);
+		assert.match(app, /function closeAdd\(preserveSource = false\)[\s\S]*clearPendingShare\(\)/);
 	});
 
 	it('configures TipTap link support once through StarterKit', () => {

@@ -13,6 +13,7 @@ import { StreamientApi } from "./lib/api";
 import { beginOAuth, clearAuth, exchangeCode, listenForOAuthCallbacks, loadPendingServer, loadSelectedServer, loadTokens, parseOAuthCallback, saveTokens } from "./lib/auth";
 import { clearDraft, loadDraft, saveDraft } from "./lib/cache";
 import { APP_VERSION, HOSTED_SERVER } from "./lib/config";
+import { removeSharedFile } from "./lib/nativeFile";
 import { startRealtime } from "./lib/realtime";
 import { clearPendingShare, listenForShares, loadPendingShare, sharedTextKind } from "./lib/shareTarget";
 import { forgetUpload, rememberUpload, restoreUploads, sourceSize, updateRememberedUpload, uploadNamespace, uploadWithResume, waitForProcessing, type UploadSource } from "./lib/uploads";
@@ -80,7 +81,7 @@ function BrandHomeButton({ onClick }: { onClick: () => void }) {
 
 function openExternal(event: MouseEvent<HTMLAnchorElement>) {
 	event.preventDefault();
-	void Browser.open({ url: event.currentTarget.href });
+	void Browser.open({ url: event.currentTarget.href }).catch((error) => Swal.fire({ icon: "error", title: "Could not open link", text: String(error) }));
 }
 
 export function App() {
@@ -123,14 +124,23 @@ export function App() {
 	const [conversations, setConversations] = useState<ChatConversation[]>([]);
 	const [historyDrawer, setHistoryDrawer] = useState(false);
 	const [appearance, setAppearance] = useState(localStorage.getItem("streamient_appearance") || "system");
+	const sessionApi = useRef<StreamientApi | null>(null);
+	const liveEvents = useRef(new Map<string, object>());
+	const catchupEvents = useRef(new Set<Set<string>>());
+	const feedEvents = useRef(new Map<string, RecordSummary | null | undefined>());
 	const uploadControllers = useRef(new Map<string, AbortController>());
 	const bootstrapRef = useRef<BootstrapResponse | null>(null);
 	const activeProjectIdRef = useRef("");
 	const changeCursor = useRef("");
+	const feedLoad = useRef<Promise<void>>(Promise.resolve());
+	const feedKey = useRef("");
 	const authHandled = useRef(false);
 	const sessionEpoch = useRef(0);
 	const feedSeq = useRef(0);
 	const detailSeq = useRef(0);
+	const searchSeq = useRef(0);
+	const chatBusy = useRef(false);
+	const chatSeq = useRef(0);
 	const uploadNamespaceRef = useRef("");
 	const realtimeEventHandler = useRef<(event: string, payload: Record<string, unknown>) => void>(() => undefined);
 
@@ -138,8 +148,14 @@ export function App() {
 		sessionEpoch.current++;
 		feedSeq.current++;
 		detailSeq.current++;
+		searchSeq.current++;
+		chatBusy.current = false;
+		chatSeq.current++;
+		setChatting(false);
+		feedEvents.current.clear();
 		for (const controller of uploadControllers.current.values()) controller.abort();
 		uploadControllers.current.clear();
+		sessionApi.current?.clearCache();
 		await clearAuth();
 		setTokens(null);
 		setBootstrap(null);
@@ -173,17 +189,17 @@ export function App() {
 
 	const handleTokens = useCallback((next: TokenSet | null) => {
 		if (next) {
-			setTokens(next);
-			void saveTokens(next);
+			// The API owns renewed tokens; changing login state would restart session effects.
+			void saveTokens(next).catch((error) => setError(error instanceof Error ? error.message : "Could not save renewed sign-in"));
 		} else {
-			void resetSessionState();
+			void resetSessionState().catch((error) => setError(String(error)));
 		}
 	}, [resetSessionState]);
 
 	const api = useMemo(() => {
 		if (!tokens) return null;
 		const epoch = sessionEpoch.current;
-		return new StreamientApi(server, tokens, (next) => {
+		return sessionApi.current = new StreamientApi(server, tokens, (next) => {
 			if (epoch !== sessionEpoch.current) return;
 			handleTokens(next);
 		});
@@ -233,7 +249,7 @@ export function App() {
 					setLoginLoading(true);
 					await finishCallback(window.location.href, pendingServer || selectedServer);
 				} else setTokens(storedTokens);
-				removeCallback = listenForOAuthCallbacks((url) => void loadPendingServer().then((callbackServer) => finishCallback(url, callbackServer || selectedServer)));
+				removeCallback = listenForOAuthCallbacks((url) => void loadPendingServer().then((callbackServer) => finishCallback(url, callbackServer || selectedServer)).catch((error) => setError(String(error))));
 			} catch (restoreError) {
 				console.error("Streamient Mobile authentication restore failed:", restoreError);
 				setServer(HOSTED_SERVER);
@@ -248,7 +264,7 @@ export function App() {
 
 	useEffect(() => {
 		let removeShare = () => undefined;
-		void listenForShares((share) => { if (bootstrapRef.current) void openSharedContent(share, activeProjectIdRef.current || bootstrapRef.current.projects[0]?.id || ""); }).then((remove) => { removeShare = remove; });
+		void listenForShares((share) => { if (bootstrapRef.current) void openSharedContent(share, activeProjectIdRef.current || bootstrapRef.current.projects[0]?.id || ""); }).then((remove) => { removeShare = remove; }).catch((error) => setError(String(error)));
 		return () => removeShare();
 	}, []);
 
@@ -258,9 +274,9 @@ export function App() {
 
 	useEffect(() => {
 		let networkListener: { remove: () => Promise<void> } | null = null;
-		void Network.getStatus().then(({ connected }) => setOnline(connected));
-		void Network.addListener("networkStatusChange", ({ connected }) => setOnline(connected)).then((listener) => { networkListener = listener; });
-		return () => { void networkListener?.remove(); };
+		void Network.getStatus().then(({ connected }) => setOnline(connected)).catch((error) => setError(String(error)));
+		void Network.addListener("networkStatusChange", ({ connected }) => setOnline(connected)).then((listener) => { networkListener = listener; }).catch((error) => setError(String(error)));
+		return () => { void networkListener?.remove().catch((error) => setError(String(error))); };
 	}, []);
 
 	useEffect(() => {
@@ -306,11 +322,23 @@ export function App() {
 	const loadFeed = useCallback(async (cursor = "") => {
 		if (!api || !activeProjectId) return;
 		const requestId = ++feedSeq.current;
+		const intervening = new Set<string>();
+		catchupEvents.current.add(intervening);
+		let feedLoaded = () => {};
+		if (!cursor) { feedKey.current = `${activeProjectId}:${filter}`; feedLoad.current = new Promise<void>((resolve) => { feedLoaded = resolve; }); }
 		cursor ? setLoadingMore(true) : setFeedLoading(true);
 		try {
 			const result = await api.records({ projectId: activeProjectId, type: filter, cursor: cursor || undefined });
 			if (requestId !== feedSeq.current) return;
-			setRecords((current) => cursor ? [...current, ...result.value.records.filter((record) => !current.some((item) => item.key === record.key))] : result.value.records);
+			if (!result.offline) for (const record of result.value.records) if (feedEvents.current.has(record.key) && !intervening.has(record.key)) feedEvents.current.set(record.key, record);
+			setRecords((current) => {
+				let items = cursor ? [...current, ...result.value.records.filter((record) => !current.some((item) => item.key === record.key))] : result.value.records;
+				for (const [key, record] of feedEvents.current) {
+					if (!result.offline && !intervening.has(key)) continue;
+					items = record === null ? items.filter((item) => item.key !== key) : record ? upsertRecord(items, record, activeProjectId, filter) : items;
+				}
+				return items;
+			});
 			setNextCursor(result.value.next_cursor);
 			setOffline(result.offline);
 		} catch (loadError) {
@@ -321,6 +349,8 @@ export function App() {
 				setFeedLoading(false);
 				setLoadingMore(false);
 			}
+			catchupEvents.current.delete(intervening);
+			feedLoaded();
 		}
 	}, [api, activeProjectId, filter]);
 
@@ -337,21 +367,33 @@ export function App() {
 	const applyChanges = useCallback(async () => {
 		if (!api || !activeProjectId || !changeCursor.current) return;
 		const epoch = sessionEpoch.current;
-		let result = await api.changes(changeCursor.current, activeProjectId);
-		while (true) {
-			if (epoch !== sessionEpoch.current) return;
-			const changes = result.changes;
-			setRecords((current) => changes.reduce((items, change) => change.action === "delete" ? items.filter((item) => item.key !== change.key) : upsertRecord(items, change.record, activeProjectId, filter), current));
-			changeCursor.current = result.next_cursor;
-			if (!result.has_more) break;
-			result = await api.changes(changeCursor.current, activeProjectId);
-		}
+		// Apply changes only after the first-page snapshot lands, or that older snapshot would overwrite them.
+		for (let pending: Promise<void> | null = null; pending !== feedLoad.current;) { pending = feedLoad.current; await pending; }
+		// A project or filter switch during any await makes this catch-up obsolete; the new feed load covers it.
+		const current = () => epoch === sessionEpoch.current && feedKey.current === `${activeProjectId}:${filter}`;
+		if (!current()) return;
+		const intervening = new Set<string>();
+		catchupEvents.current.add(intervening);
+		try {
+			let result = await api.changes(changeCursor.current);
+			while (true) {
+				for (let pending: Promise<void> | null = null; pending !== feedLoad.current;) { pending = feedLoad.current; await pending; }
+				if (!current()) return;
+				const changes = result.changes;
+				for (const change of changes) if (!intervening.has(change.key)) feedEvents.current.set(change.key, change.action === "delete" ? null : change.record);
+				for (const change of changes) for (const pending of catchupEvents.current) if (pending !== intervening) pending.add(change.key);
+				setRecords((current) => changes.reduce((items, change) => intervening.has(change.key) ? items : change.action === "delete" ? items.filter((item) => item.key !== change.key) : upsertRecord(items, change.record, activeProjectId, filter), current));
+				changeCursor.current = result.next_cursor;
+				if (!result.has_more) break;
+				result = await api.changes(changeCursor.current);
+			}
+		} finally { catchupEvents.current.delete(intervening); }
 	}, [api, activeProjectId, filter]);
 
 	realtimeEventHandler.current = (event, payload) => {
 		if (!api) return;
-		if (event === "counts:refresh") { void refreshCounts(); return; }
-		if (event === "connection:reconnected") { void applyChanges(); return; }
+		if (event === "counts:refresh") { void refreshCounts().catch((error) => setError(String(error))); return; }
+		if (event === "connection:reconnected") { void applyChanges().catch((error) => setError(String(error))); return; }
 		if (event.startsWith("note-import:")) {
 			const id = String(payload.id || "");
 			setUploads((current) => current.map((item) => item.session.id === id ? { ...item, session: payload as unknown as UploadSession } : item));
@@ -361,15 +403,25 @@ export function App() {
 		if (!match) return;
 		const type = ({ note: "notes", memory: "memories", url: "urls", email: "emails" } as const)[match[1] as "note" | "memory" | "url" | "email"];
 		const id = String(payload._id || payload.id || "");
-		if (match[2] === "deleted") setRecords((current) => current.filter((item) => item.key !== `${type}:${id}`));
-		else if (id) {
-			const epoch = sessionEpoch.current;
-			void api.record(type, id).then(({ record }) => {
-				if (epoch !== sessionEpoch.current) return;
+		const epoch = sessionEpoch.current;
+		const key = `${type}:${id}`;
+			if (!feedEvents.current.has(key)) feedEvents.current.set(key, undefined);
+		const version = {};
+		liveEvents.current.set(key, version);
+		for (const pending of catchupEvents.current) pending.add(key);
+		void (async () => {
+			for (let pending: Promise<void> | null = null; pending !== feedLoad.current;) { pending = feedLoad.current; await pending; }
+			if (epoch !== sessionEpoch.current || feedKey.current !== `${activeProjectId}:${filter}`) return;
+				if (match[2] === "deleted") { feedEvents.current.set(key, null); setRecords((current) => current.filter((item) => item.key !== key)); }
+			else if (id) {
+				const { record } = await api.record(type, id);
+					for (let pending: Promise<void> | null = null; pending !== feedLoad.current;) { pending = feedLoad.current; await pending; }
+				if (epoch !== sessionEpoch.current || liveEvents.current.get(key) !== version || feedKey.current !== `${activeProjectId}:${filter}`) return;
+					feedEvents.current.set(key, record);
 				setRecords((current) => (epoch === sessionEpoch.current ? upsertRecord(current, record, activeProjectId, filter) : current));
-			}).catch(() => undefined);
-		}
-		void refreshCounts();
+			}
+		})().catch((error) => setError(String(error))).finally(() => { if (liveEvents.current.get(key) === version) liveEvents.current.delete(key); });
+		void refreshCounts().catch((error) => setError(String(error)));
 	};
 
 	const realtimeHostId = bootstrap?.account.host_id || "";
@@ -400,8 +452,10 @@ export function App() {
 		if (mode === "file") setFileDraft({ source: null, name: "", mimeType: "", projectId: activeProjectId });
 	}
 
-	function closeAdd() {
-		void clearPendingShare();
+	function closeAdd(preserveSource = false) {
+		if (!preserveSource && fileDraft.source && !(fileDraft.source instanceof Blob)) void removeSharedFile(fileDraft.source.uri).catch((error) => setError(String(error)));
+		setFileDraft({ source: null, name: "", mimeType: "", projectId: "" });
+		void clearPendingShare().catch((error) => setError(String(error)));
 		setAddDrawer(false);
 		setAddMode("chooser");
 	}
@@ -448,25 +502,48 @@ export function App() {
 
 	const updateUpload = useCallback((localId: string, session: UploadSession) => {
 		setUploads((current) => current.map((item) => item.localId === localId ? { ...item, session, paused: false } : item));
-		void updateRememberedUpload(uploadNamespaceRef.current, localId, session);
+		void updateRememberedUpload(uploadNamespaceRef.current, localId, session).catch((error) => setError(String(error)));
 	}, []);
+
+	async function cancelImport(item: UploadUi) {
+		if (!api) return;
+		const namespace = uploadNamespaceRef.current;
+		const epoch = sessionEpoch.current;
+		uploadControllers.current.get(item.localId)?.abort();
+		try {
+			const session = ["complete", "canceled"].includes(item.session.state) ? item.session : (await api.cancelUpload(item.session.id)).upload;
+			await updateRememberedUpload(namespace, item.localId, session);
+			if (epoch !== sessionEpoch.current) return;
+			setUploads((current) => current.map((value) => value.localId === item.localId ? { ...value, session } : value));
+			await forgetUpload(namespace, item.localId);
+			if (epoch === sessionEpoch.current) setUploads((current) => current.filter((value) => value.localId !== item.localId));
+		} catch (error) { if (epoch === sessionEpoch.current) setError(String(error)); }
+	}
 
 	async function runUpload(item: UploadUi) {
 		if (!api || !item.source || !online) return;
 		const source = item.source;
 		const epoch = sessionEpoch.current;
+		const namespace = uploadNamespaceRef.current;
 		const controller = new AbortController();
 		uploadControllers.current.set(item.localId, controller);
 		setUploads((current) => current.map((currentItem) => currentItem.localId === item.localId ? { ...currentItem, paused: false, manualPause: false } : currentItem));
 		try {
 			let session = item.session;
 			if (session.state === "failed") session = await api.uploadStatus(session.id);
-			if (session.state === "uploading") session = await uploadWithResume(api, session, source, (next) => updateUpload(item.localId, next), controller.signal);
-			if (session.state === "processing") session = await waitForProcessing(api, session, (next) => updateUpload(item.localId, next), controller.signal);
+			if (session.state === "uploading") session = await uploadWithResume(api, session, source, (next) => { if (epoch === sessionEpoch.current) updateUpload(item.localId, next); }, controller.signal);
+			if (session.state === "processing") session = await waitForProcessing(api, session, (next) => { if (epoch === sessionEpoch.current) updateUpload(item.localId, next); }, controller.signal);
 			if (epoch !== sessionEpoch.current) return;
 			updateUpload(item.localId, session);
-			if (session.state === "complete") { await forgetUpload(uploadNamespaceRef.current, item.localId); await refreshCounts(); }
+			if (session.state === "complete") {
+				try {
+					await forgetUpload(namespace, item.localId);
+					if (epoch === sessionEpoch.current) setUploads((current) => current.filter((value) => value.localId !== item.localId));
+				} catch (error) { if (epoch === sessionEpoch.current) setError(String(error)); }
+				await refreshCounts().catch((error) => { if (epoch === sessionEpoch.current) setError(String(error)); });
+			}
 		} catch (uploadError) {
+			if (epoch !== sessionEpoch.current) return;
 			if ((uploadError as Error).name === "AbortError") setUploads((current) => current.map((currentItem) => currentItem.localId === item.localId ? { ...currentItem, paused: true } : currentItem));
 			else if (uploadError instanceof TypeError) setUploads((current) => current.map((currentItem) => currentItem.localId === item.localId ? { ...currentItem, paused: true, manualPause: true } : currentItem));
 			else setUploads((current) => current.map((currentItem) => currentItem.localId === item.localId ? { ...currentItem, session: { ...currentItem.session, state: "failed", error: uploadError instanceof Error ? uploadError.message : "Upload failed" }, paused: false } : currentItem));
@@ -498,7 +575,7 @@ export function App() {
 			if (epoch !== sessionEpoch.current) return;
 			setUploads((current) => [...current, item]);
 			setUploadTray(true);
-			closeAdd();
+			closeAdd(true);
 			await clearPendingShare();
 			void runUpload(item);
 		} catch (uploadError) {
@@ -538,26 +615,35 @@ export function App() {
 		setAddDrawer(true);
 	}
 
+	useEffect(() => {
+		searchSeq.current++;
+		setSearching(false);
+		setSearchResults([]);
+	}, [activeProjectId, searchQuery, searchAllProjects, searchType, api]);
+
 	async function runSearch() {
 		if (!api || !searchQuery.trim()) return;
 		const epoch = sessionEpoch.current;
+		const requestId = ++searchSeq.current;
 		setSearching(true);
 		try {
 			const result = await api.search(searchQuery.trim(), { projectId: activeProjectId, allProjects: searchAllProjects, type: searchType });
-			if (epoch !== sessionEpoch.current) return;
+			if (epoch !== sessionEpoch.current || requestId !== searchSeq.current) return;
 			setSearchResults(result.results as RecordSummary[]);
 		} catch (searchError) {
-			if (epoch !== sessionEpoch.current) return;
+			if (epoch !== sessionEpoch.current || requestId !== searchSeq.current) return;
 			void Swal.fire({ icon: "error", title: "Search failed", text: searchError instanceof Error ? searchError.message : "Try again." });
 		} finally {
-			if (epoch === sessionEpoch.current) setSearching(false);
+			if (epoch === sessionEpoch.current && requestId === searchSeq.current) setSearching(false);
 		}
 	}
 
 	async function sendChat() {
-		if (!api || !chatQuery.trim() || chatting) return;
+		if (!api || !chatQuery.trim() || chatBusy.current) return;
 		if (!online) { void Swal.fire({ icon: "info", title: "AI needs a connection", text: "Reconnect to continue chatting." }); return; }
 		const epoch = sessionEpoch.current;
+		chatBusy.current = true;
+		chatSeq.current++;
 		const query = chatQuery.trim();
 		setChatQuery("");
 		setChatMessages((current) => [...current, { role: "user", message: query }, { role: "assistant", message: "" }]);
@@ -576,12 +662,12 @@ export function App() {
 			if (epoch !== sessionEpoch.current) return;
 			setChatMessages((current) => current.map((message, index) => index === current.length - 1 ? { ...message, message: chatError instanceof Error ? chatError.message : "AI request failed" } : message));
 		} finally {
-			if (epoch === sessionEpoch.current) setChatting(false);
+			if (epoch === sessionEpoch.current) { chatBusy.current = false; setChatting(false); }
 		}
 	}
 
 	async function openHistory() {
-		if (!api) return;
+		if (!api || chatBusy.current) return;
 		const epoch = sessionEpoch.current;
 		setHistoryDrawer(true);
 		try {
@@ -593,10 +679,13 @@ export function App() {
 	}
 
 	async function selectConversation(conversation: ChatConversation) {
-		if (!api) return;
+		if (!api || chatBusy.current) return;
 		const epoch = sessionEpoch.current;
-		const result = await api.conversationMessages(conversation.conversation_id);
+		const requestId = ++chatSeq.current;
+		let result;
+		try { result = await api.conversationMessages(conversation.conversation_id); } catch (error) { if (epoch === sessionEpoch.current && requestId === chatSeq.current) setError(String(error)); return; }
 		if (epoch !== sessionEpoch.current) return;
+		if (chatBusy.current || requestId !== chatSeq.current) return;
 		setConversationId(conversation.conversation_id);
 		setChatMessages(result.messages);
 		setHistoryDrawer(false);
@@ -646,14 +735,14 @@ export function App() {
 				<div className="top-actions"><button className="icon-button" onClick={() => setView("search")} aria-label="Search"><Icon name="search" /></button><button className="avatar-button" onClick={() => setView("settings")} aria-label="Settings">{initials(bootstrap.user.name)}</button></div>
 			</header>
 			<main className="content feed-content">
-				<div className="feed-heading"><div><h1>Records</h1><p><span className="feed-project-dot" style={{ background: activeProject?.color }} />{activeProject?.name || "Project"} · {activeProject ? countTotal(activeProject) : 0} records</p></div>{uploads.some((item) => !["complete", "canceled"].includes(item.session.state)) && <button className="upload-pill" onClick={() => setUploadTray(true)}><Icon name="upload" />{uploads.filter((item) => !["complete", "canceled"].includes(item.session.state)).length}</button>}</div>
+				<div className="feed-heading"><div><h1>Records</h1><p><span className="feed-project-dot" style={{ background: activeProject?.color }} />{activeProject?.name || "Project"} · {activeProject ? countTotal(activeProject) : 0} records</p></div>{uploads.length > 0 && <button className="upload-pill" onClick={() => setUploadTray(true)}><Icon name="upload" />{uploads.length}</button>}</div>
 				<div className="filter-row" role="tablist">{visibleFilters.map((item) => <button aria-selected={filter === item.value} key={item.value} className={filter === item.value ? "active" : ""} onClick={() => setFilter(item.value)} role="tab" type="button"><Icon name={item.icon} />{item.label}</button>)}</div>
 				{feedLoading ? <RecordSkeleton /> : records.length ? <div className="record-list">{records.map((record) => <RecordRow key={record.key} record={record} onOpen={() => void openRecord(record)} />)}{nextCursor && <button className="button subtle full" disabled={loadingMore} onClick={() => void loadFeed(nextCursor)}>{loadingMore ? "Loading…" : "Load more"}</button>}</div> : <EmptyFeed filter={filter} onAdd={() => openAdd(filter === "urls" ? "url" : "note")} />}
 			</main>
 		</>}
 
 		{view === "search" && <SearchScreen query={searchQuery} setQuery={setSearchQuery} allProjects={searchAllProjects} setAllProjects={setSearchAllProjects} type={searchType} setType={setSearchType} filters={visibleFilters} results={searchResults} searching={searching} onBack={() => setView("projects")} onSearch={() => void runSearch()} onOpen={(record) => void openRecord(record)} />}
-		{view === "ai" && <AiScreen project={activeProject} allProjects={chatAllProjects} setAllProjects={setChatAllProjects} messages={chatMessages} query={chatQuery} setQuery={setChatQuery} chatting={chatting} onHome={showAllRecords} onSend={() => void sendChat()} onHistory={() => void openHistory()} onNew={() => { setChatMessages([]); setConversationId(""); }} onOpen={(record) => void openRecord(record)} />}
+		{view === "ai" && <AiScreen project={activeProject} allProjects={chatAllProjects} setAllProjects={setChatAllProjects} messages={chatMessages} query={chatQuery} setQuery={setChatQuery} chatting={chatting} onHome={showAllRecords} onSend={() => void sendChat()} onHistory={() => void openHistory()} onNew={() => { if (chatBusy.current) return; chatSeq.current++; setChatMessages([]); setConversationId(""); }} onOpen={(record) => void openRecord(record)} />}
 		{view === "settings" && <SettingsScreen bootstrap={bootstrap} server={server} appearance={appearance} setAppearance={setAppearance} onBack={() => setView("projects")} onSave={async (data) => {
 			if (!api) return;
 			const epoch = sessionEpoch.current;
@@ -674,22 +763,22 @@ export function App() {
 			if (epoch !== sessionEpoch.current) return;
 			applyBootstrap(result.value);
 			await loadFeed();
-		}} onSignOut={() => void signOut()} />}
+		}} onSignOut={() => void signOut().catch((error) => setError(String(error)))} />}
 
 		<BottomNav active={view} onProjects={() => setProjectDrawer(true)} onAdd={() => openAdd()} onAi={() => changeView("ai")} />
 
 		<Sheet open={projectDrawer} title="Switch project" onClose={() => setProjectDrawer(false)}>{bootstrap.projects.map((project) => <button key={project.id} className="project-row" onClick={() => chooseProject(project.id)}><span className="project-icon" style={{ background: `${project.color}20`, color: project.color }}><Icon name="folder" /></span><span className="project-info"><strong>{project.name}</strong><small>{countTotal(project)} records · {project.counts.notes} notes · {project.counts.memories} memories · {project.counts.urls} URLs{project.counts.emails === undefined ? "" : ` · ${project.counts.emails} emails`}</small></span>{project.id === activeProjectId && <Icon name="check_circle" className="check" />}</button>)}</Sheet>
 
-		<Sheet open={addDrawer} title={addMode === "chooser" ? "Add to Streamient" : addMode === "note" ? noteDraft.id ? "Edit note" : "New note" : addMode === "url" ? "Save URL" : "Import document"} onClose={closeAdd} wide={addMode === "note"}>
+		<Sheet open={addDrawer} title={addMode === "chooser" ? "Add to Streamient" : addMode === "note" ? noteDraft.id ? "Edit note" : "New note" : addMode === "url" ? "Save URL" : "Import document"} onClose={() => closeAdd()} wide={addMode === "note"}>
 			{addMode === "chooser" && <div className="add-options"><button onClick={() => openAdd("note")}><span className="option-icon note"><Icon name="edit_note" /></span><span><strong>Note</strong><small>Write with the rich-text editor</small></span><Icon name="chevron_right" /></button><button onClick={() => openAdd("url")}><span className="option-icon url"><Icon name="link" /></span><span><strong>URL</strong><small>Save a web page to a project</small></span><Icon name="chevron_right" /></button><button onClick={() => openAdd("file")}><span className="option-icon file"><Icon name="upload_file" /></span><span><strong>Import document</strong><small>PDF, Word, text, Markdown, and more</small></span><Icon name="chevron_right" /></button></div>}
-			{addMode === "note" && <NoteForm draft={noteDraft} projects={bootstrap.projects} saving={saving} onChange={(next) => { setNoteDraft(next); saveDraft(draftKey(server, bootstrap.user._id, next.id), next); }} onCancel={closeAdd} onSave={() => void saveNote()} />}
-			{addMode === "url" && <UrlForm draft={urlDraft} projects={bootstrap.projects} saving={saving} onChange={setUrlDraft} onCancel={closeAdd} onSave={() => void saveUrl()} />}
-			{addMode === "file" && <FileForm draft={fileDraft} projects={bootstrap.projects} saving={saving} onChange={setFileDraft} onCancel={closeAdd} onSave={() => void startFileUpload()} />}
+			{addMode === "note" && <NoteForm draft={noteDraft} projects={bootstrap.projects} saving={saving} onChange={(next) => { setNoteDraft(next); saveDraft(draftKey(server, bootstrap.user._id, next.id), next); }} onCancel={() => closeAdd()} onSave={() => void saveNote()} />}
+			{addMode === "url" && <UrlForm draft={urlDraft} projects={bootstrap.projects} saving={saving} onChange={setUrlDraft} onCancel={() => closeAdd()} onSave={() => void saveUrl()} />}
+			{addMode === "file" && <FileForm draft={fileDraft} projects={bootstrap.projects} saving={saving} onChange={setFileDraft} onCancel={() => closeAdd()} onSave={() => void startFileUpload()} />}
 		</Sheet>
 
 		<Sheet open={!!detail || detailLoading} title={detail?.title || "Record"} onClose={closeDetail} wide>{detailLoading && !detail ? <RecordSkeleton /> : detail && <RecordView record={detail} onEdit={editDetail} />}</Sheet>
-		<UploadTray open={uploadTray} uploads={uploads} onClose={() => setUploadTray(false)} onPause={(item) => { setUploads((current) => current.map((value) => value.localId === item.localId ? { ...value, paused: true, manualPause: true } : value)); uploadControllers.current.get(item.localId)?.abort(); }} onResume={(item) => void runUpload(item)} onCancel={async (item) => { if (!api) return; uploadControllers.current.get(item.localId)?.abort(); await api.cancelUpload(item.session.id).catch(() => undefined); await forgetUpload(uploadNamespaceRef.current, item.localId); setUploads((current) => current.filter((value) => value.localId !== item.localId)); }} />
-		<Sheet open={historyDrawer} title="AI history" onClose={() => setHistoryDrawer(false)}>{conversations.length ? conversations.map((conversation) => <button className="history-row" key={conversation.conversation_id} onClick={() => void selectConversation(conversation)}><Icon name="chat_bubble" /><span><strong>{conversation.title}</strong><small>{new Date(conversation.timestamp).toLocaleDateString()}</small></span><Icon name="chevron_right" /></button>) : <div className="empty-mini">No previous conversations</div>}</Sheet>
+		<UploadTray open={uploadTray} uploads={uploads} onClose={() => setUploadTray(false)} onPause={(item) => { setUploads((current) => current.map((value) => value.localId === item.localId ? { ...value, paused: true, manualPause: true } : value)); uploadControllers.current.get(item.localId)?.abort(); }} onResume={(item) => void runUpload(item)} onCancel={(item) => cancelImport(item)} />
+		<Sheet open={historyDrawer} title="AI history" onClose={() => setHistoryDrawer(false)}>{conversations.length ? conversations.map((conversation) => <button className="history-row" disabled={chatting} key={conversation.conversation_id} onClick={() => void selectConversation(conversation)}><Icon name="chat_bubble" /><span><strong>{conversation.title}</strong><small>{new Date(conversation.timestamp).toLocaleDateString()}</small></span><Icon name="chevron_right" /></button>) : <div className="empty-mini">No previous conversations</div>}</Sheet>
 	</div>;
 }
 
@@ -722,7 +811,7 @@ function UrlForm({ draft, projects, saving, onChange, onCancel, onSave }: { draf
 }
 
 function FileForm({ draft, projects, saving, onChange, onCancel, onSave }: { draft: { source: UploadSource | null; name: string; mimeType: string; projectId: string }; projects: Project[]; saving: boolean; onChange: (draft: { source: UploadSource | null; name: string; mimeType: string; projectId: string }) => void; onCancel: () => void; onSave: () => void }) {
-	return <form onSubmit={(event) => { event.preventDefault(); onSave(); }}>{draft.source ? <div className="selected-file"><span><Icon name="description" /></span><div><strong>{draft.name}</strong><small>{draft.source instanceof Blob ? `${(draft.source.size / 1_000_000).toFixed(1)} MB` : draft.mimeType}</small></div><button type="button" className="icon-button" onClick={() => onChange({ ...draft, source: null, name: "", mimeType: "" })}><Icon name="close" /></button></div> : <label className="file-picker"><Icon name="upload_file" /><strong>Choose a document</strong><small>Any supported size. Uploads resume automatically.</small><input type="file" onChange={(event) => { const file = event.target.files?.[0]; if (file) onChange({ ...draft, source: file, name: file.name, mimeType: file.type || "application/octet-stream" }); }} /></label>}<ProjectSelect value={draft.projectId} projects={projects} onChange={(projectId) => onChange({ ...draft, projectId })} /><div className="privacy-note"><Icon name="verified_user" /><span>Transferred in 20 MB integrity-checked chunks. The complete file is never loaded into app memory.</span></div><FormActions saving={saving} onCancel={onCancel} onSave={onSave} saveLabel="Start import" /></form>;
+	return <form onSubmit={(event) => { event.preventDefault(); onSave(); }}>{draft.source ? <div className="selected-file"><span><Icon name="description" /></span><div><strong>{draft.name}</strong><small>{draft.source instanceof Blob ? `${(draft.source.size / 1_000_000).toFixed(1)} MB` : draft.mimeType}</small></div><button type="button" className="icon-button" onClick={() => onChange({ ...draft, source: null, name: "", mimeType: "" })}><Icon name="close" /></button></div> : <label className="file-picker"><Icon name="upload_file" /><strong>Choose a document</strong><small>Any supported size. Uploads resume automatically.</small><input type="file" onChange={(event) => { const file = event.target.files?.[0]; if (file) onChange({ ...draft, source: file, name: file.name, mimeType: file.type || "application/octet-stream" }); }} /></label>}<ProjectSelect value={draft.projectId} projects={projects} onChange={(projectId) => onChange({ ...draft, projectId })} /><div className="privacy-note"><Icon name="verified_user" /><span>Transferred in 4 MB integrity-checked chunks. The complete file is never loaded into app memory.</span></div><FormActions saving={saving} onCancel={onCancel} onSave={onSave} saveLabel="Start import" /></form>;
 }
 
 function RecordView({ record, onEdit }: { record: RecordDetail; onEdit: () => void }) {
@@ -734,7 +823,7 @@ function SearchScreen(props: { query: string; setQuery: (value: string) => void;
 }
 
 function AiScreen(props: { project: Project | null; allProjects: boolean; setAllProjects: (value: boolean) => void; messages: ChatMessage[]; query: string; setQuery: (value: string) => void; chatting: boolean; onHome: () => void; onSend: () => void; onHistory: () => void; onNew: () => void; onOpen: (record: SearchResult) => void }) {
-	return <><header className="top-bar"><div className="ai-title"><BrandHomeButton onClick={props.onHome} /><div><small>Streamient</small><strong>AI Assistant</strong></div></div><div className="top-actions"><button aria-label="Chat history" className="icon-button" onClick={props.onHistory} type="button"><Icon name="history" /></button><button aria-label="New chat" className="icon-button" onClick={props.onNew} type="button"><Icon name="add_comment" /></button></div></header><main className="content ai-content"><label className="scope-toggle"><Icon name="folder" /><span>{props.allProjects ? "All projects" : props.project?.name}</span><input type="checkbox" checked={props.allProjects} onChange={(event) => props.setAllProjects(event.target.checked)} /><small>All</small></label>{props.messages.length ? <div className="chat-list">{props.messages.map((message, index) => <div className={`chat-message ${message.role}`} key={index}>{message.role === "assistant" && <span className="ai-avatar"><Icon name="auto_awesome" /></span>}<div><div className="chat-bubble" dangerouslySetInnerHTML={message.role === "assistant" ? markdown(message.message || (props.chatting ? "Thinking…" : "")) : { __html: DOMPurify.sanitize(message.message) }} />{!!message.sources?.length && <div className="chat-sources"><strong>Sources</strong>{message.sources.slice(0, 4).map((source) => <button type="button" key={source.key} onClick={() => props.onOpen(source)}><Icon name={TYPE_ICONS[source.type]} />{source.title}</button>)}</div>}</div></div>)}</div> : <div className="ai-welcome"><span><Icon name="auto_awesome" /></span><h1>Ask your knowledge</h1><p>Get answers grounded in everything saved to Streamient.</p><div className="suggestions">{["Summarize what changed recently", "Find decisions about our roadmap", "What should I follow up on?"].map((value) => <button key={value} onClick={() => props.setQuery(value)}>{value}<Icon name="north_east" /></button>)}</div></div>}</main><form className="chat-composer" onSubmit={(event) => { event.preventDefault(); props.onSend(); }}><label className="sr-only" htmlFor="chat-query">Ask Streamient</label><textarea id="chat-query" rows={1} value={props.query} onChange={(event) => props.setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); props.onSend(); } }} /><button aria-label="Send message" disabled={!props.query.trim() || props.chatting}><Icon name="arrow_upward" /></button></form></>;
+	return <><header className="top-bar"><div className="ai-title"><BrandHomeButton onClick={props.onHome} /><div><small>Streamient</small><strong>AI Assistant</strong></div></div><div className="top-actions"><button aria-label="Chat history" disabled={props.chatting} className="icon-button" onClick={props.onHistory} type="button"><Icon name="history" /></button><button aria-label="New chat" disabled={props.chatting} className="icon-button" onClick={props.onNew} type="button"><Icon name="add_comment" /></button></div></header><main className="content ai-content"><label className="scope-toggle"><Icon name="folder" /><span>{props.allProjects ? "All projects" : props.project?.name}</span><input type="checkbox" checked={props.allProjects} onChange={(event) => props.setAllProjects(event.target.checked)} /><small>All</small></label>{props.messages.length ? <div className="chat-list">{props.messages.map((message, index) => <div className={`chat-message ${message.role}`} key={index}>{message.role === "assistant" && <span className="ai-avatar"><Icon name="auto_awesome" /></span>}<div><div className="chat-bubble" dangerouslySetInnerHTML={message.role === "assistant" ? markdown(message.message || (props.chatting ? "Thinking…" : "")) : { __html: DOMPurify.sanitize(message.message) }} />{!!message.sources?.length && <div className="chat-sources"><strong>Sources</strong>{message.sources.slice(0, 4).map((source) => <button type="button" key={source.key} onClick={() => props.onOpen(source)}><Icon name={TYPE_ICONS[source.type]} />{source.title}</button>)}</div>}</div></div>)}</div> : <div className="ai-welcome"><span><Icon name="auto_awesome" /></span><h1>Ask your knowledge</h1><p>Get answers grounded in everything saved to Streamient.</p><div className="suggestions">{["Summarize what changed recently", "Find decisions about our roadmap", "What should I follow up on?"].map((value) => <button key={value} onClick={() => props.setQuery(value)}>{value}<Icon name="north_east" /></button>)}</div></div>}</main><form className="chat-composer" onSubmit={(event) => { event.preventDefault(); props.onSend(); }}><label className="sr-only" htmlFor="chat-query">Ask Streamient</label><textarea id="chat-query" rows={1} value={props.query} onChange={(event) => props.setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); props.onSend(); } }} /><button aria-label="Send message" disabled={!props.query.trim() || props.chatting}><Icon name="arrow_upward" /></button></form></>;
 }
 
 function SettingsScreen({ bootstrap, server, appearance, setAppearance, onBack, onSave, onRefresh, onSignOut }: { bootstrap: BootstrapResponse; server: ServerOption; appearance: string; setAppearance: (value: string) => void; onBack: () => void; onSave: (data: { name: string; timezone: string; time_format: string }) => Promise<void>; onRefresh: () => Promise<void>; onSignOut: () => void }) {
@@ -742,9 +831,9 @@ function SettingsScreen({ bootstrap, server, appearance, setAppearance, onBack, 
 	const [timezone, setTimezone] = useState(bootstrap.user.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
 	const [timeFormat, setTimeFormat] = useState(bootstrap.user.time_format || "12-hour");
 	const [busy, setBusy] = useState(false);
-	return <><header className="top-bar"><button aria-label="Back to records" className="icon-button" onClick={onBack} type="button"><Icon name="arrow_back" /></button><h1>Settings</h1><span className="top-spacer" /></header><main className="content settings-content"><section className="profile-card"><span className="large-avatar">{initials(bootstrap.user.name)}</span><div><strong>{bootstrap.user.name}</strong><small>{bootstrap.user.email}</small></div></section><section className="settings-section"><h2>Profile</h2><div className="form-group"><label htmlFor="settings-name">Name</label><input id="settings-name" className="form-control" value={name} onChange={(event) => setName(event.target.value)} /></div><div className="form-group"><label htmlFor="settings-timezone">Timezone</label><input id="settings-timezone" className="form-control" value={timezone} onChange={(event) => setTimezone(event.target.value)} /></div><div className="form-group"><label htmlFor="settings-time-format">Time format</label><select id="settings-time-format" className="form-control" value={timeFormat} onChange={(event) => setTimeFormat(event.target.value as "12-hour" | "24-hour")}><option value="12-hour">12-hour</option><option value="24-hour">24-hour</option></select></div><button className="button primary settings-save" disabled={busy} onClick={async () => { setBusy(true); try { await onSave({ name, timezone, time_format: timeFormat }); } finally { setBusy(false); } }}>Save profile</button></section><section className="settings-section"><h2>Appearance</h2><div className="segmented">{["system", "light", "dark"].map((value) => <button className={appearance === value ? "active" : ""} key={value} onClick={() => setAppearance(value)}><Icon name={value === "system" ? "devices" : value === "light" ? "light_mode" : "dark_mode"} />{value[0].toUpperCase() + value.slice(1)}</button>)}</div></section><section className="settings-section"><h2>Connection</h2><div className="settings-row"><Icon name="dns" /><span><strong>Server</strong><small>{server.baseUrl}</small></span><Icon name="verified" className="connected" /></div><button className="settings-row button-row" onClick={() => void onRefresh()}><Icon name="sync" /><span><strong>Refresh data</strong><small>Sync projects and records now</small></span><Icon name="chevron_right" /></button></section><section className="settings-section"><h2>About</h2><a className="settings-row" href="https://streamient.com/support" target="_blank" rel="noreferrer"><Icon name="help" /><span><strong>Support</strong></span><Icon name="open_in_new" /></a><a className="settings-row" href="https://streamient.com/privacy" target="_blank" rel="noreferrer"><Icon name="privacy_tip" /><span><strong>Privacy</strong></span><Icon name="open_in_new" /></a><div className="settings-row"><Icon name="info" /><span><strong>Version</strong></span><small>{APP_VERSION}</small></div></section><button className="button danger full" onClick={onSignOut}><Icon name="logout" /> Sign out</button><footer aria-label="Other apps" className="settings-family"><small>Built by the team behind:</small><ul>{FAMILY_APPS.map((app) => <li key={app.name}><a href={app.href} onClick={openExternal} rel="noreferrer" target="_blank">{app.name}</a><span> - {app.description}</span></li>)}</ul></footer></main></>;
+	return <><header className="top-bar"><button aria-label="Back to records" className="icon-button" onClick={onBack} type="button"><Icon name="arrow_back" /></button><h1>Settings</h1><span className="top-spacer" /></header><main className="content settings-content"><section className="profile-card"><span className="large-avatar">{initials(bootstrap.user.name)}</span><div><strong>{bootstrap.user.name}</strong><small>{bootstrap.user.email}</small></div></section><section className="settings-section"><h2>Profile</h2><div className="form-group"><label htmlFor="settings-name">Name</label><input id="settings-name" className="form-control" value={name} onChange={(event) => setName(event.target.value)} /></div><div className="form-group"><label htmlFor="settings-timezone">Timezone</label><input id="settings-timezone" className="form-control" value={timezone} onChange={(event) => setTimezone(event.target.value)} /></div><div className="form-group"><label htmlFor="settings-time-format">Time format</label><select id="settings-time-format" className="form-control" value={timeFormat} onChange={(event) => setTimeFormat(event.target.value as "12-hour" | "24-hour")}><option value="12-hour">12-hour</option><option value="24-hour">24-hour</option></select></div><button className="button primary settings-save" disabled={busy} onClick={async () => { setBusy(true); try { await onSave({ name, timezone, time_format: timeFormat }); } catch (error) { void Swal.fire({ icon: "error", title: "Profile not saved", text: String(error) }); } finally { setBusy(false); } }}>Save profile</button></section><section className="settings-section"><h2>Appearance</h2><div className="segmented">{["system", "light", "dark"].map((value) => <button className={appearance === value ? "active" : ""} key={value} onClick={() => setAppearance(value)}><Icon name={value === "system" ? "devices" : value === "light" ? "light_mode" : "dark_mode"} />{value[0].toUpperCase() + value.slice(1)}</button>)}</div></section><section className="settings-section"><h2>Connection</h2><div className="settings-row"><Icon name="dns" /><span><strong>Server</strong><small>{server.baseUrl}</small></span><Icon name="verified" className="connected" /></div><button className="settings-row button-row" onClick={() => void onRefresh().catch((error) => Swal.fire({ icon: "error", title: "Refresh failed", text: String(error) }))}><Icon name="sync" /><span><strong>Refresh data</strong><small>Sync projects and records now</small></span><Icon name="chevron_right" /></button></section><section className="settings-section"><h2>About</h2><a className="settings-row" href="https://streamient.com/support" target="_blank" rel="noreferrer"><Icon name="help" /><span><strong>Support</strong></span><Icon name="open_in_new" /></a><a className="settings-row" href="https://streamient.com/privacy" target="_blank" rel="noreferrer"><Icon name="privacy_tip" /><span><strong>Privacy</strong></span><Icon name="open_in_new" /></a><div className="settings-row"><Icon name="info" /><span><strong>Version</strong></span><small>{APP_VERSION}</small></div></section><button className="button danger full" onClick={onSignOut}><Icon name="logout" /> Sign out</button><footer aria-label="Other apps" className="settings-family"><small>Built by the team behind:</small><ul>{FAMILY_APPS.map((app) => <li key={app.name}><a href={app.href} onClick={openExternal} rel="noreferrer" target="_blank">{app.name}</a><span> - {app.description}</span></li>)}</ul></footer></main></>;
 }
 
 function UploadTray({ open, uploads, onClose, onPause, onResume, onCancel }: { open: boolean; uploads: UploadUi[]; onClose: () => void; onPause: (item: UploadUi) => void; onResume: (item: UploadUi) => void; onCancel: (item: UploadUi) => void }) {
-	return <Sheet open={open} title="Imports" onClose={onClose}>{uploads.length ? uploads.map((item) => { const progress = item.session.upload_length ? Math.round(item.session.upload_offset / item.session.upload_length * 100) : 0; return <div className="upload-row" key={item.localId}><span className="upload-file-icon"><Icon name="description" /></span><div className="upload-info"><strong>{item.name}</strong><small>{item.session.state === "processing" ? "Processing content…" : item.session.state === "complete" ? "Import complete" : item.session.state === "failed" ? item.session.error || "Import failed" : item.paused ? `Paused at ${progress}%` : `Uploading · ${progress}%`}</small><div className="progress"><span style={{ width: `${item.session.state === "processing" || item.session.state === "complete" ? 100 : progress}%` }} /></div></div><div className="upload-actions">{item.session.state === "uploading" && !item.paused && <button className="icon-button" onClick={() => onPause(item)}><Icon name="pause" /></button>}{((item.session.state === "uploading" && item.paused) || item.session.state === "failed") && <button className="icon-button" onClick={() => onResume(item)}><Icon name="play_arrow" /></button>}{["uploading", "failed"].includes(item.session.state) && <button className="icon-button" onClick={() => onCancel(item)}><Icon name="close" /></button>}</div></div>; }) : <div className="empty-mini">No document imports</div>}</Sheet>;
+	return <Sheet open={open} title="Imports" onClose={onClose}>{uploads.length ? uploads.map((item) => { const progress = item.session.upload_length ? Math.round(item.session.upload_offset / item.session.upload_length * 100) : 0; return <div className="upload-row" key={item.localId}><span className="upload-file-icon"><Icon name="description" /></span><div className="upload-info"><strong>{item.name}</strong><small>{item.session.state === "processing" ? "Processing content…" : item.session.state === "complete" ? "Import complete · cleanup pending" : item.session.state === "canceled" ? "Canceled · cleanup pending" : item.session.state === "failed" ? item.session.error || "Import failed" : item.paused ? `Paused at ${progress}%` : `Uploading · ${progress}%`}</small><div className="progress"><span style={{ width: `${item.session.state === "processing" || item.session.state === "complete" ? 100 : progress}%` }} /></div></div><div className="upload-actions">{item.session.state === "uploading" && !item.paused && <button className="icon-button" onClick={() => onPause(item)}><Icon name="pause" /></button>}{((item.session.state === "uploading" && item.paused) || item.session.state === "failed") && <button className="icon-button" onClick={() => onResume(item)}><Icon name="play_arrow" /></button>}{["uploading", "failed", "canceled", "complete"].includes(item.session.state) && <button aria-label={["complete", "canceled"].includes(item.session.state) ? "Retry file cleanup" : "Cancel import"} className="icon-button" onClick={() => onCancel(item)}><Icon name="close" /></button>}</div></div>; }) : <div className="empty-mini">No document imports</div>}</Sheet>;
 }

@@ -17,7 +17,7 @@ const obsidianBlobSchema = new mongoose.Schema({
 	storage_key: { type: String, required: true },
 	key_version: { type: Number, default: 1 },
 	chunks: { type: [obsidianBlobChunkSchema], default: [] },
-}, { timestamps: true });
+}, { timestamps: true, read: 'secondaryPreferred' });
 
 obsidianBlobSchema.index({ host_id: 1, sha256: 1 }, { unique: true });
 

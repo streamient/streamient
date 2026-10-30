@@ -13,7 +13,7 @@ const teamInviteSchema = new mongoose.Schema(
 		expires_at: { type: Date, required: true },
 		accepted_at: { type: Date },
 	},
-	{ timestamps: true },
+	{ timestamps: true, read: 'secondaryPreferred' },
 );
 
 teamInviteSchema.index({ expires_at: 1 }, { expireAfterSeconds: 0 });

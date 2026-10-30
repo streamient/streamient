@@ -17,7 +17,7 @@ const obsidianChangeSchema = new mongoose.Schema({
 	conflict: { type: Boolean, default: false },
 	conflict_reason: { type: String, default: '' },
 	losing_revision: { type: mongoose.Schema.Types.ObjectId, ref: 'ObsidianRevision', default: null },
-}, { timestamps: true });
+}, { timestamps: true, read: 'secondaryPreferred' });
 
 obsidianChangeSchema.index({ host_id: 1, connection: 1, sequence: 1 }, { unique: true });
 obsidianChangeSchema.index({ host_id: 1, connection: 1, operation_id: 1 }, { unique: true });

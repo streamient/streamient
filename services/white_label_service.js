@@ -8,8 +8,11 @@ import sharp from 'sharp';
 
 import config, { isHostedHostname } from '../config.js';
 import { Tenant } from '../modules/tenancy.js';
-import { createHostname, getHostnameStatus, isCloudflareConfigured } from '../modules/cloudflare_api.js';
+import { createHostname, deleteHostname, getHostnameStatus, isCloudflareConfigured } from '../modules/cloudflare_api.js';
+import { createLogger } from '../modules/logger.js';
 import { hasProFeatureAccess } from './subscription_access_service.js';
+
+const log = createLogger('white-label');
 
 export const MAX_ASSET_FILE_SIZE = 5 * 1024 * 1024;
 
@@ -206,7 +209,7 @@ export async function getPublicSettingsForHost(hostId) {
 	return serializePublicWhiteLabel(tenant);
 }
 
-export async function updateSettings(hostId, payload = {}, { billingUser = null, isHosted = false } = {}) {
+export async function updateSettings(hostId, payload = {}, { billingUser = null, isHosted = false, deleteHostnameFn = deleteHostname } = {}) {
 	const tenant = await Tenant.findOne({ host_id: hostId }).select('plan settings.white_label').lean();
 	if (!tenant) throw createHttpError(404, 'Account not found', 'TENANT_NOT_FOUND');
 
@@ -214,14 +217,18 @@ export async function updateSettings(hostId, payload = {}, { billingUser = null,
 	if (Object.hasOwn(payload, 'dns_name_custom')) {
 		assertProFeatureAccess(billingUser, tenant.plan || 'free', isHosted, 'Custom domains are available on the Pro plan');
 		const domain = normalizeCustomDomain(payload.dns_name_custom, { allowEmpty: true });
-		updates['settings.white_label.dns_name_custom'] = domain;
-		updates['settings.white_label.dns_verified'] = false;
-		updates['settings.white_label.ssl_ready'] = false;
-		updates['settings.white_label.cloudflare_custom_hostname_id'] = '';
-		updates['settings.white_label.cloudflare_status'] = '';
-		updates['settings.white_label.cloudflare_ssl_status'] = '';
-		updates['settings.white_label.last_error'] = '';
+		const current = tenant.settings?.white_label || {};
+		if (domain !== (current.dns_name_custom || '')) {
+			updates['settings.white_label.dns_name_custom'] = domain;
+			updates['settings.white_label.dns_verified'] = false;
+			updates['settings.white_label.ssl_ready'] = false;
+			updates['settings.white_label.cloudflare_custom_hostname_id'] = '';
+			updates['settings.white_label.cloudflare_status'] = '';
+			updates['settings.white_label.cloudflare_ssl_status'] = '';
+			updates['settings.white_label.last_error'] = '';
+		}
 	}
+	const staleHostnameId = updates['settings.white_label.dns_name_custom'] !== undefined ? tenant.settings?.white_label?.cloudflare_custom_hostname_id : '';
 
 	if (!Object.keys(updates).length) {
 		return getSettings(hostId, { billingUser, isHosted });
@@ -233,6 +240,8 @@ export async function updateSettings(hostId, payload = {}, { billingUser = null,
 			{ $set: updates },
 			{ new: true },
 		).select('plan settings.white_label').lean();
+		// Delete the old Cloudflare hostname only after the new domain is saved, so a rejected change keeps it working.
+		if (staleHostnameId) await deleteHostnameFn(staleHostnameId).catch((err) => log.error({ err, host_id: hostId }, 'Failed to delete Cloudflare custom hostname'));
 		return serializeWhiteLabelSettings(updated, {
 			canUsePro: canUseProFeature(billingUser, updated?.plan || tenant.plan || 'free', isHosted),
 		});

@@ -16,7 +16,7 @@ const tenantMemberSchema = new mongoose.Schema(
 		invited_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 		joined_at: { type: Date, default: Date.now },
 	},
-	{ timestamps: true },
+	{ timestamps: true, read: 'secondaryPreferred' },
 );
 
 tenantMemberSchema.index({ tenant: 1, user: 1 }, { unique: true });

@@ -51,6 +51,10 @@ curl https://your-instance.com/api/v1/urls \
 
 ## Migration Notes
 
+### Release build checks
+
+The GitHub image workflow defaults to a dry run. It builds the image without pushing it or publishing a GitHub release. A non-dry-run build on a dated release tag publishes the GitHub release only after the image build and push succeed.
+
 Breaking changes, if any, are documented in the [GitHub releases](https://github.com/streamient/streamient/releases). Check the release notes before upgrading to a new major version.
 
 ### Account-scoped email Message-IDs
@@ -89,3 +93,9 @@ docker compose exec app pnpm trash:reconcile --host-id <host_id> --apply --confi
 ```
 
 4. Set `SCHEDULER_TRASH_RECONCILIATION_ENABLED=true` to enable nightly reconciliation.
+
+## Crawl publication recovery
+
+Crawl publication uses a ten-minute parent URL lease and durable `crawlpublications` records. The scheduled crawler retries expired cleanup records, including records whose parent URL was deleted. Cleanup targets captured document IDs and individual claim tokens.
+
+Completed cleanup records are removed. Records left by an interrupted process remain so cleanup can remove a late import after that process resumes. Do not add a TTL index to this collection. Inspect repeated `Crawl cleanup retained for retry` errors for Typesense connectivity failures. Include this tenant-scoped collection in account deletion.

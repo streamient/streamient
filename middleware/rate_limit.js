@@ -5,6 +5,7 @@ import { Tenant } from '../modules/tenancy.js';
 import { resolveStoredTenantLimits } from '../modules/tenant_limits.js';
 import { createLogger } from '../modules/logger.js';
 import { hasStreamientDemoSessionEntry } from '../services/streamient_demo_service.js';
+import { isPublicAddress } from '../modules/public_url.js';
 
 const log = createLogger('api-rate-limit');
 
@@ -113,55 +114,30 @@ export function getRequestPath(request) {
 	return strippedPath;
 }
 
-function getBearerToken(request) {
-	const authHeader = request.headers?.authorization || '';
-	if (!/^(Bearer|Token)\s+/i.test(authHeader)) return null;
-	return authHeader.replace(/^(Bearer|Token)\s+/i, '').trim();
-}
-
-function getBasicAuthName(request) {
-	const authHeader = request.headers?.authorization || '';
-	if (!/^Basic\s+/i.test(authHeader)) return null;
-
-	try {
-		const decoded = Buffer.from(authHeader.replace(/^Basic\s+/i, '').trim(), 'base64').toString('utf8');
-		const separatorIndex = decoded.indexOf(':');
-		return separatorIndex === -1 ? decoded : decoded.slice(0, separatorIndex);
-	} catch {
-		return null;
-	}
-}
-
+// Forwarding headers are client-controlled unless the direct peer is our own proxy on a private network.
 export function getClientIp(request) {
+	const peer = normalizeIp(request.socket?.remoteAddress || request.connection?.remoteAddress || '127.0.0.1');
+	if (isPublicAddress(peer)) return peer;
 	return normalizeIp(
 		request.headers?.['cf-connecting-ip'] ||
 		request.headers?.['fastly-client-ip'] ||
 		request.headers?.['true-client-ip'] ||
 		request.headers?.['x-real-ip'] ||
 		request.headers?.['x-forwarded-for'] ||
-		request['ip'] ||
-		request.connection?.remoteAddress ||
-		request.socket?.remoteAddress ||
-		'127.0.0.1'
+		peer
 	);
 }
 
+// Authorization headers are unverified before auth runs; key by the identity requireAuth verified, else by IP.
 export function getRateLimitKey(request) {
-	const basicAuthName = getBasicAuthName(request);
-	if (basicAuthName) return `basic:${hashValue(basicAuthName)}`;
-
-	const bearerToken = getBearerToken(request);
-	if (bearerToken) return `bearer:${hashValue(bearerToken)}`;
-
-	const accessToken = request.headers?.['x-access-token'] || request.headers?.['access-token'];
-	if (accessToken) return `access:${hashValue(accessToken)}`;
-
+	const userId = request.userId || request.session?.userId;
+	if (userId) return `user:${hashValue(String(userId))}`;
 	return `ip:${hashValue(getClientIp(request))}`;
 }
 
-function getCacheStore(prefix) {
+function getCacheStore(prefix, windowMs) {
 	try {
-		return getRateLimitStore(prefix, getConfig().windowMs);
+		return getRateLimitStore(prefix, windowMs || getConfig().windowMs);
 	} catch (err) {
 		log.warn({ err, prefix }, 'API rate limit Memcached store unavailable; using memory store');
 		return undefined;
@@ -284,6 +260,28 @@ export function createGeneralApiLimiter() {
 	});
 }
 
+const AUTH_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
+const AUTH_ATTEMPT_LIMIT = 10;
+
+/** Brute-force guard for credential endpoints: 10 attempts per 15 minutes per IP and account. Always on. */
+export function createAuthAttemptLimiter(name, { view = null, account = (request) => request.body?.email, store } = {}) {
+	return rateLimit({
+		windowMs: AUTH_ATTEMPT_WINDOW_MS,
+		limit: AUTH_ATTEMPT_LIMIT,
+		keyGenerator: (request) => hashValue(`${getClientIp(request)}|${String(account(request) || '').trim().toLowerCase()}`),
+		store: store || getCacheStore(name, AUTH_ATTEMPT_WINDOW_MS),
+		passOnStoreError: true,
+		standardHeaders: 'draft-7',
+		legacyHeaders: false,
+		handler: (request, response) => {
+			const error = 'Too many attempts. Please wait 15 minutes and try again.';
+			log.warn({ method: request.method, path: getRequestPath(request), bucket: name }, 'Auth attempt limit exceeded');
+			if (view && request.is('application/x-www-form-urlencoded')) return response.status(429).render(view, { error });
+			return response.status(429).json({ error });
+		},
+	});
+}
+
 async function resolveRequestAiDailyLimit(request) {
 	if (request.aiDailyLimitPromise) return request.aiDailyLimitPromise;
 	request.aiDailyLimitPromise = Tenant.findOne({ host_id: request.host_id })
@@ -330,6 +328,28 @@ export function createAiDailyLimiter() {
 	});
 }
 
+/** Pre-auth guard: counts only rejected credentials per IP, so invalid tokens cannot hammer token lookups. */
+export function createApiAuthFailureLimiter() {
+	const rateLimitConfig = getConfig();
+	if (!rateLimitConfig.enabled) return createNoopLimiter();
+	return rateLimit({
+		windowMs: rateLimitConfig.windowMs,
+		limit: rateLimitConfig.generalPerMinute,
+		keyGenerator: (request) => `auth-fail:${hashValue(getClientIp(request))}`,
+		store: getCacheStore('api-auth-failure'),
+		passOnStoreError: true,
+		standardHeaders: 'draft-7',
+		legacyHeaders: false,
+		skip: shouldSkipCommon,
+		requestWasSuccessful: (_request, response) => response.statusCode !== 401,
+		skipSuccessfulRequests: true,
+		handler: (request, response) => {
+			log.warn({ method: request.method, path: getRequestPath(request), bucket: 'api-auth-failure' }, 'API auth failure limit exceeded');
+			return response.status(429).json({ error: 'Rate limit exceeded. Please slow down and try again later.' });
+		},
+	});
+}
+
 export function createApiLimiters() {
 	return [
 		createExpensiveApiLimiter(),
@@ -338,8 +358,4 @@ export function createApiLimiters() {
 		createObsidianApiLimiter(),
 		createGeneralApiLimiter(),
 	];
-}
-
-export function createApiLimiter() {
-	return createGeneralApiLimiter();
 }

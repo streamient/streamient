@@ -21,10 +21,9 @@ export async function listenForShares(callback: (share: SharePayload) => void) {
 	if (!Capacitor.isNativePlatform()) return () => undefined;
 	const listener = await CapacitorShareTarget.addListener("shareReceived", async (event) => {
 		const share = normalize(event);
-		await setStoredJson(PENDING_SHARE_KEY, share);
-		callback(share);
+		try { await setStoredJson(PENDING_SHARE_KEY, share); callback(share); } catch (error) { console.error("Unable to receive shared content", error); }
 	});
-	return () => void listener.remove();
+	return () => void listener.remove().catch((error) => console.error("Unable to remove share listener", error));
 }
 
 export function sharedTextKind(share: SharePayload) {

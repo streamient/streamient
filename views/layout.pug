@@ -481,7 +481,7 @@ html(lang="en")
 			var __host_id = "#{host_id}";
 			var __user_id = "#{user_id}";
 			var __socket_token = "#{socket_token}";
-			var __user_name = "#{user ? user.name : ''}";
+			var __user_name = !{JSON.stringify(user ? user.name : '').replace(/[<>&]/g, (char) => ({ '<': '\\u003c', '>': '\\u003e', '&': '\\u0026' }[char]))};
 			var __static_base = "/static/v-#{v}";
 			window.STREAMIENTDateSettings = !{dateSettingsJson};
 			var __user_email = !{JSON.stringify(user ? user.email : '').replace(/</g, '\\u003c')};

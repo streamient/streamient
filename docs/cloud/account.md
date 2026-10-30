@@ -73,3 +73,9 @@ Usage limits depend on your [billing plan](/cloud/billing).
 ## Delete account
 
 Owners can permanently delete the account from Settings > Subscription. See [Delete your account](./account-deletion) for eligibility and what is removed.
+
+## Change your email address
+
+In **Settings > Profile**, enter your new address and save. Streamient sends a confirmation link to that address. Your current address remains active until you open the link and confirm while signed in to the same account.
+
+The link expires after 15 minutes and works once. A new request replaces the previous link. An address already used by another account cannot be selected. `PUT /profile` returns `email_change_pending: true` when confirmation is required; `user.email` remains the current address.

@@ -10,7 +10,7 @@ function read(relativePath) {
 
 async function compile(src, globals = {}) {
 	const code = (await transform(src.replace(/^import .*\n/gm, ''), { loader: 'ts', format: 'cjs', target: 'es2022' })).code;
-	const context = vm.createContext({ module: { exports: {} }, console, URL, URLSearchParams, Headers, Response, Blob, TextDecoder, TextEncoder, DOMException, Error, TypeError, atob, btoa, crypto, navigator: { onLine: true }, ...globals });
+	const context = vm.createContext({ module: { exports: {} }, console, URL, URLSearchParams, Headers, Response, Blob, TextDecoder, TextEncoder, DOMException, Error, TypeError, atob, btoa, crypto, navigator: { onLine: true }, searchSeq: { current: 0 }, chatBusy: { current: false }, chatSeq: { current: 0 }, sessionApi: { current: null }, liveEvents: { current: new Map() }, catchupEvents: { current: new Set() }, feedLoad: { current: Promise.resolve() }, feedKey: { current: "P:all" }, feedEvents: { current: new Map() }, setChatting: noop, setError: noop, ...globals });
 	vm.runInContext(code, context);
 	return { exports: context.module.exports, context };
 }
@@ -23,6 +23,7 @@ function block(start, end) { return app.slice(app.indexOf(start), app.indexOf(en
 
 const serverA = { baseUrl: 'https://a.example', resourceUrl: 'https://a.example/api/v1' };
 const serverB = { baseUrl: 'https://b.example', resourceUrl: 'https://b.example/api/v1' };
+const serverC = { baseUrl: 'https://c.example', resourceUrl: 'https://c.example/api/v1' };
 
 function storage() {
 	const saved = new Map();
@@ -74,7 +75,7 @@ describe('Streamient Mobile client regressions', () => {
 	});
 
 	it('finding 7: resetSessionState clears credentials, identity state, and pending work', async () => {
-		const state = { tokens: 'A', bootstrap: 'A', records: ['A'], nextCursor: 'cursor', activeProjectId: 'p1', filter: 'urls', view: 'ai', error: 'x', detail: { id: 'n' }, detailLoading: true, chatMessages: ['A private answer'], chatQuery: 'private', conversationId: 'conv-A', conversations: ['A'], historyDrawer: true, searchQuery: 'private', searchResults: ['A private result'], searching: true, uploads: ['A private.pdf'], uploadTray: true, saving: true, feedLoading: true, loadingMore: true, noteDraft: { title: 'A' }, urlDraft: { url: 'https://a' }, fileDraft: { name: 'A.pdf' } };
+		const state = { tokens: 'A', bootstrap: 'A', records: ['A'], nextCursor: 'cursor', activeProjectId: 'p1', filter: 'urls', view: 'ai', error: 'x', detail: { id: 'n' }, detailLoading: true, chatting: true, chatMessages: ['A private answer'], chatQuery: 'private', conversationId: 'conv-A', conversations: ['A'], historyDrawer: true, searchQuery: 'private', searchResults: ['A private result'], searching: true, uploads: ['A private.pdf'], uploadTray: true, saving: true, feedLoading: true, loadingMore: true, noteDraft: { title: 'A' }, urlDraft: { url: 'https://a' }, fileDraft: { name: 'A.pdf' } };
 		let cleared = false;
 		const globals = { clearAuth: async () => { cleared = true; }, bootstrapRef: { current: 'A' }, uploadNamespaceRef: { current: 'ns:A' }, sessionEpoch: { current: 0 }, feedSeq: { current: 0 }, detailSeq: { current: 0 }, uploadControllers: { current: new Map([['u', { abort() {} }]]) }, useCallback: (fn) => fn };
 		for (const name of Object.keys(state)) globals['set' + name[0].toUpperCase() + name.slice(1)] = (next) => { state[name] = next; };
@@ -93,6 +94,7 @@ describe('Streamient Mobile client regressions', () => {
 		assert.equal(state.detail, null);
 		assert.equal(state.detailLoading, false);
 		assert.equal(state.chatMessages.length, 0);
+		assert.equal(state.chatting, false);
 		assert.equal(state.chatQuery, '');
 		assert.equal(state.conversationId, '');
 		assert.equal(state.conversations.length, 0);
@@ -168,7 +170,7 @@ describe('Streamient Mobile client regressions', () => {
 			{ changes: [{ action: 'upsert', record: record('last') }], next_cursor: 'page-2', has_more: false },
 		];
 		const { exports: f } = await compile(block('function upsertRecord(', '\nfunction relativeTime') + block('const applyChanges = useCallback', '\n\trealtimeEventHandler.current =') + '\nexport { applyChanges };', {
-			api: { changes: async (cursor) => { calls.push(cursor); return pages.shift(); } }, changeCursor, sessionEpoch: { current: 0 }, activeProjectId: 'P', filter: 'all', useCallback: (fn) => fn,
+			api: { changes: async (cursor) => { calls.push(cursor); return pages.shift(); } }, changeCursor, feedLoad: { current: Promise.resolve() }, feedKey: { current: 'P:all' }, sessionEpoch: { current: 0 }, activeProjectId: 'P', filter: 'all', useCallback: (fn) => fn,
 			setRecords: (fn) => { state.records = fn(state.records); },
 		});
 		await f.applyChanges();
@@ -176,6 +178,36 @@ describe('Streamient Mobile client regressions', () => {
 		assert.equal(state.records.length, 101);
 		assert.equal(state.records.some((r) => r.id === 'last'), true);
 		assert.equal(changeCursor.current, 'page-2');
+	});
+
+	it('finding 15: catch-up waits for the in-flight first-page feed load', async () => {
+		let release;
+		const feedLoad = { current: new Promise((resolve) => { release = resolve; }) };
+		const calls = [];
+		const { exports: f } = await compile(block('function upsertRecord(', '\nfunction relativeTime') + block('const applyChanges = useCallback', '\n\trealtimeEventHandler.current =') + '\nexport { applyChanges };', {
+			api: { changes: async (cursor) => { calls.push(cursor); return { changes: [], next_cursor: 'next', has_more: false }; } }, changeCursor: { current: 'start' }, feedLoad, feedKey: { current: 'P:all' }, sessionEpoch: { current: 0 }, activeProjectId: 'P', filter: 'all', useCallback: (fn) => fn, setRecords: noop,
+		});
+		const pending = f.applyChanges();
+		await new Promise((resolve) => setImmediate(resolve));
+		assert.equal(calls.length, 0);
+		release();
+		await pending;
+		assert.deepEqual(calls, ['start']);
+	});
+
+	it('finding 15: catch-up started before a project switch never applies to the new project', async () => {
+		let release;
+		const feedLoad = { current: new Promise((resolve) => { release = resolve; }) };
+		const feedKey = { current: 'P:all' };
+		const calls = [];
+		const { exports: f } = await compile(block('function upsertRecord(', '\nfunction relativeTime') + block('const applyChanges = useCallback', '\n\trealtimeEventHandler.current =') + '\nexport { applyChanges };', {
+			api: { changes: async (cursor) => { calls.push(cursor); return { changes: [], next_cursor: 'next', has_more: false }; } }, changeCursor: { current: 'start' }, feedLoad, feedKey, sessionEpoch: { current: 0 }, activeProjectId: 'P', filter: 'all', useCallback: (fn) => fn, setRecords: () => assert.fail('must not touch records'),
+		});
+		const pending = f.applyChanges();
+		feedKey.current = 'Q:all';
+		release();
+		await pending;
+		assert.deepEqual(calls, []);
 	});
 
 	it('finding 15: an obsolete feed response cannot overwrite the current project', async () => {
@@ -186,7 +218,7 @@ describe('Streamient Mobile client regressions', () => {
 		const make = async (project) => (await compile(block('const loadFeed = useCallback', '\n\tuseEffect(() => { if (view === "projects")') + '\nexport { loadFeed };', {
 			api: { records: () => project === 'A' ? new Promise((resolve) => { resolveA = resolve; }) : Promise.resolve({ value: { records: [record('B-note', 'B')], next_cursor: null }, offline: false }) },
 			activeProjectId: project, filter: 'all', useCallback: (fn) => fn, setRecords,
-			setLoadingMore: noop, setFeedLoading: noop, setNextCursor: noop, setOffline: noop, Swal: { fire: noop }, feedSeq,
+			setLoadingMore: noop, setFeedLoading: noop, setNextCursor: noop, setOffline: noop, Swal: { fire: noop }, feedSeq, feedLoad: { current: Promise.resolve() }, feedKey: { current: '' },
 		})).exports.loadFeed;
 		const loadA = await make('A');
 		const loadB = await make('B');
@@ -377,7 +409,7 @@ describe('Streamient Mobile client regressions', () => {
 		const sessionEpoch = { current: 0 };
 		let resolveRestore;
 		const start = app.indexOf('api.bootstrap().then(async (result) => {');
-		const end = app.indexOf('}).catch(');
+		const end = app.indexOf('}).catch(', start);
 		const body = app.slice(start + 'api.bootstrap().then(async (result) => {'.length, end);
 		const { exports: f } = await compile('async function chain(result) {' + body + '\n}\nexport { chain };', {
 			canceled: false, epoch: 0, sessionEpoch, server: serverA,
@@ -456,7 +488,7 @@ describe('Streamient Mobile client regressions', () => {
 		const sessionEpoch = { current: 0 };
 		const base = {
 			sessionEpoch, activeProjectId: 'P', filter: 'all',
-			refreshCounts: noop, applyChanges: noop, setUploads: noop,
+			refreshCounts: async () => {}, applyChanges: async () => {}, setUploads: noop,
 			upsertRecord: (items, rec) => [rec, ...items.filter((item) => item.key !== rec.key)],
 		};
 		const start = app.indexOf('realtimeEventHandler.current = (event, payload) => {');
@@ -533,4 +565,471 @@ describe('Streamient Mobile client regressions', () => {
 		const current = { user: { _id: 'B', name: 'B user' }, projects: [] };
 		assert.deepEqual(queuedUpdater(current), current);
 	});
+	it('finding 13: sibling instances share one refresh per token and a rotated token never signs out', async () => {
+		let refreshes = 0;
+		let release;
+		const gate = new Promise((resolve) => { release = resolve; });
+		const refreshTokens = async (server, token) => { refreshes++; await gate; if (token !== 'R1') throw Object.assign(new Error('invalid_grant'), { status: 400, code: 'invalid_grant' }); return { access_token: 'A2', refresh_token: 'R2', expires_in: 3600, obtained_at: Date.now(), token_type: 'Bearer', scope: '' }; };
+		const { exports: { StreamientApi } } = await compile(read('apps/mobile/src/lib/api.ts'), { refreshTokens, getCachedJson: async () => null, setCachedJson: async () => {}, fetch: async (url, init) => new Response('{}', { status: init.headers.get('Authorization') === 'Bearer A2' ? 200 : 401 }) });
+		const stale = { access_token: 'A1', refresh_token: 'R1', expires_in: 3600, obtained_at: Date.now(), token_type: 'Bearer', scope: '' };
+		const seen = [];
+		const first = new StreamientApi(serverA, stale, (next) => seen.push(next?.refresh_token ?? null));
+		const second = new StreamientApi(serverA, stale, (next) => seen.push(next?.refresh_token ?? null));
+		const pending = [first.projects(), second.projects()];
+		await new Promise((resolve) => setImmediate(resolve));
+		release();
+		await Promise.all(pending);
+		assert.equal(refreshes, 1);
+		assert.deepEqual(seen, ['R2', 'R2']);
+		// A later request on an instance that still holds R1 adopts the rotated tokens instead of replaying R1.
+		const late = new StreamientApi(serverA, stale, (next) => seen.push(next?.refresh_token ?? null));
+		await late.projects();
+		assert.equal(refreshes, 1);
+		assert.deepEqual(seen, ['R2', 'R2']);
+		// Another server with the same token string never receives the rotated tokens.
+		await new StreamientApi(serverB, stale, noop).projects().catch(noop);
+		assert.equal(refreshes, 2);
+	});
+
+	it('finding 13: a long-lived instance adopts current tokens after many rotations instead of signing out', async () => {
+		let n = 1;
+		const refreshTokens = async (server, token) => { if (token !== `R${n}`) throw Object.assign(new Error('invalid_grant'), { status: 400 }); n++; return { access_token: `A${n}`, refresh_token: `R${n}`, expires_in: 1, obtained_at: Date.now() + n, token_type: 'Bearer', scope: '' }; };
+		const { exports: { StreamientApi } } = await compile(read('apps/mobile/src/lib/api.ts'), { refreshTokens, getCachedJson: async () => null, setCachedJson: async () => {}, fetch: async (url, init) => new Response('{}', { status: init.headers.get('Authorization') === `Bearer A${n}` ? 200 : 401 }) });
+		const signedOut = [];
+		const old = new StreamientApi(serverC, { access_token: 'A1', refresh_token: 'R1', expires_in: 1, obtained_at: Date.now(), token_type: 'Bearer', scope: '' }, (next) => { if (!next) signedOut.push(true); });
+		let tokens = { access_token: 'A1', refresh_token: 'R1', expires_in: 1, obtained_at: Date.now(), token_type: 'Bearer', scope: '' };
+		for (let i = 0; i < 40; i += 1) {
+			const current = new StreamientApi(serverC, tokens, (next) => { tokens = next; });
+			await current.projects();
+		}
+		await old.projects();
+		assert.deepEqual(signedOut, []);
+		assert.equal(n, 41);
+	});
+
+	it('finding 13: different logins with opaque tokens never share refreshed credentials', async () => {
+		const refreshTokens = async (server, token) => ({ access_token: `access-${token}-next`, refresh_token: `${token}-next`, expires_in: 1, obtained_at: Date.now(), token_type: 'Bearer', scope: '' });
+		const sent = [];
+		const { exports: { StreamientApi } } = await compile(read('apps/mobile/src/lib/api.ts'), { refreshTokens, getCachedJson: async () => null, setCachedJson: async () => {}, fetch: async (url, init) => { sent.push(init.headers.get('Authorization')); return new Response('{}', { status: 200 }); } });
+		const userB = new StreamientApi(serverA, { access_token: 'opaque-B', refresh_token: 'RB', expires_in: 1, obtained_at: Date.now() - 60000, token_type: 'Bearer', scope: '' }, noop);
+		await userB.projects();
+		const userA = new StreamientApi(serverA, { access_token: 'opaque-A', refresh_token: 'RA', expires_in: 1, obtained_at: Date.now() - 60000, token_type: 'Bearer', scope: '' }, noop);
+		await userA.projects();
+		assert.deepEqual(sent, ['Bearer access-RB-next', 'Bearer access-RA-next']);
+	});
+
+	it('finding 13: refreshes in many other logins never evict the rotated tokens of a live instance', async () => {
+		const used = new Set();
+		const refreshTokens = async (server, token) => { if (used.has(token)) throw Object.assign(new Error('invalid_grant'), { status: 400 }); used.add(token); return { access_token: `A-${token}`, refresh_token: `${token}+`, expires_in: 3600, obtained_at: Date.now(), token_type: 'Bearer', scope: '' }; };
+		const { exports: { StreamientApi } } = await compile(read('apps/mobile/src/lib/api.ts'), { refreshTokens, getCachedJson: async () => null, setCachedJson: async () => {}, fetch: async () => new Response('{}', { status: 200 }) });
+		const expired = (refresh) => ({ access_token: `old-${refresh}`, refresh_token: refresh, expires_in: 1, obtained_at: Date.now() - 60000, token_type: 'Bearer', scope: '' });
+		const signedOut = [];
+		const first = new StreamientApi(serverC, expired('R0'), noop);
+		const stale = new StreamientApi(serverC, expired('R0'), (next) => { if (!next) signedOut.push(true); });
+		await first.projects();
+		for (let i = 0; i < 40; i += 1) await new StreamientApi(serverC, expired(`other-${i}`), noop).projects();
+		await stale.projects();
+		assert.deepEqual(signedOut, []);
+	});
+
+	it('finding 14: realtime start does not create a socket after cleanup during socketToken', async () => {
+		let created = 0;
+		let release;
+		const gate = new Promise((resolve) => { release = resolve; });
+		const { exports: { startRealtime } } = await compile(read('apps/mobile/src/lib/realtime.ts'), { io: () => { created++; return { io: { on: noop, removeAllListeners: noop }, on: noop, removeAllListeners: noop, connect: noop, disconnect: noop, connected: false }; }, window: { setTimeout, clearTimeout } });
+		const stop = startRealtime({ socketToken: async () => { await gate; return { token: 't', refresh_after: 60 }; } }, serverA, { hostId: 'h', userId: 'u' }, noop);
+		stop();
+		release();
+		await new Promise((resolve) => setImmediate(resolve));
+		assert.equal(created, 0);
+	});
+
+	it('finding 15: every socket connect, including a restarted realtime first connect, triggers catch-up', async () => {
+		const handlers = {};
+		const events = [];
+		const { exports: { startRealtime } } = await compile(read('apps/mobile/src/lib/realtime.ts'), { io: () => ({ io: { on: noop, removeAllListeners: noop }, on: (event, fn) => { handlers[event] = fn; }, emit: noop, removeAllListeners: noop, connect: noop, disconnect: noop, connected: false }), window: { setTimeout, clearTimeout } });
+		const stop = startRealtime({ socketToken: async () => ({ token: 't', refresh_after: 60 }) }, serverA, { hostId: 'h', userId: 'u' }, (event) => events.push(event));
+		await new Promise((resolve) => setImmediate(resolve));
+		handlers.connect();
+		assert.deepEqual(events, ['connection:reconnected']);
+		stop();
+	});
+});
+it('renewed tokens persist without resetting React session state or API identity', async () => {
+	let tokens = { access_token: 'old', refresh_token: 'old' };
+	let api;
+	let dependencies;
+	let constructions = 0;
+	const saved = [];
+	const globals = {
+		server: serverA, tokens, sessionEpoch: { current: 0 },
+		setTokens: () => assert.fail('renewal must not reset session state'),
+		resetSessionState: async () => assert.fail('renewal must not sign out'),
+		saveTokens: async (value) => saved.push(value), useCallback: (fn) => fn,
+		useMemo: (fn, deps) => { if (!dependencies || deps.some((value, index) => value !== dependencies[index])) { api = fn(); dependencies = deps; } return api; },
+		StreamientApi: class { constructor(server, value, onTokens) { constructions++; this.onTokens = onTokens; } },
+	};
+	const { exports: f } = await compile(block('const handleTokens = useCallback', 'const activeProject =') + '\nexport { api };', globals);
+	const original = f.api;
+	original.onTokens({ access_token: 'new', refresh_token: 'new' });
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.equal(saved[0].access_token, 'new');
+	assert.equal(constructions, 1);
+	assert.equal(f.api, original);
+});
+
+it('signout clears only its cache and pending requests cannot repopulate it', async () => {
+	const values = { unrelated: 'keep' };
+	const localStorage = { getItem: (key) => values[key] ?? null, setItem: (key, value) => { localStorage[key] = values[key] = value; }, removeItem: (key) => { delete values[key]; delete localStorage[key]; } };
+	const { exports: cache } = await compile(read('apps/mobile/src/lib/cache.ts'), { localStorage });
+	await cache.setCachedJson('other', 'bootstrap', 'keep');
+	let release;
+	const { exports: { StreamientApi } } = await compile(read('apps/mobile/src/lib/api.ts'), { ...cache, fetch: () => new Promise((resolve) => { release = () => resolve(Response.json({ private: true })); }) });
+	const api = new StreamientApi(serverA, { access_token: 'opaque' }, noop);
+	await cache.setCachedJson('https://a.example:unknown', 'records', 'private');
+	const pending = api.bootstrap();
+	api.clearCache();
+	release();
+	await pending;
+	assert.equal(await cache.getCachedJson('https://a.example:unknown', 'records'), null);
+	assert.equal(await cache.getCachedJson('https://a.example:unknown', 'bootstrap'), null);
+	assert.equal(await cache.getCachedJson('other', 'bootstrap'), 'keep');
+});
+
+it('live create and delete wait for the initial snapshot; older reads cannot resurrect deletion', async () => {
+	let releaseFeed;
+	let releaseRecord;
+	const feedLoad = { current: new Promise((resolve) => { releaseFeed = resolve; }) };
+	let records = [];
+	let reads = 0;
+	const handler = { current: null };
+	await compile(block('function upsertRecord(', '\nfunction relativeTime') + block('realtimeEventHandler.current =', '\n\tconst realtimeHostId') + '\n', {
+		api: { record: async () => { reads++; return new Promise((resolve) => { releaseRecord = resolve; }); } },
+		feedLoad, sessionEpoch: { current: 0 }, activeProjectId: 'P', filter: 'all', realtimeEventHandler: handler,
+		refreshCounts: async () => {}, applyChanges: async () => {}, setUploads: noop,
+		setRecords: (fn) => { records = fn(records); },
+	});
+	handler.current('note:created', { id: 'live' });
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.equal(reads, 0);
+	records = [record('snapshot')];
+	releaseFeed();
+	await new Promise((resolve) => setImmediate(resolve));
+	handler.current('note:deleted', { id: 'live' });
+	await new Promise((resolve) => setImmediate(resolve));
+	releaseRecord({ record: record('live') });
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.deepEqual(records.map((item) => item.id), ['snapshot']);
+});
+
+it('upload pieces stay within 4 MB and resume at arbitrary confirmed offsets', async () => {
+	const lengths = [];
+	const start = 123;
+	const session = { id: 'u', state: 'uploading', upload_length: 8_000_130, chunk_size: 20_000_000 };
+	const { exports: uploads } = await compile(read('apps/mobile/src/lib/uploads.ts'));
+	const api = { uploadStatus: async () => ({ state: 'uploading', upload_offset: start, chunk_size: 20_000_000 }), uploadChunk: async (id, offset, total, digest, blob) => { lengths.push([offset, blob.size]); return offset + blob.size; }, completeUpload: async () => ({ upload: { ...session, state: 'processing' } }) };
+	await uploads.uploadWithResume(api, session, new Blob([new Uint8Array(session.upload_length)]), noop);
+	assert.deepEqual(lengths, [[123, 4_000_000], [4_000_123, 4_000_000], [8_000_123, 7]]);
+	await assert.rejects(uploads.uploadWithResume(api, session, new Blob(['short']), noop), /ended before/);
+});
+
+it('copied file cleanup keeps registry for retry when removal fails', async () => {
+	const values = new Map();
+	const localStorage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: (key) => values.delete(key) };
+	let failure = true;
+	let removed = 0;
+	const { exports: uploads } = await compile(read('apps/mobile/src/lib/uploads.ts'), { localStorage, removeSharedFile: async () => { if (failure) throw new Error('busy'); removed++; } });
+	await uploads.rememberUpload('ns', 'local', { id: 'u' }, { uri: 'file:///copy', name: 'copy', mimeType: 'text/plain' }, 'copy', 'text/plain');
+	await assert.rejects(uploads.forgetUpload('ns', 'local'), /busy/);
+	assert.equal((await uploads.restoreUploads('ns')).length, 1);
+	failure = false;
+	await uploads.forgetUpload('ns', 'local');
+	assert.equal(removed, 1);
+	assert.equal((await uploads.restoreUploads('ns')).length, 0);
+});
+
+it('live creation lands after the snapshot without replacing its other records', async () => {
+	let release;
+	let records = [];
+	const handler = { current: null };
+	await compile(block('function upsertRecord(', '\nfunction relativeTime') + block('realtimeEventHandler.current =', '\n\tconst realtimeHostId'), {
+		api: { record: async () => ({ record: record('live') }) },
+		feedLoad: { current: new Promise((resolve) => { release = resolve; }) }, sessionEpoch: { current: 0 }, activeProjectId: 'P', filter: 'all', realtimeEventHandler: handler,
+		refreshCounts: async () => {}, applyChanges: async () => {}, setUploads: noop, setRecords: (fn) => { records = fn(records); },
+	});
+	handler.current('note:created', { id: 'live' });
+	records = [record('snapshot')];
+	release();
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.deepEqual(Array.from(records, (item) => item.id).sort(), ['live', 'snapshot']);
+});
+
+it('native cleanup is limited to app-owned iOS share copies', async () => {
+	const removed = [];
+	const { exports: native } = await compile(read('apps/mobile/src/lib/nativeFile.ts'), { Capacitor: { getPlatform: () => 'android' }, registerPlugin: () => ({ removeSharedFile: async (options) => removed.push(options) }) });
+	await native.removeSharedFile('content://original');
+	assert.equal(removed.length, 0);
+	const swift = read('apps/mobile/ios/App/App/StreamientFileReaderPlugin.swift');
+	assert.match(swift, /resolvingSymlinksInPath\(\)/);
+	assert.match(swift, /folder.deletingLastPathComponent\(\) == incoming, UUID\(uuidString: folder.lastPathComponent\) != nil/);
+	assert.match(swift, /fileExists\(atPath: url.path\)/);
+});
+
+it('cleanup preserves uploads and progress registered during native deletion', async () => {
+	const values = new Map();
+	const localStorage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+	let release;
+	const { exports: uploads } = await compile(read('apps/mobile/src/lib/uploads.ts'), { localStorage, removeSharedFile: () => new Promise((resolve) => { release = resolve; }) });
+	const source = { uri: 'file:///copy', name: 'copy', mimeType: 'text/plain' };
+	await uploads.rememberUpload('ns', 'A', { id: 'A' }, source, 'copy', 'text/plain');
+	const pending = uploads.forgetUpload('ns', 'A');
+	await uploads.rememberUpload('ns', 'B', { id: 'B', upload_offset: 1 }, source, 'copy', 'text/plain');
+	await uploads.updateRememberedUpload('ns', 'B', { id: 'B', upload_offset: 99 });
+	release();
+	await pending;
+	const remaining = await uploads.restoreUploads('ns');
+	assert.equal(remaining.length, 1);
+	assert.equal(remaining[0].saved.session.upload_offset, 99);
+});
+
+it('catch-up cannot resurrect a record deleted live while its response waits', async () => {
+	let release;
+	let records = [record('deleted')];
+	const handler = { current: null };
+	const { exports: f } = await compile(block('function upsertRecord(', '\nfunction relativeTime') + block('const applyChanges = useCallback', '\n\tconst realtimeHostId') + '\nexport { applyChanges };', {
+		api: { changes: () => new Promise((resolve) => { release = resolve; }) },
+		changeCursor: { current: 'start' }, sessionEpoch: { current: 0 }, activeProjectId: 'P', filter: 'all', useCallback: (fn) => fn, realtimeEventHandler: handler,
+		refreshCounts: async () => {}, setUploads: noop, setRecords: (fn) => { records = fn(records); },
+	});
+	const pending = f.applyChanges();
+	await new Promise((resolve) => setImmediate(resolve));
+	handler.current('note:deleted', { id: 'deleted' });
+	await new Promise((resolve) => setImmediate(resolve));
+	release({ changes: [{ key: 'notes:deleted', action: 'update', record: record('deleted') }], next_cursor: 'next', has_more: false });
+	await pending;
+	assert.equal(records.length, 0);
+});
+
+it('cancellation persists canceled state before cleanup and retries cleanup without another request', async () => {
+	let item = { localId: 'local', session: { id: 'u', state: 'uploading' } };
+	let requests = 0;
+	let failed = true;
+	let persisted;
+	const { exports: f } = await compile(block('async function cancelImport(', '\n\tasync function runUpload(') + '\nexport { cancelImport };', {
+		api: { cancelUpload: async () => { requests++; return { upload: { id: 'u', state: 'canceled' } }; } },
+		uploadNamespaceRef: { current: 'ns' }, sessionEpoch: { current: 0 }, uploadControllers: { current: new Map() },
+		updateRememberedUpload: async (ns, id, session) => { persisted = session; },
+		forgetUpload: async () => { assert.equal(persisted.state, 'canceled'); if (failed) throw new Error('busy'); },
+		setUploads: (fn) => { item = fn([item])[0]; },
+	});
+	await f.cancelImport(item);
+	assert.equal(item.session.state, 'canceled');
+	failed = false;
+	await f.cancelImport(item);
+	assert.equal(requests, 1);
+	assert.equal(item, undefined);
+});
+
+it('pending feed pages preserve live deletions and updates even after their live handlers finish', async () => {
+	let rows = [record('first'), record('updated')];
+	let release;
+	const handler = { current: null };
+	const { exports: f } = await compile(block('function upsertRecord(', '\nfunction relativeTime') + block('const loadFeed = useCallback', '\n\tuseEffect(() => { if (view === "projects")') + block('realtimeEventHandler.current =', '\n\tconst realtimeHostId') + '\nexport { loadFeed };', {
+		api: { records: () => new Promise((resolve) => { release = resolve; }), record: async () => ({ record: { ...record('updated'), title: 'new title' } }) }, activeProjectId: 'P', filter: 'all', feedSeq: { current: 0 }, sessionEpoch: { current: 0 }, useCallback: (fn) => fn,
+		setRecords: (fn) => { rows = fn(rows); }, setLoadingMore: noop, setFeedLoading: noop, setNextCursor: noop, setOffline: noop, realtimeEventHandler: handler, refreshCounts: async () => {}, setUploads: noop,
+	});
+	const pending = f.loadFeed('page2');
+	handler.current('note:deleted', { id: 'deleted' });
+	handler.current('note:updated', { id: 'updated' });
+	await new Promise((resolve) => setImmediate(resolve));
+	release({ value: { records: [record('deleted'), record('updated'), record('older')], next_cursor: null }, offline: false });
+	await pending;
+	assert.equal(rows.some((row) => row.id === 'deleted'), false);
+	assert.equal(rows.find((row) => row.id === 'updated').title, 'new title');
+	assert.equal(rows.some((row) => row.id === 'older'), true);
+});
+
+it('catch-up waits for a same-project refresh before applying changes and advancing its cursor', async () => {
+	let rows = [record('moved')], releaseChanges, releaseFeed;
+	const changeCursor = { current: 'start' };
+	const { exports: f } = await compile(block('function upsertRecord(', '\nfunction relativeTime') + block('const loadFeed = useCallback', '\n\tuseEffect(() => { if (view === "projects")') + block('const applyChanges = useCallback', '\n\trealtimeEventHandler.current =') + '\nexport { loadFeed, applyChanges };', {
+		api: { records: () => new Promise((resolve) => { releaseFeed = resolve; }), changes: () => new Promise((resolve) => { releaseChanges = resolve; }) }, activeProjectId: 'P', filter: 'all', feedSeq: { current: 0 }, sessionEpoch: { current: 0 }, changeCursor, useCallback: (fn) => fn,
+		setRecords: (fn) => { rows = fn(rows); }, setLoadingMore: noop, setFeedLoading: noop, setNextCursor: noop, setOffline: noop,
+	});
+	const catchup = f.applyChanges();
+	await new Promise((resolve) => setImmediate(resolve));
+	const refresh = f.loadFeed();
+	releaseChanges({ changes: [{ key: 'notes:moved', action: 'upsert', record: record('moved', 'OTHER') }], next_cursor: 'after-move', has_more: false });
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.equal(changeCursor.current, 'start');
+	releaseFeed({ value: { records: [record('moved')], next_cursor: null }, offline: false });
+	await Promise.all([refresh, catchup]);
+	assert.equal(rows.length, 0);
+	assert.equal(changeCursor.current, 'after-move');
+});
+
+it('later cached pages retain earlier live deletion and move protection within the feed', async () => {
+	let rows = [record('first')], release;
+	const handler = { current: null };
+	const { exports: f } = await compile(block('function upsertRecord(', '\nfunction relativeTime') + block('const loadFeed = useCallback', '\n\tuseEffect(() => { if (view === "projects")') + block('realtimeEventHandler.current =', '\n\tconst realtimeHostId') + '\nexport { loadFeed };', {
+		api: { records: () => new Promise((resolve) => { release = resolve; }), record: async () => ({ record: record('moved', 'OTHER') }) }, activeProjectId: 'P', filter: 'all', feedSeq: { current: 0 }, sessionEpoch: { current: 0 }, useCallback: (fn) => fn,
+		setRecords: (fn) => { rows = fn(rows); }, setLoadingMore: noop, setFeedLoading: noop, setNextCursor: noop, setOffline: noop, realtimeEventHandler: handler, refreshCounts: async () => {}, setUploads: noop,
+	});
+	const second = f.loadFeed('page2');
+	handler.current('note:deleted', { id: 'deleted' });
+	handler.current('note:updated', { id: 'moved' });
+	await new Promise((resolve) => setImmediate(resolve));
+	release({ value: { records: [record('second')], next_cursor: 'page3' }, offline: false });
+	await second;
+	const third = f.loadFeed('page3');
+	release({ value: { records: [record('deleted'), record('moved'), record('third')], next_cursor: null }, offline: true });
+	await third;
+	assert.deepEqual(Array.from(rows, (row) => row.id), ['first', 'second', 'third']);
+});
+
+it('cached first-page refresh replays prior catch-up deletions, updates and moves', async () => {
+	let rows = [record('deleted'), record('updated'), record('moved')];
+	let offline = true;
+	const fresh = { ...record('deleted'), title: 'restored online' };
+	const { exports: f } = await compile(block('function upsertRecord(', '\nfunction relativeTime') + block('const loadFeed = useCallback', '\n\tuseEffect(() => { if (view === "projects")') + block('const applyChanges = useCallback', '\n\trealtimeEventHandler.current =') + '\nexport { loadFeed, applyChanges };', {
+		api: {
+			records: async () => ({ value: { records: offline ? [record('deleted'), record('updated'), record('moved')] : [fresh], next_cursor: null }, offline }),
+			changes: async () => ({ changes: [{ key: 'notes:deleted', action: 'delete' }, { key: 'notes:updated', action: 'upsert', record: { ...record('updated'), title: 'new title' } }, { key: 'notes:moved', action: 'upsert', record: record('moved', 'OTHER') }], next_cursor: 'advanced', has_more: false }),
+		}, activeProjectId: 'P', filter: 'all', feedSeq: { current: 0 }, sessionEpoch: { current: 0 }, changeCursor: { current: 'start' }, useCallback: (fn) => fn,
+		setRecords: (fn) => { rows = fn(rows); }, setLoadingMore: noop, setFeedLoading: noop, setNextCursor: noop, setOffline: noop,
+	});
+	await f.applyChanges();
+	await f.loadFeed();
+	assert.equal(rows.length, 1);
+	assert.equal(rows[0].id, 'updated');
+	assert.equal(rows[0].title, 'new title');
+	offline = false;
+	await f.loadFeed();
+	assert.equal(rows[0].title, 'restored online');
+	offline = true;
+	await f.loadFeed();
+	assert.equal(rows.find((row) => row.id === 'deleted').title, 'restored online');
+	assert.equal(rows.some((row) => row.id === 'moved'), false);
+});
+
+it('reset during a pending chat clears busy state and the old stream cannot disable the next session', async () => {
+	let releaseChat, chatting = false;
+	const chatBusy = { current: false }, sessionEpoch = { current: 0 };
+	const reset = block('const resetSessionState = useCallback', 'const handleTokens = useCallback');
+	const globals = { api: { chat: () => new Promise((resolve) => { releaseChat = resolve; }) }, chatBusy, sessionEpoch, chatQuery: 'question', online: true, activeProjectId: 'P', chatAllProjects: false, conversationId: '', useCallback: (fn) => fn, clearAuth: async () => {}, feedSeq: { current: 0 }, detailSeq: { current: 0 }, uploadControllers: { current: new Map() }, bootstrapRef: { current: null }, uploadNamespaceRef: { current: '' } };
+	for (const [, setter] of reset.matchAll(/\b(set[A-Z]\w*)\(/g)) globals[setter] = noop;
+	globals.setChatting = (value) => { chatting = value; };
+	globals.setChatMessages = noop;
+	globals.setConversationId = noop;
+	const { exports: f } = await compile(reset + block('async function sendChat()', '\n\tasync function openHistory()') + '\nexport { resetSessionState, sendChat };', globals);
+	const stream = f.sendChat();
+	assert.equal(chatting, true);
+	await f.resetSessionState();
+	assert.equal(chatting, false);
+	assert.equal(chatBusy.current, false);
+	releaseChat({ conversation_id: 'old', results: [] });
+	await stream;
+	assert.equal(chatting, false);
+	assert.equal(chatBusy.current, false);
+});
+
+it('tenant-wide catch-up removes moved-out records on every continuation and protects pending feed pages', async () => {
+	let rows = [record('moved')];
+	let release;
+	let calls = 0;
+	const { exports: f } = await compile(block('function upsertRecord(', '\nfunction relativeTime') + block('const loadFeed = useCallback', '\n\tuseEffect(() => { if (view === "projects")') + block('const applyChanges = useCallback', '\n\trealtimeEventHandler.current =') + '\nexport { loadFeed, applyChanges };', {
+		api: { records: () => new Promise((resolve) => { release = resolve; }), changes: async (...args) => { assert.equal(args.length, 1); calls++; return { changes: [{ key: 'notes:moved', action: 'update', record: record('moved', 'OTHER') }], next_cursor: `page${calls}`, has_more: calls === 1 }; } }, activeProjectId: 'P', filter: 'all', feedSeq: { current: 0 }, sessionEpoch: { current: 0 }, changeCursor: { current: 'start' }, useCallback: (fn) => fn,
+		setRecords: (fn) => { rows = fn(rows); }, setLoadingMore: noop, setFeedLoading: noop, setNextCursor: noop, setOffline: noop,
+	});
+	const pending = f.loadFeed('page2');
+	await f.applyChanges();
+	release({ value: { records: [record('moved')], next_cursor: null }, offline: false });
+	await pending;
+	assert.equal(calls, 2);
+	assert.equal(rows.length, 0);
+	const urls = [];
+	const { exports: { StreamientApi } } = await compile(read('apps/mobile/src/lib/api.ts'), { fetch: async (url) => { urls.push(url); return Response.json({}); } });
+	await new StreamientApi(serverA, { access_token: 'opaque' }, noop).changes('cursor');
+	assert.equal(new URL(urls[0]).searchParams.has('project_id'), false);
+});
+
+it('terminal cleanup failures retain retry entries while restoring other uploads', async () => {
+	const values = new Map();
+	const localStorage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+	let failed = true;
+	const { exports: uploads } = await compile(read('apps/mobile/src/lib/uploads.ts'), { localStorage, removeSharedFile: async () => { if (failed) throw new Error('busy'); } });
+	for (const state of ['complete', 'canceled', 'uploading']) await uploads.rememberUpload('ns', state, { id: state, state }, { uri: state, name: state, mimeType: 'text/plain' }, state, 'text/plain');
+	const restored = await uploads.restoreUploads('ns');
+	assert.equal(restored.length, 3);
+	assert.equal(restored[0].source, null);
+	assert.equal(restored[1].source, null);
+	assert.equal(restored[2].source.uri, 'uploading');
+	failed = false;
+	assert.deepEqual(Array.from(await uploads.restoreUploads('ns'), (item) => item.saved.local_id), ['uploading']);
+});
+
+it('search sequence fences stale results, errors and loading; changed context invalidates pending searches', async () => {
+	let requests = [], results = [], loading = false, errors = [];
+	const searchSeq = { current: 0 };
+	const globals = { api: { search: () => new Promise((resolve, reject) => requests.push({ resolve, reject })) }, searchSeq, sessionEpoch: { current: 0 }, searchQuery: 'term', activeProjectId: 'P', searchAllProjects: false, searchType: 'all', setSearching: (value) => { loading = value; }, setSearchResults: (value) => { results = value; }, Swal: { fire: (value) => errors.push(value) } };
+	const { exports: f } = await compile(block('async function runSearch()', '\n\tasync function sendChat()') + '\nexport { runSearch };', globals);
+	let a = f.runSearch(), b = f.runSearch();
+	requests[0].reject(new Error('stale'));
+	await a;
+	assert.equal(loading, true);
+	assert.equal(errors.length, 0);
+	requests[1].resolve({ results: ['newest'] }); await b;
+	a = f.runSearch(); b = f.runSearch();
+	requests[3].resolve({ results: ['newer'] }); await b;
+	requests[2].resolve({ results: ['older'] }); await a;
+	assert.deepEqual(results, ['newer']);
+	const pending = f.runSearch();
+	await compile(block('useEffect(() => {\n\t\tsearchSeq.current++;', '\n\tasync function runSearch()'), { ...globals, useEffect: (fn) => fn() });
+	requests[4].resolve({ results: ['old project'] }); await pending;
+	assert.equal(results.length, 0);
+	assert.equal(loading, false);
+	assert.match(app, /\[activeProjectId, searchQuery, searchAllProjects, searchType, api\]/);
+});
+
+it('chat switching is blocked throughout streaming, including already-open history and late history reads', async () => {
+	let releaseChat, releaseHistory, token;
+	let messages = [], id = 'old';
+	const chatBusy = { current: false }, chatSeq = { current: 0 };
+	const { exports: f } = await compile(block('async function sendChat()', '\n\tasync function signOut()') + '\nexport { sendChat, selectConversation };', {
+		api: { chat: async (query, options, cb) => { token = cb; return new Promise((resolve) => { releaseChat = resolve; }); }, conversationMessages: () => new Promise((resolve) => { releaseHistory = resolve; }) }, chatBusy, chatSeq, chatQuery: 'question', online: true, activeProjectId: 'P', chatAllProjects: false, conversationId: 'old', sessionEpoch: { current: 0 },
+		setChatQuery: noop, setChatting: noop, setChatMessages: (next) => { messages = typeof next === 'function' ? next(messages) : next; }, setConversationId: (next) => { id = next; }, setHistoryDrawer: noop,
+	});
+	const history = f.selectConversation({ conversation_id: 'history' });
+	const stream = f.sendChat();
+	await f.selectConversation({ conversation_id: 'blocked' });
+	token('answer');
+	releaseChat({ conversation_id: 'stream', results: [] }); await stream;
+	releaseHistory({ messages: [{ message: 'history' }] }); await history;
+	assert.equal(id, 'stream');
+	assert.equal(messages.at(-1).message, 'answer');
+	assert.match(app, /onNew=\{\(\) => \{ if \(chatBusy.current\) return;/);
+	assert.match(app, /className="history-row" disabled=\{chatting\}/);
+	assert.match(app, /aria-label="New chat" disabled=\{props.chatting\}/);
+});
+
+it('complete cleanup retry never cancels the completed import', async () => {
+	let item = { localId: 'done', session: { id: 'u', state: 'complete' } };
+	const { exports: f } = await compile(block('async function cancelImport(', '\n\tasync function runUpload(') + '\nexport { cancelImport };', {
+		api: { cancelUpload: () => assert.fail('completed import must not be canceled') },
+		uploadNamespaceRef: { current: 'ns' }, sessionEpoch: { current: 0 }, uploadControllers: { current: new Map() },
+		updateRememberedUpload: async () => {}, forgetUpload: async () => {}, setUploads: (fn) => { item = fn([item])[0]; },
+	});
+	await f.cancelImport(item);
+	assert.equal(item, undefined);
+});
+
+it('a completed import stays complete when native cleanup or count refresh fails', async () => {
+	let item = { localId: 'done', source: new Blob(['file']), session: { id: 'u', state: 'complete' } };
+	const { exports: f } = await compile(block('async function runUpload(', '\n\tuseEffect(() => {\n\t\tif (!api || !online)') + '\nexport { runUpload };', {
+		api: {}, online: true, AbortController, sessionEpoch: { current: 0 }, uploadNamespaceRef: { current: 'ns' }, uploadControllers: { current: new Map() },
+		setUploads: (fn) => { item = fn([item])[0]; }, updateUpload: (id, session) => { item.session = session; },
+		forgetUpload: async () => { throw new Error('copy busy'); }, refreshCounts: async () => { throw new Error('offline'); },
+	});
+	await f.runUpload(item);
+	assert.equal(item.session.state, 'complete');
 });

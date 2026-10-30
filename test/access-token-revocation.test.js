@@ -1,13 +1,14 @@
+import crypto from 'node:crypto';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { requireAuth } from '../middleware/auth.js';
 import { User } from '../model/user.js';
 
-// A stale secondary may still contain a deleted token; it must never authorize the request.
-test('token authentication uses the atomic token match instead of a stale user read', async (t) => {
-	t.mock.method(User, 'findOne', () => { throw new Error('replica token lookup must not run'); });
+// Neither hash nor legacy lookup may authorize a revoked token.
+test('token authentication uses atomic matches for hash and legacy tokens', async (t) => {
+	t.mock.method(User, 'findOne', () => { throw new Error('non-atomic token lookup must not run'); });
 	t.mock.method(User, 'findOneAndUpdate', (filter, update, options) => {
-		assert.deepEqual(filter, { 'access_tokens.token': 'revoked', is_active: true });
+		assert.deepEqual(filter, filter['access_tokens.token_hash'] ? { 'access_tokens.token_hash': crypto.createHash('sha256').update('revoked').digest('hex'), is_active: true } : { 'access_tokens.token': 'revoked', is_active: true });
 		assert.deepEqual(update, { $set: { is_active: true } });
 		assert.equal(options.timestamps, false);
 		assert.equal(options.returnDocument, 'after');

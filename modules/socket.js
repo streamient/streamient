@@ -154,6 +154,18 @@ export async function disconnectTenantSockets(hostId) {
 	if (usesMongoSocketTransport()) (await ensureMongoEmitter()).in(`account:${hostId}`).in(`tenant:${hostId}`).disconnectSockets(true);
 }
 
+export async function disconnectMemberSockets(hostId, userId) {
+	const room = `member:${hostId}:${userId}`;
+	if (io) return io.in(room).disconnectSockets(true);
+	if (usesMongoSocketTransport()) (await ensureMongoEmitter()).in(room).disconnectSockets(true);
+}
+
+async function authorizeSocketMembership(socket) {
+	const { hostId, userId } = getSocketIdentity(socket);
+	const context = await resolveActiveTenantContext(userId, null, hostId);
+	if (!context.activeTenant || context.activeTenant.host_id !== hostId) throw new Error('Socket membership revoked');
+}
+
 export async function disconnectSessionSockets(publicIds) {
 	if (!publicIds.length) return;
 	const rooms = publicIds.map((id) => `session:${id}`);
@@ -198,10 +210,12 @@ export async function setupSocketIO(httpServer, sessionMiddleware, handlers = {}
 				if (!socket.request?.session?.userId || !socket.request?.session?.host_id) {
 					await authenticateSocketBearer(socket);
 				} else {
+					await authorizeSocketMembership(socket);
 					socket.data.sessionId = publicSessionId(socket.request.sessionID);
 					socket.join(`session:${socket.data.sessionId}`);
 				}
 				const identity = getSocketIdentity(socket);
+				socket.join(`member:${identity.hostId}:${identity.userId}`);
 			if (identity.hostId) { await assertTenantAvailable(identity.hostId); socket.join(`account:${identity.hostId}`); }
 			next();
 			} catch (err) {
@@ -217,7 +231,8 @@ export async function setupSocketIO(httpServer, sessionMiddleware, handlers = {}
 
 		io.on('connection', (socket) => {
 			// Room disconnects miss pending handshakes; check again once the socket can be disconnected.
-			const sessionReady = isSessionRevoked(socket.data.sessionId).then((revoked) => {
+			const sessionReady = isSessionRevoked(socket.data.sessionId).then(async (revoked) => {
+				if (!revoked) await authorizeSocketMembership(socket);
 				if (revoked) socket.disconnect(true);
 				return !revoked;
 			}).catch((err) => {
@@ -225,7 +240,10 @@ export async function setupSocketIO(httpServer, sessionMiddleware, handlers = {}
 				socket.disconnect(true);
 				return false;
 			});
-			socket.use(async (_packet, next) => { if (await sessionReady && socket.connected) next(); });
+			socket.use(async (packet, next) => {
+				if (packet[0] === 'subscribe' && !resolveAuthorizedSubscribeRoom(getSocketIdentity(socket), packet[1], packet[2], packet[3])) return;
+				try { if (await sessionReady && socket.connected) { await authorizeSocketMembership(socket); next(); } } catch { socket.disconnect(true); }
+			});
 			OtelRuntime.createCustomSpan('socketio.connection', (connectionSpan) => {
 				connectionSpan.setAttribute('socket.id', socket.id);
 				connectionSpan.setAttribute('server.mode', process.env.SERVER_MODE || 'app');
@@ -235,8 +253,8 @@ export async function setupSocketIO(httpServer, sessionMiddleware, handlers = {}
 
 			socket.on('subscribe', async (room, userId, hostId, app = '') => {
 				const authorizedRoom = resolveAuthorizedSubscribeRoom(getSocketIdentity(socket), room, userId, hostId);
-			try { await assertTenantAvailable(hostId); } catch { socket.disconnect(true); return; }
 				if (!authorizedRoom || !socket.connected) return;
+				try { await assertTenantAvailable(getSocketIdentity(socket).hostId); } catch { socket.disconnect(true); return; }
 				OtelRuntime.createCustomSpan('socketio.subscribe', (subscribeSpan) => {
 					subscribeSpan.setAttribute('socket.id', socket.id);
 					subscribeSpan.setAttribute('socket.room', authorizedRoom);

@@ -1,3 +1,4 @@
+import { requestEmailChange } from '../services/profile_email_service.js';
 import { attachItemHtml } from '../modules/item_html.js';
 import { Router } from 'express';
 import { verifySync } from 'otplib';
@@ -181,7 +182,7 @@ router.get('/projects', async (req, res) => {
 });
 
 router.post('/projects', requireProjectQuota, async (req, res) => {
-	const project = await projectService.createProject(req.userId, req.host_id, req.body, auditCtx(req));
+	const project = await projectService.createProject(req.userId, req.host_id, req.body, auditCtx(req), { isHosted: req.isHosted });
 	res.status(201).json({ project });
 });
 
@@ -456,6 +457,8 @@ router.get('/memories/tags/suggest', async (req, res) => {
 
 // ---- Project emails (storage only) ----
 
+router.use('/emails', requireEmailFeatureAccess);
+
 router.get('/emails', async (req, res) => {
 	const emails = await emailIngestService.listEmails(req.host_id, req.query.project, {
 		page: parseInt(req.query.page, 10) || 1,
@@ -481,6 +484,7 @@ router.post('/emails', async (req, res) => {
 		const email = await emailIngestService.ingestEmail(req.userId, req.host_id, req.body, auditCtx(req));
 		res.status(201).json({ email });
 	} catch (err) {
+		if (err.code === 'email_already_exists') return res.status(409).json({ error: err.message, code: err.code });
 		res.status(400).json({ error: err.message });
 	}
 });
@@ -749,7 +753,7 @@ router.get('/batch/count', async (req, res) => {
 	try {
 		const { type, project } = req.query;
 		if (!type || !BATCH_TYPES.includes(type)) return res.status(400).json({ error: 'valid type required' });
-		if (type === 'emails' && !(await getEmailFeatureAccess(req.host_id, req.billingUser))) {
+		if (type === 'emails' && !(await getEmailFeatureAccess(req.host_id, req.billingUser, req.isHosted))) {
 			return res.status(403).json({ error: 'Email ingestion is available on the Pro plan' });
 		}
 		const count = await getFilteredCount(req.host_id, TS_TYPE_MAP[type], project || null);
@@ -764,7 +768,7 @@ router.post('/batch/delete', async (req, res) => {
 	try {
 		const { type } = req.body;
 		if (!type || !BATCH_TYPES.includes(type)) return res.status(400).json({ error: 'Invalid type' });
-		if (type === 'emails' && !(await getEmailFeatureAccess(req.host_id, req.billingUser))) {
+		if (type === 'emails' && !(await getEmailFeatureAccess(req.host_id, req.billingUser, req.isHosted))) {
 			return res.status(403).json({ error: 'Email ingestion is available on the Pro plan' });
 		}
 
@@ -783,7 +787,7 @@ router.post('/batch/move', async (req, res) => {
 	try {
 		const { type, project } = req.body;
 		if (!type || !BATCH_TYPES.includes(type)) return res.status(400).json({ error: 'Invalid type' });
-		if (type === 'emails' && !(await getEmailFeatureAccess(req.host_id, req.billingUser))) {
+		if (type === 'emails' && !(await getEmailFeatureAccess(req.host_id, req.billingUser, req.isHosted))) {
 			return res.status(403).json({ error: 'Email ingestion is available on the Pro plan' });
 		}
 		if (!project) return res.status(400).json({ error: 'project required' });
@@ -805,7 +809,7 @@ router.post('/batch/copy', async (req, res) => {
 	try {
 		const { type, project } = req.body;
 		if (!type || !BATCH_TYPES.includes(type)) return res.status(400).json({ error: 'Invalid type' });
-		if (type === 'emails' && !(await getEmailFeatureAccess(req.host_id, req.billingUser))) {
+		if (type === 'emails' && !(await getEmailFeatureAccess(req.host_id, req.billingUser, req.isHosted))) {
 			return res.status(403).json({ error: 'Email ingestion is available on the Pro plan' });
 		}
 		if (!project) return res.status(400).json({ error: 'project required' });
@@ -828,7 +832,7 @@ router.post('/search/all', async (req, res) => {
 	try {
 		const query = req.body.query;
 		if (!query) return res.status(400).json({ error: 'query required' });
-		const emailEnabled = await getEmailFeatureAccess(req.host_id, req.billingUser);
+		const emailEnabled = await getEmailFeatureAccess(req.host_id, req.billingUser, req.isHosted);
 
 		// One batched multiSearch across collections instead of N serial calls.
 		const merged = await searchKnowledge(req.host_id, query, { perPage: 5, includeEmails: emailEnabled });
@@ -855,7 +859,7 @@ router.post('/search/all', async (req, res) => {
 router.post('/resolve', async (req, res) => {
 	const ids = req.body.ids;
 	if (!ids?.length) return res.json({ items: [] });
-	const emailEnabled = await getEmailFeatureAccess(req.host_id, req.billingUser);
+	const emailEnabled = await getEmailFeatureAccess(req.host_id, req.billingUser, req.isHosted);
 
 	const [notes, memories, urls, emails] = await Promise.all([
 		Note.find({ _id: { $in: ids }, host_id: req.host_id }, 'title').lean(),
@@ -926,7 +930,7 @@ router.get('/graph', async (req, res) => {
 router.get('/counts', async (req, res) => {
 	res.setHeader('Cache-Control', 'no-store');
 	try {
-		const counts = await getProjectCounts(req.host_id);
+		const counts = await getProjectCounts(req.host_id, { includeEmails: await getEmailFeatureAccess(req.host_id, req.billingUser, req.isHosted) });
 		res.json(counts);
 	} catch (err) {
 		log.error({ err }, 'Counts error');
@@ -1119,7 +1123,7 @@ router.delete('/settings/white-label/assets/:kind', requireRestrictedSettingsAcc
 
 router.post(['/search/results', '/search/selection', '/search/actions', '/search/item'], async (req, res) => {
 	try {
-		const search = new SearchResults(req.host_id, { includeEmails: await getEmailFeatureAccess(req.host_id, req.billingUser) });
+		const search = new SearchResults(req.host_id, { includeEmails: await getEmailFeatureAccess(req.host_id, req.billingUser, req.isHosted) });
 		if (req.path === '/search/selection') return res.json({ items: await search.selection(req.body) });
 		let payload;
 		if (req.path === '/search/actions') payload = { outcomes: await search.apply(req.body, auditCtx(req)) };
@@ -1153,7 +1157,7 @@ router.post('/search/quick', async (req, res) => {
 		const query = String(req.body.query || '').trim();
 		const filters = SearchFilters.parse(req.body);
 		if (!query && !filters.tags.length && !filters.types) return res.status(400).json({ error: 'query required' });
-		const emailEnabled = await getEmailFeatureAccess(req.host_id, req.billingUser);
+		const emailEnabled = await getEmailFeatureAccess(req.host_id, req.billingUser, req.isHosted);
 		if (filters.tags.length || filters.types) {
 			const data = await new SearchResults(req.host_id, { includeEmails: emailEnabled }).list({ ...filters, per_page: 6 });
 			return res.json({ query, found: data.total, filters, results: data.items.slice(0, 12).map((item) => ({ ...item, label: item.type, subtitle: item.tags.join(', '), open_target: { kind: 'modal', type: item.type, id: item.id, project_id: item.project_id } })) });
@@ -1173,7 +1177,7 @@ router.post('/search/quick', async (req, res) => {
 
 router.post('/search/knowledge', async (req, res) => {
 	const filters = SearchFilters.parse(req.body);
-	const emailEnabled = await getEmailFeatureAccess(req.host_id, req.billingUser);
+	const emailEnabled = await getEmailFeatureAccess(req.host_id, req.billingUser, req.isHosted);
 	if (filters.tags.length || filters.types || req.body.page) {
 		const data = await new SearchResults(req.host_id, { includeEmails: emailEnabled }).list({ ...filters, page: req.body.page, per_page: req.body.per_page });
 		return res.json({ results: data.results, total: data.total, page: data.page, pages: data.pages });
@@ -1197,7 +1201,7 @@ router.post('/chat', aiDailyLimiter, async (req, res) => {
 	try {
 		const { query, conversation_id, project_id, context_results } = req.body;
 		if (!query) return res.status(400).json({ error: 'query required' });
-		const emailEnabled = await getEmailFeatureAccess(req.host_id, req.billingUser);
+		const emailEnabled = await getEmailFeatureAccess(req.host_id, req.billingUser, req.isHosted);
 
 		const result = await processChat({
 			hostId: req.host_id,
@@ -1251,7 +1255,7 @@ router.post('/chat/stream', aiDailyLimiter, async (req, res) => {
 			sendSSE('error', { error: 'query required' });
 			return res.end();
 		}
-		const emailEnabled = await getEmailFeatureAccess(req.host_id, req.billingUser);
+		const emailEnabled = await getEmailFeatureAccess(req.host_id, req.billingUser, req.isHosted);
 
 		const { stream, answer, metadata } = await processChatStream({
 			hostId: req.host_id,
@@ -1330,6 +1334,7 @@ router.delete('/chat/conversations/:id', async (req, res) => {
 router.post('/chat/search', aiDailyLimiter, async (req, res) => {
 	try {
 		const { query, stream: useStream } = req.body;
+		const includeEmails = await getEmailFeatureAccess(req.host_id, req.billingUser, req.isHosted);
 		if (!query) return res.status(400).json({ error: 'query required' });
 
 		if (useStream) {
@@ -1337,7 +1342,7 @@ router.post('/chat/search', aiDailyLimiter, async (req, res) => {
 			res.setHeader('Cache-Control', 'no-cache');
 			res.setHeader('Connection', 'keep-alive');
 
-			const body = await aiChatSearch(req.host_id, query, { stream: true });
+			const body = await aiChatSearch(req.host_id, query, { stream: true, includeEmails });
 			const reader = body.getReader();
 			const decoder = new TextDecoder();
 
@@ -1352,7 +1357,7 @@ router.post('/chat/search', aiDailyLimiter, async (req, res) => {
 				res.end();
 			}
 		} else {
-			const answer = await aiChatSearch(req.host_id, query);
+			const answer = await aiChatSearch(req.host_id, query, { includeEmails });
 			res.json({ answer });
 		}
 	} catch (err) {
@@ -1494,11 +1499,11 @@ router.get('/team/members', requireTeamManager, async (req, res) => {
 
 router.post('/team/members', requireTeamManager, requireUserQuota, async (req, res) => {
 	try {
-		const member = await teamService.createTeamMember(req.userId, req.host_id, req.body, auditCtx(req));
+		const member = await teamService.createTeamMember(req.userId, req.host_id, req.body, auditCtx(req), { isHosted: req.isHosted });
 		res.status(201).json({ member });
 	} catch (err) {
 		log.error({ err }, 'Create team member error');
-		res.status(400).json({ error: err.message || 'Failed to create team member' });
+		res.status(err.status || 400).json({ error: err.message || 'Failed to create team member', ...(err.code === 'ACCOUNT_LIMIT' ? { code: err.code, limit: err.limit } : {}) });
 	}
 });
 
@@ -1549,8 +1554,11 @@ router.put('/profile', async (req, res) => {
 		const user = await queryForSave(User.findById(req.userId));
 		if (!user) return res.status(404).json({ error: 'User not found' });
 
+		const emailValue = typeof email === 'string' ? email.trim().toLowerCase() : '';
+		if (Object.hasOwn(body, 'email') && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue) || emailValue.length > 254)) return res.status(400).json({ error: 'Invalid email address' });
+		const emailChangePending = Boolean(emailValue && emailValue !== user.email);
+		if (emailChangePending) await requestEmailChange(user, emailValue);
 		if (name) user.name = name.trim();
-		if (email) user.email = email.trim().toLowerCase();
 		if (hasTimezone) {
 			user.timezone = timezoneValue;
 			user.timezone_configured = true;
@@ -1559,10 +1567,10 @@ router.put('/profile', async (req, res) => {
 		if (Object.hasOwn(body, 'avatar_style')) user.avatar_style = body.avatar_style;
 		await user.save();
 
-		res.json({ user: user.toSafe() });
+		res.json({ user: user.toSafe(), email_change_pending: emailChangePending });
 	} catch (err) {
 		log.error({ err }, 'Profile update error');
-		res.status(500).json({ error: 'Profile update failed' });
+		res.status(err.status || 500).json({ error: err.status ? err.message : 'Profile update failed' });
 	}
 });
 
@@ -1602,7 +1610,7 @@ router.get('/oauth/clients', async (req, res) => {
 	}
 });
 
-router.post('/oauth/clients', async (req, res) => {
+router.post('/oauth/clients', requireTeamManager, async (req, res) => {
 	try {
 		const { client, client_secret } = await oauthService.registerClient({
 			tenantId: req.tenantId,
@@ -1635,7 +1643,7 @@ router.post('/oauth/clients', async (req, res) => {
 	}
 });
 
-router.delete('/oauth/clients/:id', async (req, res) => {
+router.delete('/oauth/clients/:id', requireTeamManager, async (req, res) => {
 	try {
 		await oauthService.deleteClient(req.host_id, req.params.id, auditCtx(req));
 		res.json({ message: 'OAuth client deleted' });
@@ -1672,7 +1680,7 @@ router.post('/tokens', async (req, res) => {
 		if (!user) return res.status(404).json({ error: 'User not found' });
 
 		const token = crypto.randomBytes(32).toString('hex');
-		user.access_tokens.push({ token, name: name.trim() });
+		user.access_tokens.push({ token_hash: crypto.createHash('sha256').update(token).digest('hex'), name: name.trim() });
 		await user.save();
 
 		const entry = user.access_tokens[user.access_tokens.length - 1];
@@ -1929,7 +1937,7 @@ router.use((err, req, res, next) => {
 	if (res.headersSent) return next(err);
 	const status = Number.isInteger(err.status) && err.status >= 400 && err.status < 600 ? err.status : 500;
 	if (status >= 500) log.error({ err }, 'API request failed');
-	res.status(status).json({ error: status < 500 ? err.message : 'Request failed', ...(status < 500 && typeof err.code === 'string' ? { code: err.code } : {}) });
+	res.status(status).json({ error: status < 500 ? err.message : 'Request failed', ...(status < 500 && typeof err.code === 'string' ? { code: err.code, ...(err.limit ? { limit: err.limit } : {}) } : {}) });
 });
 
 export default router;

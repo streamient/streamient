@@ -12,7 +12,7 @@ const obsidianRevisionSchema = new mongoose.Schema({
 	source: { type: String, enum: ['obsidian', 'streamient'], required: true },
 	reason: { type: String, default: '' },
 	expires_at: { type: Date, required: true },
-}, { timestamps: true });
+}, { timestamps: true, read: 'secondaryPreferred' });
 
 obsidianRevisionSchema.index({ host_id: 1, file: 1, revision: -1 });
 obsidianRevisionSchema.index({ expires_at: 1 });

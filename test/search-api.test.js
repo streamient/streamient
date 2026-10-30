@@ -6,13 +6,14 @@ import { SearchResults } from '../modules/search_results.js';
 import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
 import { Url } from '../model/url.js';
+import { Tenant } from '../modules/tenancy.js';
 import { Email } from '../model/email.js';
 
 class SearchApi {
-	static async request(path, body = {}) {
+	static async request(path, body = {}, context = {}) {
 		const handler = router.stack.find((layer) => layer.route?.path === path).route.stack.at(-1).handle;
 		const response = { statusCode: 200, headers: {}, setHeader(name, value) { this.headers[name] = value; }, status(code) { this.statusCode = code; return this; }, json(value) { this.body = value; return this; } };
-		await handler({ body, host_id: 'tenant-one' }, response);
+		await handler({ body, host_id: 'tenant-one', ...context }, response);
 		return response;
 	}
 }
@@ -62,4 +63,27 @@ describe('project count API', () => {
 		assert.match(failure.body.error, /Unable to refresh/);
 		assert.equal(failure.headers['Cache-Control'], 'no-store');
 	});
+});
+
+it('hosted Free search and counts exclude email while Pro, trials and self-hosted retain access', async () => {
+	let plan = 'free';
+	mock.method(Tenant, 'findOne', () => ({ select: () => ({ lean: async () => ({ plan }) }) }));
+	for (const Model of [Note, Memory, Url, Email]) mock.method(Model, 'aggregate', async () => [{ _id: 'project-one', count: 1 }]);
+	const seen = [];
+	mock.method(SearchResults.prototype, 'list', async function () { seen.push(this.includeEmails); return { items: [], results: {}, total: 0 }; });
+	for (const state of [
+		{ plan: 'free', isHosted: true, expected: false },
+		{ plan: 'pro', isHosted: true, expected: true },
+		{ plan: 'free', isHosted: false, expected: true },
+		{ plan: 'free', isHosted: true, billingUser: { subscription_status: 'trialing', trial_source: 'no_card', trial_ends_at: new Date(Date.now() + 86400000) }, expected: true },
+		{ plan: 'free', isHosted: true, billingUser: { subscription_status: 'trialing', trial_source: 'no_card', trial_ends_at: new Date(0) }, expected: false },
+	]) {
+		plan = state.plan;
+		for (const path of ['/search/quick', '/search/knowledge']) {
+			await SearchApi.request(path, { query: 'type:note' }, state);
+			assert.equal(seen.at(-1), state.expected);
+		}
+		const response = await SearchApi.request('/counts', {}, state);
+		assert.equal(response.body['project-one'].emails || 0, Number(state.expected));
+	}
 });

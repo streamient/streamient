@@ -1,5 +1,6 @@
 import { holdTenantRequest } from '../modules/tenancy.js';
 import jwt from 'jsonwebtoken';
+import crypto from 'node:crypto';
 import config from '../config.js';
 import csrfProtection from './csrf.js';
 import { publicSessionId } from '../services/user_session_service.js';
@@ -28,6 +29,8 @@ async function applyTenantContext(req, userId, preferredTenantId = null, preferr
 }
 
 export async function requireAuth(req, res, next) {
+	// Already authenticated earlier in this request (app-level API mount); skip the repeat lookup.
+	if (req.authMethod) return next();
 	if (req.session?.userId && !/^(Bearer|Token) /.test(req.headers.authorization || '')) {
 		if (req.csrfDeferred) {
 			let verified = false;
@@ -103,16 +106,14 @@ export async function requireAuth(req, res, next) {
 
 	if (authHeader?.startsWith('Token ')) {
 		const accessToken = authHeader.slice(6);
-		const user = await User.findOneAndUpdate(
-			{ 'access_tokens.token': accessToken, is_active: true },
-			{ $set: { is_active: true } },
-			{ returnDocument: 'after', timestamps: false },
-		).select('host_id tenant access_tokens').lean();
+		const tokenHash = crypto.createHash('sha256').update(accessToken).digest('hex');
+		let user = await User.findOneAndUpdate({ 'access_tokens.token_hash': tokenHash, is_active: true }, { $set: { is_active: true } }, { returnDocument: 'after', timestamps: false }).select('host_id tenant access_tokens').lean();
+		if (!user) user = await User.findOneAndUpdate({ 'access_tokens.token': accessToken, is_active: true }, { $set: { is_active: true } }, { returnDocument: 'after', timestamps: false }).select('host_id tenant access_tokens').lean();
 		if (user) {
 			await ensureOwnerMembershipForUser(user);
 			req.userId = user._id.toString();
 			req.authMethod = 'token';
-			const matched = user.access_tokens.find((t) => t.token === accessToken);
+			const matched = user.access_tokens.find((t) => t.token_hash === tokenHash || t.token === accessToken);
 			if (matched) req.tokenLabel = matched.name;
 			const preferredTenantId = req.whiteLabelHostId ? null : user.tenant?.toString();
 			const preferredHostId = req.whiteLabelHostId || user.host_id;
@@ -123,7 +124,7 @@ export async function requireAuth(req, res, next) {
 		}
 	}
 
-	if (req.accepts('html')) {
+	if (!authHeader && !req.originalUrl.startsWith('/api/') && req.accepts('html')) {
 		return res.redirect('/login');
 	}
 	return res.status(401).json({ error: 'Authentication required' });
@@ -131,7 +132,7 @@ export async function requireAuth(req, res, next) {
 
 export function requireOAuthScopes(...requiredScopes) {
 	return function oauthScopeMiddleware(req, res, next) {
-		if (req.authMethod !== 'oauth-api') return next();
+		if (!['oauth-api', 'mcp-bridge'].includes(req.authMethod)) return next();
 		if (hasRequiredScopes(req.oauthScopes, requiredScopes)) return next();
 		res.set('WWW-Authenticate', buildBearerChallenge({
 			resourceMetadataUrl: getApiProtectedResourceMetadataUrl(),

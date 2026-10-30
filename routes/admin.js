@@ -3,6 +3,7 @@ import config from '../config.js';
 import { resolvePlanTenantLimits } from '../modules/tenant_limits.js';
 import { ensureCollections } from '../modules/typesense.js';
 import { isSysadminCredentials, requireAdmin } from '../middleware/sysadmin.js';
+import { createAuthAttemptLimiter } from '../middleware/rate_limit.js';
 import emailTemplates from '../config/email_templates.js';
 import { getByCategory, setSetting, deleteSetting } from '../services/system_settings_service.js';
 import { sendTestEmail } from '../services/email_service.js';
@@ -29,9 +30,9 @@ router.get('/login', (req, res) => {
     res.render('admin/login');
 });
 
-router.post('/login', (req, res) => {
+router.post('/login', createAuthAttemptLimiter('admin-login', { view: 'admin/login' }), (req, res) => {
     const { email, password } = req.body;
-    if (!email || !password) {
+    if (typeof email !== 'string' || typeof password !== 'string' || !email || !password) {
         return res.render('admin/login', { error: 'Email and password required' });
     }
 
@@ -39,8 +40,14 @@ router.post('/login', (req, res) => {
         return res.render('admin/login', { error: 'Invalid credentials' });
     }
 
-    req.session.isAdmin = true;
-    res.redirect('/admin');
+    req.session.regenerate((err) => {
+        if (err) {
+            log.error({ err }, 'Admin session regenerate error');
+            return res.render('admin/login', { error: 'Login failed' });
+        }
+        req.session.isAdmin = true;
+        res.redirect('/admin');
+    });
 });
 
 router.post('/logout', (req, res) => {

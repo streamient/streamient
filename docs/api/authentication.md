@@ -80,3 +80,7 @@ Magic links are intentionally a two-step browser flow to prevent email-client pr
 2. `POST /magic` is the only endpoint that redeems the token and creates a session.
 
 This means link scanners that issue automatic `GET` requests cannot burn a login token before the user confirms.
+
+## Password Reset
+
+Password reset links expire after one hour. Opening the link shows a new password; selecting **Continue** applies it. Each link can confirm one reset only, even if it is opened in several browser sessions. Expired or already used links cannot change the password.

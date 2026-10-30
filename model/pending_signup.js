@@ -8,7 +8,7 @@ const pendingSignupSchema = new mongoose.Schema(
 		token: { type: String, required: true, unique: true, index: true },
 		expires_at: { type: Date, required: true },
 	},
-	{ timestamps: true },
+	{ timestamps: true, read: 'secondaryPreferred' },
 );
 
 // Auto-expire documents after they pass expires_at

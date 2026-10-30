@@ -28,7 +28,7 @@ const obsidianConnectionSchema = new mongoose.Schema({
 	sync_requested_at: { type: Date, default: null },
 	storage_bytes: { type: Number, default: 0, min: 0 },
 	conflict_count: { type: Number, default: 0, min: 0 },
-}, { timestamps: true });
+}, { timestamps: true, read: 'secondaryPreferred' });
 
 obsidianConnectionSchema.index({ host_id: 1, project: 1 }, { unique: true });
 

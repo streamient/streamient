@@ -24,16 +24,16 @@ describe('Streamient CLI over Streamable HTTP MCP', () => {
 	before(async () => {
 		api = createMockApi({
 			get: async (path) => {
-				if (path === '/notes/note-1') return { note: FIXTURES.note };
-				if (path === '/notes/note-1?include_markdown=true') return { note: { ...FIXTURES.note, markdown_content: '---\ntitle: Original\n---\nBody' } };
-				if (path === '/git-repos/repo-1/status') return { status: 'idle', id: 'repo-1' };
+				if (path === '/notes/507f1f77bcf86cd799439022') return { note: FIXTURES.note };
+				if (path === '/notes/507f1f77bcf86cd799439022?include_markdown=true') return { note: { ...FIXTURES.note, markdown_content: '---\ntitle: Original\n---\nBody' } };
+				if (path === '/git-repos/507f1f77bcf86cd799439066/status') return { status: 'idle', id: '507f1f77bcf86cd799439066' };
 				if (path.startsWith('/graph?')) return { nodes: [], edges: [] };
 				return {};
 			},
 			post: async (path, body) => {
 				if (path === '/memories') return { memory: { ...FIXTURES.memory, title: body.title, content: body.content } };
-				if (path === '/search/knowledge') return { results: { notes: [{ id: 'note-1', title: 'Release decision' }] } };
-				if (path.endsWith('/git-repos')) return { repo: { _id: 'repo-1', repo_url: body.repo_url } };
+				if (path === '/search/knowledge') return { results: { notes: [{ id: '507f1f77bcf86cd799439022', title: 'Release decision' }] } };
+				if (path.endsWith('/git-repos')) return { repo: { _id: '507f1f77bcf86cd799439066', repo_url: body.repo_url } };
 				return {};
 			},
 			delete: async () => ({}),
@@ -59,7 +59,7 @@ describe('Streamient CLI over Streamable HTTP MCP', () => {
 		assert.equal(tools.code, EXIT_CODES.SUCCESS);
 		assert.equal(JSON.parse(tools.stdout).length, 44);
 
-		const note = await run(['notes', 'read', 'note-1']);
+		const note = await run(['notes', 'read', '507f1f77bcf86cd799439022']);
 		assert.equal(note.code, EXIT_CODES.SUCCESS);
 		assert.equal(JSON.parse(note.stdout).title, FIXTURES.note.title);
 
@@ -75,20 +75,20 @@ describe('Streamient CLI over Streamable HTTP MCP', () => {
 		assert.equal(graph.code, EXIT_CODES.SUCCESS);
 		assert.deepEqual(JSON.parse(graph.stdout), { nodes: [], edges: [] });
 
-		const status = await run(['git', 'status', 'repo-1']);
+		const status = await run(['git', 'status', '507f1f77bcf86cd799439066']);
 		assert.equal(status.code, EXIT_CODES.SUCCESS);
-		assert.deepEqual(JSON.parse(status.stdout), { status: 'idle', id: 'repo-1' });
+		assert.deepEqual(JSON.parse(status.stdout), { status: 'idle', id: '507f1f77bcf86cd799439066' });
 	});
 
 	it('enforces and then executes destructive and Git confirmation', async () => {
-		const blockedDelete = await run(['notes', 'delete', 'note-1']);
+		const blockedDelete = await run(['notes', 'delete', '507f1f77bcf86cd799439022']);
 		assert.equal(blockedDelete.code, EXIT_CODES.USAGE);
 		assert.match(blockedDelete.stderr, /CONFIRMATION_REQUIRED/);
 
-		const confirmedDelete = await run(['notes', 'delete', 'note-1', '--yes']);
+		const confirmedDelete = await run(['notes', 'delete', '507f1f77bcf86cd799439022', '--yes']);
 		assert.equal(confirmedDelete.code, EXIT_CODES.SUCCESS);
 		assert.deepEqual(JSON.parse(confirmedDelete.stdout), { message: 'Note deleted' });
-		assert.ok(api.calls.some((call) => call.method === 'DELETE' && call.path === '/notes/note-1'));
+		assert.ok(api.calls.some((call) => call.method === 'DELETE' && call.path === '/notes/507f1f77bcf86cd799439022'));
 
 		const blockedGit = await run(['git', 'add', '--repo-url', 'https://example.com/repo.git']);
 		assert.equal(blockedGit.code, EXIT_CODES.USAGE);
@@ -110,11 +110,11 @@ describe('Streamient CLI over Streamable HTTP MCP', () => {
 	});
 
 	it('reads original Markdown and sends Markdown updates through discovered schemas', async () => {
-		const read = await run(['notes', 'read', 'note-1']);
+		const read = await run(['notes', 'read', '507f1f77bcf86cd799439022']);
 		assert.equal(read.code, EXIT_CODES.SUCCESS, read.stderr);
 		assert.match(JSON.parse(read.stdout).markdown_content, /title: Original/);
 		const markdown = '---\ntitle: Original\n---\nCorrected body';
-		const update = await run(['notes', 'update', 'note-1', `--markdown-content=${markdown}`, '--yes']);
+		const update = await run(['notes', 'update', '507f1f77bcf86cd799439022', `--markdown-content=${markdown}`, '--yes']);
 		assert.equal(update.code, EXIT_CODES.SUCCESS, update.stderr);
 		assert.deepEqual(api.lastCall.body, { markdown_content: markdown });
 	});

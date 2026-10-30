@@ -67,7 +67,7 @@ router.get('/billing/checkout', async (req, res) => {
         if (!billingUser) return res.redirect('/login');
 
         // Paid or Stripe-trialing users already have a subscription.
-        if (billingUser.subscription_status === 'active' || (billingUser.subscription_status === 'trialing' && billingUser.trial_source !== 'no_card')) {
+        if (['active', 'past_due', 'unpaid', 'paused'].includes(billingUser.subscription_status) || (billingUser.subscription_status === 'trialing' && billingUser.trial_source !== 'no_card')) {
             return res.redirect('/dashboard');
         }
 
@@ -131,7 +131,7 @@ router.get('/billing/success', async (req, res) => {
     // Stripe redirects here after successful checkout.
     // First check if webhook already updated the status.
     const billingUser = await getBillingUserForHost(req.host_id, req.userId);
-    if (billingUser && (billingUser.subscription_status === 'active' || (billingUser.subscription_status === 'trialing' && billingUser.trial_source !== 'no_card'))) {
+    if (billingUser && (['active', 'past_due', 'unpaid', 'paused'].includes(billingUser.subscription_status) || (billingUser.subscription_status === 'trialing' && billingUser.trial_source !== 'no_card'))) {
         return res.redirect('/dashboard');
     }
 

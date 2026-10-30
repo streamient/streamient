@@ -232,7 +232,7 @@ function normalizeTags(value) {
 }
 
 function parsedMarkdown(raw, filePath) {
-	const parsed = matter(raw);
+	const parsed = matter(raw, {});
 	const requestedType = String(parsed.data.streamient_type || '').trim().toLowerCase();
 	const type = requestedType === 'memory' || requestedType === 'url' ? requestedType : 'note';
 	const savedUrl = type === 'url' ? String(parsed.data.url || '').trim() : '';
@@ -261,7 +261,7 @@ function safeFileName(value) {
 
 function itemMarkdown(type, item, existingRaw = '') {
 	if (existingRaw) {
-		const parsed = matter(existingRaw);
+		const parsed = matter(existingRaw, {});
 		parsed.data.title = item.title;
 		parsed.data.tags = item.tags || [];
 		parsed.data.streamient_type = type;
@@ -1087,19 +1087,22 @@ export async function relocateConnectionFolder(hostId, connectionId, data, ctx =
 		}
 		const changes = [];
 		for (const move of moves) {
-			let file;
+			let change;
 			try {
-				file = await ObsidianFile.findOneAndUpdate(
-					{ _id: move.file._id, connection: connection._id, host_id: hostId, path: move.previousPath },
-					{ $set: { path: move.path, kind: vaultFileKind(move.path), modified_at: new Date(), last_source: 'streamient', last_device_id: '' }, $inc: { revision: 1 } },
-					{ returnDocument: 'after' },
-				);
+				change = await mongoose.connection.transaction(async (session) => {
+					const file = await ObsidianFile.findOneAndUpdate(
+						{ _id: move.file._id, connection: connection._id, host_id: hostId, path: move.previousPath, revision: move.file.revision },
+						{ $set: { path: move.path, kind: vaultFileKind(move.path), modified_at: new Date(), last_source: 'streamient', last_device_id: '' }, $inc: { revision: 1 } },
+						{ returnDocument: 'after', session },
+					);
+					if (!file) return null;
+					return recordChange(connection, file, 'rename', { previousPath: move.previousPath, source: 'streamient', operationId: `streamient:folder:${file._id}:${file.revision}:${toFolder}` }, session);
+				});
 			} catch (err) {
 				if (err?.code === 11000) throw new ObsidianSyncError(`The destination path ${move.path} already exists`, 409, 'folder_path_conflict');
 				throw err;
 			}
-			if (!file) continue;
-			const change = await recordChange(connection, file, 'rename', { previousPath: move.previousPath, source: 'streamient', operationId: `streamient:folder:${file._id}:${toFolder}` });
+			if (!change) continue;
 			changes.push(change);
 			emitToTenant(hostId, 'obsidian:file-changed', publicChange(change));
 		}

@@ -8,6 +8,7 @@ const HOST_SCOPED_MODELS = [
 	'Memory',
 	'Url',
 	'CrawlState',
+	'CrawlPublication',
 	'Email',
 	'Project',
 	'GraphLink',

@@ -26,7 +26,7 @@ const auditLogSchema = new mongoose.Schema(
         ip: { type: String },
         user_agent: { type: String },
     },
-    { timestamps: { createdAt: true, updatedAt: false } },
+    { timestamps: { createdAt: true, updatedAt: false }, read: 'secondaryPreferred' },
 );
 
 auditLogSchema.index({ host_id: 1, createdAt: -1 });

@@ -1,4 +1,4 @@
-import { getCachedJson, setCachedJson } from "./cache";
+import { clearCachedJson, getCachedJson, setCachedJson } from "./cache";
 import { refreshTokens } from "./auth";
 import type { BootstrapResponse, ChangesResponse, ChatConversation, ChatMessage, Project, RecordDetail, RecordsResponse, SearchResult, ServerOption, TokenSet, UploadSession } from "../types";
 
@@ -20,12 +20,26 @@ export class ApiError extends Error {
 	}
 }
 
+// Refresh tokens are single-use, so every StreamientApi instance shares one in-flight refresh per server+token.
+// Each login is a token lineage that refreshes extend; a stale instance adopts only its own lineage's newest tokens,
+// so different users, servers, or logins never share credentials (opaque tokens included).
+const refreshKey = (server: ServerOption, refreshToken: string) => `${server.baseUrl}\n${refreshToken}`;
+const inflightRefreshes = new Map<string, Promise<TokenSet>>();
+type Lineage = { latest?: TokenSet };
+// Live instances hold their lineage object, so only the token lookup needs a cap.
+const lineageByToken = new Map<string, Lineage>();
+const remember = <K, V>(map: Map<K, V>, key: K, value: V, max: number) => { map.delete(key); map.set(key, value); if (map.size > max) map.delete(map.keys().next().value as K); };
+
 export class StreamientApi {
-	private refreshPromise: Promise<TokenSet> | null = null;
 	private cacheNamespace: string;
+	private cacheEnabled = true;
+	private lineage: Lineage;
 
 	constructor(private server: ServerOption, private tokens: TokenSet, private onTokens: (tokens: TokenSet | null) => void) {
 		this.cacheNamespace = cacheNamespace(server, tokens.access_token);
+		const key = tokens.refresh_token ? refreshKey(server, tokens.refresh_token) : "";
+		this.lineage = (key && lineageByToken.get(key)) || {};
+		if (key) remember(lineageByToken, key, this.lineage, 64);
 	}
 
 	private accessTokenNeedsRefresh() {
@@ -33,17 +47,37 @@ export class StreamientApi {
 		return Date.now() >= this.tokens.obtained_at + this.tokens.expires_in * 1000 - 30_000;
 	}
 
+	private latestTokens() {
+		const latest = this.lineage.latest;
+		return latest && latest.refresh_token !== this.tokens.refresh_token ? latest : this.tokens;
+	}
+
 	private async replaceTokens() {
-		if (!this.tokens.refresh_token) throw new Error("Your session has expired");
-		if (!this.refreshPromise) this.refreshPromise = refreshTokens(this.server, this.tokens.refresh_token).finally(() => { this.refreshPromise = null; });
-		this.tokens = await this.refreshPromise;
+		const refreshToken = this.tokens.refresh_token;
+		if (!refreshToken) throw new Error("Your session has expired");
+		const latest = this.latestTokens();
+		if (latest !== this.tokens) { this.tokens = latest; return; } // A sibling instance already rotated this token; the app received the result from it.
+		const key = refreshKey(this.server, refreshToken);
+		const lineage = this.lineage;
+		let pending = inflightRefreshes.get(key);
+		if (!pending) {
+			pending = refreshTokens(this.server, refreshToken).then((next) => {
+				lineage.latest = next;
+				if (next.refresh_token) remember(lineageByToken, refreshKey(this.server, next.refresh_token), lineage, 64);
+				return next;
+			}).finally(() => { inflightRefreshes.delete(key); });
+			inflightRefreshes.set(key, pending);
+		}
+		this.tokens = await pending;
 		this.onTokens(this.tokens);
 	}
 
 	private handleRefreshFailure(error: unknown) {
 		if (error instanceof TypeError || !navigator.onLine) return;
+		if (this.latestTokens() !== this.tokens) return; // Token was already rotated elsewhere; the next request adopts the latest tokens.
 		const status = (error as { status?: number }).status;
 		if (status && (status >= 500 || status === 429)) return; // Transient server/rate-limit failure preserves the session.
+		this.lineage.latest = undefined;
 		this.onTokens(null);
 	}
 
@@ -80,13 +114,18 @@ export class StreamientApi {
 		return result as T;
 	}
 
+	clearCache() {
+		this.cacheEnabled = false;
+		clearCachedJson(this.cacheNamespace);
+	}
+
 	private async cached<T>(key: string, load: () => Promise<T>) {
 		try {
 			const value = await load();
-			await setCachedJson(this.cacheNamespace, key, value);
+			if (this.cacheEnabled) await setCachedJson(this.cacheNamespace, key, value);
 			return { offline: false, value };
 		} catch (error) {
-			const cached = await getCachedJson<T>(this.cacheNamespace, key);
+			const cached = this.cacheEnabled ? await getCachedJson<T>(this.cacheNamespace, key) : null;
 			if (cached && (!navigator.onLine || error instanceof TypeError)) return { offline: true, value: cached };
 			throw error;
 		}
@@ -111,8 +150,8 @@ export class StreamientApi {
 		return this.cached<RecordsResponse>(key, () => this.request(`/api/v1/mobile/records?${params}`));
 	}
 
-	changes(cursor: string, projectId: string) {
-		const params = new URLSearchParams({ cursor, project_id: projectId });
+	changes(cursor: string) {
+		const params = new URLSearchParams({ cursor });
 		return this.request<ChangesResponse>(`/api/v1/mobile/records/changes?${params}`);
 	}
 

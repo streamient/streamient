@@ -51,7 +51,7 @@ const gitRepoSchema = new mongoose.Schema(
 			message: { type: String, default: '' },
 		}],
 	},
-	{ timestamps: true },
+	{ timestamps: true, read: 'secondaryPreferred' },
 );
 
 gitRepoSchema.index({ host_id: 1, project: 1 });

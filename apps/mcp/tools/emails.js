@@ -19,7 +19,7 @@ export function emailTools(api, defaultProjectId) {
 			annotations: WRITE_INTERNAL,
 			outputSchema: MCP_JSON_OUTPUT_SCHEMA,
 			inputSchema: {
-				project_id: z.string().optional().describe('Project ID (defaults to the default project)'),
+				project_id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').optional().describe('Project ID (defaults to the default project)'),
 				raw_email: z.string().optional().describe('Raw RFC822 email content'),
 				parsed_email: z.any().optional().describe('Pre-parsed mailparser-like JSON payload'),
 			},
@@ -39,7 +39,7 @@ export function emailTools(api, defaultProjectId) {
 			annotations: READ_ONLY,
 			outputSchema: MCP_JSON_OUTPUT_SCHEMA,
 			inputSchema: {
-				id: z.string().describe('Email ID'),
+				id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').describe('Email ID'),
 			},
 			handler: async (args) => {
 				const { email } = await api.get(`/emails/${args.id}`);
@@ -52,7 +52,7 @@ export function emailTools(api, defaultProjectId) {
 			annotations: READ_ONLY,
 			outputSchema: MCP_JSON_OUTPUT_SCHEMA,
 			inputSchema: {
-				project_id: z.string().optional().describe('Project ID filter'),
+				project_id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').optional().describe('Project ID filter'),
 				page: z.number().optional(),
 				limit: z.number().optional(),
 			},
@@ -92,7 +92,7 @@ export function emailTools(api, defaultProjectId) {
 			annotations: READ_ONLY,
 			outputSchema: MCP_JSON_OUTPUT_SCHEMA,
 			inputSchema: {
-				id: z.string().describe('Email ID'),
+				id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').describe('Email ID'),
 			},
 			handler: async (args) => {
 				const { thread } = await api.get(`/emails/${args.id}/thread`);
@@ -105,7 +105,7 @@ export function emailTools(api, defaultProjectId) {
 			annotations: OVERWRITE_INTERNAL,
 			outputSchema: MCP_JSON_OUTPUT_SCHEMA,
 			inputSchema: {
-				id: z.string().describe('Email ID'),
+				id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').describe('Email ID'),
 			},
 			handler: async (args) => {
 				await api.delete(`/emails/${args.id}`);
