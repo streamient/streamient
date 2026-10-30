@@ -10,7 +10,7 @@ function read(relativePath) {
 
 async function compile(src, globals = {}) {
 	const code = (await transform(src.replace(/^import .*\n/gm, ''), { loader: 'ts', format: 'cjs', target: 'es2022' })).code;
-	const context = vm.createContext({ module: { exports: {} }, console, URL, URLSearchParams, Headers, Response, Blob, TextDecoder, TextEncoder, DOMException, Error, TypeError, atob, btoa, crypto, navigator: { onLine: true }, searchSeq: { current: 0 }, chatBusy: { current: false }, chatSeq: { current: 0 }, sessionApi: { current: null }, liveEvents: { current: new Map() }, catchupEvents: { current: new Set() }, feedLoad: { current: Promise.resolve() }, feedKey: { current: "P:all" }, setError: noop, ...globals });
+	const context = vm.createContext({ module: { exports: {} }, console, URL, URLSearchParams, Headers, Response, Blob, TextDecoder, TextEncoder, DOMException, Error, TypeError, atob, btoa, crypto, navigator: { onLine: true }, searchSeq: { current: 0 }, chatBusy: { current: false }, chatSeq: { current: 0 }, sessionApi: { current: null }, liveEvents: { current: new Map() }, catchupEvents: { current: new Set() }, feedLoad: { current: Promise.resolve() }, feedKey: { current: "P:all" }, feedEvents: { current: new Set() }, setChatting: noop, setError: noop, ...globals });
 	vm.runInContext(code, context);
 	return { exports: context.module.exports, context };
 }
@@ -75,7 +75,7 @@ describe('Streamient Mobile client regressions', () => {
 	});
 
 	it('finding 7: resetSessionState clears credentials, identity state, and pending work', async () => {
-		const state = { tokens: 'A', bootstrap: 'A', records: ['A'], nextCursor: 'cursor', activeProjectId: 'p1', filter: 'urls', view: 'ai', error: 'x', detail: { id: 'n' }, detailLoading: true, chatMessages: ['A private answer'], chatQuery: 'private', conversationId: 'conv-A', conversations: ['A'], historyDrawer: true, searchQuery: 'private', searchResults: ['A private result'], searching: true, uploads: ['A private.pdf'], uploadTray: true, saving: true, feedLoading: true, loadingMore: true, noteDraft: { title: 'A' }, urlDraft: { url: 'https://a' }, fileDraft: { name: 'A.pdf' } };
+		const state = { tokens: 'A', bootstrap: 'A', records: ['A'], nextCursor: 'cursor', activeProjectId: 'p1', filter: 'urls', view: 'ai', error: 'x', detail: { id: 'n' }, detailLoading: true, chatting: true, chatMessages: ['A private answer'], chatQuery: 'private', conversationId: 'conv-A', conversations: ['A'], historyDrawer: true, searchQuery: 'private', searchResults: ['A private result'], searching: true, uploads: ['A private.pdf'], uploadTray: true, saving: true, feedLoading: true, loadingMore: true, noteDraft: { title: 'A' }, urlDraft: { url: 'https://a' }, fileDraft: { name: 'A.pdf' } };
 		let cleared = false;
 		const globals = { clearAuth: async () => { cleared = true; }, bootstrapRef: { current: 'A' }, uploadNamespaceRef: { current: 'ns:A' }, sessionEpoch: { current: 0 }, feedSeq: { current: 0 }, detailSeq: { current: 0 }, uploadControllers: { current: new Map([['u', { abort() {} }]]) }, useCallback: (fn) => fn };
 		for (const name of Object.keys(state)) globals['set' + name[0].toUpperCase() + name.slice(1)] = (next) => { state[name] = next; };
@@ -94,6 +94,7 @@ describe('Streamient Mobile client regressions', () => {
 		assert.equal(state.detail, null);
 		assert.equal(state.detailLoading, false);
 		assert.equal(state.chatMessages.length, 0);
+		assert.equal(state.chatting, false);
 		assert.equal(state.chatQuery, '');
 		assert.equal(state.conversationId, '');
 		assert.equal(state.conversations.length, 0);
@@ -846,6 +847,65 @@ it('pending feed pages preserve live deletions and updates even after their live
 	assert.equal(rows.some((row) => row.id === 'deleted'), false);
 	assert.equal(rows.find((row) => row.id === 'updated').title, 'new title');
 	assert.equal(rows.some((row) => row.id === 'older'), true);
+});
+
+it('catch-up waits for a same-project refresh before applying changes and advancing its cursor', async () => {
+	let rows = [record('moved')], releaseChanges, releaseFeed;
+	const changeCursor = { current: 'start' };
+	const { exports: f } = await compile(block('function upsertRecord(', '\nfunction relativeTime') + block('const loadFeed = useCallback', '\n\tuseEffect(() => { if (view === "projects")') + block('const applyChanges = useCallback', '\n\trealtimeEventHandler.current =') + '\nexport { loadFeed, applyChanges };', {
+		api: { records: () => new Promise((resolve) => { releaseFeed = resolve; }), changes: () => new Promise((resolve) => { releaseChanges = resolve; }) }, activeProjectId: 'P', filter: 'all', feedSeq: { current: 0 }, sessionEpoch: { current: 0 }, changeCursor, useCallback: (fn) => fn,
+		setRecords: (fn) => { rows = fn(rows); }, setLoadingMore: noop, setFeedLoading: noop, setNextCursor: noop, setOffline: noop,
+	});
+	const catchup = f.applyChanges();
+	await new Promise((resolve) => setImmediate(resolve));
+	const refresh = f.loadFeed();
+	releaseChanges({ changes: [{ key: 'notes:moved', action: 'upsert', record: record('moved', 'OTHER') }], next_cursor: 'after-move', has_more: false });
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.equal(changeCursor.current, 'start');
+	releaseFeed({ value: { records: [record('moved')], next_cursor: null }, offline: false });
+	await Promise.all([refresh, catchup]);
+	assert.equal(rows.length, 0);
+	assert.equal(changeCursor.current, 'after-move');
+});
+
+it('later cached pages retain earlier live deletion and move protection within the feed', async () => {
+	let rows = [record('first')], release;
+	const handler = { current: null };
+	const { exports: f } = await compile(block('function upsertRecord(', '\nfunction relativeTime') + block('const loadFeed = useCallback', '\n\tuseEffect(() => { if (view === "projects")') + block('realtimeEventHandler.current =', '\n\tconst realtimeHostId') + '\nexport { loadFeed };', {
+		api: { records: () => new Promise((resolve) => { release = resolve; }), record: async () => ({ record: record('moved', 'OTHER') }) }, activeProjectId: 'P', filter: 'all', feedSeq: { current: 0 }, sessionEpoch: { current: 0 }, useCallback: (fn) => fn,
+		setRecords: (fn) => { rows = fn(rows); }, setLoadingMore: noop, setFeedLoading: noop, setNextCursor: noop, setOffline: noop, realtimeEventHandler: handler, refreshCounts: async () => {}, setUploads: noop,
+	});
+	const second = f.loadFeed('page2');
+	handler.current('note:deleted', { id: 'deleted' });
+	handler.current('note:updated', { id: 'moved' });
+	await new Promise((resolve) => setImmediate(resolve));
+	release({ value: { records: [record('second')], next_cursor: 'page3' }, offline: false });
+	await second;
+	const third = f.loadFeed('page3');
+	release({ value: { records: [record('deleted'), record('moved'), record('third')], next_cursor: null }, offline: true });
+	await third;
+	assert.deepEqual(Array.from(rows, (row) => row.id), ['first', 'second', 'third']);
+});
+
+it('reset during a pending chat clears busy state and the old stream cannot disable the next session', async () => {
+	let releaseChat, chatting = false;
+	const chatBusy = { current: false }, sessionEpoch = { current: 0 };
+	const reset = block('const resetSessionState = useCallback', 'const handleTokens = useCallback');
+	const globals = { api: { chat: () => new Promise((resolve) => { releaseChat = resolve; }) }, chatBusy, sessionEpoch, chatQuery: 'question', online: true, activeProjectId: 'P', chatAllProjects: false, conversationId: '', useCallback: (fn) => fn, clearAuth: async () => {}, feedSeq: { current: 0 }, detailSeq: { current: 0 }, uploadControllers: { current: new Map() }, bootstrapRef: { current: null }, uploadNamespaceRef: { current: '' } };
+	for (const [, setter] of reset.matchAll(/\b(set[A-Z]\w*)\(/g)) globals[setter] = noop;
+	globals.setChatting = (value) => { chatting = value; };
+	globals.setChatMessages = noop;
+	globals.setConversationId = noop;
+	const { exports: f } = await compile(reset + block('async function sendChat()', '\n\tasync function openHistory()') + '\nexport { resetSessionState, sendChat };', globals);
+	const stream = f.sendChat();
+	assert.equal(chatting, true);
+	await f.resetSessionState();
+	assert.equal(chatting, false);
+	assert.equal(chatBusy.current, false);
+	releaseChat({ conversation_id: 'old', results: [] });
+	await stream;
+	assert.equal(chatting, false);
+	assert.equal(chatBusy.current, false);
 });
 
 it('tenant-wide catch-up removes moved-out records on every continuation and protects pending feed pages', async () => {

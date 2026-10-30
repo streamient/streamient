@@ -127,6 +127,7 @@ export function App() {
 	const sessionApi = useRef<StreamientApi | null>(null);
 	const liveEvents = useRef(new Map<string, object>());
 	const catchupEvents = useRef(new Set<Set<string>>());
+	const feedEvents = useRef(new Set<string>());
 	const uploadControllers = useRef(new Map<string, AbortController>());
 	const bootstrapRef = useRef<BootstrapResponse | null>(null);
 	const activeProjectIdRef = useRef("");
@@ -150,6 +151,8 @@ export function App() {
 		searchSeq.current++;
 		chatBusy.current = false;
 		chatSeq.current++;
+		setChatting(false);
+		feedEvents.current.clear();
 		for (const controller of uploadControllers.current.values()) controller.abort();
 		uploadControllers.current.clear();
 		sessionApi.current?.clearCache();
@@ -319,15 +322,13 @@ export function App() {
 	const loadFeed = useCallback(async (cursor = "") => {
 		if (!api || !activeProjectId) return;
 		const requestId = ++feedSeq.current;
-		const intervening = new Set<string>();
-		catchupEvents.current.add(intervening);
 		let feedLoaded = () => {};
-		if (!cursor) { feedKey.current = `${activeProjectId}:${filter}`; feedLoad.current = new Promise<void>((resolve) => { feedLoaded = resolve; }); }
+		if (!cursor) { feedEvents.current.clear(); feedKey.current = `${activeProjectId}:${filter}`; feedLoad.current = new Promise<void>((resolve) => { feedLoaded = resolve; }); }
 		cursor ? setLoadingMore(true) : setFeedLoading(true);
 		try {
 			const result = await api.records({ projectId: activeProjectId, type: filter, cursor: cursor || undefined });
 			if (requestId !== feedSeq.current) return;
-			setRecords((current) => cursor ? [...current, ...result.value.records.filter((record) => !intervening.has(record.key) && !current.some((item) => item.key === record.key))] : result.value.records);
+			setRecords((current) => cursor ? [...current, ...result.value.records.filter((record) => !feedEvents.current.has(record.key) && !current.some((item) => item.key === record.key))] : result.value.records);
 			setNextCursor(result.value.next_cursor);
 			setOffline(result.offline);
 		} catch (loadError) {
@@ -338,7 +339,6 @@ export function App() {
 				setFeedLoading(false);
 				setLoadingMore(false);
 			}
-			catchupEvents.current.delete(intervening);
 			feedLoaded();
 		}
 	}, [api, activeProjectId, filter]);
@@ -366,8 +366,10 @@ export function App() {
 		try {
 			let result = await api.changes(changeCursor.current);
 			while (true) {
+				for (let pending: Promise<void> | null = null; pending !== feedLoad.current;) { pending = feedLoad.current; await pending; }
 				if (!current()) return;
 				const changes = result.changes;
+				for (const change of changes) feedEvents.current.add(change.key);
 				for (const change of changes) for (const pending of catchupEvents.current) if (pending !== intervening) pending.add(change.key);
 				setRecords((current) => changes.reduce((items, change) => intervening.has(change.key) ? items : change.action === "delete" ? items.filter((item) => item.key !== change.key) : upsertRecord(items, change.record, activeProjectId, filter), current));
 				changeCursor.current = result.next_cursor;
@@ -392,16 +394,19 @@ export function App() {
 		const id = String(payload._id || payload.id || "");
 		const epoch = sessionEpoch.current;
 		const key = `${type}:${id}`;
+			feedEvents.current.add(key);
 		const version = {};
 		liveEvents.current.set(key, version);
 		for (const pending of catchupEvents.current) pending.add(key);
 		void (async () => {
 			for (let pending: Promise<void> | null = null; pending !== feedLoad.current;) { pending = feedLoad.current; await pending; }
 			if (epoch !== sessionEpoch.current || feedKey.current !== `${activeProjectId}:${filter}`) return;
-			if (match[2] === "deleted") setRecords((current) => current.filter((item) => item.key !== key));
+				if (match[2] === "deleted") { feedEvents.current.add(key); setRecords((current) => current.filter((item) => item.key !== key)); }
 			else if (id) {
 				const { record } = await api.record(type, id);
+					for (let pending: Promise<void> | null = null; pending !== feedLoad.current;) { pending = feedLoad.current; await pending; }
 				if (epoch !== sessionEpoch.current || liveEvents.current.get(key) !== version || feedKey.current !== `${activeProjectId}:${filter}`) return;
+					feedEvents.current.add(key);
 				setRecords((current) => (epoch === sessionEpoch.current ? upsertRecord(current, record, activeProjectId, filter) : current));
 			}
 		})().catch((error) => setError(String(error))).finally(() => { if (liveEvents.current.get(key) === version) liveEvents.current.delete(key); });
