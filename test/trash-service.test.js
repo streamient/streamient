@@ -171,22 +171,42 @@ describe('Trash service Typesense bulk writes', () => {
 		const stateUpdates = [];
 		for (const [Model, ids] of [[Note, ['note-1', 'note-2']], [Memory, ['memory-1']], [Url, []], [Email, ['email-1']]]) {
 			t.mock.method(Model, 'findOneAndDelete', async () => ids.length ? { _id: ids.shift() } : null);
-			t.mock.method(Model, 'findOneAndUpdate', (filter) => ({ lean: async () => Model === Note && filter._id === activeId ? { _id: activeId } : null }));
+			t.mock.method(Model, 'find', (filter) => ({ lean: async () => Model === Note ? filter._id.$in.filter((id) => id === activeId).map((id) => ({ _id: id })) : [] }));
 		}
 		t.mock.method(Note, 'updateMany', async (query, update) => stateUpdates.push({ query, update }));
 		const result = await emptyTrash('host-1', {
 			exportTrashDocuments: async (hostId, type) => type === 'notes' ? [{ source_id: 'note-1' }, { source_id: 'note-orphan' }, { source_id: activeId }] : [],
-			removeDocumentsByFilter: async (hostId, type) => removeCalls.push(type),
+			bulkRemoveDocuments: async (hostId, type, ids) => removeCalls.push([type, ids]),
 			removeGraphLinks: async (hostId, ids) => graphCalls.push(ids),
 			bulkIndexDocuments: async (hostId, type, docs) => { indexCalls.push(...docs.map((doc) => String(doc._id))); return docs.map((doc) => ({ id: String(doc._id), success: true })); },
 		});
 		assert.deepEqual(result, { deleted: 5 });
-		assert.deepEqual(removeCalls, ['notes', 'memory', 'urls', 'emails']);
+		assert.deepEqual(removeCalls, [['notes', ['note-1', 'note-orphan', 'note-2']], ['memory', ['memory-1']], ['emails', ['email-1']]]);
 		assert.deepEqual(graphCalls[0], ['note-1', 'note-orphan', 'note-2']);
 		assert.deepEqual(indexCalls, [activeId]);
 		// bulkIndexDocuments marks indexed via the claim protocol; only the
 		// pending pre-step remains here.
 		assert.deepEqual(stateUpdates.map((call) => call.update.$set.is_indexed), [false]);
+	});
+
+	it('empty trash keeps the Typesense row of an item trashed while it runs and batches existence checks', async (t) => {
+		const finds = [];
+		const removed = [];
+		let ids = ['note-1', '507f1f77bcf86cd799439012'];
+		t.mock.method(Note, 'findOneAndDelete', async () => ids.length ? { _id: ids.shift() } : null);
+		t.mock.method(Note, 'find', (filter) => { finds.push(filter._id.$in); return { lean: async () => [] }; });
+		for (const Model of [Memory, Url, Email]) t.mock.method(Model, 'findOneAndDelete', async () => null);
+		await emptyTrash('host-1', {
+			// 'late-trashed' is in Typesense as trashed but Mongo trashed it after the delete loop ended.
+			exportTrashDocuments: async (hostId, type) => type === 'notes' ? [{ source_id: 'note-1' }] : [],
+			bulkRemoveDocuments: async (hostId, type, removeIds) => removed.push([type, removeIds]),
+			removeGraphLinks: async () => {},
+			bulkIndexDocuments: async () => [],
+			removeDocumentsByFilter: async () => assert.fail('must not remove by broad in_trash filter'),
+		});
+		assert.equal(finds.length, 1);
+		assert.deepEqual(removed, [['notes', ['note-1', '507f1f77bcf86cd799439012']]]);
+		assert.equal(removed.flatMap(([, removeIds]) => removeIds).includes('late-trashed'), false);
 	});
 
 	it('stale permanent-delete repair preserves a concurrent live publication', async (t) => {

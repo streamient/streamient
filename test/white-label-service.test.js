@@ -135,4 +135,29 @@ describe('white-label service', () => {
 			},
 		);
 	});
+	it('deletes the old Cloudflare hostname when the custom domain changes and survives a delete failure', async () => {
+		tenant.plan = 'pro';
+		Object.assign(tenant.settings.white_label, { dns_name_custom: 'old.example.com', cloudflare_custom_hostname_id: 'cf-1', cloudflare_status: 'active' });
+		const deleted = [];
+		const settings = await whiteLabelService.updateSettings('host-1', { dns_name_custom: 'new.example.com' }, {
+			isHosted: true,
+			deleteHostnameFn: async (id) => { deleted.push(id); throw new Error('cloudflare down'); },
+		});
+		assert.deepEqual(deleted, ['cf-1']);
+		assert.equal(settings.dns_name_custom, 'new.example.com');
+		assert.equal(tenant.settings.white_label.cloudflare_custom_hostname_id, '');
+		assert.equal(tenant.settings.white_label.cloudflare_status, '');
+	});
+
+	it('keeps the Cloudflare hostname when the custom domain is unchanged', async () => {
+		tenant.plan = 'pro';
+		Object.assign(tenant.settings.white_label, { dns_name_custom: 'brand.example.com', dns_verified: true, cloudflare_custom_hostname_id: 'cf-1', cloudflare_status: 'active' });
+		await whiteLabelService.updateSettings('host-1', { dns_name_custom: 'https://Brand.Example.com/' }, {
+			isHosted: true,
+			deleteHostnameFn: async () => assert.fail('must not delete'),
+		});
+		assert.equal(tenant.settings.white_label.cloudflare_custom_hostname_id, 'cf-1');
+		assert.equal(tenant.settings.white_label.cloudflare_status, 'active');
+		assert.equal(tenant.settings.white_label.dns_verified, true);
+	});
 });

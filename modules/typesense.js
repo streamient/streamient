@@ -1903,10 +1903,9 @@ export async function runStreamientIndexer(models) {
 	const hostProgress = new Map();
 
 	for (const { type, model, query: typeQuery = {} } of typeModelMap) {
-		// Fast aggregate: get host_ids that have unindexed docs, sorted by most-recently-updated first
+		// Fast aggregate: get host_ids that have unindexed docs
 		const hosts = await model.aggregate([
 			{ $match: { ...typeQuery, is_indexed: { $ne: true } } },
-			{ $sort: { updatedAt: -1 } },
 			{ $group: { _id: '$host_id' } },
 		]);
 
