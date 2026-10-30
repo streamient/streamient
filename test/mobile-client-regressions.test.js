@@ -10,7 +10,7 @@ function read(relativePath) {
 
 async function compile(src, globals = {}) {
 	const code = (await transform(src.replace(/^import .*\n/gm, ''), { loader: 'ts', format: 'cjs', target: 'es2022' })).code;
-	const context = vm.createContext({ module: { exports: {} }, console, URL, URLSearchParams, Headers, Response, Blob, TextDecoder, TextEncoder, DOMException, Error, TypeError, atob, btoa, crypto, navigator: { onLine: true }, searchSeq: { current: 0 }, chatBusy: { current: false }, chatSeq: { current: 0 }, sessionApi: { current: null }, liveEvents: { current: new Map() }, catchupEvents: { current: new Set() }, feedLoad: { current: Promise.resolve() }, feedKey: { current: "P:all" }, feedEvents: { current: new Set() }, setChatting: noop, setError: noop, ...globals });
+	const context = vm.createContext({ module: { exports: {} }, console, URL, URLSearchParams, Headers, Response, Blob, TextDecoder, TextEncoder, DOMException, Error, TypeError, atob, btoa, crypto, navigator: { onLine: true }, searchSeq: { current: 0 }, chatBusy: { current: false }, chatSeq: { current: 0 }, sessionApi: { current: null }, liveEvents: { current: new Map() }, catchupEvents: { current: new Set() }, feedLoad: { current: Promise.resolve() }, feedKey: { current: "P:all" }, feedEvents: { current: new Map() }, setChatting: noop, setError: noop, ...globals });
 	vm.runInContext(code, context);
 	return { exports: context.module.exports, context };
 }
@@ -885,6 +885,31 @@ it('later cached pages retain earlier live deletion and move protection within t
 	release({ value: { records: [record('deleted'), record('moved'), record('third')], next_cursor: null }, offline: true });
 	await third;
 	assert.deepEqual(Array.from(rows, (row) => row.id), ['first', 'second', 'third']);
+});
+
+it('cached first-page refresh replays prior catch-up deletions, updates and moves', async () => {
+	let rows = [record('deleted'), record('updated'), record('moved')];
+	let offline = true;
+	const fresh = { ...record('deleted'), title: 'restored online' };
+	const { exports: f } = await compile(block('function upsertRecord(', '\nfunction relativeTime') + block('const loadFeed = useCallback', '\n\tuseEffect(() => { if (view === "projects")') + block('const applyChanges = useCallback', '\n\trealtimeEventHandler.current =') + '\nexport { loadFeed, applyChanges };', {
+		api: {
+			records: async () => ({ value: { records: offline ? [record('deleted'), record('updated'), record('moved')] : [fresh], next_cursor: null }, offline }),
+			changes: async () => ({ changes: [{ key: 'notes:deleted', action: 'delete' }, { key: 'notes:updated', action: 'upsert', record: { ...record('updated'), title: 'new title' } }, { key: 'notes:moved', action: 'upsert', record: record('moved', 'OTHER') }], next_cursor: 'advanced', has_more: false }),
+		}, activeProjectId: 'P', filter: 'all', feedSeq: { current: 0 }, sessionEpoch: { current: 0 }, changeCursor: { current: 'start' }, useCallback: (fn) => fn,
+		setRecords: (fn) => { rows = fn(rows); }, setLoadingMore: noop, setFeedLoading: noop, setNextCursor: noop, setOffline: noop,
+	});
+	await f.applyChanges();
+	await f.loadFeed();
+	assert.equal(rows.length, 1);
+	assert.equal(rows[0].id, 'updated');
+	assert.equal(rows[0].title, 'new title');
+	offline = false;
+	await f.loadFeed();
+	assert.equal(rows[0].title, 'restored online');
+	offline = true;
+	await f.loadFeed();
+	assert.equal(rows.find((row) => row.id === 'deleted').title, 'restored online');
+	assert.equal(rows.some((row) => row.id === 'moved'), false);
 });
 
 it('reset during a pending chat clears busy state and the old stream cannot disable the next session', async () => {
