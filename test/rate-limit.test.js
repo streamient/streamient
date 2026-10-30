@@ -260,16 +260,18 @@ describe('API rate-limit helpers', () => {
 		try {
 			const { port } = server.address();
 			const base = `http://127.0.0.1:${port}/api/v1`;
-			const obsidianHeaders = { authorization: 'Bearer obsidian-read-token' };
+			// Unauthenticated callers are keyed by IP and the store may be a shared Memcached, so give each bucket a fresh client IP.
+			const runIp = (n) => `198.51.${Math.floor(Math.random() * 250)}.${n}`;
+			const obsidianHeaders = { authorization: 'Bearer obsidian-read-token', 'cf-connecting-ip': runIp(1) };
 			assert.equal((await fetch(`${base}/obsidian/files/file-1/content`, { headers: obsidianHeaders })).status, 200);
 			assert.equal((await fetch(`${base}/obsidian/connections/connection-1/changes`, { headers: obsidianHeaders })).status, 200);
 			assert.equal((await fetch(`${base}/obsidian/projects`, { headers: obsidianHeaders })).status, 429);
 
-			const uploadHeaders = { authorization: 'Bearer obsidian-upload-token', 'cf-connecting-ip': '198.51.100.2', 'content-type': 'application/json' };
+			const uploadHeaders = { authorization: 'Bearer obsidian-upload-token', 'cf-connecting-ip': runIp(2), 'content-type': 'application/json' };
 			assert.equal((await fetch(`${base}/obsidian/uploads`, { method: 'POST', headers: uploadHeaders, body: '{}' })).status, 200);
 			assert.equal((await fetch(`${base}/obsidian/uploads/upload-1/complete`, { method: 'POST', headers: uploadHeaders, body: '{}' })).status, 200);
 
-			const generalHeaders = { authorization: 'Bearer general-token' };
+			const generalHeaders = { authorization: 'Bearer general-token', 'cf-connecting-ip': runIp(3) };
 			assert.equal((await fetch(`${base}/projects`, { headers: generalHeaders })).status, 200);
 			assert.equal((await fetch(`${base}/notes`, { headers: generalHeaders })).status, 429);
 		} finally {
