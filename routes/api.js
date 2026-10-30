@@ -481,6 +481,7 @@ router.post('/emails', async (req, res) => {
 		const email = await emailIngestService.ingestEmail(req.userId, req.host_id, req.body, auditCtx(req));
 		res.status(201).json({ email });
 	} catch (err) {
+		if (err.code === 'email_already_exists') return res.status(409).json({ error: err.message, code: err.code });
 		res.status(400).json({ error: err.message });
 	}
 });

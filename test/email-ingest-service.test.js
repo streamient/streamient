@@ -150,6 +150,13 @@ describe('Email ingest storage service', () => {
 		assert.equal(email.in_trash, true);
 	});
 
+	it('reports a content-hash duplicate stored in another project instead of creating a copy', async () => {
+		Email.findOne = () => ({ lean: async () => ({ _id: 'email-other', project: '507f1f77bcf86cd7994390ff' }) });
+		Email.findOneAndUpdate = async () => assert.fail('must not update another project');
+		Email.create = async () => assert.fail('must not create a duplicate');
+		await assert.rejects(ingestEmail('507f1f77bcf86cd799439012', 'host-1', { project: '507f1f77bcf86cd799439011', parsed_email: { raw_hash: 'hash', subject: 'Dup', text: 'Body' } }, { skipSideEffects: true }), (err) => err.code === 'email_already_exists' && err.status === 409);
+	});
+
 	it('maps a tenant Message-ID conflict without an in-transaction fallback read', async () => {
 		let calls = 0;
 		Email.findOneAndUpdate = async (filter) => {
@@ -165,7 +172,7 @@ describe('Email ingest storage service', () => {
 	});
 
 	it('creates a replacement when the hash-deduplicated row was deleted before persistence', async () => {
-		Email.findOne = () => ({ lean: async () => ({ _id: 'deleted-email' }) });
+		Email.findOne = () => ({ lean: async () => ({ _id: 'deleted-email', project: '507f1f77bcf86cd799439011' }) });
 		Email.findOneAndUpdate = async () => null;
 		Email.create = async (payload) => Array.isArray(payload) ? [{ _id: 'replacement-email', ...payload[0] }] : { _id: 'replacement-email', ...payload };
 		const email = await ingestEmail('507f1f77bcf86cd799439012', 'host-1', { project: '507f1f77bcf86cd799439011', parsed_email: { raw_hash: 'hash', subject: 'Replacement', text: 'Body' } }, { skipSideEffects: true });

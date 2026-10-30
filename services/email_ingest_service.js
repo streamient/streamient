@@ -556,6 +556,8 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 			}
 
 			if (existingByHash) {
+				// Same content already stored in another project: report the duplicate instead of creating a second copy.
+				if (String(existingByHash.project) !== String(project)) throw Object.assign(new Error('Email message already exists'), { code: 'email_already_exists', status: 409 });
 				const result = await Email.findOneAndUpdate({ _id: existingByHash._id, host_id, ...projectGuard }, { $set: payload }, { returnDocument: 'after', session });
 				if (result) return { email: result, created: false };
 			}

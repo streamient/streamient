@@ -128,6 +128,7 @@ export function App() {
 	const activeProjectIdRef = useRef("");
 	const changeCursor = useRef("");
 	const feedLoad = useRef<Promise<void>>(Promise.resolve());
+	const feedKey = useRef("");
 	const authHandled = useRef(false);
 	const sessionEpoch = useRef(0);
 	const feedSeq = useRef(0);
@@ -308,7 +309,7 @@ export function App() {
 		if (!api || !activeProjectId) return;
 		const requestId = ++feedSeq.current;
 		let feedLoaded = () => {};
-		if (!cursor) feedLoad.current = new Promise<void>((resolve) => { feedLoaded = resolve; });
+		if (!cursor) { feedKey.current = `${activeProjectId}:${filter}`; feedLoad.current = new Promise<void>((resolve) => { feedLoaded = resolve; }); }
 		cursor ? setLoadingMore(true) : setFeedLoading(true);
 		try {
 			const result = await api.records({ projectId: activeProjectId, type: filter, cursor: cursor || undefined });
@@ -343,10 +344,12 @@ export function App() {
 		const epoch = sessionEpoch.current;
 		// Apply changes only after the first-page snapshot lands, or that older snapshot would overwrite them.
 		for (let pending: Promise<void> | null = null; pending !== feedLoad.current;) { pending = feedLoad.current; await pending; }
-		if (epoch !== sessionEpoch.current) return;
+		// A project or filter switch during any await makes this catch-up obsolete; the new feed load covers it.
+		const current = () => epoch === sessionEpoch.current && feedKey.current === `${activeProjectId}:${filter}`;
+		if (!current()) return;
 		let result = await api.changes(changeCursor.current, activeProjectId);
 		while (true) {
-			if (epoch !== sessionEpoch.current) return;
+			if (!current()) return;
 			const changes = result.changes;
 			setRecords((current) => changes.reduce((items, change) => change.action === "delete" ? items.filter((item) => item.key !== change.key) : upsertRecord(items, change.record, activeProjectId, filter), current));
 			changeCursor.current = result.next_cursor;
