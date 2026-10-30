@@ -21,6 +21,7 @@
     "cli:smoke": "pnpm --filter @streamient/cli pack:smoke",
     "android:release": "pnpm --filter @streamient/mobile android:release",
     "ios:release": "pnpm --filter @streamient/mobile ios:release",
+    "tokens:migrate-hashes": "node scripts/migrate-access-token-hashes.mjs",
     "trash:reconcile": "node scripts/reconcile-trash.mjs",
     "trash:migrate-ttl": "node scripts/migrate-trash-ttl-indexes.mjs",
     "docs:dev": "pnpm --filter @streamient/docs dev",

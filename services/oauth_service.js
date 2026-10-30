@@ -1,6 +1,7 @@
 import { assertTenantAvailable } from '../modules/tenancy.js';
 import { acquireTenantWork } from '../modules/tenancy.js';
 import crypto from 'node:crypto';
+import { getPublicUrl } from '../modules/public_url.js';
 import { isIP } from 'node:net';
 import bcrypt from 'bcryptjs';
 import { createLocalJWKSet, createRemoteJWKSet, jwtVerify } from 'jose';
@@ -336,26 +337,14 @@ async function fetchClientMetadataDocument(clientId) {
 	}
 
 	let response;
-	try {
-		response = await fetch(url, {
-			headers: { Accept: 'application/json' },
-			redirect: 'error',
-			signal: AbortSignal.timeout(5000),
-		});
-	} catch (err) {
-		throw new OAuthError('invalid_client', `Failed to fetch client metadata: ${err.message}`, 400);
-	}
-
-	if (!response.ok) {
-		throw new OAuthError('invalid_client', `Client metadata request failed with status ${response.status}`, 400);
-	}
-
 	let json;
 	try {
-		json = await response.json();
+		response = await getPublicUrl(url, { headers: { Accept: 'application/json' }, timeout: 5000, maxRedirects: 0, maxContentLength: 1024 * 1024, responseType: 'text' });
+		json = JSON.parse(response.data);
 	} catch {
-		throw new OAuthError('invalid_client', 'Client metadata document is not valid JSON', 400);
+		throw new OAuthError('invalid_client', 'Failed to fetch client metadata', 400);
 	}
+	if (!json || typeof json !== 'object' || Array.isArray(json)) throw new OAuthError('invalid_client', 'Invalid client metadata document', 400);
 
 	if (json.client_id !== url) {
 		throw new OAuthError('invalid_client', 'client_id metadata value must exactly match the document URL', 400);
@@ -368,7 +357,9 @@ async function fetchClientMetadataDocument(clientId) {
 		...normalized,
 	};
 
-	const maxAge = parseCacheControlMaxAge(response.headers.get('cache-control')) || (5 * 60 * 1000);
+	const maxAge = Math.min(parseCacheControlMaxAge(response.headers['cache-control']) ?? (5 * 60 * 1000), 60 * 60 * 1000);
+	CLIENT_METADATA_CACHE.delete(url);
+	if (CLIENT_METADATA_CACHE.size >= 500) CLIENT_METADATA_CACHE.delete(CLIENT_METADATA_CACHE.keys().next().value);
 	CLIENT_METADATA_CACHE.set(url, { value: metadata, expiresAt: Date.now() + maxAge });
 	return metadata;
 }
@@ -541,11 +532,7 @@ export async function authenticateClientForToken({ clientId, clientSecret, clien
 	}
 
 	if (client.token_endpoint_auth_method === 'private_key_jwt') {
-		if (clientAssertion) {
-			await verifyPrivateKeyJwtClientAssertion({ client, clientAssertionType, clientAssertion });
-		} else if (clientAssertionType) {
-			throw new OAuthError('invalid_client', 'client_assertion is required for private_key_jwt clients', 401);
-		}
+		await verifyPrivateKeyJwtClientAssertion({ client, clientAssertionType, clientAssertion });
 		return client;
 	}
 	if (client.token_endpoint_auth_method !== 'none') {

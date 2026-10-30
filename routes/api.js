@@ -1602,7 +1602,7 @@ router.get('/oauth/clients', async (req, res) => {
 	}
 });
 
-router.post('/oauth/clients', async (req, res) => {
+router.post('/oauth/clients', requireTeamManager, async (req, res) => {
 	try {
 		const { client, client_secret } = await oauthService.registerClient({
 			tenantId: req.tenantId,
@@ -1635,7 +1635,7 @@ router.post('/oauth/clients', async (req, res) => {
 	}
 });
 
-router.delete('/oauth/clients/:id', async (req, res) => {
+router.delete('/oauth/clients/:id', requireTeamManager, async (req, res) => {
 	try {
 		await oauthService.deleteClient(req.host_id, req.params.id, auditCtx(req));
 		res.json({ message: 'OAuth client deleted' });
@@ -1672,7 +1672,7 @@ router.post('/tokens', async (req, res) => {
 		if (!user) return res.status(404).json({ error: 'User not found' });
 
 		const token = crypto.randomBytes(32).toString('hex');
-		user.access_tokens.push({ token, name: name.trim() });
+		user.access_tokens.push({ token_hash: crypto.createHash('sha256').update(token).digest('hex'), name: name.trim() });
 		await user.save();
 
 		const entry = user.access_tokens[user.access_tokens.length - 1];
