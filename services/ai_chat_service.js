@@ -442,7 +442,7 @@ async function handleStatsStream({ hostId, query, conversationId, projectId, inc
 // Emails are gated by `includeEmails`; active vault files stay in the total.
 async function getActiveStats(hostId, projectId, includeEmails) {
 	const { project_id } = SearchFilters.parse({ project_id: projectId });
-	const perProject = await getProjectCounts(hostId);
+	const perProject = await getProjectCounts(hostId, { includeEmails });
 	const scope = project_id ? [project_id] : Object.keys(perProject);
 	const counts = { notes: 0, memory: 0, urls: 0, emails: 0 };
 	for (const pid of scope) {
@@ -900,8 +900,8 @@ function flattenResults(results, types = null) {
  * Use processChat() for new code.
  * @deprecated
  */
-export async function aiChatSearch(host_id, query, { stream = false } = {}) {
-	const results = await searchAll(host_id, query, { perPage: 5 });
+export async function aiChatSearch(host_id, query, { stream = false, includeEmails = true } = {}) {
+	const results = await searchAll(host_id, query, { perPage: 5, includeEmails });
 	const context = buildLegacyContext(results);
 
 	const { chatCompletion } = await import('../modules/llm_client.js');

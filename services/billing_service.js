@@ -262,20 +262,16 @@ export async function cancelFreeSubscriptionForUser(userId, options = {}) {
 	return true;
 }
 
-/**
- * Conditional match for a Checkout apply. A `checkout.session.completed` or
- * GET /billing/success apply must never overwrite a terminal `canceled` state
- * for the SAME subscription (Stripe can never reactivate a canceled id), but a
- * genuinely DIFFERENT subscription still applies over a canceled one and
- * re-applying the current active subscription stays idempotent. The condition
- * is tested against the document's state at write time, not a stale pre-read.
- */
-function buildCheckoutApplyFilter(userId, subscriptionId) {
+/** Checkout can fill an empty slot or replace a terminal subscription, never a live different one. */
+function buildCheckoutApplyFilter(userId, subscription, stripeCustomerId) {
+	const subscriptionId = subscription.id;
 	return {
 		_id: userId,
+		...(stripeCustomerId ? { stripe_customer_id: stripeCustomerId } : {}),
 		$or: [
-			{ stripe_subscription_id: subscriptionId, subscription_status: { $ne: 'canceled' } },
-			{ stripe_subscription_id: { $ne: subscriptionId } },
+			{ stripe_subscription_id: subscriptionId, subscription_status: subscription.status },
+			{ stripe_subscription_id: { $ne: subscriptionId }, subscription_status: { $in: ['canceled', 'incomplete_expired'] } },
+			{ stripe_subscription_id: null },
 		],
 	};
 }
@@ -310,8 +306,9 @@ function buildCheckoutApplyUpdate(subscription, stripeCustomerId = undefined) {
  * transaction `session`; Stripe I/O and reads stay outside.
  */
 export async function applyCheckoutSubscriptionPlan(userId, subscription, stripeCustomerId = undefined, { userModel = User, tenantModel = Tenant, session } = {}) {
+	if (!subscription?.id || !['active', 'trialing'].includes(subscription.status) || isFreePriceSubscription(subscription)) return null;
 	const user = await userModel.findOneAndUpdate(
-		buildCheckoutApplyFilter(userId, subscription.id),
+		buildCheckoutApplyFilter(userId, subscription, stripeCustomerId),
 		buildCheckoutApplyUpdate(subscription, stripeCustomerId),
 		{ returnDocument: 'after', updatePipeline: true, ...(session ? { session } : {}) },
 	);
@@ -490,6 +487,7 @@ async function runSubscriptionEventTransaction(callback) {
  * Returns the Checkout URL to redirect the user to.
  */
 export async function createCheckoutSession(user, options = {}) {
+	if (user.stripe_subscription_id && !['canceled', 'incomplete_expired'].includes(user.subscription_status)) throw new Error('Manage your existing subscription in the billing portal.');
     const priceId = resolveCheckoutPriceId();
     if (!priceId) {
         throw new Error('Stripe price ID is not configured for the Pro plan (STRIPE_PRO_PRICE_ID).');
@@ -507,6 +505,8 @@ export async function createCheckoutSession(user, options = {}) {
         });
     }
 
+	const subscriptions = await listDeletionBillingObjects(stripe.subscriptions, { customer: customerId, status: 'all' });
+	if (subscriptions.some((subscription) => !['canceled', 'incomplete_expired'].includes(subscription.status) && !isFreePriceSubscription(subscription))) throw new Error('Manage your existing subscription in the billing portal.');
     const session = await stripe.checkout.sessions.create(buildCheckoutSessionParams(user, customerId, priceId));
 
     return session.url;
@@ -544,7 +544,8 @@ export async function handleWebhook(rawBody, sig) {
 
 	const object = event.data.object;
 	const customerId = typeof object.customer === 'string' ? object.customer : object.customer?.id;
-	const subscriptionId = object.object === 'subscription' ? object.id : object.subscription;
+	const subscriptionReference = object.object === 'subscription' ? object.id : (object.parent?.subscription_details?.subscription || object.subscription);
+	const subscriptionId = typeof subscriptionReference === 'string' ? subscriptionReference : subscriptionReference?.id;
 	const user = await User.findOne({ $or: [...(customerId ? [{ stripe_customer_id: customerId }] : []), ...(subscriptionId ? [{ stripe_subscription_id: subscriptionId }] : []), { _id: null }] }).select('host_id').lean();
 	const hostId = object.metadata?.host_id || user?.host_id;
 	if (!hostId) return;
@@ -561,7 +562,9 @@ export async function handleWebhook(rawBody, sig) {
                 // Checkout only sells Pro; a free-price session would be a
                 // misconfiguration and must not grant a paid plan.
                 if (isFreePriceSubscription(subscription)) break;
-                await applySubscriptionToUser(userId, subscription);
+                if (subscription.customer !== customerId || !['active', 'trialing'].includes(subscription.status)) break;
+                const applied = await applySubscriptionToUser(userId, subscription, customerId);
+                if (!applied) break;
                 // The paid subscription replaces the $0 tracking subscription.
                 try {
                     await cancelFreeSubscriptionForUser(userId, { stripe });
@@ -598,9 +601,8 @@ export async function handleWebhook(rawBody, sig) {
         }
 
         case 'invoice.payment_failed': {
-            const invoice = event.data.object;
-            if (invoice.subscription) {
-                await applyInvoicePaymentFailed(invoice.subscription, event.created);
+            if (subscriptionId) {
+                await applyInvoicePaymentFailed(subscriptionId, event.created);
             }
             break;
         }

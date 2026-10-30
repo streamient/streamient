@@ -25,11 +25,11 @@ function makeUserModel(initial) {
 
 function matchesCheckoutFilter(state, filter) {
 	if (String(filter._id) !== String(state._id)) return false;
+	if (filter.stripe_customer_id && filter.stripe_customer_id !== state.stripe_customer_id) return false;
 	return filter.$or.some((clause) => {
-		if (clause.stripe_subscription_id?.$ne !== undefined) {
-			return state.stripe_subscription_id !== clause.stripe_subscription_id.$ne;
-		}
-		return state.stripe_subscription_id === clause.stripe_subscription_id && state.subscription_status !== clause.subscription_status.$ne;
+		const idMatches = clause.stripe_subscription_id === null ? state.stripe_subscription_id == null : clause.stripe_subscription_id?.$ne !== undefined ? state.stripe_subscription_id !== clause.stripe_subscription_id.$ne : state.stripe_subscription_id === clause.stripe_subscription_id;
+		const statusMatches = !clause.subscription_status || (clause.subscription_status.$in ? clause.subscription_status.$in.includes(state.subscription_status) : state.subscription_status === clause.subscription_status);
+		return idMatches && statusMatches;
 	});
 }
 
@@ -124,4 +124,34 @@ test('checkout apply publishes user and tenant in the same transaction session',
 
 	assert.equal(userOptions[0].session, session);
 	assert.equal(tenantOptions[0].session, session);
+});
+
+for (const status of ['active', 'trialing', 'past_due', 'unpaid', 'paused', 'incomplete']) {
+	test(`checkout cannot replace a different ${status} subscription`, async () => {
+		const userModel = makeUserModel({ stripe_subscription_id: 'sub_current', subscription_status: status });
+		const tenantModel = makeTenantModel();
+		assert.equal(await applyCheckoutSubscriptionPlan('user-1', activeSub('sub_old'), undefined, { userModel, tenantModel }), null);
+		assert.equal(userModel.state.stripe_subscription_id, 'sub_current');
+		assert.equal(tenantModel.plans.length, 0);
+	});
+}
+for (const status of ['canceled', 'incomplete', 'past_due', 'unpaid']) {
+	test(`checkout does not apply incoming ${status}`, async () => {
+		const userModel = makeUserModel({});
+		assert.equal(await applyCheckoutSubscriptionPlan('user-1', { id: 'sub_old', status }, undefined, { userModel }), null);
+		assert.equal(userModel.calls.length, 0);
+	});
+}
+test('stale same-subscription checkout cannot erase a payment failure', async () => {
+	const userModel = makeUserModel({ stripe_subscription_id: 'sub_1', subscription_status: 'past_due' });
+	assert.equal(await applyCheckoutSubscriptionPlan('user-1', activeSub('sub_1'), undefined, { userModel }), null);
+});
+
+test('checkout rejects a different Stripe customer and accepts an initial Stripe trial', async () => {
+	const userModel = makeUserModel({ stripe_customer_id: 'cus_owner', subscription_status: 'trialing' });
+	const tenantModel = makeTenantModel();
+	const subscription = { id: 'sub_trial', status: 'trialing' };
+	assert.equal(await applyCheckoutSubscriptionPlan('user-1', subscription, 'cus_other', { userModel, tenantModel }), null);
+	assert.ok(await applyCheckoutSubscriptionPlan('user-1', subscription, 'cus_owner', { userModel, tenantModel }));
+	assert.equal(tenantModel.plans.length, 1);
 });

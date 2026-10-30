@@ -1,3 +1,5 @@
+import config from '../config.js';
+import { requireResourceQuota } from './subscription_access_service.js';
 import { Project } from '../model/project.js';
 import crypto from 'node:crypto';
 import mongoose, { queryForSave } from '../model/mongoose.js';
@@ -127,13 +129,17 @@ export async function createDefaultProject(userId, host_id, options = {}) {
 	return project;
 }
 
-export async function createProject(userId, host_id, data, ctx = {}) {
-	const project = await Project.create({
+export async function createProject(userId, host_id, data, ctx = {}, { isHosted = config.isHosted } = {}) {
+	const payload = {
 		name: data.name,
 		owner: userId,
 		host_id,
 		color: data.color,
-	});
+	};
+	const project = isHosted ? await mongoose.connection.transaction(async (session) => {
+		await requireResourceQuota(host_id, 'projects', session);
+		return (await Project.create([payload], { session }))[0];
+	}) : await Project.create(payload);
 	emitToTenant(host_id, 'project:created', project);
 	audit.log({ action: 'create', resource: 'project', resource_id: project._id.toString(), user_id: userId, host_id, ...ctx });
 	return project;
@@ -284,7 +290,7 @@ export async function deleteProject(host_id, projectId, ctx = {}) {
  * Get per-project document counts from MongoDB.
  * Returns { projectId: { notes: N, memory: N, urls: N, emails: N }, ... }
  */
-export async function getProjectCounts(host_id) {
+export async function getProjectCounts(host_id, { includeEmails = true } = {}) {
 	const [noteCounts, memoryCounts, urlCounts, emailCounts] = await Promise.all([
 		Note.aggregate([
 			{ $match: { host_id, in_trash: { $ne: true } } },
@@ -298,10 +304,10 @@ export async function getProjectCounts(host_id) {
 			{ $match: { host_id, in_trash: { $ne: true } } },
 			{ $group: { _id: '$project', count: { $sum: 1 } } },
 		]),
-		Email.aggregate([
+		includeEmails ? Email.aggregate([
 			{ $match: { host_id, in_trash: { $ne: true } } },
 			{ $group: { _id: '$project', count: { $sum: 1 } } },
-		]),
+		]) : [],
 	]);
 
 	const counts = {};
