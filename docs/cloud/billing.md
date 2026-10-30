@@ -51,6 +51,8 @@ Invoices are generated automatically for each billing cycle. Download past invoi
 
 You can cancel your subscription at any time from **Settings > Billing**. Your data remains accessible until the end of the current billing period.
 
+After your subscription ends, you can subscribe again from **Settings > Billing**. Streamient checks that the previous checkout subscription has ended before opening a new payment session.
+
 After cancellation, you can export your data or move to a [self-hosted installation](/selfhosted/) without changing how Streamient works for your team.
 
 ## Subscription and access safeguards

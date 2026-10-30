@@ -172,3 +172,95 @@ test('created checkout ID is persisted and expired sessions are retrieved rather
   assert.equal(fixture.attempt, null);
  } finally { config.stripe.proPriceId = old; }
 });
+
+for (const status of ['canceled', 'incomplete_expired']) test(`completed checkout with ${status} subscription permits one concurrent replacement`, async () => {
+ const old = config.stripe.proPriceId;
+ config.stripe.proPriceId = 'price_pro';
+ try {
+  const fixture = checkoutFixture();
+  const user = { _id: 'owner', stripe_customer_id: 'cus_one', subscription_status: status };
+  await createCheckoutSession(user, fixture);
+  const previous = fixture.attempt.key;
+  const session = [...fixture.remote.values()][0];
+  Object.assign(session, { status: 'complete', subscription: 'sub_old', url: null });
+  let arrived = 0;
+  let release;
+  const barrier = new Promise(resolve => { release = resolve; });
+  fixture.stripe.subscriptions.retrieve = async id => {
+   assert.equal(id, 'sub_old');
+   if (++arrived === 8) release();
+   await barrier;
+   return { id, status };
+  };
+  const create = fixture.stripe.checkout.sessions.create;
+  fixture.stripe.checkout.sessions.create = async (...args) => {
+   const result = await create(...args);
+   result.id = 'cs_replacement';
+   return result;
+  };
+  const urls = await Promise.all(Array.from({ length: 8 }, () => createCheckoutSession(user, fixture)));
+  assert.equal(new Set(urls).size, 1);
+  assert.equal(fixture.remote.size, 2);
+  assert.notEqual(fixture.attempt.key, previous);
+  assert.equal(new Set(fixture.keys.slice(1)).size, 1);
+  assert.equal(fixture.attempt.session_id, 'cs_replacement');
+ } finally { config.stripe.proPriceId = old; }
+});
+
+for (const status of ['active', 'trialing', 'past_due', 'unpaid', 'incomplete', 'paused', 'unknown', 'lookup-failed']) test(`completed checkout preserves reservation when subscription is ${status}`, async () => {
+ const old = config.stripe.proPriceId;
+ config.stripe.proPriceId = 'price_pro';
+ try {
+  const fixture = checkoutFixture();
+  const user = { _id: 'owner', stripe_customer_id: 'cus_one' };
+  await createCheckoutSession(user, fixture);
+  const key = fixture.attempt.key;
+  Object.assign([...fixture.remote.values()][0], { status: 'complete', subscription: { id: 'sub_old' } });
+  fixture.stripe.subscriptions.retrieve = async id => {
+   assert.equal(id, 'sub_old');
+   if (status === 'lookup-failed') throw new Error('Stripe unavailable');
+   return { id, status };
+  };
+  await assert.rejects(createCheckoutSession(user, fixture), /complete|Stripe unavailable/);
+  assert.equal(fixture.attempt.key, key);
+  assert.equal(fixture.remote.size, 1);
+ } finally { config.stripe.proPriceId = old; }
+});
+
+test('late terminal confirmation cannot clear a replacement reservation or bypass a new active subscription', async () => {
+ const old = config.stripe.proPriceId;
+ config.stripe.proPriceId = 'price_pro';
+ try {
+  const fixture = checkoutFixture();
+  const user = { _id: 'owner', stripe_customer_id: 'cus_one' };
+  await createCheckoutSession(user, fixture);
+  Object.assign([...fixture.remote.values()][0], { status: 'complete', subscription: 'sub_old', url: null });
+  let releaseLate;
+  let bothArrived;
+  let arrivals = 0;
+  const late = new Promise(resolve => { releaseLate = resolve; });
+  const barrier = new Promise(resolve => { bothArrived = resolve; });
+  fixture.stripe.subscriptions.retrieve = async () => {
+   const position = ++arrivals;
+   if (position === 2) bothArrived();
+   await barrier;
+   if (position === 2) await late;
+   return { status: 'canceled' };
+  };
+  const create = fixture.stripe.checkout.sessions.create;
+  fixture.stripe.checkout.sessions.create = async (...args) => {
+   const result = await create(...args);
+   result.id = 'cs_replacement';
+   return result;
+  };
+  const first = createCheckoutSession(user, fixture);
+  const second = createCheckoutSession(user, fixture);
+  assert.equal(await first, 'https://checkout.test/one');
+  const replacementKey = fixture.attempt.key;
+  fixture.stripe.subscriptions.list = async () => ({ data: [{ id: 'sub_new', status: 'active' }], has_more: false });
+  releaseLate();
+  await assert.rejects(second, /existing subscription/);
+  assert.equal(fixture.attempt.key, replacementKey);
+  assert.equal(fixture.remote.size, 2);
+ } finally { config.stripe.proPriceId = old; }
+});
