@@ -277,3 +277,9 @@ describe('MCP HTTP auth helper', () => {
 		assert.equal(isAppRestrictedToken(null), false);
 	});
 });
+
+it('requires write scope for every tool in a JSON-RPC batch', () => {
+	const body = [{ jsonrpc: '2.0', id: 1, method: 'tools/list' }, { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'create_note' } }];
+	assert.deepEqual(getRequiredScopesForRequestBody(body), ['mcp:read', 'mcp:write']);
+	assert.equal(checkRequestScopes({ mode: 'oauth', tokenClaims: { scope: 'mcp:read' } }, body).status, 403);
+});

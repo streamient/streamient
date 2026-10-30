@@ -1,6 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import axios from 'axios';
+import dns from 'node:dns';
 import { fileURLToPath } from 'node:url';
 import pug from 'pug';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
@@ -14,25 +16,12 @@ const oauthAuthorizeViewPath = fileURLToPath(new URL('../views/auth/oauth_author
 const clientAssertionType = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer';
 
 function mockMetadataFetch(metadata) {
-	const originalFetch = globalThis.fetch;
-	globalThis.fetch = async (url) => {
+	const originalGet = axios.get;
+	axios.get = async (url) => {
 		assert.equal(String(url), metadata.client_id);
-		return {
-			ok: true,
-			status: 200,
-			headers: {
-				get() {
-					return null;
-				},
-			},
-			async json() {
-				return metadata;
-			},
-		};
+		return { data: JSON.stringify(metadata), headers: {} };
 	};
-	return () => {
-		globalThis.fetch = originalFetch;
-	};
+	return () => { axios.get = originalGet; };
 }
 
 function mockQueryResult(result, onLean) {
@@ -397,17 +386,12 @@ describe('oauth helpers', () => {
 		}
 	});
 
-	it('lets private_key_jwt metadata clients continue without an assertion for PKCE token exchange', async () => {
+	it('rejects private_key_jwt metadata clients without an assertion', async () => {
 		const { metadata } = await buildPrivateKeyJwtClient();
 		const restoreFetch = mockMetadataFetch(metadata);
 
 		try {
-			const client = await authenticateClientForToken({
-				clientId: metadata.client_id,
-			});
-
-			assert.equal(client.client_id, metadata.client_id);
-			assert.equal(client.token_endpoint_auth_method, 'private_key_jwt');
+			await assert.rejects(authenticateClientForToken({ clientId: metadata.client_id }), (err) => err.oauthError === 'invalid_client' && err.status === 401);
 		} finally {
 			restoreFetch();
 		}
@@ -589,4 +573,29 @@ describe('oauth helpers', () => {
 		assert.match(html, /OAuth consent/);
 		assert.match(html, /Only authorize access if you trust this application/);
 	});
+});
+
+it('rejects metadata hostnames resolving to private addresses without leaking the cause', async (t) => {
+	t.mock.method(dns, 'lookup', (hostname, options, callback) => callback(null, [{ address: '10.0.0.1', family: 4 }]));
+	await assert.rejects(authenticateClientForToken({ clientId: 'https://private-metadata.example/client.json' }), (err) => err.oauthError === 'invalid_client' && err.message === 'Failed to fetch client metadata');
+});
+
+it('bounds metadata cache entries and caps upstream cache lifetimes at one hour', async (t) => {
+	let now = Date.now();
+	let requests = 0;
+	t.mock.method(Date, 'now', () => now);
+	t.mock.method(axios, 'get', async (url) => {
+		requests++;
+		return { headers: { 'cache-control': 'max-age=999999999' }, data: JSON.stringify({ client_id: url, client_name: 'Cache test', redirect_uris: ['https://example.com/callback'], token_endpoint_auth_method: 'none' }) };
+	});
+	const clientId = 'https://cache.example/first.json';
+	await authenticateClientForToken({ clientId });
+	await authenticateClientForToken({ clientId });
+	assert.equal(requests, 1);
+	now += 60 * 60 * 1000 + 1;
+	await authenticateClientForToken({ clientId });
+	assert.equal(requests, 2);
+	for (let index = 0; index < 500; index++) await authenticateClientForToken({ clientId: `https://cache.example/${index}.json` });
+	await authenticateClientForToken({ clientId });
+	assert.equal(requests, 503);
 });
