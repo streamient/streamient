@@ -1,4 +1,4 @@
-import { getCachedJson, setCachedJson } from "./cache";
+import { clearCachedJson, getCachedJson, setCachedJson } from "./cache";
 import { refreshTokens } from "./auth";
 import type { BootstrapResponse, ChangesResponse, ChatConversation, ChatMessage, Project, RecordDetail, RecordsResponse, SearchResult, ServerOption, TokenSet, UploadSession } from "../types";
 
@@ -32,6 +32,7 @@ const remember = <K, V>(map: Map<K, V>, key: K, value: V, max: number) => { map.
 
 export class StreamientApi {
 	private cacheNamespace: string;
+	private cacheEnabled = true;
 	private lineage: Lineage;
 
 	constructor(private server: ServerOption, private tokens: TokenSet, private onTokens: (tokens: TokenSet | null) => void) {
@@ -113,13 +114,18 @@ export class StreamientApi {
 		return result as T;
 	}
 
+	clearCache() {
+		this.cacheEnabled = false;
+		clearCachedJson(this.cacheNamespace);
+	}
+
 	private async cached<T>(key: string, load: () => Promise<T>) {
 		try {
 			const value = await load();
-			await setCachedJson(this.cacheNamespace, key, value);
+			if (this.cacheEnabled) await setCachedJson(this.cacheNamespace, key, value);
 			return { offline: false, value };
 		} catch (error) {
-			const cached = await getCachedJson<T>(this.cacheNamespace, key);
+			const cached = this.cacheEnabled ? await getCachedJson<T>(this.cacheNamespace, key) : null;
 			if (cached && (!navigator.onLine || error instanceof TypeError)) return { offline: true, value: cached };
 			throw error;
 		}

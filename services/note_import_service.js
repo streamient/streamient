@@ -219,17 +219,13 @@ export async function appendChunk(userId, host_id, id, req) {
 	await ensureStorageAvailable(chunkDir(upload._id), maximumBytes);
 	const temporaryPath = path.join(chunkDir(upload._id), `${offset}.${crypto.randomUUID()}.tmp`);
 	const received = await hashAndStoreRequest(req, temporaryPath, maximumBytes);
-	if (!received.size && remaining) {
+	if (!received.size) {
 		await rm(temporaryPath, { force: true });
 		throw new NoteImportError('Chunk is empty', 400, 'empty_chunk');
 	}
 	if (!checksumMatches(checksum, received.hash)) {
 		await rm(temporaryPath, { force: true });
 		throw new NoteImportError('Chunk checksum mismatch', 460, 'checksum_mismatch');
-	}
-	if (received.size !== maximumBytes) {
-		await rm(temporaryPath, { force: true });
-		throw new NoteImportError(`Chunk must contain exactly ${maximumBytes} bytes`, 409, 'chunk_size_conflict');
 	}
 	if (offset + received.size > upload.total_bytes) {
 		await rm(temporaryPath, { force: true });

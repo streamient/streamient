@@ -36,3 +36,8 @@ export function loadDraft<T>(key: string): T | null {
 export function clearDraft(key: string) {
 	localStorage.removeItem(`streamient_draft:${key}`);
 }
+
+export function clearCachedJson(namespace: string) {
+	const prefix = `${PREFIX}${encodeURIComponent(namespace)}:`;
+	for (const key of Object.keys(localStorage)) if (key.startsWith(prefix)) localStorage.removeItem(key);
+}

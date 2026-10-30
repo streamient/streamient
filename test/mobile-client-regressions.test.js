@@ -10,7 +10,7 @@ function read(relativePath) {
 
 async function compile(src, globals = {}) {
 	const code = (await transform(src.replace(/^import .*\n/gm, ''), { loader: 'ts', format: 'cjs', target: 'es2022' })).code;
-	const context = vm.createContext({ module: { exports: {} }, console, URL, URLSearchParams, Headers, Response, Blob, TextDecoder, TextEncoder, DOMException, Error, TypeError, atob, btoa, crypto, navigator: { onLine: true }, ...globals });
+	const context = vm.createContext({ module: { exports: {} }, console, URL, URLSearchParams, Headers, Response, Blob, TextDecoder, TextEncoder, DOMException, Error, TypeError, atob, btoa, crypto, navigator: { onLine: true }, sessionApi: { current: null }, liveEvents: { current: new Map() }, feedLoad: { current: Promise.resolve() }, feedKey: { current: "P:all" }, setError: noop, ...globals });
 	vm.runInContext(code, context);
 	return { exports: context.module.exports, context };
 }
@@ -408,7 +408,7 @@ describe('Streamient Mobile client regressions', () => {
 		const sessionEpoch = { current: 0 };
 		let resolveRestore;
 		const start = app.indexOf('api.bootstrap().then(async (result) => {');
-		const end = app.indexOf('}).catch(');
+		const end = app.indexOf('}).catch(', start);
 		const body = app.slice(start + 'api.bootstrap().then(async (result) => {'.length, end);
 		const { exports: f } = await compile('async function chain(result) {' + body + '\n}\nexport { chain };', {
 			canceled: false, epoch: 0, sessionEpoch, server: serverA,
@@ -487,7 +487,7 @@ describe('Streamient Mobile client regressions', () => {
 		const sessionEpoch = { current: 0 };
 		const base = {
 			sessionEpoch, activeProjectId: 'P', filter: 'all',
-			refreshCounts: noop, applyChanges: noop, setUploads: noop,
+			refreshCounts: async () => {}, applyChanges: async () => {}, setUploads: noop,
 			upsertRecord: (items, rec) => [rec, ...items.filter((item) => item.key !== rec.key)],
 		};
 		const start = app.indexOf('realtimeEventHandler.current = (event, payload) => {');
@@ -653,4 +653,123 @@ describe('Streamient Mobile client regressions', () => {
 		assert.deepEqual(events, ['connection:reconnected']);
 		stop();
 	});
+});
+it('renewed tokens persist without resetting React session state or API identity', async () => {
+	let tokens = { access_token: 'old', refresh_token: 'old' };
+	let api;
+	let dependencies;
+	let constructions = 0;
+	const saved = [];
+	const globals = {
+		server: serverA, tokens, sessionEpoch: { current: 0 },
+		setTokens: () => assert.fail('renewal must not reset session state'),
+		resetSessionState: async () => assert.fail('renewal must not sign out'),
+		saveTokens: async (value) => saved.push(value), useCallback: (fn) => fn,
+		useMemo: (fn, deps) => { if (!dependencies || deps.some((value, index) => value !== dependencies[index])) { api = fn(); dependencies = deps; } return api; },
+		StreamientApi: class { constructor(server, value, onTokens) { constructions++; this.onTokens = onTokens; } },
+	};
+	const { exports: f } = await compile(block('const handleTokens = useCallback', 'const activeProject =') + '\nexport { api };', globals);
+	const original = f.api;
+	original.onTokens({ access_token: 'new', refresh_token: 'new' });
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.equal(saved[0].access_token, 'new');
+	assert.equal(constructions, 1);
+	assert.equal(f.api, original);
+});
+
+it('signout clears only its cache and pending requests cannot repopulate it', async () => {
+	const values = { unrelated: 'keep' };
+	const localStorage = { getItem: (key) => values[key] ?? null, setItem: (key, value) => { localStorage[key] = values[key] = value; }, removeItem: (key) => { delete values[key]; delete localStorage[key]; } };
+	const { exports: cache } = await compile(read('apps/mobile/src/lib/cache.ts'), { localStorage });
+	await cache.setCachedJson('other', 'bootstrap', 'keep');
+	let release;
+	const { exports: { StreamientApi } } = await compile(read('apps/mobile/src/lib/api.ts'), { ...cache, fetch: () => new Promise((resolve) => { release = () => resolve(Response.json({ private: true })); }) });
+	const api = new StreamientApi(serverA, { access_token: 'opaque' }, noop);
+	await cache.setCachedJson('https://a.example:unknown', 'records', 'private');
+	const pending = api.bootstrap();
+	api.clearCache();
+	release();
+	await pending;
+	assert.equal(await cache.getCachedJson('https://a.example:unknown', 'records'), null);
+	assert.equal(await cache.getCachedJson('https://a.example:unknown', 'bootstrap'), null);
+	assert.equal(await cache.getCachedJson('other', 'bootstrap'), 'keep');
+});
+
+it('live create and delete wait for the initial snapshot; older reads cannot resurrect deletion', async () => {
+	let releaseFeed;
+	let releaseRecord;
+	const feedLoad = { current: new Promise((resolve) => { releaseFeed = resolve; }) };
+	let records = [];
+	let reads = 0;
+	const handler = { current: null };
+	await compile(block('function upsertRecord(', '\nfunction relativeTime') + block('realtimeEventHandler.current =', '\n\tconst realtimeHostId') + '\n', {
+		api: { record: async () => { reads++; return new Promise((resolve) => { releaseRecord = resolve; }); } },
+		feedLoad, sessionEpoch: { current: 0 }, activeProjectId: 'P', filter: 'all', realtimeEventHandler: handler,
+		refreshCounts: async () => {}, applyChanges: async () => {}, setUploads: noop,
+		setRecords: (fn) => { records = fn(records); },
+	});
+	handler.current('note:created', { id: 'live' });
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.equal(reads, 0);
+	records = [record('snapshot')];
+	releaseFeed();
+	await new Promise((resolve) => setImmediate(resolve));
+	handler.current('note:deleted', { id: 'live' });
+	await new Promise((resolve) => setImmediate(resolve));
+	releaseRecord({ record: record('live') });
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.deepEqual(records.map((item) => item.id), ['snapshot']);
+});
+
+it('upload pieces stay within 4 MB and resume at arbitrary confirmed offsets', async () => {
+	const lengths = [];
+	const start = 123;
+	const session = { id: 'u', state: 'uploading', upload_length: 8_000_130, chunk_size: 20_000_000 };
+	const { exports: uploads } = await compile(read('apps/mobile/src/lib/uploads.ts'));
+	const api = { uploadStatus: async () => ({ state: 'uploading', upload_offset: start, chunk_size: 20_000_000 }), uploadChunk: async (id, offset, total, digest, blob) => { lengths.push([offset, blob.size]); return offset + blob.size; }, completeUpload: async () => ({ upload: { ...session, state: 'processing' } }) };
+	await uploads.uploadWithResume(api, session, new Blob([new Uint8Array(session.upload_length)]), noop);
+	assert.deepEqual(lengths, [[123, 4_000_000], [4_000_123, 4_000_000], [8_000_123, 7]]);
+	await assert.rejects(uploads.uploadWithResume(api, session, new Blob(['short']), noop), /ended before/);
+});
+
+it('copied file cleanup keeps registry for retry when removal fails', async () => {
+	const values = new Map();
+	const localStorage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: (key) => values.delete(key) };
+	let failure = true;
+	let removed = 0;
+	const { exports: uploads } = await compile(read('apps/mobile/src/lib/uploads.ts'), { localStorage, removeSharedFile: async () => { if (failure) throw new Error('busy'); removed++; } });
+	await uploads.rememberUpload('ns', 'local', { id: 'u' }, { uri: 'file:///copy', name: 'copy', mimeType: 'text/plain' }, 'copy', 'text/plain');
+	await assert.rejects(uploads.forgetUpload('ns', 'local'), /busy/);
+	assert.equal((await uploads.restoreUploads('ns')).length, 1);
+	failure = false;
+	await uploads.forgetUpload('ns', 'local');
+	assert.equal(removed, 1);
+	assert.equal((await uploads.restoreUploads('ns')).length, 0);
+});
+
+it('live creation lands after the snapshot without replacing its other records', async () => {
+	let release;
+	let records = [];
+	const handler = { current: null };
+	await compile(block('function upsertRecord(', '\nfunction relativeTime') + block('realtimeEventHandler.current =', '\n\tconst realtimeHostId'), {
+		api: { record: async () => ({ record: record('live') }) },
+		feedLoad: { current: new Promise((resolve) => { release = resolve; }) }, sessionEpoch: { current: 0 }, activeProjectId: 'P', filter: 'all', realtimeEventHandler: handler,
+		refreshCounts: async () => {}, applyChanges: async () => {}, setUploads: noop, setRecords: (fn) => { records = fn(records); },
+	});
+	handler.current('note:created', { id: 'live' });
+	records = [record('snapshot')];
+	release();
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.deepEqual(Array.from(records, (item) => item.id).sort(), ['live', 'snapshot']);
+});
+
+it('native cleanup is limited to app-owned iOS share copies', async () => {
+	const removed = [];
+	const { exports: native } = await compile(read('apps/mobile/src/lib/nativeFile.ts'), { Capacitor: { getPlatform: () => 'android' }, registerPlugin: () => ({ removeSharedFile: async (options) => removed.push(options) }) });
+	await native.removeSharedFile('content://original');
+	assert.equal(removed.length, 0);
+	const swift = read('apps/mobile/ios/App/App/StreamientFileReaderPlugin.swift');
+	assert.match(swift, /resolvingSymlinksInPath\(\)/);
+	assert.match(swift, /folder.deletingLastPathComponent\(\) == incoming, UUID\(uuidString: folder.lastPathComponent\) != nil/);
+	assert.match(swift, /fileExists\(atPath: url.path\)/);
 });

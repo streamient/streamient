@@ -86,3 +86,7 @@ The npm package requires Node.js 24 or newer:
 node --version
 streamient-cli --version
 ```
+
+## Piping output
+
+Commands exit quietly when a consumer such as `head` closes its input early. Other output errors still fail the command.

@@ -13,6 +13,7 @@ import { StreamientApi } from "./lib/api";
 import { beginOAuth, clearAuth, exchangeCode, listenForOAuthCallbacks, loadPendingServer, loadSelectedServer, loadTokens, parseOAuthCallback, saveTokens } from "./lib/auth";
 import { clearDraft, loadDraft, saveDraft } from "./lib/cache";
 import { APP_VERSION, HOSTED_SERVER } from "./lib/config";
+import { removeSharedFile } from "./lib/nativeFile";
 import { startRealtime } from "./lib/realtime";
 import { clearPendingShare, listenForShares, loadPendingShare, sharedTextKind } from "./lib/shareTarget";
 import { forgetUpload, rememberUpload, restoreUploads, sourceSize, updateRememberedUpload, uploadNamespace, uploadWithResume, waitForProcessing, type UploadSource } from "./lib/uploads";
@@ -80,7 +81,7 @@ function BrandHomeButton({ onClick }: { onClick: () => void }) {
 
 function openExternal(event: MouseEvent<HTMLAnchorElement>) {
 	event.preventDefault();
-	void Browser.open({ url: event.currentTarget.href });
+	void Browser.open({ url: event.currentTarget.href }).catch((error) => Swal.fire({ icon: "error", title: "Could not open link", text: String(error) }));
 }
 
 export function App() {
@@ -123,6 +124,8 @@ export function App() {
 	const [conversations, setConversations] = useState<ChatConversation[]>([]);
 	const [historyDrawer, setHistoryDrawer] = useState(false);
 	const [appearance, setAppearance] = useState(localStorage.getItem("streamient_appearance") || "system");
+	const sessionApi = useRef<StreamientApi | null>(null);
+	const liveEvents = useRef(new Map<string, object>());
 	const uploadControllers = useRef(new Map<string, AbortController>());
 	const bootstrapRef = useRef<BootstrapResponse | null>(null);
 	const activeProjectIdRef = useRef("");
@@ -142,6 +145,7 @@ export function App() {
 		detailSeq.current++;
 		for (const controller of uploadControllers.current.values()) controller.abort();
 		uploadControllers.current.clear();
+		sessionApi.current?.clearCache();
 		await clearAuth();
 		setTokens(null);
 		setBootstrap(null);
@@ -175,17 +179,17 @@ export function App() {
 
 	const handleTokens = useCallback((next: TokenSet | null) => {
 		if (next) {
-			setTokens(next);
-			void saveTokens(next);
+			// The API owns renewed tokens; changing login state would restart session effects.
+			void saveTokens(next).catch((error) => setError(error instanceof Error ? error.message : "Could not save renewed sign-in"));
 		} else {
-			void resetSessionState();
+			void resetSessionState().catch((error) => setError(String(error)));
 		}
 	}, [resetSessionState]);
 
 	const api = useMemo(() => {
 		if (!tokens) return null;
 		const epoch = sessionEpoch.current;
-		return new StreamientApi(server, tokens, (next) => {
+		return sessionApi.current = new StreamientApi(server, tokens, (next) => {
 			if (epoch !== sessionEpoch.current) return;
 			handleTokens(next);
 		});
@@ -235,7 +239,7 @@ export function App() {
 					setLoginLoading(true);
 					await finishCallback(window.location.href, pendingServer || selectedServer);
 				} else setTokens(storedTokens);
-				removeCallback = listenForOAuthCallbacks((url) => void loadPendingServer().then((callbackServer) => finishCallback(url, callbackServer || selectedServer)));
+				removeCallback = listenForOAuthCallbacks((url) => void loadPendingServer().then((callbackServer) => finishCallback(url, callbackServer || selectedServer)).catch((error) => setError(String(error))));
 			} catch (restoreError) {
 				console.error("Streamient Mobile authentication restore failed:", restoreError);
 				setServer(HOSTED_SERVER);
@@ -250,7 +254,7 @@ export function App() {
 
 	useEffect(() => {
 		let removeShare = () => undefined;
-		void listenForShares((share) => { if (bootstrapRef.current) void openSharedContent(share, activeProjectIdRef.current || bootstrapRef.current.projects[0]?.id || ""); }).then((remove) => { removeShare = remove; });
+		void listenForShares((share) => { if (bootstrapRef.current) void openSharedContent(share, activeProjectIdRef.current || bootstrapRef.current.projects[0]?.id || ""); }).then((remove) => { removeShare = remove; }).catch((error) => setError(String(error)));
 		return () => removeShare();
 	}, []);
 
@@ -260,9 +264,9 @@ export function App() {
 
 	useEffect(() => {
 		let networkListener: { remove: () => Promise<void> } | null = null;
-		void Network.getStatus().then(({ connected }) => setOnline(connected));
-		void Network.addListener("networkStatusChange", ({ connected }) => setOnline(connected)).then((listener) => { networkListener = listener; });
-		return () => { void networkListener?.remove(); };
+		void Network.getStatus().then(({ connected }) => setOnline(connected)).catch((error) => setError(String(error)));
+		void Network.addListener("networkStatusChange", ({ connected }) => setOnline(connected)).then((listener) => { networkListener = listener; }).catch((error) => setError(String(error)));
+		return () => { void networkListener?.remove().catch((error) => setError(String(error))); };
 	}, []);
 
 	useEffect(() => {
@@ -360,8 +364,8 @@ export function App() {
 
 	realtimeEventHandler.current = (event, payload) => {
 		if (!api) return;
-		if (event === "counts:refresh") { void refreshCounts(); return; }
-		if (event === "connection:reconnected") { void applyChanges(); return; }
+		if (event === "counts:refresh") { void refreshCounts().catch((error) => setError(String(error))); return; }
+		if (event === "connection:reconnected") { void applyChanges().catch((error) => setError(String(error))); return; }
 		if (event.startsWith("note-import:")) {
 			const id = String(payload.id || "");
 			setUploads((current) => current.map((item) => item.session.id === id ? { ...item, session: payload as unknown as UploadSession } : item));
@@ -371,15 +375,21 @@ export function App() {
 		if (!match) return;
 		const type = ({ note: "notes", memory: "memories", url: "urls", email: "emails" } as const)[match[1] as "note" | "memory" | "url" | "email"];
 		const id = String(payload._id || payload.id || "");
-		if (match[2] === "deleted") setRecords((current) => current.filter((item) => item.key !== `${type}:${id}`));
-		else if (id) {
-			const epoch = sessionEpoch.current;
-			void api.record(type, id).then(({ record }) => {
-				if (epoch !== sessionEpoch.current) return;
+		const epoch = sessionEpoch.current;
+		const key = `${type}:${id}`;
+		const version = {};
+		liveEvents.current.set(key, version);
+		void (async () => {
+			for (let pending: Promise<void> | null = null; pending !== feedLoad.current;) { pending = feedLoad.current; await pending; }
+			if (epoch !== sessionEpoch.current || feedKey.current !== `${activeProjectId}:${filter}`) return;
+			if (match[2] === "deleted") setRecords((current) => current.filter((item) => item.key !== key));
+			else if (id) {
+				const { record } = await api.record(type, id);
+				if (epoch !== sessionEpoch.current || liveEvents.current.get(key) !== version || feedKey.current !== `${activeProjectId}:${filter}`) return;
 				setRecords((current) => (epoch === sessionEpoch.current ? upsertRecord(current, record, activeProjectId, filter) : current));
-			}).catch(() => undefined);
-		}
-		void refreshCounts();
+			}
+		})().catch((error) => setError(String(error))).finally(() => { if (liveEvents.current.get(key) === version) liveEvents.current.delete(key); });
+		void refreshCounts().catch((error) => setError(String(error)));
 	};
 
 	const realtimeHostId = bootstrap?.account.host_id || "";
@@ -410,8 +420,10 @@ export function App() {
 		if (mode === "file") setFileDraft({ source: null, name: "", mimeType: "", projectId: activeProjectId });
 	}
 
-	function closeAdd() {
-		void clearPendingShare();
+	function closeAdd(preserveSource = false) {
+		if (!preserveSource && fileDraft.source && !(fileDraft.source instanceof Blob)) void removeSharedFile(fileDraft.source.uri).catch((error) => setError(String(error)));
+		setFileDraft({ source: null, name: "", mimeType: "", projectId: "" });
+		void clearPendingShare().catch((error) => setError(String(error)));
 		setAddDrawer(false);
 		setAddMode("chooser");
 	}
@@ -458,25 +470,27 @@ export function App() {
 
 	const updateUpload = useCallback((localId: string, session: UploadSession) => {
 		setUploads((current) => current.map((item) => item.localId === localId ? { ...item, session, paused: false } : item));
-		void updateRememberedUpload(uploadNamespaceRef.current, localId, session);
+		void updateRememberedUpload(uploadNamespaceRef.current, localId, session).catch((error) => setError(String(error)));
 	}, []);
 
 	async function runUpload(item: UploadUi) {
 		if (!api || !item.source || !online) return;
 		const source = item.source;
 		const epoch = sessionEpoch.current;
+		const namespace = uploadNamespaceRef.current;
 		const controller = new AbortController();
 		uploadControllers.current.set(item.localId, controller);
 		setUploads((current) => current.map((currentItem) => currentItem.localId === item.localId ? { ...currentItem, paused: false, manualPause: false } : currentItem));
 		try {
 			let session = item.session;
 			if (session.state === "failed") session = await api.uploadStatus(session.id);
-			if (session.state === "uploading") session = await uploadWithResume(api, session, source, (next) => updateUpload(item.localId, next), controller.signal);
-			if (session.state === "processing") session = await waitForProcessing(api, session, (next) => updateUpload(item.localId, next), controller.signal);
+			if (session.state === "uploading") session = await uploadWithResume(api, session, source, (next) => { if (epoch === sessionEpoch.current) updateUpload(item.localId, next); }, controller.signal);
+			if (session.state === "processing") session = await waitForProcessing(api, session, (next) => { if (epoch === sessionEpoch.current) updateUpload(item.localId, next); }, controller.signal);
 			if (epoch !== sessionEpoch.current) return;
 			updateUpload(item.localId, session);
-			if (session.state === "complete") { await forgetUpload(uploadNamespaceRef.current, item.localId); await refreshCounts(); }
+			if (session.state === "complete") { await forgetUpload(namespace, item.localId); await refreshCounts(); }
 		} catch (uploadError) {
+			if (epoch !== sessionEpoch.current) return;
 			if ((uploadError as Error).name === "AbortError") setUploads((current) => current.map((currentItem) => currentItem.localId === item.localId ? { ...currentItem, paused: true } : currentItem));
 			else if (uploadError instanceof TypeError) setUploads((current) => current.map((currentItem) => currentItem.localId === item.localId ? { ...currentItem, paused: true, manualPause: true } : currentItem));
 			else setUploads((current) => current.map((currentItem) => currentItem.localId === item.localId ? { ...currentItem, session: { ...currentItem.session, state: "failed", error: uploadError instanceof Error ? uploadError.message : "Upload failed" }, paused: false } : currentItem));
@@ -508,7 +522,7 @@ export function App() {
 			if (epoch !== sessionEpoch.current) return;
 			setUploads((current) => [...current, item]);
 			setUploadTray(true);
-			closeAdd();
+			closeAdd(true);
 			await clearPendingShare();
 			void runUpload(item);
 		} catch (uploadError) {
@@ -605,7 +619,8 @@ export function App() {
 	async function selectConversation(conversation: ChatConversation) {
 		if (!api) return;
 		const epoch = sessionEpoch.current;
-		const result = await api.conversationMessages(conversation.conversation_id);
+		let result;
+		try { result = await api.conversationMessages(conversation.conversation_id); } catch (error) { setError(String(error)); return; }
 		if (epoch !== sessionEpoch.current) return;
 		setConversationId(conversation.conversation_id);
 		setChatMessages(result.messages);
@@ -684,21 +699,21 @@ export function App() {
 			if (epoch !== sessionEpoch.current) return;
 			applyBootstrap(result.value);
 			await loadFeed();
-		}} onSignOut={() => void signOut()} />}
+		}} onSignOut={() => void signOut().catch((error) => setError(String(error)))} />}
 
 		<BottomNav active={view} onProjects={() => setProjectDrawer(true)} onAdd={() => openAdd()} onAi={() => changeView("ai")} />
 
 		<Sheet open={projectDrawer} title="Switch project" onClose={() => setProjectDrawer(false)}>{bootstrap.projects.map((project) => <button key={project.id} className="project-row" onClick={() => chooseProject(project.id)}><span className="project-icon" style={{ background: `${project.color}20`, color: project.color }}><Icon name="folder" /></span><span className="project-info"><strong>{project.name}</strong><small>{countTotal(project)} records · {project.counts.notes} notes · {project.counts.memories} memories · {project.counts.urls} URLs{project.counts.emails === undefined ? "" : ` · ${project.counts.emails} emails`}</small></span>{project.id === activeProjectId && <Icon name="check_circle" className="check" />}</button>)}</Sheet>
 
-		<Sheet open={addDrawer} title={addMode === "chooser" ? "Add to Streamient" : addMode === "note" ? noteDraft.id ? "Edit note" : "New note" : addMode === "url" ? "Save URL" : "Import document"} onClose={closeAdd} wide={addMode === "note"}>
+		<Sheet open={addDrawer} title={addMode === "chooser" ? "Add to Streamient" : addMode === "note" ? noteDraft.id ? "Edit note" : "New note" : addMode === "url" ? "Save URL" : "Import document"} onClose={() => closeAdd()} wide={addMode === "note"}>
 			{addMode === "chooser" && <div className="add-options"><button onClick={() => openAdd("note")}><span className="option-icon note"><Icon name="edit_note" /></span><span><strong>Note</strong><small>Write with the rich-text editor</small></span><Icon name="chevron_right" /></button><button onClick={() => openAdd("url")}><span className="option-icon url"><Icon name="link" /></span><span><strong>URL</strong><small>Save a web page to a project</small></span><Icon name="chevron_right" /></button><button onClick={() => openAdd("file")}><span className="option-icon file"><Icon name="upload_file" /></span><span><strong>Import document</strong><small>PDF, Word, text, Markdown, and more</small></span><Icon name="chevron_right" /></button></div>}
-			{addMode === "note" && <NoteForm draft={noteDraft} projects={bootstrap.projects} saving={saving} onChange={(next) => { setNoteDraft(next); saveDraft(draftKey(server, bootstrap.user._id, next.id), next); }} onCancel={closeAdd} onSave={() => void saveNote()} />}
-			{addMode === "url" && <UrlForm draft={urlDraft} projects={bootstrap.projects} saving={saving} onChange={setUrlDraft} onCancel={closeAdd} onSave={() => void saveUrl()} />}
-			{addMode === "file" && <FileForm draft={fileDraft} projects={bootstrap.projects} saving={saving} onChange={setFileDraft} onCancel={closeAdd} onSave={() => void startFileUpload()} />}
+			{addMode === "note" && <NoteForm draft={noteDraft} projects={bootstrap.projects} saving={saving} onChange={(next) => { setNoteDraft(next); saveDraft(draftKey(server, bootstrap.user._id, next.id), next); }} onCancel={() => closeAdd()} onSave={() => void saveNote()} />}
+			{addMode === "url" && <UrlForm draft={urlDraft} projects={bootstrap.projects} saving={saving} onChange={setUrlDraft} onCancel={() => closeAdd()} onSave={() => void saveUrl()} />}
+			{addMode === "file" && <FileForm draft={fileDraft} projects={bootstrap.projects} saving={saving} onChange={setFileDraft} onCancel={() => closeAdd()} onSave={() => void startFileUpload()} />}
 		</Sheet>
 
 		<Sheet open={!!detail || detailLoading} title={detail?.title || "Record"} onClose={closeDetail} wide>{detailLoading && !detail ? <RecordSkeleton /> : detail && <RecordView record={detail} onEdit={editDetail} />}</Sheet>
-		<UploadTray open={uploadTray} uploads={uploads} onClose={() => setUploadTray(false)} onPause={(item) => { setUploads((current) => current.map((value) => value.localId === item.localId ? { ...value, paused: true, manualPause: true } : value)); uploadControllers.current.get(item.localId)?.abort(); }} onResume={(item) => void runUpload(item)} onCancel={async (item) => { if (!api) return; uploadControllers.current.get(item.localId)?.abort(); await api.cancelUpload(item.session.id).catch(() => undefined); await forgetUpload(uploadNamespaceRef.current, item.localId); setUploads((current) => current.filter((value) => value.localId !== item.localId)); }} />
+		<UploadTray open={uploadTray} uploads={uploads} onClose={() => setUploadTray(false)} onPause={(item) => { setUploads((current) => current.map((value) => value.localId === item.localId ? { ...value, paused: true, manualPause: true } : value)); uploadControllers.current.get(item.localId)?.abort(); }} onResume={(item) => void runUpload(item)} onCancel={async (item) => { if (!api) return; uploadControllers.current.get(item.localId)?.abort(); try { await api.cancelUpload(item.session.id); await forgetUpload(uploadNamespaceRef.current, item.localId); setUploads((current) => current.filter((value) => value.localId !== item.localId)); } catch (error) { setError(String(error)); } }} />
 		<Sheet open={historyDrawer} title="AI history" onClose={() => setHistoryDrawer(false)}>{conversations.length ? conversations.map((conversation) => <button className="history-row" key={conversation.conversation_id} onClick={() => void selectConversation(conversation)}><Icon name="chat_bubble" /><span><strong>{conversation.title}</strong><small>{new Date(conversation.timestamp).toLocaleDateString()}</small></span><Icon name="chevron_right" /></button>) : <div className="empty-mini">No previous conversations</div>}</Sheet>
 	</div>;
 }
@@ -752,7 +767,7 @@ function SettingsScreen({ bootstrap, server, appearance, setAppearance, onBack, 
 	const [timezone, setTimezone] = useState(bootstrap.user.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
 	const [timeFormat, setTimeFormat] = useState(bootstrap.user.time_format || "12-hour");
 	const [busy, setBusy] = useState(false);
-	return <><header className="top-bar"><button aria-label="Back to records" className="icon-button" onClick={onBack} type="button"><Icon name="arrow_back" /></button><h1>Settings</h1><span className="top-spacer" /></header><main className="content settings-content"><section className="profile-card"><span className="large-avatar">{initials(bootstrap.user.name)}</span><div><strong>{bootstrap.user.name}</strong><small>{bootstrap.user.email}</small></div></section><section className="settings-section"><h2>Profile</h2><div className="form-group"><label htmlFor="settings-name">Name</label><input id="settings-name" className="form-control" value={name} onChange={(event) => setName(event.target.value)} /></div><div className="form-group"><label htmlFor="settings-timezone">Timezone</label><input id="settings-timezone" className="form-control" value={timezone} onChange={(event) => setTimezone(event.target.value)} /></div><div className="form-group"><label htmlFor="settings-time-format">Time format</label><select id="settings-time-format" className="form-control" value={timeFormat} onChange={(event) => setTimeFormat(event.target.value as "12-hour" | "24-hour")}><option value="12-hour">12-hour</option><option value="24-hour">24-hour</option></select></div><button className="button primary settings-save" disabled={busy} onClick={async () => { setBusy(true); try { await onSave({ name, timezone, time_format: timeFormat }); } finally { setBusy(false); } }}>Save profile</button></section><section className="settings-section"><h2>Appearance</h2><div className="segmented">{["system", "light", "dark"].map((value) => <button className={appearance === value ? "active" : ""} key={value} onClick={() => setAppearance(value)}><Icon name={value === "system" ? "devices" : value === "light" ? "light_mode" : "dark_mode"} />{value[0].toUpperCase() + value.slice(1)}</button>)}</div></section><section className="settings-section"><h2>Connection</h2><div className="settings-row"><Icon name="dns" /><span><strong>Server</strong><small>{server.baseUrl}</small></span><Icon name="verified" className="connected" /></div><button className="settings-row button-row" onClick={() => void onRefresh()}><Icon name="sync" /><span><strong>Refresh data</strong><small>Sync projects and records now</small></span><Icon name="chevron_right" /></button></section><section className="settings-section"><h2>About</h2><a className="settings-row" href="https://streamient.com/support" target="_blank" rel="noreferrer"><Icon name="help" /><span><strong>Support</strong></span><Icon name="open_in_new" /></a><a className="settings-row" href="https://streamient.com/privacy" target="_blank" rel="noreferrer"><Icon name="privacy_tip" /><span><strong>Privacy</strong></span><Icon name="open_in_new" /></a><div className="settings-row"><Icon name="info" /><span><strong>Version</strong></span><small>{APP_VERSION}</small></div></section><button className="button danger full" onClick={onSignOut}><Icon name="logout" /> Sign out</button><footer aria-label="Other apps" className="settings-family"><small>Built by the team behind:</small><ul>{FAMILY_APPS.map((app) => <li key={app.name}><a href={app.href} onClick={openExternal} rel="noreferrer" target="_blank">{app.name}</a><span> - {app.description}</span></li>)}</ul></footer></main></>;
+	return <><header className="top-bar"><button aria-label="Back to records" className="icon-button" onClick={onBack} type="button"><Icon name="arrow_back" /></button><h1>Settings</h1><span className="top-spacer" /></header><main className="content settings-content"><section className="profile-card"><span className="large-avatar">{initials(bootstrap.user.name)}</span><div><strong>{bootstrap.user.name}</strong><small>{bootstrap.user.email}</small></div></section><section className="settings-section"><h2>Profile</h2><div className="form-group"><label htmlFor="settings-name">Name</label><input id="settings-name" className="form-control" value={name} onChange={(event) => setName(event.target.value)} /></div><div className="form-group"><label htmlFor="settings-timezone">Timezone</label><input id="settings-timezone" className="form-control" value={timezone} onChange={(event) => setTimezone(event.target.value)} /></div><div className="form-group"><label htmlFor="settings-time-format">Time format</label><select id="settings-time-format" className="form-control" value={timeFormat} onChange={(event) => setTimeFormat(event.target.value as "12-hour" | "24-hour")}><option value="12-hour">12-hour</option><option value="24-hour">24-hour</option></select></div><button className="button primary settings-save" disabled={busy} onClick={async () => { setBusy(true); try { await onSave({ name, timezone, time_format: timeFormat }); } catch (error) { void Swal.fire({ icon: "error", title: "Profile not saved", text: String(error) }); } finally { setBusy(false); } }}>Save profile</button></section><section className="settings-section"><h2>Appearance</h2><div className="segmented">{["system", "light", "dark"].map((value) => <button className={appearance === value ? "active" : ""} key={value} onClick={() => setAppearance(value)}><Icon name={value === "system" ? "devices" : value === "light" ? "light_mode" : "dark_mode"} />{value[0].toUpperCase() + value.slice(1)}</button>)}</div></section><section className="settings-section"><h2>Connection</h2><div className="settings-row"><Icon name="dns" /><span><strong>Server</strong><small>{server.baseUrl}</small></span><Icon name="verified" className="connected" /></div><button className="settings-row button-row" onClick={() => void onRefresh().catch((error) => Swal.fire({ icon: "error", title: "Refresh failed", text: String(error) }))}><Icon name="sync" /><span><strong>Refresh data</strong><small>Sync projects and records now</small></span><Icon name="chevron_right" /></button></section><section className="settings-section"><h2>About</h2><a className="settings-row" href="https://streamient.com/support" target="_blank" rel="noreferrer"><Icon name="help" /><span><strong>Support</strong></span><Icon name="open_in_new" /></a><a className="settings-row" href="https://streamient.com/privacy" target="_blank" rel="noreferrer"><Icon name="privacy_tip" /><span><strong>Privacy</strong></span><Icon name="open_in_new" /></a><div className="settings-row"><Icon name="info" /><span><strong>Version</strong></span><small>{APP_VERSION}</small></div></section><button className="button danger full" onClick={onSignOut}><Icon name="logout" /> Sign out</button><footer aria-label="Other apps" className="settings-family"><small>Built by the team behind:</small><ul>{FAMILY_APPS.map((app) => <li key={app.name}><a href={app.href} onClick={openExternal} rel="noreferrer" target="_blank">{app.name}</a><span> - {app.description}</span></li>)}</ul></footer></main></>;
 }
 
 function UploadTray({ open, uploads, onClose, onPause, onResume, onCancel }: { open: boolean; uploads: UploadUi[]; onClose: () => void; onPause: (item: UploadUi) => void; onResume: (item: UploadUi) => void; onCancel: (item: UploadUi) => void }) {

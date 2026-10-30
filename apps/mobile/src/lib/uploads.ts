@@ -1,5 +1,5 @@
 import type { StreamientApi } from "./api";
-import { uriChunk, uriSize } from "./nativeFile";
+import { removeSharedFile, uriChunk, uriSize } from "./nativeFile";
 import type { ServerOption, UploadSession } from "../types";
 
 export type UploadSource = Blob | { uri: string; name: string; mimeType: string };
@@ -130,7 +130,10 @@ export async function updateRememberedUpload(namespace: string, localId: string,
 }
 
 export async function forgetUpload(namespace: string, localId: string) {
-	saveRegistry(namespace, registry(namespace).filter((item) => item.local_id !== localId));
+	const items = registry(namespace);
+	const item = items.find((entry) => entry.local_id === localId);
+	if (item?.uri) await removeSharedFile(item.uri);
+	saveRegistry(namespace, items.filter((item) => item.local_id !== localId));
 	await removeBlob(localId).catch(() => undefined);
 }
 
@@ -138,6 +141,7 @@ export async function restoreUploads(namespace: string, validateUpload?: (sessio
 	await migrateLegacyUploads(namespace, validateUpload);
 	const result: { saved: SavedUpload; source: UploadSource | null }[] = [];
 	for (const saved of registry(namespace)) {
+		if (["complete", "canceled"].includes(saved.session.state)) { await forgetUpload(namespace, saved.local_id); continue; }
 		const source = saved.source_kind === "uri" && saved.uri ? { uri: saved.uri, name: saved.name, mimeType: saved.mime_type } : await loadBlob(saved.local_id);
 		result.push({ saved, source });
 	}
@@ -150,9 +154,12 @@ export async function uploadWithResume(api: StreamientApi, session: UploadSessio
 	if (status.state !== "uploading") return api.uploadStatus(session.id);
 	while (offset < session.upload_length) {
 		if (signal?.aborted) throw new DOMException("Upload paused", "AbortError");
-		const chunk = await sourceChunk(source, offset, Math.min(session.chunk_size, session.upload_length - offset));
-		if (!chunk.size) throw new Error("The shared file ended before its expected size");
-		offset = await api.uploadChunk(session.id, offset, session.upload_length, await checksum(chunk), chunk, signal);
+		const length = Math.min(4_000_000, status.chunk_size || session.chunk_size, session.upload_length - offset);
+		const chunk = await sourceChunk(source, offset, length);
+		if (chunk.size !== length) throw new Error("The shared file ended before its expected size");
+		const nextOffset = await api.uploadChunk(session.id, offset, session.upload_length, await checksum(chunk), chunk, signal);
+		if (nextOffset !== offset + chunk.size) throw new Error("The server returned an unexpected upload offset");
+		offset = nextOffset;
 		session = { ...session, upload_offset: offset, state: "uploading", updated_at: new Date().toISOString() };
 		onUpdate(session);
 	}

@@ -33,10 +33,10 @@ describe('Streamient Mobile source contracts', () => {
 		assert.doesNotMatch(app, /startRealtime\(api, server, bootstrap/);
 		assert.match(uploads, /indexedDB\.open/);
 		assert.match(uploads, /api\.uploadStatus\(session\.id, true\)/);
-		assert.match(uploads, /Math\.min\(session\.chunk_size/);
+		assert.match(uploads, /Math\.min\(4_000_000, status\.chunk_size/);
 		assert.match(shares, /PENDING_SHARE_KEY/);
 		assert.match(app, /loadPendingShare\(\)/);
-		assert.match(app, /function closeAdd\(\)[\s\S]*clearPendingShare\(\)/);
+		assert.match(app, /function closeAdd\(preserveSource = false\)[\s\S]*clearPendingShare\(\)/);
 	});
 
 	it('configures TipTap link support once through StarterKit', () => {

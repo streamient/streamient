@@ -109,6 +109,6 @@ export async function refreshTokens(server: ServerOption, refreshToken: string) 
 
 export function listenForOAuthCallbacks(callback: (url: string) => void) {
 	const handle = (url: string) => { if (url.startsWith(NATIVE_REDIRECT_URI) || url.startsWith(WEB_REDIRECT_URI)) callback(url); };
-	const subscription = App.addListener("appUrlOpen", ({ url }) => handle(url));
-	return () => void subscription.then((listener) => listener.remove());
+	const subscription = App.addListener("appUrlOpen", ({ url }) => handle(url)).catch((error) => { console.error("Unable to listen for sign-in links", error); return null; });
+	return () => void subscription.then((listener) => listener?.remove()).catch((error) => console.error("Unable to remove sign-in listener", error));
 }

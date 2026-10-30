@@ -100,10 +100,31 @@ describe('mobile resumable note imports', () => {
 		assert.equal(upload.chunks.length, 1);
 	});
 
-	it('requires exact 20 MB chunks except for the final remainder', async () => {
+	it('accepts variable pieces, exact retries, and verifies contiguous completion', async () => {
 		const partial = Buffer.from('hello');
-		await assert.rejects(appendChunk(userId, hostId, uploadId, uploadRequest(partial, 0, upload.total_bytes)), (err) => err.status === 409 && err.code === 'chunk_size_conflict');
+		const first = await appendChunk(userId, hostId, uploadId, uploadRequest(partial, 0, upload.total_bytes));
+		assert.equal(first.upload_offset, 5);
+		await appendChunk(userId, hostId, uploadId, uploadRequest(partial, 0, upload.total_bytes));
+		assert.equal(upload.chunks.length, 1);
+		const rest = Buffer.from(' world!');
+		await appendChunk(userId, hostId, uploadId, uploadRequest(rest, 5, upload.total_bytes));
+		assert.equal(upload.received_bytes, upload.total_bytes);
+		assert.deepEqual(upload.chunks.map(({ offset, size }) => [offset, size]), [[0, 5], [5, 7]]);
+	});
+
+	it('rejects empty pieces even at the completed offset', async () => {
+		upload.received_bytes = upload.total_bytes;
+		await assert.rejects(appendChunk(userId, hostId, uploadId, uploadRequest(Buffer.alloc(0), upload.total_bytes, upload.total_bytes)), (err) => err.code === 'empty_chunk');
+	});
+
+	it('retains 20 MB client compatibility and rejects oversized pieces', async () => {
+		upload.total_bytes = 20_000_001;
+		await assert.rejects(appendChunk(userId, hostId, uploadId, uploadRequest(Buffer.alloc(20_000_001), 0, upload.total_bytes)), (err) => err.code === 'chunk_too_large');
 		assert.equal(upload.received_bytes, 0);
+		const first = await appendChunk(userId, hostId, uploadId, uploadRequest(Buffer.alloc(20_000_000), 0, upload.total_bytes));
+		assert.equal(first.upload_offset, 20_000_000);
+		const last = await appendChunk(userId, hostId, uploadId, uploadRequest(Buffer.alloc(1), 20_000_000, upload.total_bytes));
+		assert.equal(last.upload_offset, upload.total_bytes);
 	});
 
 	it('rejects mismatched overlap and isolates sessions by tenant', async () => {
