@@ -530,7 +530,13 @@ export async function createCheckoutSession(user, options = {}) {
 		await userModel.updateOne({ _id: user._id, 'stripe_checkout_attempt.key': attempt.key }, { $unset: { stripe_checkout_attempt: '' } });
 		throw new Error('Checkout expired. Please try again.');
 	}
-	const session = await stripe.checkout.sessions.create(attempt.params, { idempotencyKey: attempt.key });
+	const created = await stripe.checkout.sessions.create(attempt.params, { idempotencyKey: attempt.key });
+	await userModel.updateOne({ _id: user._id, 'stripe_checkout_attempt.key': attempt.key }, { $set: { 'stripe_checkout_attempt.session_id': created.id } });
+	const session = await stripe.checkout.sessions.retrieve(created.id);
+	if (session.status === 'expired') {
+		await userModel.updateOne({ _id: user._id, 'stripe_checkout_attempt.key': attempt.key }, { $unset: { stripe_checkout_attempt: '' } });
+		throw new Error('Checkout expired. Please try again.');
+	}
 	if (session.status !== 'open' || !session.url) throw new Error('Checkout is already complete or expired. Please refresh billing.');
 	return session.url;
 	} finally { if (release) await release(); }

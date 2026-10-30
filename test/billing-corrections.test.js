@@ -41,7 +41,7 @@ function checkoutFixture() {
  const keys = [];
  const userModel = {
   findOneAndUpdate(filter, pipeline) { attempt ||= pipeline[0].$set.stripe_checkout_attempt.$ifNull[1].$literal; return { select() { return this; }, lean: async () => ({ stripe_checkout_attempt: attempt }) }; },
-  async updateOne(filter) { if (attempt.key === filter['stripe_checkout_attempt.key']) attempt = null; },
+  async updateOne(filter, update) { if (attempt?.key !== filter['stripe_checkout_attempt.key']) return; if (update.$unset) attempt = null; else attempt.session_id = update.$set['stripe_checkout_attempt.session_id']; },
  };
  const stripe = { subscriptions: { list: async () => ({ data: [], has_more: false }) }, checkout: { sessions: {
   list: async () => ({ data: [...remote.values()].filter(x => x.status === 'open'), has_more: false }),
@@ -63,7 +63,7 @@ test('sequential and concurrent checkout requests reserve one payable session', 
   assert.equal(await createCheckoutSession(user, fixture), urls[0]);
   const session = [...fixture.remote.values()][0];
   session.status = 'complete'; session.url = null;
-  await assert.rejects(createCheckoutSession(user, fixture), /complete or expired/);
+  await assert.rejects(createCheckoutSession(user, fixture), /complete/);
   assert.equal(fixture.remote.size, 1);
  } finally { config.stripe.proPriceId = old; }
 });
@@ -152,6 +152,23 @@ test('checkout adopts a preexisting open session and fences completion and expir
   [...fixture.remote.values()].find(x => x.id === 'cs_one').status = 'expired';
   fixture.attempt.params.expires_at = 0;
   await assert.rejects(createCheckoutSession(user, fixture), /expired/);
+  assert.equal(fixture.attempt, null);
+ } finally { config.stripe.proPriceId = old; }
+});
+
+test('created checkout ID is persisted and expired sessions are retrieved rather than replayed', async () => {
+ const old = config.stripe.proPriceId;
+ config.stripe.proPriceId = 'price_pro';
+ try {
+  const fixture = checkoutFixture();
+  const create = fixture.stripe.checkout.sessions.create;
+  fixture.stripe.checkout.sessions.create = async (...args) => structuredClone(await create(...args));
+  const user = { _id: 'owner', stripe_customer_id: 'cus_one' };
+  await createCheckoutSession(user, fixture);
+  assert.equal(fixture.attempt.session_id, 'cs_one');
+  [...fixture.remote.values()][0].status = 'expired';
+  await assert.rejects(createCheckoutSession(user, fixture), /expired/);
+  assert.equal(fixture.keys.length, 1);
   assert.equal(fixture.attempt, null);
  } finally { config.stripe.proPriceId = old; }
 });
