@@ -1001,7 +1001,7 @@ const swaggerSpec = {
                                 type: 'object',
                                 properties: {
                                     name: { type: 'string' },
-                                    email: { type: 'string', format: 'email' },
+                                    email: { type: 'string', format: 'email', description: 'Requests a single-use confirmation link at the new address. The current address stays active until confirmed within 15 minutes.' },
                                     timezone: { type: 'string', description: 'IANA timezone identifier. UTC is also accepted.', example: 'America/New_York' },
                                     avatar_style: { type: 'string', enum: avatarStyleValues, default: 'initials', description: 'Personal viewing preference for your own and team avatars.' }, time_format: { type: 'string', enum: ['12-hour', '24-hour'], description: 'Clock format to use for signed-in date and time displays.' },
                                 },
@@ -1010,7 +1010,7 @@ const swaggerSpec = {
                     },
                 },
                 responses: {
-                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { user: { $ref: '#/components/schemas/UserProfile' } } } } } },
+                    200: { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { user: { $ref: '#/components/schemas/UserProfile' }, email_change_pending: { type: 'boolean' } } } } } },
                     400: { description: 'Invalid profile payload', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
                     404: { description: 'User not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
                 },

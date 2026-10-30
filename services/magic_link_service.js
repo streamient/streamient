@@ -21,6 +21,7 @@ export async function isMagicLinkValid(token) {
 	if (typeof token !== 'string' || !token) return false;
 	const link = await MagicLink.findOne({
 		token,
+		$or: [{ purpose: 'login' }, { purpose: { $exists: false } }],
 		used: false,
 		expires_at: { $gt: new Date() },
 	}).select('_id');

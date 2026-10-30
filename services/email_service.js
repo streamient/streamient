@@ -124,6 +124,11 @@ export async function sendMagicLinkEmail(email, token, baseUrl = null) {
 	});
 }
 
+export async function sendEmailChangeEmail(email, token) {
+	const url = buildUrl(null, `/profile/email-confirm?token=${encodeURIComponent(token)}`);
+	return sendMail({ to: email, subject: 'Confirm your Streamient email address', text: `Confirm your new email address: ${url}\nThis link expires in 15 minutes. Sign in to the account that requested this change before confirming. If you did not request it, ignore this email.` });
+}
+
 export async function sendTeamInviteEmail(email, token, tenantName, inviterName, name) {
 	const url = `${config.appUrl}/team-invite?token=${encodeURIComponent(token)}`;
 	const { subject, html } = await resolveTemplate('team_invite');

@@ -1,3 +1,4 @@
+import { confirmEmailChange } from '../services/profile_email_service.js';
 import config from '../config.js';
 import csrfProtection from '../middleware/csrf.js';
 import { Tenant } from '../modules/tenancy.js';
@@ -9,7 +10,7 @@ import { queryForSave } from '../model/mongoose.js';
 import { User, compareUserPassword, toSafeUser } from '../model/user.js';
 import { applyTenantContextToSession, initializeSessionTenant } from '../modules/tenancy.js';
 import { ensureCollections } from '../modules/typesense.js';
-import { generateToken } from '../middleware/auth.js';
+import { generateToken, requireAuth } from '../middleware/auth.js';
 import { createAuthAttemptLimiter, getClientIp } from '../middleware/rate_limit.js';
 import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail, sendSignupNotificationEmail } from '../services/email_service.js';
 import { buildHostedTrialFields } from '../services/billing_service.js';
@@ -507,6 +508,22 @@ router.post('/magic-link', async (req, res) => {
 	} catch (err) {
 		log.error({ err, email: req.body?.email }, 'Magic link error');
 		res.status(500).json({ error: 'Failed to send magic link' });
+	}
+});
+
+router.get('/profile/email-confirm', requireAuth, (req, res) => {
+	res.set({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
+	res.render('auth/email_confirm', { token: asString(req.query.token) });
+});
+
+router.post('/profile/email-confirm', requireAuth, async (req, res) => {
+	res.set({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
+	try {
+		const user = await confirmEmailChange(asString(req.body.token), req.userId);
+		return res.status(user ? 200 : 400).render('auth/email_confirm', { complete: Boolean(user), error: user ? null : 'This link is invalid, expired, replaced, or the address is already in use. Sign in to the account that requested it or request a new link.' });
+	} catch (err) {
+		log.error({ err }, 'Email confirmation failed');
+		return res.status(500).render('auth/email_confirm', { error: 'Email confirmation failed. Please request a new link.' });
 	}
 });
 

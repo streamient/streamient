@@ -127,7 +127,7 @@ describe('profile API', () => {
 		try {
 			const response = await request(server, 'PUT', '/profile', {
 				name: 'Nitai',
-				email: 'NITAI@EXAMPLE.COM',
+				email: 'TEST@EXAMPLE.COM',
 				timezone: 'America/New_York',
 				time_format: '24-hour',
 			});
@@ -136,7 +136,7 @@ describe('profile API', () => {
 			assert.equal(response.status, 200);
 			assert.equal(profileUser.timezone, 'America/New_York');
 			assert.equal(profileUser.timezone_configured, true);
-			assert.equal(profileUser.email, 'nitai@example.com');
+			assert.equal(profileUser.email, 'test@example.com');
 			assert.equal(profileUser.time_format, '24-hour');
 			assert.equal(json.user.timezone, 'America/New_York');
 		} finally {

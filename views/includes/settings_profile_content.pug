@@ -26,6 +26,7 @@ form#profile-form
 	.mb-3
 		label.form-label.small(for="profile-email") Email
 		input.form-control.form-control-sm#profile-email(type="email" value=user.email)
+		.form-text Email changes require confirmation at the new address.
 	.mb-3
 		label.form-label.small(for="profile-timezone") Timezone
 		select.form-select.form-select-sm#profile-timezone(data-timezone-select data-timezone-configured=(user.timezone_configured === true ? "true" : "false"))

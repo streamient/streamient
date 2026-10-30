@@ -2,8 +2,8 @@
 if hyperdx && hyperdx.enabled && hyperdx.apiKey && hyperdx.browserUrl
 	- const hdxUser = typeof user !== 'undefined' ? user : null;
 	- const hdxHostId = typeof host_id !== 'undefined' ? host_id : '';
-	- const hdxUserJson = hdxUser ? JSON.stringify({ userId: String(hdxUser._id), userEmail: hdxUser.email || '', userName: hdxUser.name || '', hostId: hdxHostId }) : 'null';
-	script(src="https://www.unpkg.com/@hyperdx/browser@latest/build/index.js" crossorigin="anonymous")
+	- const hdxUserJson = hdxUser ? JSON.stringify({ userId: String(hdxUser._id), userEmail: hdxUser.email || '', userName: hdxUser.name || '', hostId: hdxHostId }).replace(/[<>&]/g, (char) => ({ '<': '\\u003c', '>': '\\u003e', '&': '\\u0026' }[char])) : 'null';
+	script(src="https://www.unpkg.com/@hyperdx/browser@0.26.0/build/index.js" integrity="sha384-0GVEokAfCkAabuWH3AOROI7QdPa/ZcEWDP//bqacA2opPwBJIufMuAMejab/lQ+/" crossorigin="anonymous")
 	script.
 		try {
 			window.HyperDX.init({

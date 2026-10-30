@@ -42,6 +42,8 @@ async function streamBlobResponse(res, blob, hostId, mimeType) {
 		'ETag': `"sha256-${blob.sha256}"`,
 		'Cache-Control': 'private, no-store',
 		'X-Content-Type-Options': 'nosniff',
+		'Content-Disposition': 'attachment',
+		'Content-Security-Policy': "sandbox; default-src 'none'",
 	});
 	for await (const chunk of blobService.readBlob(blob, hostId)) {
 		if (!res.write(chunk)) await once(res, 'drain');

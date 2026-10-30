@@ -1,3 +1,4 @@
+import { disconnectMemberSockets } from '../modules/socket.js';
 import mongoose from '../model/mongoose.js';
 import { User } from '../model/user.js';
 import { queryForSave } from '../model/mongoose.js';
@@ -165,6 +166,7 @@ export async function removeTeamMember(host_id, membershipId, actor, ctx = {}) {
 
 	const result = await TenantMember.deleteOne({ _id: membership._id, host_id, role: membership.role });
 	if (!result.deletedCount) throw new Error('Member changed or was removed. Please try again.');
+	if (membership.user) await disconnectMemberSockets(host_id, String(membership.user._id));
 
 	audit.log({
 		action: 'delete',

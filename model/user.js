@@ -19,6 +19,7 @@ export function toSafeUser(user) {
 	const obj = typeof user?.toObject === 'function' ? user.toObject() : { ...(user || {}) };
 	obj.avatar_style = avatarStyleValues.includes(obj.avatar_style) ? obj.avatar_style : 'initials';
 	delete obj.password;
+	delete obj.pending_email_token;
 	delete obj.totp_secret;
 	delete obj.verification_token;
 	delete obj.password_reset_token;
@@ -36,6 +37,7 @@ export function toSafeUser(user) {
 const userSchema = new mongoose.Schema(
 	{
 		email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+		pending_email_token: { type: String, select: false },
 		password: { type: String, required: true, select: false },
 		name: { type: String, required: true, trim: true },
 		avatar_style: { type: String, enum: avatarStyleValues, default: 'initials' },

@@ -1,3 +1,4 @@
+import { requestEmailChange } from '../services/profile_email_service.js';
 import { attachItemHtml } from '../modules/item_html.js';
 import { Router } from 'express';
 import { verifySync } from 'otplib';
@@ -1550,8 +1551,11 @@ router.put('/profile', async (req, res) => {
 		const user = await queryForSave(User.findById(req.userId));
 		if (!user) return res.status(404).json({ error: 'User not found' });
 
+		const emailValue = typeof email === 'string' ? email.trim().toLowerCase() : '';
+		if (Object.hasOwn(body, 'email') && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue) || emailValue.length > 254)) return res.status(400).json({ error: 'Invalid email address' });
+		const emailChangePending = Boolean(emailValue && emailValue !== user.email);
+		if (emailChangePending) await requestEmailChange(user, emailValue);
 		if (name) user.name = name.trim();
-		if (email) user.email = email.trim().toLowerCase();
 		if (hasTimezone) {
 			user.timezone = timezoneValue;
 			user.timezone_configured = true;
@@ -1560,10 +1564,10 @@ router.put('/profile', async (req, res) => {
 		if (Object.hasOwn(body, 'avatar_style')) user.avatar_style = body.avatar_style;
 		await user.save();
 
-		res.json({ user: user.toSafe() });
+		res.json({ user: user.toSafe(), email_change_pending: emailChangePending });
 	} catch (err) {
 		log.error({ err }, 'Profile update error');
-		res.status(500).json({ error: 'Profile update failed' });
+		res.status(err.status || 500).json({ error: err.status ? err.message : 'Profile update failed' });
 	}
 });
 

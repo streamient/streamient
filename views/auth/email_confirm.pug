@@ -1,0 +1,20 @@
+extends ../auth_layout
+
+block head
+	title Confirm email address | Streamient
+
+block body
+	h1.h2.mb-5 Confirm email address
+	if error
+		.alert.alert-danger= error
+	else if complete
+		.alert.alert-success Your email address has been updated.
+		a(href="/settings/profile") Return to profile
+	else
+		p.text-muted.mb-5 Confirm this address for the account you are signed in to. Your current email stays active until you confirm.
+		form(method="POST" action="/profile/email-confirm")
+			input(type="hidden" name="_csrf" value=csrf_token)
+			input(type="hidden" name="token" value=token)
+			.d-flex.justify-content-between
+				a.btn.btn-secondary.btn-sm(href="/settings/profile") Cancel
+				button.btn.btn-primary.btn-sm(type="submit") Confirm email

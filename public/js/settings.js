@@ -107,7 +107,7 @@
 						timeZone: result.user?.timezone || data.timezone,
 						timeFormat: result.user?.time_format || data.time_format,
 					});
-					showSuccess('Profile updated');
+					showSuccess(result.email_change_pending ? 'Profile saved. Check your new email address for a confirmation link. Your current email stays active until you confirm.' : 'Profile updated');
 				} catch (err) {
 					showError(err.message);
 				} finally {

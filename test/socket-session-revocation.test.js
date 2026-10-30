@@ -9,24 +9,25 @@ import mongoose from '../model/mongoose.js';
 import { User } from '../model/user.js';
 import { TenantMember } from '../model/tenant_member.js';
 import { accountWork } from '../modules/tenancy.js';
-import { setupSocketIO, disconnectSessionSockets } from '../modules/socket.js';
+import { setupSocketIO, disconnectSessionSockets, disconnectMemberSockets } from '../modules/socket.js';
 import { publicSessionId } from '../services/user_session_service.js';
 
 for (const auth of ['cookie', 'token']) {
-	for (const outcome of ['revoked', 'active', 'lookup failure']) {
+	for (const outcome of ['revoked', 'active', 'lookup failure', 'removed member']) {
 		it(`${auth} socket ${outcome}: checks again after a pending handshake and gates early events`, { timeout: 4000 }, async (t) => {
 			const originalAdapter = config.socketIO.adapter;
 			config.socketIO.adapter = 'memory';
 			t.after(() => { config.socketIO.adapter = originalAdapter; });
 			const originalDb = Object.getOwnPropertyDescriptor(mongoose.connection, 'db');
 			let revoked = false;
+			let removed = false;
 			let failLookup = false;
 			let lookup;
 			Object.defineProperty(mongoose.connection, 'db', { configurable: true, value: { collection: () => ({ updateOne: async () => { if (lookup) await lookup.promise; if (failLookup) throw new Error('lookup unavailable'); return { matchedCount: Number(revoked) }; } }) } });
 			t.after(() => originalDb ? Object.defineProperty(mongoose.connection, 'db', originalDb) : delete mongoose.connection.db);
 			const query = (value) => ({ select() { return this; }, populate() { return this; }, read() { return this; }, lean: async () => value });
 			t.mock.method(User, 'findOneAndUpdate', () => query({ is_active: true }));
-			t.mock.method(TenantMember, 'findOneAndUpdate', () => query({ role: 'owner' }));
+			t.mock.method(TenantMember, 'findOneAndUpdate', () => query(removed ? null : { role: 'owner' }));
 			t.mock.method(TenantMember, 'find', () => query([{ _id: 'membership', role: 'owner', tenant: { _id: 'tenant', host_id: 'host', name: 'Test' } }]));
 			const entered = Promise.withResolvers();
 			const resume = Promise.withResolvers();
@@ -47,8 +48,10 @@ for (const auth of ['cookie', 'token']) {
 			await entered.promise;
 			lookup = Promise.withResolvers();
 			revoked = outcome === 'revoked';
+			removed = outcome === 'removed member';
 			failLookup = outcome === 'lookup failure';
 			await disconnectSessionSockets([publicSessionId('browser')]);
+			if (removed) await disconnectMemberSockets('host', 'user');
 			const finished = once(client, outcome === 'active' ? 'email-counts:updated' : 'disconnect');
 			resume.resolve();
 			await packetSeen.promise;
@@ -60,7 +63,9 @@ for (const auth of ['cookie', 'token']) {
 			if (outcome === 'active') {
 				assert.equal(countRequests, 1);
 				assert.equal(io.of('/').adapter.rooms.get('tenant:host')?.size, 1);
-				await disconnectSessionSockets([publicSessionId('browser')]);
+				const disconnected = once(client, 'disconnect');
+				await disconnectMemberSockets('host', 'user');
+				await disconnected;
 			} else {
 				assert.equal(countRequests, 0);
 				assert.equal(io.of('/').adapter.rooms.has('tenant:host'), false);
