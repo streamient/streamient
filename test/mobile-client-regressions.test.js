@@ -617,6 +617,20 @@ describe('Streamient Mobile client regressions', () => {
 		assert.deepEqual(sent, ['Bearer access-RB-next', 'Bearer access-RA-next']);
 	});
 
+	it('finding 13: refreshes in many other logins never evict the rotated tokens of a live instance', async () => {
+		const used = new Set();
+		const refreshTokens = async (server, token) => { if (used.has(token)) throw Object.assign(new Error('invalid_grant'), { status: 400 }); used.add(token); return { access_token: `A-${token}`, refresh_token: `${token}+`, expires_in: 3600, obtained_at: Date.now(), token_type: 'Bearer', scope: '' }; };
+		const { exports: { StreamientApi } } = await compile(read('apps/mobile/src/lib/api.ts'), { refreshTokens, getCachedJson: async () => null, setCachedJson: async () => {}, fetch: async () => new Response('{}', { status: 200 }) });
+		const expired = (refresh) => ({ access_token: `old-${refresh}`, refresh_token: refresh, expires_in: 1, obtained_at: Date.now() - 60000, token_type: 'Bearer', scope: '' });
+		const signedOut = [];
+		const first = new StreamientApi(serverC, expired('R0'), noop);
+		const stale = new StreamientApi(serverC, expired('R0'), (next) => { if (!next) signedOut.push(true); });
+		await first.projects();
+		for (let i = 0; i < 40; i += 1) await new StreamientApi(serverC, expired(`other-${i}`), noop).projects();
+		await stale.projects();
+		assert.deepEqual(signedOut, []);
+	});
+
 	it('finding 14: realtime start does not create a socket after cleanup during socketToken', async () => {
 		let created = 0;
 		let release;

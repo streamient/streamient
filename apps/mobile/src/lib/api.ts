@@ -25,18 +25,19 @@ export class ApiError extends Error {
 // so different users, servers, or logins never share credentials (opaque tokens included).
 const refreshKey = (server: ServerOption, refreshToken: string) => `${server.baseUrl}\n${refreshToken}`;
 const inflightRefreshes = new Map<string, Promise<TokenSet>>();
-const lineageByToken = new Map<string, symbol>();
-const latestByLineage = new Map<symbol, TokenSet>();
+type Lineage = { latest?: TokenSet };
+// Live instances hold their lineage object, so only the token lookup needs a cap.
+const lineageByToken = new Map<string, Lineage>();
 const remember = <K, V>(map: Map<K, V>, key: K, value: V, max: number) => { map.delete(key); map.set(key, value); if (map.size > max) map.delete(map.keys().next().value as K); };
 
 export class StreamientApi {
 	private cacheNamespace: string;
-	private lineage: symbol;
+	private lineage: Lineage;
 
 	constructor(private server: ServerOption, private tokens: TokenSet, private onTokens: (tokens: TokenSet | null) => void) {
 		this.cacheNamespace = cacheNamespace(server, tokens.access_token);
 		const key = tokens.refresh_token ? refreshKey(server, tokens.refresh_token) : "";
-		this.lineage = (key && lineageByToken.get(key)) || Symbol("session");
+		this.lineage = (key && lineageByToken.get(key)) || {};
 		if (key) remember(lineageByToken, key, this.lineage, 64);
 	}
 
@@ -46,7 +47,7 @@ export class StreamientApi {
 	}
 
 	private latestTokens() {
-		const latest = latestByLineage.get(this.lineage);
+		const latest = this.lineage.latest;
 		return latest && latest.refresh_token !== this.tokens.refresh_token ? latest : this.tokens;
 	}
 
@@ -60,7 +61,7 @@ export class StreamientApi {
 		let pending = inflightRefreshes.get(key);
 		if (!pending) {
 			pending = refreshTokens(this.server, refreshToken).then((next) => {
-				remember(latestByLineage, lineage, next, 16);
+				lineage.latest = next;
 				if (next.refresh_token) remember(lineageByToken, refreshKey(this.server, next.refresh_token), lineage, 64);
 				return next;
 			}).finally(() => { inflightRefreshes.delete(key); });
@@ -75,7 +76,7 @@ export class StreamientApi {
 		if (this.latestTokens() !== this.tokens) return; // Token was already rotated elsewhere; the next request adopts the latest tokens.
 		const status = (error as { status?: number }).status;
 		if (status && (status >= 500 || status === 429)) return; // Transient server/rate-limit failure preserves the session.
-		latestByLineage.delete(this.lineage);
+		this.lineage.latest = undefined;
 		this.onTokens(null);
 	}
 
