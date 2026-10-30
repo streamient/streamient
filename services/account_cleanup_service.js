@@ -20,6 +20,7 @@ import { Note } from '../model/note.js';
 import { Memory } from '../model/memory.js';
 import { Url } from '../model/url.js';
 import { CrawlState } from '../model/crawl_state.js';
+import { CrawlPublication } from '../model/crawl_publication.js';
 import { Email } from '../model/email.js';
 import { Project } from '../model/project.js';
 import { GraphLink } from '../model/graph_link.js';
@@ -49,7 +50,7 @@ import { createLogger } from '../modules/logger.js';
 
 const log = createLogger('account-cleanup');
 
-export const HOST_SCOPED_MODELS = { Note, Memory, Url, CrawlState, Email, Project, GraphLink, GitRepo, GitSyncLog, EmailLabel, NoteImportUpload, ObsidianConnection, ObsidianFile, ObsidianChange, ObsidianRevision, ObsidianUpload, ObsidianBlob, ObsidianManifestBatch, OAuthAuthorizationCode, OAuthClient, OAuthConsent, OAuthRefreshToken, TeamInvite, TenantMember, Export, AuditLog };
+export const HOST_SCOPED_MODELS = { Note, Memory, Url, CrawlState, CrawlPublication, Email, Project, GraphLink, GitRepo, GitSyncLog, EmailLabel, NoteImportUpload, ObsidianConnection, ObsidianFile, ObsidianChange, ObsidianRevision, ObsidianUpload, ObsidianBlob, ObsidianManifestBatch, OAuthAuthorizationCode, OAuthClient, OAuthConsent, OAuthRefreshToken, TeamInvite, TenantMember, Export, AuditLog };
 
 const TENANT_COLLECTION_TYPES = ['notes', 'memory', 'urls', 'emails', 'pages', 'vault_files'];
 
