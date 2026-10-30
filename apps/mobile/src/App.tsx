@@ -126,6 +126,7 @@ export function App() {
 	const [appearance, setAppearance] = useState(localStorage.getItem("streamient_appearance") || "system");
 	const sessionApi = useRef<StreamientApi | null>(null);
 	const liveEvents = useRef(new Map<string, object>());
+	const catchupEvents = useRef(new Set<Set<string>>());
 	const uploadControllers = useRef(new Map<string, AbortController>());
 	const bootstrapRef = useRef<BootstrapResponse | null>(null);
 	const activeProjectIdRef = useRef("");
@@ -351,15 +352,19 @@ export function App() {
 		// A project or filter switch during any await makes this catch-up obsolete; the new feed load covers it.
 		const current = () => epoch === sessionEpoch.current && feedKey.current === `${activeProjectId}:${filter}`;
 		if (!current()) return;
-		let result = await api.changes(changeCursor.current, activeProjectId);
-		while (true) {
-			if (!current()) return;
-			const changes = result.changes;
-			setRecords((current) => changes.reduce((items, change) => change.action === "delete" ? items.filter((item) => item.key !== change.key) : upsertRecord(items, change.record, activeProjectId, filter), current));
-			changeCursor.current = result.next_cursor;
-			if (!result.has_more) break;
-			result = await api.changes(changeCursor.current, activeProjectId);
-		}
+		const intervening = new Set<string>();
+		catchupEvents.current.add(intervening);
+		try {
+			let result = await api.changes(changeCursor.current, activeProjectId);
+			while (true) {
+				if (!current()) return;
+				const changes = result.changes;
+				setRecords((current) => changes.reduce((items, change) => intervening.has(change.key) ? items : change.action === "delete" ? items.filter((item) => item.key !== change.key) : upsertRecord(items, change.record, activeProjectId, filter), current));
+				changeCursor.current = result.next_cursor;
+				if (!result.has_more) break;
+				result = await api.changes(changeCursor.current, activeProjectId);
+			}
+		} finally { catchupEvents.current.delete(intervening); }
 	}, [api, activeProjectId, filter]);
 
 	realtimeEventHandler.current = (event, payload) => {
@@ -379,6 +384,7 @@ export function App() {
 		const key = `${type}:${id}`;
 		const version = {};
 		liveEvents.current.set(key, version);
+		for (const pending of catchupEvents.current) pending.add(key);
 		void (async () => {
 			for (let pending: Promise<void> | null = null; pending !== feedLoad.current;) { pending = feedLoad.current; await pending; }
 			if (epoch !== sessionEpoch.current || feedKey.current !== `${activeProjectId}:${filter}`) return;
@@ -472,6 +478,21 @@ export function App() {
 		setUploads((current) => current.map((item) => item.localId === localId ? { ...item, session, paused: false } : item));
 		void updateRememberedUpload(uploadNamespaceRef.current, localId, session).catch((error) => setError(String(error)));
 	}, []);
+
+	async function cancelImport(item: UploadUi) {
+		if (!api) return;
+		const namespace = uploadNamespaceRef.current;
+		const epoch = sessionEpoch.current;
+		uploadControllers.current.get(item.localId)?.abort();
+		try {
+			const session = item.session.state === "canceled" ? item.session : (await api.cancelUpload(item.session.id)).upload;
+			await updateRememberedUpload(namespace, item.localId, session);
+			if (epoch !== sessionEpoch.current) return;
+			setUploads((current) => current.map((value) => value.localId === item.localId ? { ...value, session } : value));
+			await forgetUpload(namespace, item.localId);
+			if (epoch === sessionEpoch.current) setUploads((current) => current.filter((value) => value.localId !== item.localId));
+		} catch (error) { if (epoch === sessionEpoch.current) setError(String(error)); }
+	}
 
 	async function runUpload(item: UploadUi) {
 		if (!api || !item.source || !online) return;
@@ -713,7 +734,7 @@ export function App() {
 		</Sheet>
 
 		<Sheet open={!!detail || detailLoading} title={detail?.title || "Record"} onClose={closeDetail} wide>{detailLoading && !detail ? <RecordSkeleton /> : detail && <RecordView record={detail} onEdit={editDetail} />}</Sheet>
-		<UploadTray open={uploadTray} uploads={uploads} onClose={() => setUploadTray(false)} onPause={(item) => { setUploads((current) => current.map((value) => value.localId === item.localId ? { ...value, paused: true, manualPause: true } : value)); uploadControllers.current.get(item.localId)?.abort(); }} onResume={(item) => void runUpload(item)} onCancel={async (item) => { if (!api) return; uploadControllers.current.get(item.localId)?.abort(); try { await api.cancelUpload(item.session.id); await forgetUpload(uploadNamespaceRef.current, item.localId); setUploads((current) => current.filter((value) => value.localId !== item.localId)); } catch (error) { setError(String(error)); } }} />
+		<UploadTray open={uploadTray} uploads={uploads} onClose={() => setUploadTray(false)} onPause={(item) => { setUploads((current) => current.map((value) => value.localId === item.localId ? { ...value, paused: true, manualPause: true } : value)); uploadControllers.current.get(item.localId)?.abort(); }} onResume={(item) => void runUpload(item)} onCancel={(item) => cancelImport(item)} />
 		<Sheet open={historyDrawer} title="AI history" onClose={() => setHistoryDrawer(false)}>{conversations.length ? conversations.map((conversation) => <button className="history-row" key={conversation.conversation_id} onClick={() => void selectConversation(conversation)}><Icon name="chat_bubble" /><span><strong>{conversation.title}</strong><small>{new Date(conversation.timestamp).toLocaleDateString()}</small></span><Icon name="chevron_right" /></button>) : <div className="empty-mini">No previous conversations</div>}</Sheet>
 	</div>;
 }

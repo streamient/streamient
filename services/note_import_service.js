@@ -282,7 +282,7 @@ export async function completeUpload(userId, host_id, id) {
 }
 
 export async function cancelUpload(userId, host_id, id) {
-	const upload = await NoteImportUpload.findOneAndUpdate(
+	let upload = await NoteImportUpload.findOneAndUpdate(
 		{ ...ownershipFilter(id, userId, host_id), state: { $in: ['uploading', 'failed'] } },
 		{ $set: { state: 'canceled', last_activity_at: new Date(), expires_at: expiryDate() } },
 		{ returnDocument: 'after' },
@@ -290,7 +290,8 @@ export async function cancelUpload(userId, host_id, id) {
 	if (!upload) {
 		const existing = await NoteImportUpload.findOne(ownershipFilter(id, userId, host_id)).lean();
 		if (!existing) throw new NoteImportError('Import session not found', 404, 'upload_not_found');
-		throw new NoteImportError(`Import is ${existing.state}`, 409, 'invalid_state');
+		if (existing.state !== 'canceled') throw new NoteImportError(`Import is ${existing.state}`, 409, 'invalid_state');
+		upload = existing;
 	}
 	await rm(uploadDir(upload._id), { recursive: true, force: true });
 	emitToTenant(host_id, 'note-import:canceled', publicUpload(upload));

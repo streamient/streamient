@@ -133,7 +133,7 @@ export async function forgetUpload(namespace: string, localId: string) {
 	const items = registry(namespace);
 	const item = items.find((entry) => entry.local_id === localId);
 	if (item?.uri) await removeSharedFile(item.uri);
-	saveRegistry(namespace, items.filter((item) => item.local_id !== localId));
+	saveRegistry(namespace, registry(namespace).filter((item) => item.local_id !== localId));
 	await removeBlob(localId).catch(() => undefined);
 }
 

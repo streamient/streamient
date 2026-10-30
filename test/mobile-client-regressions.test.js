@@ -10,7 +10,7 @@ function read(relativePath) {
 
 async function compile(src, globals = {}) {
 	const code = (await transform(src.replace(/^import .*\n/gm, ''), { loader: 'ts', format: 'cjs', target: 'es2022' })).code;
-	const context = vm.createContext({ module: { exports: {} }, console, URL, URLSearchParams, Headers, Response, Blob, TextDecoder, TextEncoder, DOMException, Error, TypeError, atob, btoa, crypto, navigator: { onLine: true }, sessionApi: { current: null }, liveEvents: { current: new Map() }, feedLoad: { current: Promise.resolve() }, feedKey: { current: "P:all" }, setError: noop, ...globals });
+	const context = vm.createContext({ module: { exports: {} }, console, URL, URLSearchParams, Headers, Response, Blob, TextDecoder, TextEncoder, DOMException, Error, TypeError, atob, btoa, crypto, navigator: { onLine: true }, sessionApi: { current: null }, liveEvents: { current: new Map() }, catchupEvents: { current: new Set() }, feedLoad: { current: Promise.resolve() }, feedKey: { current: "P:all" }, setError: noop, ...globals });
 	vm.runInContext(code, context);
 	return { exports: context.module.exports, context };
 }
@@ -772,4 +772,59 @@ it('native cleanup is limited to app-owned iOS share copies', async () => {
 	assert.match(swift, /resolvingSymlinksInPath\(\)/);
 	assert.match(swift, /folder.deletingLastPathComponent\(\) == incoming, UUID\(uuidString: folder.lastPathComponent\) != nil/);
 	assert.match(swift, /fileExists\(atPath: url.path\)/);
+});
+
+it('cleanup preserves uploads and progress registered during native deletion', async () => {
+	const values = new Map();
+	const localStorage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+	let release;
+	const { exports: uploads } = await compile(read('apps/mobile/src/lib/uploads.ts'), { localStorage, removeSharedFile: () => new Promise((resolve) => { release = resolve; }) });
+	const source = { uri: 'file:///copy', name: 'copy', mimeType: 'text/plain' };
+	await uploads.rememberUpload('ns', 'A', { id: 'A' }, source, 'copy', 'text/plain');
+	const pending = uploads.forgetUpload('ns', 'A');
+	await uploads.rememberUpload('ns', 'B', { id: 'B', upload_offset: 1 }, source, 'copy', 'text/plain');
+	await uploads.updateRememberedUpload('ns', 'B', { id: 'B', upload_offset: 99 });
+	release();
+	await pending;
+	const remaining = await uploads.restoreUploads('ns');
+	assert.equal(remaining.length, 1);
+	assert.equal(remaining[0].saved.session.upload_offset, 99);
+});
+
+it('catch-up cannot resurrect a record deleted live while its response waits', async () => {
+	let release;
+	let records = [record('deleted')];
+	const handler = { current: null };
+	const { exports: f } = await compile(block('function upsertRecord(', '\nfunction relativeTime') + block('const applyChanges = useCallback', '\n\tconst realtimeHostId') + '\nexport { applyChanges };', {
+		api: { changes: () => new Promise((resolve) => { release = resolve; }) },
+		changeCursor: { current: 'start' }, sessionEpoch: { current: 0 }, activeProjectId: 'P', filter: 'all', useCallback: (fn) => fn, realtimeEventHandler: handler,
+		refreshCounts: async () => {}, setUploads: noop, setRecords: (fn) => { records = fn(records); },
+	});
+	const pending = f.applyChanges();
+	await new Promise((resolve) => setImmediate(resolve));
+	handler.current('note:deleted', { id: 'deleted' });
+	await new Promise((resolve) => setImmediate(resolve));
+	release({ changes: [{ key: 'notes:deleted', action: 'update', record: record('deleted') }], next_cursor: 'next', has_more: false });
+	await pending;
+	assert.equal(records.length, 0);
+});
+
+it('cancellation persists canceled state before cleanup and retries cleanup without another request', async () => {
+	let item = { localId: 'local', session: { id: 'u', state: 'uploading' } };
+	let requests = 0;
+	let failed = true;
+	let persisted;
+	const { exports: f } = await compile(block('async function cancelImport(', '\n\tasync function runUpload(') + '\nexport { cancelImport };', {
+		api: { cancelUpload: async () => { requests++; return { upload: { id: 'u', state: 'canceled' } }; } },
+		uploadNamespaceRef: { current: 'ns' }, sessionEpoch: { current: 0 }, uploadControllers: { current: new Map() },
+		updateRememberedUpload: async (ns, id, session) => { persisted = session; },
+		forgetUpload: async () => { assert.equal(persisted.state, 'canceled'); if (failed) throw new Error('busy'); },
+		setUploads: (fn) => { item = fn([item])[0]; },
+	});
+	await f.cancelImport(item);
+	assert.equal(item.session.state, 'canceled');
+	failed = false;
+	await f.cancelImport(item);
+	assert.equal(requests, 1);
+	assert.equal(item, undefined);
 });

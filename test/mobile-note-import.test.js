@@ -13,7 +13,7 @@ import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import { Note } from '../model/note.js';
 import { NoteImportUpload } from '../model/note_import_upload.js';
 import { Project } from '../model/project.js';
-import { NOTE_IMPORT_ACTIVE_LIMIT, NOTE_IMPORT_CHUNK_SIZE, NoteImportError, appendChunk, completeUpload, createUpload, ensureStorageAvailable, getUpload, processUpload } from '../services/note_import_service.js';
+import { NOTE_IMPORT_ACTIVE_LIMIT, NOTE_IMPORT_CHUNK_SIZE, NoteImportError, appendChunk, cancelUpload, completeUpload, createUpload, ensureStorageAvailable, getUpload, processUpload } from '../services/note_import_service.js';
 
 function queryResult(value) {
 	return { select() { return this; }, read() { return this; }, lean: async () => structuredClone(value) };
@@ -202,6 +202,13 @@ describe('mobile resumable note imports', () => {
 			Project.findOneAndUpdate = projectFindOneAndUpdate;
 			Project.updateOne = projectUpdateOne;
 		}
+	});
+
+	it('repeated cancellation returns the canceled session and retries cleanup', async () => {
+		assert.equal((await cancelUpload(userId, hostId, uploadId)).state, 'canceled');
+		assert.equal((await cancelUpload(userId, hostId, uploadId)).state, 'canceled');
+		upload.state = 'processing';
+		await assert.rejects(cancelUpload(userId, hostId, uploadId), { status: 409 });
 	});
 
 	it('enforces the exact bounded chunk constant and seven-day TTL schema', () => {
