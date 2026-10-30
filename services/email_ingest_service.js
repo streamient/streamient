@@ -24,6 +24,8 @@ const log = createLogger('email-ingest');
 
 const MAX_ATTACHMENT_SIZE = 50 * 1024 * 1024;
 const EMAIL_DATE_SORT = { createdAt: -1, updatedAt: -1 };
+const EMAIL_THREAD_FIELDS = '_id message_id references in_reply_to createdAt updatedAt';
+const MAX_EMAIL_LIST_LIMIT = 100;
 const VALID_MAILBOXES = new Set(['inbox', 'archived', 'sent', 'spam']);
 
 function emailIndexOptions(ctx = {}) {
@@ -351,7 +353,7 @@ function emailSortTime(email = {}) {
 
 function groupEmailsByThread(emails = []) {
 	const byIdentifier = new Map();
-	const groups = [];
+	const groups = new Set();
 
 	for (const email of emails) {
 		const identifiers = emailThreadIdentifiers(email);
@@ -359,7 +361,7 @@ function groupEmailsByThread(emails = []) {
 		let group;
 		if (!matchedGroups.length) {
 			group = { identifiers: new Set(), email };
-			groups.push(group);
+			groups.add(group);
 		} else {
 			group = matchedGroups[0];
 			for (const merged of matchedGroups.slice(1)) {
@@ -369,8 +371,7 @@ function groupEmailsByThread(emails = []) {
 					byIdentifier.set(id, group);
 				}
 				if (emailSortTime(merged.email) > emailSortTime(group.email)) group.email = merged.email;
-				const index = groups.indexOf(merged);
-				if (index !== -1) groups.splice(index, 1);
+				groups.delete(merged);
 			}
 			if (emailSortTime(email) > emailSortTime(group.email)) group.email = email;
 		}
@@ -380,7 +381,7 @@ function groupEmailsByThread(emails = []) {
 		}
 	}
 
-	return groups;
+	return [...groups];
 }
 
 function collapseEmailsByThread(emails = []) {
@@ -402,7 +403,7 @@ async function attachLatestThreadEmails(host_id, projectId, emails = []) {
 		],
 	};
 	if (projectId) relatedQuery.project = projectId;
-	const related = await Email.find(relatedQuery).sort(EMAIL_DATE_SORT).lean();
+	const related = await Email.find(relatedQuery).select(EMAIL_THREAD_FIELDS).sort(EMAIL_DATE_SORT).lean();
 	const latestGroups = groupEmailsByThread([...emails, ...related]);
 	const latestByIdentifier = new Map();
 	for (const group of latestGroups) {
@@ -532,11 +533,14 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 				...normalized,
 				source: data.source === 'emailforwarding' ? 'emailforwarding' : 'api',
 				mailbox: normalizeMailbox(data.mailbox),
+				host_id,
+				is_indexed: false,
+			};
+			// User-controlled state: a re-ingest (e.g. forwarder retry) must not restore, relabel or move an existing email.
+			const insertOnly = {
 				labels: inTrash ? [] : normalizeLabels(data.labels),
 				project,
 				owner: userId,
-				host_id,
-				is_indexed: false,
 				in_trash: inTrash,
 				trashed_at: inTrash ? (data.trashed_at || new Date()) : null,
 			};
@@ -547,7 +551,7 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 				// read-after-upsert fallback is possible, so it propagates.
 				const result = await Email.findOneAndUpdate(
 					{ host_id, message_id: normalized.message_id },
-					{ $set: payload },
+					{ $set: payload, $setOnInsert: insertOnly },
 					{ upsert: true, returnDocument: 'after', includeResultMetadata: true, session },
 				);
 				return { email: result.value, created: !result.lastErrorObject.updatedExisting };
@@ -558,7 +562,7 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 				if (result) return { email: result, created: false };
 			}
 
-			const createdDoc = session ? (await Email.create([payload], { session }))[0] : await Email.create(payload);
+			const createdDoc = session ? (await Email.create([{ ...payload, ...insertOnly }], { session }))[0] : await Email.create({ ...payload, ...insertOnly });
 			return { email: createdDoc, created: true };
 		};
 		const outcome = await publish(persist);
@@ -672,15 +676,22 @@ export async function applyProjectEmailFilterToInbox(host_id, projectId, ctx = {
 
 export async function listEmails(host_id, projectId, { page = 1, limit = 50, mailbox, label, offset } = {}) {
 	const safePage = Math.max(1, parseInt(page, 10) || 1);
-	const safeLimit = Math.max(1, parseInt(limit, 10) || 50);
+	const safeLimit = Math.min(MAX_EMAIL_LIST_LIMIT, Math.max(1, parseInt(limit, 10) || 50));
 	const start = offset === undefined ? (safePage - 1) * safeLimit : Number(offset);
 	if (!Number.isSafeInteger(start) || start < 0) throw Object.assign(new Error('offset must be a nonnegative integer'), { status: 400 });
 	const emails = await Email.find(buildEmailListQuery(host_id, projectId, { mailbox, label }))
+		.select(EMAIL_THREAD_FIELDS)
 		.sort(EMAIL_DATE_SORT)
 		.lean();
 	const collapsed = collapseEmailsByThread(emails);
-	const withLatest = await attachLatestThreadEmails(host_id, projectId, collapsed);
-	return withLatest.slice(start, start + safeLimit);
+	const rows = (await attachLatestThreadEmails(host_id, projectId, collapsed)).slice(start, start + safeLimit);
+	// Thread grouping and ordering use slim rows; full documents are loaded only for the returned page and its latest thread emails.
+	const ids = [...new Set(rows.flatMap((email) => [stringifyObjectId(email._id), stringifyObjectId(email.thread_latest?._id)]).filter(Boolean))];
+	const full = new Map((ids.length ? await Email.find({ _id: { $in: ids }, host_id }).lean() : []).map((doc) => [stringifyObjectId(doc._id), doc]));
+	return rows.map((email) => {
+		const doc = full.get(stringifyObjectId(email._id)) || email;
+		return { ...doc, thread_latest: full.get(stringifyObjectId(email.thread_latest?._id)) || doc };
+	});
 }
 
 export async function listEmailIds(host_id, projectId, { mailbox, label } = {}) {
