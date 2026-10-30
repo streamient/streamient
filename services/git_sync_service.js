@@ -130,10 +130,6 @@ function repoAuthUrl(gitRepo, token) {
 	return cloneUrl(gitRepo.repo_url, token);
 }
 
-function stripAuthFromRemote(gitRepo) {
-	return gitRepo.repo_url;
-}
-
 function resolveType(filePath, gitRepo) {
 	const notesDir = (gitRepo.notes_path || 'notes').replace(/^\/|\/$/g, '');
 	const memoriesDir = (gitRepo.memories_path || 'memories').replace(/^\/|\/$/g, '');
@@ -356,31 +352,39 @@ function gitRelativePath(syncBase, relPath) {
 	return normalizedBase ? path.posix.join(normalizedBase, relPath) : relPath;
 }
 
-async function getFileGitDates(git, syncBase, relPath) {
-	const output = await git.raw([
-		'log',
-		'--follow',
-		'--format=%cI%x1f%s',
-		'--',
-		gitRelativePath(syncBase, relPath),
-	]);
-	const entries = output
-		.split('\n')
-		.map((line) => {
-			const [rawDate, ...subjectParts] = line.trim().split('\x1f');
-			return {
-				date: validDateOrNull(rawDate),
-				subject: subjectParts.join(' '),
-			};
-		})
-		.filter((entry) => entry.date);
-	const userEntries = entries.filter((entry) => !entry.subject.startsWith('Streamient sync ') && !entry.subject.startsWith('Kumbukum sync '));
-	const dates = (userEntries.length ? userEntries : entries).map((entry) => entry.date);
-	const fallback = new Date();
-	return {
-		createdAt: dates.at(-1) || fallback,
-		updatedAt: dates[0] || fallback,
-	};
+async function getFileGitDates(git, syncBase, mdFiles) {
+	const output = await git.raw(['log', '--name-status', '-z', '--find-renames', '--format=%x00%cI%x1f%s', '--']);
+	const histories = new Map(mdFiles.map((file) => [file, []]));
+	const tracked = new Map(mdFiles.map((file) => [gitRelativePath(syncBase, file), new Set([file])]));
+	const fields = output.split('\0');
+	let entry;
+	for (let i = 0; i < fields.length; i++) {
+		const field = fields[i].replace(/^\n/, '');
+		if (!field) continue;
+		if (field.includes('\x1f')) {
+			const [rawDate, ...subject] = field.split('\x1f');
+			entry = { date: validDateOrNull(rawDate), subject: subject.join(' ') };
+			continue;
+		}
+		const oldPath = fields[++i];
+		const renamed = /^[RC]/.test(field);
+		const filePath = renamed ? fields[++i] : oldPath;
+		const targets = tracked.get(filePath);
+		if (!targets || !entry?.date) continue;
+		for (const target of targets) histories.get(target).push(entry);
+		if (field.startsWith('R')) {
+			tracked.delete(filePath);
+			tracked.set(oldPath, new Set([...(tracked.get(oldPath) || []), ...targets]));
+		} else if (field === 'A' || field.startsWith('C')) tracked.delete(filePath);
+	}
+	const datesByPath = new Map();
+	for (const [file, entries] of histories) {
+		const userEntries = entries.filter((item) => !item.subject.startsWith('Streamient sync ') && !item.subject.startsWith('Kumbukum sync '));
+		const dates = (userEntries.length ? userEntries : entries).map((item) => item.date);
+		const fallback = new Date();
+		datesByPath.set(file, { createdAt: dates.at(-1) || fallback, updatedAt: dates[0] || fallback });
+	}
+	return datesByPath;
 }
 
 async function normalizeImportedTimestamps(Model, doc, dates, { includeCreatedAt = false, guard } = {}) {
@@ -405,10 +409,14 @@ function sameStringList(left = [], right = []) {
 	return left.every((value, index) => value === right[index]);
 }
 
+function importedTags(parsed) {
+	return parsed.tags?.length ? parsed.tags : ['git-sync'];
+}
+
 function importedContentMatchesGit(doc, type, parsed, title) {
 	if (!doc) return false;
 	if (doc.title !== title) return false;
-	const expectedTags = parsed.tags?.length ? parsed.tags : ['git-sync'];
+	const expectedTags = importedTags(parsed);
 	if (!sameStringList(doc.tags || [], expectedTags)) return false;
 	if (type === 'memory') return (doc.content || '') === (parsed.body || '');
 
@@ -664,11 +672,11 @@ async function executeSyncRepo(repoId, userId, hostId, ctx, gitRepoDoc, summary,
 			fs.mkdirSync(dir, { recursive: true });
 			await git.clone(repoAuthUrl(gitRepoDoc, token), dir, ['--branch', branch]);
 			const localGit = transport.git(dir);
-			await localGit.remote(['set-url', 'origin', stripAuthFromRemote(gitRepoDoc)]);
+			await localGit.remote(['set-url', 'origin', gitRepoDoc.repo_url]);
 		} else {
 			await logSyncEvent(gitRepoDoc, 'info', 'Fetching repository updates', { branch });
 			const localGit = transport.git(dir);
-			await localGit.remote(['set-url', 'origin', stripAuthFromRemote(gitRepoDoc)]);
+			await localGit.remote(['set-url', 'origin', gitRepoDoc.repo_url]);
 			await localGit.fetch(repoAuthUrl(gitRepoDoc, token), branch);
 			await localGit.reset(['--hard', 'FETCH_HEAD']);
 		}
@@ -738,10 +746,17 @@ async function executeSyncRepo(repoId, userId, hostId, ctx, gitRepoDoc, summary,
 
 async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, summary) {
 	const mdFiles = findMarkdownFiles(dir, syncBase);
-	for (const Model of [Note, Memory]) {
-		const linked = await Model.find({ host_id: hostId, 'git_source.repo_id': gitRepo._id });
-		for (const item of linked) if (item.git_source?.file_path) containedRepoPath(dir, syncBase, item.git_source.file_path);
+	const query = { host_id: hostId, 'git_source.repo_id': gitRepo._id };
+	const [notes, memories] = await Promise.all([Note.find(query).lean(), Memory.find(query).lean()]);
+	for (const item of [...notes, ...memories]) if (item.git_source?.file_path) containedRepoPath(dir, syncBase, item.git_source.file_path);
+	if (!mdFiles.length && (notes.length || memories.length)) {
+		for (const item of notes) recordConflict(summary, 'note', item.git_source?.file_path, 'Git tree contains no Markdown files; deletion skipped to protect linked items');
+		for (const item of memories) recordConflict(summary, 'memory', item.git_source?.file_path, 'Git tree contains no Markdown files; deletion skipped to protect linked items');
+		return;
 	}
+	const notesByPath = new Map(notes.map((item) => [item.git_source?.file_path, item]));
+	const memoriesByPath = new Map(memories.map((item) => [item.git_source?.file_path, item]));
+	const datesByPath = mdFiles.length ? await getFileGitDates(git, syncBase, mdFiles) : new Map();
 	const activeFilePaths = new Set(mdFiles);
 
 	for (const relPath of mdFiles) {
@@ -751,15 +766,16 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, sum
 		try { raw = fs.readFileSync(fd, 'utf8'); } finally { fs.closeSync(fd); }
 		const sha = fileSha(raw);
 		const parsed = parseMarkdownFile(raw);
+		const tags = importedTags(parsed);
 
 		const type = parsed.type || resolveType(relPath, gitRepo);
 
 		const title = parsed.title || path.basename(relPath, '.md');
 
-		const existingNote = await Note.findOne({ 'git_source.repo_id': gitRepo._id, 'git_source.file_path': relPath, host_id: hostId });
-		const existingMemory = await Memory.findOne({ 'git_source.repo_id': gitRepo._id, 'git_source.file_path': relPath, host_id: hostId });
+		const existingNote = notesByPath.get(relPath);
+		const existingMemory = memoriesByPath.get(relPath);
 		const existing = existingNote || existingMemory;
-		const fileDates = await getFileGitDates(git, syncBase, relPath);
+		const fileDates = datesByPath.get(relPath);
 
 		if (existing && existing.git_source?.last_sha === sha) {
 			if (!isLocalChangeNewer(existing) || importedContentMatchesGit(existing, existingNote ? 'note' : 'memory', parsed, title)) {
@@ -783,7 +799,7 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, sum
 				const update = {
 					title,
 					content: parsed.body,
-					tags: parsed.tags,
+					tags,
 					'git_source.last_sha': sha,
 					'git_source.last_synced_at': now,
 					'git_source.origin': 'import',
@@ -803,7 +819,7 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, sum
 					await gate.publish((session) => Memory.create([{
 						title,
 						content: parsed.body,
-						tags: parsed.tags.length ? parsed.tags : ['git-sync'],
+						tags,
 						project: gitRepo.project,
 						owner: userId,
 						host_id: hostId,
@@ -824,7 +840,7 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, sum
 					title,
 					content: html,
 					text_content: text,
-					tags: parsed.tags,
+					tags,
 					'git_source.last_sha': sha,
 					'git_source.last_synced_at': now,
 					'git_source.origin': 'import',
@@ -845,7 +861,7 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, sum
 						title,
 						content: html,
 						text_content: text,
-						tags: parsed.tags.length ? parsed.tags : ['git-sync'],
+						tags,
 						project: gitRepo.project,
 						owner: userId,
 						host_id: hostId,
@@ -861,23 +877,13 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, sum
 		}
 	}
 
-	await trashDeletedGitItems(gitRepo, hostId, activeFilePaths, summary);
+	await trashDeletedGitItems(gitRepo, hostId, activeFilePaths, summary, notes, memories);
 }
 
-async function trashDeletedGitItems(gitRepo, hostId, activeFilePaths, summary) {
-	const query = {
-		host_id: hostId,
-		'git_source.repo_id': gitRepo._id,
-		in_trash: { $ne: true },
-	};
-	const [notes, memories] = await Promise.all([
-		Note.find(query),
-		Memory.find({ ...query, 'git_commit.repo_id': { $exists: false } }),
-	]);
-
+async function trashDeletedGitItems(gitRepo, hostId, activeFilePaths, summary, notes, memories) {
 	for (const note of notes) {
 		const filePath = note.git_source?.file_path;
-		if (!filePath || activeFilePaths.has(filePath)) continue;
+		if (note.in_trash || !filePath || activeFilePaths.has(filePath)) continue;
 		if (isLocalChangeNewer(note)) {
 			recordConflict(summary, 'note', filePath, 'Git deleted the file but Streamient has newer local edits');
 			continue;
@@ -895,7 +901,7 @@ async function trashDeletedGitItems(gitRepo, hostId, activeFilePaths, summary) {
 
 	for (const memory of memories) {
 		const filePath = memory.git_source?.file_path;
-		if (!filePath || activeFilePaths.has(filePath)) continue;
+		if (memory.in_trash || memory.git_commit?.repo_id != null || !filePath || activeFilePaths.has(filePath)) continue;
 		if (isLocalChangeNewer(memory)) {
 			recordConflict(summary, 'memory', filePath, 'Git deleted the file but Streamient has newer local edits');
 			continue;
