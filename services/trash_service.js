@@ -177,7 +177,7 @@ async function restoreItemsByType(host_id, type, ids, deps = {}) {
 		}
 	}
 	if (missingIds.length) {
-		await removeGraphLinks(host_id, missingIds);
+		await removeGraphLinks(host_id, missingIds).catch((err) => log.error({ err, type, host_id }, 'Trash graph cleanup failed'));
 		await bulkRemoveFn(host_id, tsType, missingIds);
 	}
 
@@ -212,7 +212,7 @@ async function permanentDeleteItemsByType(host_id, type, ids, deps = {}) {
 	}
 
 	const deletedIds = docs.map((doc) => doc._id?.toString?.() || String(doc._id || ''));
-	await removeGraphLinks(host_id, [...deletedIds, ...missingIds]);
+	await removeGraphLinks(host_id, [...deletedIds, ...missingIds]).catch((err) => log.error({ err, type, host_id }, 'Trash graph cleanup failed'));
 	const absentIds = [...deletedIds, ...missingIds];
 	if (absentIds.length) await bulkRemoveFn(host_id, tsType, absentIds);
 	if (currentDocs.length) {
@@ -300,7 +300,7 @@ export async function emptyTrash(host_id, deps = {}) {
 		const remainingDocs = await findExisting(model, host_id, candidateIds);
 		const remainingIds = new Set(remainingDocs.map((doc) => String(doc._id)));
 		const absentIds = candidateIds.filter((id) => !remainingIds.has(id));
-		await removeGraphLinks(host_id, absentIds);
+		await removeGraphLinks(host_id, absentIds).catch((err) => log.error({ err, type, host_id }, 'Trash graph cleanup failed'));
 		// Remove only IDs deleted here; items trashed while this ran keep their rows.
 		if (absentIds.length) await bulkRemoveFn(host_id, tsType, absentIds);
 		if (remainingDocs.length) {

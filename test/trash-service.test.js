@@ -294,3 +294,29 @@ describe('Trash service Typesense bulk writes', () => {
 		}
 	});
 });
+
+it('manual permanent delete removes search content when graph cleanup fails', async (t) => {
+	t.mock.method(Url, 'findOneAndDelete', async () => ({ _id: 'url' }));
+	const removed = [];
+	const result = await permanentDelete('tenant', 'urls', 'url', {
+		removeGraphLinks: async () => { throw new Error('graph offline'); },
+		bulkRemoveDocuments: async (...args) => removed.push(args),
+	});
+	assert.equal(result.deleted, true);
+	assert.deepEqual(removed, [['tenant', 'urls', ['url']]]);
+});
+
+it('empty trash continues all types after graph failures', async (t) => {
+	for (const Model of [Note, Memory, Url, Email]) {
+		let deleted = false;
+		t.mock.method(Model, 'findOneAndDelete', async () => { if (deleted) return null; deleted = true; return { _id: Model.modelName }; });
+		t.mock.method(Model, 'find', () => ({ lean: async () => [] }));
+	}
+	const removed = [];
+	assert.deepEqual(await emptyTrash('tenant', {
+		exportTrashDocuments: async () => [],
+		removeGraphLinks: async () => { throw new Error('graph offline'); },
+		bulkRemoveDocuments: async (_host, type) => removed.push(type),
+	}), { deleted: 4 });
+	assert.deepEqual(removed.sort(), ['emails', 'memory', 'notes', 'urls']);
+});

@@ -3,8 +3,9 @@ import { validatePublicUrl, publicLookup } from './public_url.js';
 import { acquireTenantWork } from './tenancy.js';
 import { CheerioCrawler, Configuration } from 'crawlee';
 import { randomUUID } from 'node:crypto';
-import { ensureCollections, importDocuments, removeDocumentsBySourceIds, removeCrawledPages, toIndexDocs } from '../modules/typesense.js';
+import { ensureCollections, importDocuments, removeDocumentsByIds, captureCrawledPageIds, removeCrawledPages, toIndexDocs } from '../modules/typesense.js';
 import { Url } from '../model/url.js';
+import { CrawlPublication } from '../model/crawl_publication.js';
 import { CrawlState } from '../model/crawl_state.js';
 import { createLogger } from './logger.js';
 
@@ -363,7 +364,8 @@ export function buildCrawledPageIndexDocs(input, deps = {}) {
 }
 
 export async function bulkIndexCrawledPages(hostId, input, deps = {}) {
-	const removeFn = deps.removeDocumentsBySourceIds || removeDocumentsBySourceIds;
+	const removeFn = deps.removeDocumentsByIds || removeDocumentsByIds;
+	const captureFn = deps.captureCrawledPageIds || captureCrawledPageIds;
 	const importFn = deps.importDocuments || importDocuments;
 	const toIndexDocsFn = deps.toIndexDocs || toIndexDocs;
 	const batchSize = deps.batchSize || getCrawlIndexBatchSize();
@@ -374,7 +376,9 @@ export async function bulkIndexCrawledPages(hostId, input, deps = {}) {
 	for (let i = 0; i < pageDocs.length; i += batchSize) {
 		const batch = pageDocs.slice(i, i + batchSize);
 		const sourceIds = batch.map((doc) => doc.id);
-		await removeFn(hostId, 'pages', sourceIds);
+		const displaced = await captureFn(hostId, input.urlId, sourceIds);
+		if (input.beforeImport) await input.beforeImport(displaced);
+		await removeFn(hostId, 'pages', displaced);
 
 		const entries = [];
 		const expectedChunks = new Map();
@@ -596,20 +600,9 @@ export async function crawlSite(urlDoc, deps = {}) {
 	});
 	const summary = await publishCrawlStep(urlDoc, urlModel, crawlStateModel, stateOps, deps);
 
-	const claim = randomUUID();
 	if (!summary) return 0;
-	const indexResult = await bulkIndexPagesFn(hostId, {
-		claim,
-		urlId,
-		projectId,
-		pages,
-		crawledAt: Math.floor(Date.now() / 1000),
-	});
-
-	if (!await claimActiveUrl(urlDoc, urlModel)) {
-		await (deps.removeCrawledPages || removeCrawledPages)(hostId, [urlId], { claim });
-		return 0;
-	}
+	const indexResult = await publishCrawledPages(urlDoc, { urlId, projectId, pages, crawledAt: Math.floor(Date.now() / 1000) }, { ...deps, bulkIndexCrawledPages: bulkIndexPagesFn });
+	if (!indexResult) return 0;
 
 	if (indexResult.attemptedCount > indexResult.indexedCount) {
 		log.error({ attempted: indexResult.attemptedCount, indexed: indexResult.indexedCount, url: urlDoc.url }, 'Page index error');
@@ -620,11 +613,63 @@ export async function crawlSite(urlDoc, deps = {}) {
 	} finally { await releaseAccountWork(); }
 }
 
+export async function cleanupCrawlPublications(deps = {}) {
+	const model = deps.CrawlPublication || CrawlPublication;
+	const rows = await model.find({ expires_at: { $lte: new Date() } }).lean();
+	for (const candidate of rows) {
+		try {
+			const row = await model.findOneAndUpdate({ _id: candidate._id, expires_at: { $lte: new Date() } }, { $set: { expires_at: new Date(0) } }, { returnDocument: 'after' }).lean();
+			if (!row) continue;
+			await (deps.removeDocumentsByIds || removeDocumentsByIds)(row.host_id, 'pages', row.displaced_ids);
+			if (row.cleanup) await (deps.removeCrawledPages || removeCrawledPages)(row.host_id, [String(row.parent_url_id)], { claim: row._id });
+			if (row.finished) await model.deleteOne({ _id: row._id });
+		} catch (err) { log.error({ err, claim: candidate._id }, 'Crawl cleanup retained for retry'); }
+	}
+}
+
+export async function publishCrawledPages(urlDoc, input, deps = {}) {
+	const model = deps.CrawlPublication || CrawlPublication;
+	const urlModel = deps.Url || Url;
+	const claim = randomUUID();
+	const hostId = urlDoc.host_id;
+	const expires = new Date(Date.now() + 10 * 60 * 1000);
+	const version = urlDoc.updatedAt ? { updatedAt: urlDoc.updatedAt } : {};
+	await model.create({ _id: claim, host_id: hostId, parent_url_id: urlDoc._id, expires_at: expires });
+	const ownership = { _id: urlDoc._id, host_id: hostId, ...version, in_trash: { $ne: true }, crawl_claim: claim, crawl_claim_expires_at: { $gt: new Date() } };
+	let completed = false;
+	try {
+		const parent = await urlModel.findOneAndUpdate({ _id: urlDoc._id, host_id: hostId, ...version, in_trash: { $ne: true }, $or: [{ crawl_claim: null }, { crawl_claim_expires_at: { $lte: new Date() } }] }, { $set: { crawl_claim: claim, crawl_claim_expires_at: expires } }, { timestamps: false, returnDocument: 'after' }).lean();
+		if (!parent) return null;
+		const beforeImport = async (ids) => {
+			ownership.crawl_claim_expires_at.$gt = new Date();
+			if (!await urlModel.findOneAndUpdate(ownership, { $inc: { __v: 1 } }, { timestamps: false, returnDocument: 'after' }).lean()) throw new Error('Crawl publication lost ownership');
+			await model.updateOne({ _id: claim }, { $addToSet: { displaced_ids: { $each: ids } } });
+		};
+		const result = await (deps.bulkIndexCrawledPages || bulkIndexCrawledPages)(hostId, { ...input, claim, beforeImport });
+		if (result.attemptedCount > result.indexedCount) throw new Error('Crawl import incomplete');
+		await beforeImport([]);
+		const committed = await model.findOneAndUpdate({ _id: claim, expires_at: { $gt: new Date() } }, { $set: { finished: true, cleanup: false } }, { returnDocument: 'after' }).lean();
+		if (!committed) throw new Error('Crawl publication expired');
+		completed = true;
+		return result;
+	} finally {
+		// Persist cleanup before attempting external deletion, including thrown imports and parent checks.
+		const cleanup = await model.findOneAndUpdate({ _id: claim }, { $set: { cleanup: !completed, finished: true, expires_at: new Date() } }, { returnDocument: 'after' }).lean();
+		try {
+			await (deps.removeDocumentsByIds || removeDocumentsByIds)(hostId, 'pages', cleanup?.displaced_ids || []);
+			if (!completed) await (deps.removeCrawledPages || removeCrawledPages)(hostId, [String(urlDoc._id)], { claim });
+			await model.deleteOne({ _id: claim });
+		} catch (err) { log.error({ err, claim }, 'Crawl cleanup retained for retry'); }
+		await urlModel.updateOne({ _id: urlDoc._id, host_id: hostId, crawl_claim: claim }, { $set: { crawl_claim: null, crawl_claim_expires_at: null } }, { timestamps: false });
+	}
+}
+
 /**
 * Re-crawl only URLs that are due based on last_crawled age.
 * This spreads crawling over time instead of a single daily spike.
 */
 export async function reindexDue({ intervalHours = 24 } = {}) {
+	await cleanupCrawlPublications();
 	const cutoff = new Date(Date.now() - intervalHours * 60 * 60 * 1000);
 	const urls = await Url.find({
 		crawl_enabled: true,

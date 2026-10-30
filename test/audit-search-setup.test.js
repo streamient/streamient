@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import Typesense from 'typesense';
 import { accountWork } from '../modules/tenancy.js';
+import { CrawlPublication } from '../model/crawl_publication.js';
 import { CrawlState } from '../model/crawl_state.js';
 
 test('collection setup cache avoids tenant writes, retries failures, and isolates hosts', async (t) => {
@@ -44,6 +45,9 @@ test('URL purge deletes crawled search pages and crawl state with tenant scope',
 test('scheduled crawling excludes trashed URLs', async (t) => {
 	const { Url } = await import('../model/url.js');
 	const original = Url.find;
+	const findPublications = CrawlPublication.find;
+	CrawlPublication.find = () => ({ lean: async () => [] });
+	t.after(() => { CrawlPublication.find = findPublications; });
 	let query;
 	Url.find = (filter) => { query = filter; return { sort() { return this; }, lean: async () => [] }; };
 	t.after(() => { Url.find = original; });
@@ -53,23 +57,62 @@ test('scheduled crawling excludes trashed URLs', async (t) => {
 	assert.equal(query.crawl_enabled, true);
 });
 
-test('publishing a trashed URL removes all its crawled pages', async (t) => {
+test('publishing a trashed URL deletes only pages captured before claiming', async (t) => {
 	const original = Typesense.Client;
 	const acquire = accountWork.acquire;
 	const deletes = [];
+	const pages = new Set(['old-page']);
 	accountWork.acquire = async () => async () => {};
 	Typesense.Client = class { collections(name) { return {
 		retrieve: async () => ({ fields: [] }), update: async () => {},
 		documents: () => ({
+			export: async () => [...pages].map((id) => JSON.stringify({ id })).join('\n'),
 			search: async () => ({ hits: [] }),
-			delete: async (params) => { deletes.push({ name, filter: params.filter_by }); return {}; },
+			delete: async (params) => { deletes.push({ name, filter: params.filter_by }); if (params.filter_by === 'id:=[`old-page`]') pages.delete('old-page'); return {}; },
 			import: async (docs) => docs.map(() => ({ success: true })),
 		}),
 	}; } };
 	t.after(() => { Typesense.Client = original; accountWork.acquire = acquire; });
 	const ts = await import(`../modules/typesense.js?trash-url-audit=${Date.now()}`);
-	const model = { findOneAndUpdate: (_query, _update, options) => ({ select() { return this; }, lean: async () => options.returnDocument === 'before' ? {} : { _id: 'url' } }) };
+	const model = { findOneAndUpdate: (_query, _update, options) => ({ select() { return this; }, lean: async () => { if (options.returnDocument === 'before') { pages.add('restored-new-page'); return {}; } return { _id: 'url' }; } }) };
 	const result = await ts.publishClaimedDocuments('tenant', 'urls', model, [{ _id: 'url', in_trash: true, url: 'https://example.com', updatedAt: new Date() }]);
 	assert.equal(result[0].success, true);
-	assert.ok(deletes.some((call) => call.name === ts.buildCollectionName('pages', 'tenant') && call.filter === 'parent_url_id:=[`url`]'));
+	assert.deepEqual([...pages], ['restored-new-page']);
+	assert.ok(deletes.some((call) => call.name === ts.buildCollectionName('pages', 'tenant') && call.filter === 'id:=[`old-page`]'));
+});
+
+test('reindex fences in-flight setup and failed recreation cannot leave a cache hit', async (t) => {
+	let release;
+	let started;
+	const ready = new Promise((resolve) => { started = resolve; });
+	let requests = 0;
+	let drops = 0;
+	let blocked = true;
+	let failCreate = true;
+	t.mock.method(accountWork, 'acquire', async () => async () => {});
+	const original = Typesense.Client;
+	Typesense.Client = class { collections() { return {
+		retrieve: async () => { requests++; if (blocked) { blocked = false; started(); await new Promise((resolve) => { release = resolve; }); } return { fields: [] }; },
+		update: async () => {}, delete: async () => { drops++; },
+		create: async () => { if (failCreate) throw new Error('rebuild offline'); },
+	}; } };
+	t.after(() => { Typesense.Client = original; });
+	const ts = await import(`../modules/typesense.js?rebuild-audit=${Date.now()}`);
+	const first = ts.ensureCollections('host');
+	await ready;
+	const second = ts.ensureCollections('host');
+	const rebuilding = ts.reindexHost('host', { Note: {} });
+	assert.equal(drops, 0);
+	const during = ts.ensureCollections('host');
+	release();
+	await Promise.all([first, second]);
+	await assert.rejects(rebuilding, /rebuild offline/);
+	await assert.rejects(during, /rebuild offline/);
+	const before = requests;
+	failCreate = false;
+	await Promise.all([ts.ensureCollections('host'), ts.ensureCollections('host')]);
+	assert.equal(requests - before, before);
+	const after = requests;
+	await ts.ensureCollections('host');
+	assert.equal(requests, after);
 });

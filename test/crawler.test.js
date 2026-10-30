@@ -1,3 +1,8 @@
+import { CrawlPublication } from '../model/crawl_publication.js';
+import { publicationStore } from './helpers/crawl-publication.js';
+let publicationMethods;
+beforeProject(() => { const fake = publicationStore(); publicationMethods = {}; for (const key of ['create', 'updateOne', 'findOneAndUpdate', 'find', 'deleteOne']) { publicationMethods[key] = CrawlPublication[key]; CrawlPublication[key] = fake[key]; } });
+afterProject(() => Object.assign(CrawlPublication, publicationMethods));
 import { beforeEach as beforeProject, afterEach as afterProject } from 'node:test';
 import { mockActiveProject } from './helpers/active-project.js';
 let restoreProject;
@@ -161,9 +166,9 @@ describe('crawler indexing and state', () => {
 			bulkIndexCrawledPages: async (host, data) => ({ indexedCount: data.pages.length, attemptedCount: data.pages.length }),
 		});
 		assert.equal(count, 1);
-		assert.equal(updates.at(-1).crawl_visited_count, 1);
-		assert.equal(updates.at(-1).crawl_frontier_count, 0);
-		assert.equal(updates.at(-1).crawl_partial, false);
+		assert.equal(updates.findLast((update) => update.crawl_visited_count !== undefined).crawl_visited_count, 1);
+		assert.equal(updates.findLast((update) => update.crawl_visited_count !== undefined).crawl_frontier_count, 0);
+		assert.equal(updates.findLast((update) => update.crawl_visited_count !== undefined).crawl_partial, false);
 	});
 
 	it('crawls each saved public URL independently', async () => {
@@ -313,7 +318,8 @@ describe('crawler indexing and state', () => {
 			],
 		}, {
 			batchSize: 2,
-			removeDocumentsBySourceIds: async (hostId, type, sourceIds) => {
+			captureCrawledPageIds: async (_host, _parent, ids) => ids,
+			removeDocumentsByIds: async (hostId, type, sourceIds) => {
 				removeCalls.push({ hostId, type, sourceIds });
 			},
 			importDocuments: async (hostId, type, docs) => {
@@ -806,13 +812,12 @@ it('removes only the losing crawl publication if the URL is trashed during impor
 		constructor(options) { this.options = options; }
 		async run(batch) { await this.options.requestHandler({ request: { url: batch[0] }, response: makeHtmlResponse(), $: makeHtml(), enqueueLinks: async () => {} }); }
 	}
-	const count = await crawlSite(makeUrlDoc(), {
+	await assert.rejects(crawlSite(makeUrlDoc(), {
 		CheerioCrawler: FakeCrawler, CrawlState: makeCrawlStateModel(), ensureCollections: async () => {},
 		Url: { updateOne: async () => {}, findOneAndUpdate: (query) => ({ lean: async () => { assert.deepEqual(query.in_trash, { $ne: true }); return active ? {} : null; } }) },
 		bulkIndexCrawledPages: async (_host, input) => { claim = input.claim; active = false; return { indexedCount: 1 }; },
 		removeCrawledPages: async (...args) => removed.push(args),
-	});
-	assert.equal(count, 0);
+	}), /lost ownership/);
 	assert.ok(claim);
 	assert.deepEqual(removed, [[makeUrlDoc().host_id, [String(makeUrlDoc()._id)], { claim }]]);
 });
@@ -831,7 +836,8 @@ it('does not seed crawl state or publish pages for a trashed or purged URL', asy
 it('stamps imported page chunks with the crawl claim for conditional cleanup', async () => {
 	const docs = [];
 	await bulkIndexCrawledPages('tenant', { urlId: 'url', projectId: 'project', claim: 'run-one', crawledAt: 10, pages: [{ url: 'https://example.com', title: 'Page', text_content: 'Body' }] }, {
-		removeDocumentsBySourceIds: async () => {},
+		captureCrawledPageIds: async (_host, _parent, ids) => ids,
+			removeDocumentsByIds: async () => {},
 		importDocuments: async (_host, _type, rows) => { docs.push(...rows); return rows.map(() => ({ success: true })); },
 	});
 	assert.equal(docs.length, 1);

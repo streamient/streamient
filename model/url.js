@@ -11,6 +11,8 @@ const urlSchema = new mongoose.Schema(
 		og_image: { type: String, default: '' },
 		screenshot: { type: String, default: '' },
 		text_content: { type: String, default: '' },
+		crawl_claim: { type: String, default: null },
+		crawl_claim_expires_at: { type: Date, default: null },
 		crawl_enabled: { type: Boolean, default: false },
 		last_crawled: { type: Date },
 		crawl_frontier: { type: [String], default: [] },

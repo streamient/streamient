@@ -89,3 +89,9 @@ docker compose exec app pnpm trash:reconcile --host-id <host_id> --apply --confi
 ```
 
 4. Set `SCHEDULER_TRASH_RECONCILIATION_ENABLED=true` to enable nightly reconciliation.
+
+## Crawl publication recovery
+
+Crawl publication uses a ten-minute parent URL lease and durable `crawlpublications` records. The scheduled crawler retries expired cleanup records, including records whose parent URL was deleted. Cleanup targets captured document IDs and individual claim tokens.
+
+Completed cleanup records are removed. Records left by an interrupted process remain so cleanup can remove a late import after that process resumes. Do not add a TTL index to this collection. Inspect repeated `Crawl cleanup retained for retry` errors for Typesense connectivity failures. Include this tenant-scoped collection in account deletion.

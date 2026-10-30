@@ -65,6 +65,8 @@ const INDEXED_TYPE_MODELS = {
 };
 const TYPESENSE_MAX_PAGE_SIZE = 250;
 const ensuredCollectionHosts = new Set();
+const collectionSetupPromises = new Map();
+const collectionSetupGenerations = new Map();
 
 function chunkMetadataFields() {
 	return [
@@ -717,7 +719,10 @@ const schemas = {
  * Ensure search collections exist for a given host.
  */
 export async function ensureCollections(host_id) {
+	if (collectionSetupPromises.has(host_id)) return collectionSetupPromises.get(host_id);
 	if (ensuredCollectionHosts.has(host_id)) return;
+	const generation = collectionSetupGenerations.get(host_id);
+	const setup = (async () => {
 	const releaseAccountWork = await acquireTenantWork(host_id);
 	try {
 	if (ensuredCollectionHosts.has(host_id)) return;
@@ -749,8 +754,11 @@ export async function ensureCollections(host_id) {
 			}
 		}
 	}
-	ensuredCollectionHosts.add(host_id);
+	if (collectionSetupGenerations.get(host_id) === generation) ensuredCollectionHosts.add(host_id);
 	} finally { await releaseAccountWork(); }
+	})();
+	collectionSetupPromises.set(host_id, setup);
+	try { return await setup; } finally { if (collectionSetupPromises.get(host_id) === setup) collectionSetupPromises.delete(host_id); }
 }
 
 /**
@@ -1005,6 +1013,7 @@ export async function publishClaimedDocuments(host_id, type, model, docs, option
 		if (!sourceId) continue;
 		const token = randomUUID();
 		const version = doc.updatedAt ? { updatedAt: doc.updatedAt } : { updatedAt: { $exists: false } };
+		const capturedPages = type === 'urls' && doc.in_trash ? await captureCrawledPageIds(host_id, sourceId) : [];
 		let prev;
 		try {
 			prev = await model.findOneAndUpdate(
@@ -1026,7 +1035,7 @@ export async function publishClaimedDocuments(host_id, type, model, docs, option
 		} else {
 			await removeLegacyClaimlessChunks(host_id, type, sourceId);
 		}
-		if (type === 'urls' && doc.in_trash) await removeCrawledPages(host_id, [sourceId]);
+		if (capturedPages.length) await removeDocumentsByIds(host_id, 'pages', capturedPages);
 		const chunks = toTypesenseDocs(type, doc, token);
 		chunkCounts.set(sourceId, chunks.length);
 		for (const chunk of chunks) sourceEntries.push({ sourceId, doc: chunk });
@@ -1128,8 +1137,10 @@ export async function removeDocumentsBySourceIds(host_id, type, sourceIds, optio
 	const ids = [...new Set((sourceIds || []).map((id) => String(id)).filter(Boolean))];
 	if (!ids.length) return null;
 	if (type === 'urls' && !options.claim) {
-		await removeCrawledPages(host_id, ids);
-		await CrawlState.deleteMany({ host_id, parent_url_id: { $in: ids } });
+		const outcomes = await Promise.allSettled([removeCrawledPages(host_id, ids), CrawlState.deleteMany({ host_id, parent_url_id: { $in: ids } }), removeDocumentsByFilter(host_id, type, `source_id:=[${ids.map(exactFilterValue).join(',')}]`, { batch_size: 250 })]);
+		const failures = outcomes.filter((entry) => entry.status === 'rejected');
+		if (failures.length) throw new AggregateError(failures.map((entry) => entry.reason), 'URL cleanup failed');
+		return outcomes[2].value;
 	}
 	const ts = getTypesenseClient();
 	const collectionName = buildCollectionName(type, host_id);
@@ -1147,6 +1158,13 @@ export async function removeDocumentsBySourceIds(host_id, type, sourceIds, optio
 			}
 		},
 	);
+}
+
+export async function captureCrawledPageIds(host_id, parentId, sourceIds) {
+	const filter = [`parent_url_id:=${exactFilterValue(parentId)}`];
+	if (sourceIds) filter.push(`source_id:=[${sourceIds.map(exactFilterValue).join(',')}]`);
+	const data = await getTypesenseClient().collections(buildCollectionName('pages', host_id)).documents().export({ filter_by: filter.join(' && '), include_fields: 'id' }).catch((err) => { if (err.httpStatus === 404) return ''; throw err; });
+	return String(data || '').split('\n').filter(Boolean).map((line) => JSON.parse(line).id);
 }
 
 export async function removeCrawledPages(host_id, parentIds, options = {}) {
@@ -1671,6 +1689,18 @@ export async function getFilteredCount(host_id, type, projectId) {
  * so runStreamientIndexer() can repopulate Typesense in batches.
  */
 export async function reindexHost(host_id, models) {
+	const previous = collectionSetupPromises.get(host_id);
+	collectionSetupGenerations.set(host_id, (collectionSetupGenerations.get(host_id) || 0) + 1);
+	ensuredCollectionHosts.delete(host_id);
+	const rebuild = (async () => {
+	await previous?.catch(() => {});
+	return rebuildHostCollections(host_id, models);
+	})();
+	collectionSetupPromises.set(host_id, rebuild);
+	try { return await rebuild; } finally { if (collectionSetupPromises.get(host_id) === rebuild) collectionSetupPromises.delete(host_id); }
+}
+
+async function rebuildHostCollections(host_id, models) {
 	const ts = getTypesenseClient();
 	const typeModelMap = getIndexedTypeModelMap(models);
 	const results = {};
