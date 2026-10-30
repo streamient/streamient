@@ -18,7 +18,7 @@ export async function sendMagicLink(email, baseUrl = null, options = {}) {
 }
 
 export async function isMagicLinkValid(token) {
-	if (!token) return false;
+	if (typeof token !== 'string' || !token) return false;
 	const link = await MagicLink.findOne({
 		token,
 		used: false,

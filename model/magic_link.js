@@ -1,4 +1,4 @@
-import mongoose, { queryForSave } from './mongoose.js';
+import mongoose from './mongoose.js';
 import crypto from 'node:crypto';
 
 const magicLinkSchema = new mongoose.Schema(
@@ -17,16 +17,10 @@ magicLinkSchema.statics.generate = async function (userId) {
 	return this.create({ user: userId, token, expires_at });
 };
 
+// Atomic claim: a string-only token can be consumed exactly once.
 magicLinkSchema.statics.verify = async function (token) {
-	const link = await queryForSave(this.findOne({
-		token,
-		used: false,
-		expires_at: { $gt: new Date() },
-	}));
-	if (!link) return null;
-	link.used = true;
-	await link.save();
-	return link;
+	if (typeof token !== 'string' || !token) return null;
+	return this.findOneAndUpdate({ token, used: false, expires_at: { $gt: new Date() } }, { $set: { used: true } }, { new: true }).lean();
 };
 
 export const MagicLink = mongoose.model('MagicLink', magicLinkSchema);

@@ -138,4 +138,28 @@ describe('magic link flow hardening', () => {
 			User.findById = originalFindById;
 		}
 	});
+
+	it('rejects operator-object tokens and claims a link atomically once', async (t) => {
+		const links = [{ _id: 'link-1', user: 'user-1', token: 'token-1', used: false, expires_at: new Date(Date.now() + 60000) }];
+		const calls = [];
+		t.mock.method(MagicLink, 'findOneAndUpdate', (filter, update, options) => {
+			calls.push({ filter, update, options });
+			const link = links.find((row) => row.token === filter.token && row.used === filter.used && row.expires_at > filter.expires_at.$gt);
+			if (link) Object.assign(link, update.$set);
+			return { lean: async () => link ? { ...link } : null };
+		});
+
+		assert.equal(await MagicLink.verify({ $ne: '' }), null);
+		assert.equal(await isMagicLinkValid({ $ne: '' }), false);
+		assert.equal(calls.length, 0);
+
+		const first = await MagicLink.verify('token-1');
+		const second = await MagicLink.verify('token-1');
+		assert.equal(first.user, 'user-1');
+		assert.equal(first.used, true);
+		assert.equal(second, null);
+		assert.deepEqual(calls[0].update, { $set: { used: true } });
+		assert.equal(calls[0].filter.used, false);
+		assert.equal(calls[0].options.new, true);
+	});
 });

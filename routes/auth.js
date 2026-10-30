@@ -10,7 +10,7 @@ import { User, compareUserPassword, toSafeUser } from '../model/user.js';
 import { applyTenantContextToSession, initializeSessionTenant } from '../modules/tenancy.js';
 import { ensureCollections } from '../modules/typesense.js';
 import { generateToken } from '../middleware/auth.js';
-import { getClientIp } from '../middleware/rate_limit.js';
+import { createAuthAttemptLimiter, getClientIp } from '../middleware/rate_limit.js';
 import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail, sendSignupNotificationEmail } from '../services/email_service.js';
 import { buildHostedTrialFields } from '../services/billing_service.js';
 import { sendMagicLink, isMagicLinkValid, verifyMagicLink } from '../services/magic_link_service.js';
@@ -27,6 +27,12 @@ import { PendingSignup } from '../model/pending_signup.js';
 import { isSysadminCredentials, requireSysadmin } from '../middleware/sysadmin.js';
 
 const router = Router();
+const loginLimiter = createAuthAttemptLimiter('auth-login', { view: 'auth/login' });
+const twoFactorLimiter = createAuthAttemptLimiter('auth-2fa', { account: (req) => req.session?.pending2FA?.userId });
+const MAX_2FA_FAILURES = 5;
+
+// JSON bodies accept objects; only plain strings may reach Mongo filters.
+const asString = (value) => typeof value === 'string' ? value : '';
 
 async function deletionActor(req) {
 	const hosted = req.isHosted === undefined ? config.isHosted : req.isHosted;
@@ -114,20 +120,18 @@ function consumePostAuthRedirect(req, fallback = '/dashboard') {
 	return redirectTo;
 }
 
+// Email links use the configured app URL or the tenant's stored verified domain, never raw Host headers.
 function getRequestBaseUrl(req) {
-	const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
-	const protocol = forwardedProto || req.protocol || 'http';
-	const forwardedHost = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim();
-	const host = forwardedHost || req.headers.host;
-	if (!host) return null;
-	return `${protocol}://${host}`;
+	const domain = req.whiteLabelHostId && req.whiteLabel?.dns_name_custom;
+	return domain ? `https://${domain}` : config.appUrl;
 }
 
 // ---- Registration (email confirmation required before account creation) ----
 
 router.post('/signup', async (req, res) => {
 	try {
-		const { email, name } = req.body;
+		const email = asString(req.body.email);
+		const name = asString(req.body.name);
 		if (!email || !name) {
 			return res.status(400).json({ error: 'email and name are required' });
 		}
@@ -169,7 +173,7 @@ router.post('/signup', async (req, res) => {
 
 router.get('/verify', async (req, res) => {
 	try {
-		const { token } = req.query;
+		const token = asString(req.query.token);
 		if (!token) return res.render('auth/verify', { error: 'Token required' });
 
 		const pending = await PendingSignup.findOne({ token, expires_at: { $gt: new Date() } });
@@ -194,7 +198,7 @@ router.get('/verify', async (req, res) => {
 
 router.post('/verify', async (req, res) => {
 	try {
-		const { token } = req.body;
+		const token = asString(req.body.token);
 		if (!token) return res.render('auth/verify', { error: 'Token required' });
 
 		const pending = await PendingSignup.findOne({ token, expires_at: { $gt: new Date() } });
@@ -249,15 +253,17 @@ router.post('/verify', async (req, res) => {
 
 // ---- Login ----
 
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
 	try {
-		const { email, password } = req.body;
+		const email = asString(req.body.email);
+		const password = asString(req.body.password);
 		if (!email || !password) {
 			return res.status(400).json({ error: 'email and password required' });
 		}
 
 		// ---- Sysadmin check (env-var based, no DB record) ----
 		if (isSysadminCredentials(email, password)) {
+			await new Promise((resolve, reject) => req.session.regenerate((err) => err ? reject(err) : resolve()));
 			req.session.isSysadmin = true;
 			if (req.is('application/x-www-form-urlencoded')) return res.redirect('/sysadmin');
 			return res.json({ isSysadmin: true });
@@ -324,7 +330,7 @@ router.post('/reset-password', async (req, res) => {
 
 router.post('/forgot-password', async (req, res) => {
 	try {
-		const { email } = req.body;
+		const email = asString(req.body.email);
 		if (!email) return res.status(400).json({ error: 'email is required' });
 
 		const user = await queryForSave(User.findOne({ email, is_active: true }));
@@ -348,7 +354,7 @@ router.post('/forgot-password', async (req, res) => {
 
 router.get('/reset-password', async (req, res) => {
 	try {
-		const { token } = req.query;
+		const token = asString(req.query.token);
 		if (!token) return res.redirect('/forgot-password');
 
 		const user = await User.findOne({
@@ -379,7 +385,7 @@ router.get('/reset-password', async (req, res) => {
 
 router.post('/reset-password/confirm', async (req, res) => {
 	try {
-		const { token } = req.body;
+		const token = asString(req.body.token);
 		const pending = req.session.pendingReset;
 
 		if (!pending || pending.token !== token) {
@@ -406,12 +412,13 @@ router.post('/reset-password/confirm', async (req, res) => {
 
 // ---- 2FA Verify ----
 
-router.post('/2fa/verify', async (req, res) => {
+router.post('/2fa/verify', twoFactorLimiter, async (req, res) => {
 	try {
-		const { code, tempToken } = req.body;
+		const code = asString(req.body.code);
+		const tempToken = asString(req.body.tempToken);
 		const pending = req.session.pending2FA;
 
-		if (!pending || pending.token !== tempToken) {
+		if (!pending || !tempToken || pending.token !== tempToken) {
 			return res.status(401).json({ error: 'Invalid 2FA session' });
 		}
 
@@ -419,7 +426,12 @@ router.post('/2fa/verify', async (req, res) => {
 		if (!user) return res.status(401).json({ error: 'User not found' });
 
 		const result = verifySync({ token: code, secret: user.totp_secret });
-		if (!result.valid) return res.status(401).json({ error: 'Invalid 2FA code' });
+		if (!result.valid) {
+			pending.failures = (pending.failures || 0) + 1;
+			if (pending.failures < MAX_2FA_FAILURES) return res.status(401).json({ error: 'Invalid 2FA code' });
+			delete req.session.pending2FA;
+			return res.status(401).json({ error: 'Too many invalid codes. Please sign in again.' });
+		}
 
 		delete req.session.pending2FA;
 		const tenantContext = await hydrateSessionForUser(req, user);
@@ -486,7 +498,7 @@ router.post('/2fa/confirm', async (req, res) => {
 
 router.post('/magic-link', async (req, res) => {
 	try {
-		const { email } = req.body;
+		const email = asString(req.body.email);
 		if (!email) return res.status(400).json({ error: 'email required' });
 
 		await sendMagicLink(email, getRequestBaseUrl(req));
@@ -504,7 +516,7 @@ router.head('/magic', (req, res) => {
 
 router.get('/magic', async (req, res) => {
 	try {
-		const { token } = req.query;
+		const token = asString(req.query.token);
 		if (!token) return res.render('auth/magic', { error: 'Token required' });
 
 		const isValid = await isMagicLinkValid(token);
@@ -521,7 +533,7 @@ router.get('/magic', async (req, res) => {
 
 router.post('/magic', async (req, res) => {
 	try {
-		const { token } = req.body;
+		const token = asString(req.body.token);
 		if (!token) return res.render('auth/magic', { error: 'Token required' });
 
 		const user = await verifyMagicLink(token);
