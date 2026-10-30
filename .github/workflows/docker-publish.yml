@@ -84,6 +84,7 @@ jobs:
                   GH_TOKEN: ${{ github.token }}
                   TAG: ${{ github.ref_name }}
               run: |
+                  [[ "$TAG" =~ ^202[0-9]{5}[1-9][0-9]*$ ]] || { echo "Not a dated release tag. Skipping."; exit 0; }
                   git rev-parse "refs/tags/$TAG"
                   if gh release view "$TAG" >/dev/null 2>&1; then
                     echo "Release $TAG already exists. Skipping."
