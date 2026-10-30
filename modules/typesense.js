@@ -719,14 +719,16 @@ const schemas = {
  * Ensure search collections exist for a given host.
  */
 export async function ensureCollections(host_id) {
-	if (collectionSetupPromises.has(host_id)) return collectionSetupPromises.get(host_id);
+	const generation = collectionSetupGenerations.get(host_id);
+	let setup = collectionSetupPromises.get(host_id);
+	if (!setup) {
+	setup = (async () => {
 	if (ensuredCollectionHosts.has(host_id)) {
 		const collections = await getTypesenseClient().collections().retrieve();
+		if (collectionSetupGenerations.get(host_id) !== generation) return;
 		if (Object.values(schemas).every((schema) => collections.some((collection) => collection.name === schema(host_id).name))) return;
 		ensuredCollectionHosts.delete(host_id);
 	}
-	const generation = collectionSetupGenerations.get(host_id);
-	const setup = (async () => {
 	const releaseAccountWork = await acquireTenantWork(host_id);
 	try {
 	if (ensuredCollectionHosts.has(host_id)) return;
@@ -762,7 +764,9 @@ export async function ensureCollections(host_id) {
 	} finally { await releaseAccountWork(); }
 	})();
 	collectionSetupPromises.set(host_id, setup);
-	try { return await setup; } finally { if (collectionSetupPromises.get(host_id) === setup) collectionSetupPromises.delete(host_id); }
+	}
+	try { await setup; } finally { if (collectionSetupPromises.get(host_id) === setup) collectionSetupPromises.delete(host_id); }
+	if (collectionSetupGenerations.get(host_id) !== generation) return ensureCollections(host_id);
 }
 
 /**

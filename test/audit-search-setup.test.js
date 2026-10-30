@@ -107,10 +107,12 @@ test('reindex fences in-flight setup and failed recreation cannot leave a cache 
 	const rebuilding = ts.reindexHost('host', { Note: {} });
 	assert.equal(drops, 0);
 	const during = ts.ensureCollections('host');
+	const pending = Promise.allSettled([first, second, rebuilding, during]);
 	release();
-	await Promise.all([first, second]);
-	await assert.rejects(rebuilding, /rebuild offline/);
-	await assert.rejects(during, /rebuild offline/);
+	for (const result of await pending) {
+		assert.equal(result.status, 'rejected');
+		assert.match(result.reason.message, /rebuild offline/);
+	}
 	const before = requests;
 	failCreate = false;
 	await Promise.all([ts.ensureCollections('host'), ts.ensureCollections('host')]);
@@ -140,4 +142,37 @@ test('a warm process repairs collections destroyed by another process', async (t
  assert.equal(creates, before * 2);
  await second.ensureCollections('host');
  assert.equal(creates, before * 2);
+});
+
+test('warm validation and subsequent callers wait for a superseding rebuild', async (t) => {
+ const original = Typesense.Client;
+ const names = new Set();
+ let releaseProbe, probeStarted, releaseDrop, dropStarted;
+ const probing = new Promise((resolve) => { probeStarted = resolve; });
+ const dropping = new Promise((resolve) => { dropStarted = resolve; });
+ let blockProbe = false;
+ let blockDrop = true;
+ t.mock.method(accountWork, 'acquire', async () => async () => {});
+ Typesense.Client = class { collections(name) { return {
+  retrieve: async () => { if (!name) { if (blockProbe) { blockProbe = false; probeStarted(); await new Promise((resolve) => { releaseProbe = resolve; }); return []; } return [...names].map((name) => ({ name })); } names.add(name); return { fields: [] }; },
+  update: async () => {},
+  delete: async () => { if (blockDrop) { blockDrop = false; dropStarted(); await new Promise((resolve) => { releaseDrop = resolve; }); } names.delete(name); },
+  create: async (schema) => { names.add(schema.name); },
+ }; } };
+ t.after(() => { Typesense.Client = original; });
+ const ts = await import(`../modules/typesense.js?warm-overlap=${Date.now()}`);
+ await ts.ensureCollections('host');
+ blockProbe = true;
+ let settled = 0;
+ const warm = ts.ensureCollections('host').then(() => { settled++; });
+ await probing;
+ const rebuild = ts.reindexHost('host', {});
+ releaseProbe();
+ await dropping;
+ const next = ts.ensureCollections('host').then(() => { settled++; });
+ await new Promise((resolve) => setImmediate(resolve));
+ assert.equal(settled, 0);
+ releaseDrop();
+ await Promise.all([warm, next, rebuild]);
+ assert.equal(settled, 2);
 });
