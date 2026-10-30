@@ -224,14 +224,16 @@ describe('no-card trial signup and billing helpers', () => {
 			checkout: {
 				sessions: {
 					list: async () => ({ data: [], has_more: false }),
+					retrieve: async () => ({ id: 'cs_one', status: 'open', url: 'https://checkout.example/session' }),
 					create: async (params) => {
 						checkoutParams = params;
-						return { status: 'open', url: 'https://checkout.example/session' };
+						return { id: 'cs_one', status: 'open', url: 'https://checkout.example/session' };
 					},
 				},
 			},
 		};
 		const userModel = {
+			updateOne: async () => ({ matchedCount: 1 }),
 			findOneAndUpdate(filter, pipeline) { return { select() { return this; }, lean: async () => ({ stripe_checkout_attempt: pipeline[0].$set.stripe_checkout_attempt.$ifNull[1].$literal }) }; },
 			findByIdAndUpdate: async (...args) => {
 				updateCall = args;

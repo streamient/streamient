@@ -16,8 +16,8 @@ describe('Typesense import handling', () => {
 		const originalClient = Typesense.Client;
 		t.after(() => { Typesense.Client = originalClient; });
 		Typesense.Client = class {
-			collections() {
-				return { retrieve: async () => ({ fields: [] }), update: async () => ({}), documents: () => ({ delete: async () => ({ num_deleted: 1 }), import: async (docs) => {
+			collections(name) {
+				return { retrieve: async () => name ? { fields: [] } : [], update: async () => ({}), documents: () => ({ delete: async () => ({ num_deleted: 1 }), import: async (docs) => {
 					importedProjects.push(docs[0].project_id);
 					if (importedProjects.length === 1) {
 						record.project = 'destination';
@@ -67,7 +67,7 @@ describe('Typesense import handling', () => {
 	it('returns per-document failures when a whole import request fails', async () => {
 		const originalClient = Typesense.Client;
 		Typesense.Client = class FakeTypesenseClient {
-			collections() {
+			collections(name) {
 				return {
 					documents: () => ({
 						import: async () => {
@@ -96,7 +96,7 @@ describe('Typesense import handling', () => {
 	it('preserves Typesense per-document import results from partial failures', async () => {
 		const originalClient = Typesense.Client;
 		Typesense.Client = class FakeTypesenseClient {
-			collections() {
+			collections(name) {
 				return {
 					documents: () => ({
 						import: async () => {

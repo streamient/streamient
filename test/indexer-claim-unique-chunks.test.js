@@ -80,9 +80,9 @@ function makeModel(state) {
 function fakeTypesense(store, { importGate = null, searchGate = null } = {}) {
 	const original = Typesense.Client;
 	Typesense.Client = class {
-		collections() {
+		collections(name) {
 			return {
-				retrieve: async () => ({ fields: [] }),
+				retrieve: async () => name ? { fields: [] } : [],
 				update: async () => ({}),
 				create: async () => ({}),
 				documents: () => ({
