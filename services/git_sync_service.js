@@ -353,7 +353,7 @@ function gitRelativePath(syncBase, relPath) {
 }
 
 async function getFileGitDates(git, syncBase, mdFiles) {
-	const output = await git.raw(['log', '--name-status', '-z', '--find-renames', '--format=%x00%cI%x1f%s', '--']);
+	const output = await git.raw(['log', '--name-status', '-z', '--find-renames', '--format=%x00%cI%x1f%s', '--', '*.md']);
 	const histories = new Map(mdFiles.map((file) => [file, []]));
 	const tracked = new Map(mdFiles.map((file) => [gitRelativePath(syncBase, file), new Set([file])]));
 	const fields = output.split('\0');
@@ -749,9 +749,12 @@ async function pullFromGit(git, dir, syncBase, gitRepo, userId, hostId, ctx, sum
 	const query = { host_id: hostId, 'git_source.repo_id': gitRepo._id };
 	const [notes, memories] = await Promise.all([Note.find(query).lean(), Memory.find(query).lean()]);
 	for (const item of [...notes, ...memories]) if (item.git_source?.file_path) containedRepoPath(dir, syncBase, item.git_source.file_path);
-	if (!mdFiles.length && (notes.length || memories.length)) {
-		for (const item of notes) recordConflict(summary, 'note', item.git_source?.file_path, 'Git tree contains no Markdown files; deletion skipped to protect linked items');
-		for (const item of memories) recordConflict(summary, 'memory', item.git_source?.file_path, 'Git tree contains no Markdown files; deletion skipped to protect linked items');
+	// Only items the trash pass would touch count; already-trashed or commit-linked items never trigger the guard.
+	const liveNotes = notes.filter((item) => !item.in_trash);
+	const liveMemories = memories.filter((item) => !item.in_trash && item.git_commit?.repo_id == null);
+	if (!mdFiles.length && (liveNotes.length || liveMemories.length)) {
+		for (const item of liveNotes) recordConflict(summary, 'note', item.git_source?.file_path, 'Git tree contains no Markdown files; deletion skipped to protect linked items');
+		for (const item of liveMemories) recordConflict(summary, 'memory', item.git_source?.file_path, 'Git tree contains no Markdown files; deletion skipped to protect linked items');
 		return;
 	}
 	const notesByPath = new Map(notes.map((item) => [item.git_source?.file_path, item]));

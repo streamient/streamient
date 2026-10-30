@@ -605,6 +605,19 @@ for (const sync_path of ['/', 'missing']) test(`empty Markdown tree at ${sync_pa
 	assert.equal(memory.in_trash, undefined);
 });
 
+test('empty Markdown tree with only trashed linked items records no conflicts', async (t) => {
+	const remote = await createRemoteRepo();
+	t.after(() => fs.rmSync(remote.root, { recursive: true, force: true }));
+	const repo = makeRepo(remote, { sync_path: 'missing', commit_sync_enabled: false });
+	t.after(() => cleanupClone(repo.host_id));
+	const source = { repo_id: repo._id, file_path: 'missing.md', last_synced_at: now(5000) };
+	const note = makeDoc({ _id: oid('note'), host_id: repo.host_id, in_trash: true, git_source: { ...source } });
+	installModelMocks({ repos: [repo], notes: [note], memories: [] });
+	const summary = await syncRepo(repo._id.toString(), 'user-1', repo.host_id, { skip_lock: true, skip_audit: true });
+	assert.equal(summary.conflicts, 0);
+	assert.equal(summary.trashed_items, 0);
+});
+
 test('tagless note and memory updates retain fallback tags and match imported content', async (t) => {
 	const remote = await createRemoteRepo();
 	t.after(() => fs.rmSync(remote.root, { recursive: true, force: true }));
