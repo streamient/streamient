@@ -351,37 +351,33 @@ function emailSortTime(email = {}) {
 	return Number.isFinite(time) ? time : 0;
 }
 
+// Union-find over shared thread identifiers keeps grouping near-linear even when bridge messages merge large groups.
 function groupEmailsByThread(emails = []) {
-	const byIdentifier = new Map();
-	const groups = new Set();
-
-	for (const email of emails) {
-		const identifiers = emailThreadIdentifiers(email);
-		const matchedGroups = [...new Set(identifiers.map((id) => byIdentifier.get(id)).filter(Boolean))];
-		let group;
-		if (!matchedGroups.length) {
-			group = { identifiers: new Set(), email };
-			groups.add(group);
-		} else {
-			group = matchedGroups[0];
-			for (const merged of matchedGroups.slice(1)) {
-				if (merged === group) continue;
-				for (const id of merged.identifiers) {
-					group.identifiers.add(id);
-					byIdentifier.set(id, group);
-				}
-				if (emailSortTime(merged.email) > emailSortTime(group.email)) group.email = merged.email;
-				groups.delete(merged);
+	const parent = emails.map((_email, index) => index);
+	const find = (index) => {
+		while (parent[index] !== index) index = parent[index] = parent[parent[index]];
+		return index;
+	};
+	const owner = new Map();
+	emails.forEach((email, index) => {
+		for (const id of emailThreadIdentifiers(email)) {
+			if (!owner.has(id)) owner.set(id, index);
+			else {
+				const a = find(owner.get(id));
+				const b = find(index);
+				if (a !== b) parent[Math.max(a, b)] = Math.min(a, b);
 			}
-			if (emailSortTime(email) > emailSortTime(group.email)) group.email = email;
 		}
-		for (const id of identifiers) {
-			group.identifiers.add(id);
-			byIdentifier.set(id, group);
-		}
-	}
-
-	return [...groups];
+	});
+	const groups = new Map();
+	emails.forEach((email, index) => {
+		const root = find(index);
+		let group = groups.get(root);
+		if (!group) groups.set(root, group = { identifiers: new Set(), email });
+		else if (emailSortTime(email) > emailSortTime(group.email)) group.email = email;
+		for (const id of emailThreadIdentifiers(email)) group.identifiers.add(id);
+	});
+	return [...groups.values()];
 }
 
 function collapseEmailsByThread(emails = []) {
@@ -525,6 +521,8 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 		: null;
 
 	const { projectId: project, release, publish } = await acquireProjectWrite(host_id, data.project, ctx);
+	// Updates only touch an email in the leased project; one stored in another project hits the Message-ID unique index (409) instead of bypassing that project's fence.
+	const projectGuard = { project };
 	let email;
 	let created = false;
 	try {
@@ -550,7 +548,7 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 				// session. A 11000 aborts the transaction; no in-session
 				// read-after-upsert fallback is possible, so it propagates.
 				const result = await Email.findOneAndUpdate(
-					{ host_id, message_id: normalized.message_id },
+					{ host_id, message_id: normalized.message_id, ...projectGuard },
 					{ $set: payload, $setOnInsert: insertOnly },
 					{ upsert: true, returnDocument: 'after', includeResultMetadata: true, session },
 				);
@@ -558,7 +556,7 @@ async function persistEmail(userId, host_id, normalized, data, ctx = {}) {
 			}
 
 			if (existingByHash) {
-				const result = await Email.findOneAndUpdate({ _id: existingByHash._id, host_id }, { $set: payload }, { returnDocument: 'after', session });
+				const result = await Email.findOneAndUpdate({ _id: existingByHash._id, host_id, ...projectGuard }, { $set: payload }, { returnDocument: 'after', session });
 				if (result) return { email: result, created: false };
 			}
 

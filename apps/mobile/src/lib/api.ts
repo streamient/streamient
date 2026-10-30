@@ -20,16 +20,20 @@ export class ApiError extends Error {
 	}
 }
 
-// Refresh tokens are single-use, so every StreamientApi instance shares one in-flight refresh per server+token and adopts the rotated result.
+// Refresh tokens are single-use, so every StreamientApi instance shares one in-flight refresh per server+token,
+// and the newest tokens per session (server + user + tenant) so a stale instance adopts them instead of reusing a consumed token.
 const refreshKey = (server: ServerOption, refreshToken: string) => `${server.baseUrl}\n${refreshToken}`;
 const inflightRefreshes = new Map<string, Promise<TokenSet>>();
-const rotatedTokens = new Map<string, TokenSet>();
+const currentTokens = new Map<string, TokenSet>();
+const isNewer = (a: TokenSet, b: TokenSet) => (a.obtained_at || 0) > (b.obtained_at || 0);
 
 export class StreamientApi {
 	private cacheNamespace: string;
 
 	constructor(private server: ServerOption, private tokens: TokenSet, private onTokens: (tokens: TokenSet | null) => void) {
 		this.cacheNamespace = cacheNamespace(server, tokens.access_token);
+		const known = currentTokens.get(this.cacheNamespace);
+		if (!known || isNewer(tokens, known)) currentTokens.set(this.cacheNamespace, tokens);
 	}
 
 	private accessTokenNeedsRefresh() {
@@ -38,13 +42,8 @@ export class StreamientApi {
 	}
 
 	private latestTokens() {
-		let latest = this.tokens;
-		while (latest.refresh_token) {
-			const next = rotatedTokens.get(refreshKey(this.server, latest.refresh_token));
-			if (!next) break;
-			latest = next;
-		}
-		return latest;
+		const known = currentTokens.get(this.cacheNamespace);
+		return known && known.refresh_token !== this.tokens.refresh_token && !isNewer(this.tokens, known) ? known : this.tokens;
 	}
 
 	private async replaceTokens() {
@@ -56,8 +55,7 @@ export class StreamientApi {
 		let pending = inflightRefreshes.get(key);
 		if (!pending) {
 			pending = refreshTokens(this.server, refreshToken).then((next) => {
-				if (next.refresh_token && next.refresh_token !== refreshToken) rotatedTokens.set(key, next);
-				if (rotatedTokens.size > 32) rotatedTokens.delete(rotatedTokens.keys().next().value as string);
+				currentTokens.set(this.cacheNamespace, next);
 				return next;
 			}).finally(() => { inflightRefreshes.delete(key); });
 			inflightRefreshes.set(key, pending);
@@ -68,9 +66,10 @@ export class StreamientApi {
 
 	private handleRefreshFailure(error: unknown) {
 		if (error instanceof TypeError || !navigator.onLine) return;
-		if (this.tokens.refresh_token && rotatedTokens.has(refreshKey(this.server, this.tokens.refresh_token))) return; // Token was already rotated elsewhere; the next request adopts the latest tokens.
+		if (this.latestTokens() !== this.tokens) return; // Token was already rotated elsewhere; the next request adopts the latest tokens.
 		const status = (error as { status?: number }).status;
 		if (status && (status >= 500 || status === 429)) return; // Transient server/rate-limit failure preserves the session.
+		currentTokens.delete(this.cacheNamespace);
 		this.onTokens(null);
 	}
 

@@ -115,7 +115,7 @@ describe('Email ingest storage service', () => {
 		const docs = new Map();
 		Email.findOne = () => { throw new Error('dedup must not read a replica'); };
 		Email.findOneAndUpdate = async (filter, update, options) => {
-			assert.deepEqual(Object.keys(filter).sort(), ['host_id', 'message_id']);
+			assert.deepEqual(Object.keys(filter).sort(), ['host_id', 'message_id', 'project']);
 			assert.equal(options.upsert, true);
 			assert.equal(options.includeResultMetadata, true);
 			const key = JSON.stringify(filter);
@@ -133,9 +133,11 @@ describe('Email ingest storage service', () => {
 
 	it('re-ingesting an existing Message-ID keeps trash state, labels, project and owner', async () => {
 		let update;
-		Email.findOneAndUpdate = async (_filter, applied) => {
+		let filter;
+		Email.findOneAndUpdate = async (appliedFilter, applied) => {
+			filter = appliedFilter;
 			update = applied;
-			return { value: { _id: 'email-1', project: 'project-other', in_trash: true }, lastErrorObject: { updatedExisting: true } };
+			return { value: { _id: 'email-1', project: appliedFilter.project, in_trash: true }, lastErrorObject: { updatedExisting: true } };
 		};
 		const email = await ingestEmail('507f1f77bcf86cd799439012', 'host-1', { project: '507f1f77bcf86cd799439011', labels: ['Fresh'], parsed_email: { message_id: '<retry@example.com>', text: 'Retry' } }, { skipSideEffects: true });
 		for (const field of ['in_trash', 'trashed_at', 'labels', 'project', 'owner']) {
@@ -144,7 +146,8 @@ describe('Email ingest storage service', () => {
 		}
 		assert.equal(update.$set.is_indexed, false);
 		assert.equal(update.$set.text_content, 'Retry');
-		assert.equal(email.project, 'project-other');
+		assert.equal(String(filter.project), '507f1f77bcf86cd799439011', 'updates are limited to the leased project');
+		assert.equal(email.in_trash, true);
 	});
 
 	it('maps a tenant Message-ID conflict without an in-transaction fallback read', async () => {

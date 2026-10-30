@@ -127,6 +127,7 @@ export function App() {
 	const bootstrapRef = useRef<BootstrapResponse | null>(null);
 	const activeProjectIdRef = useRef("");
 	const changeCursor = useRef("");
+	const feedLoad = useRef<Promise<void>>(Promise.resolve());
 	const authHandled = useRef(false);
 	const sessionEpoch = useRef(0);
 	const feedSeq = useRef(0);
@@ -306,6 +307,8 @@ export function App() {
 	const loadFeed = useCallback(async (cursor = "") => {
 		if (!api || !activeProjectId) return;
 		const requestId = ++feedSeq.current;
+		let feedLoaded = () => {};
+		if (!cursor) feedLoad.current = new Promise<void>((resolve) => { feedLoaded = resolve; });
 		cursor ? setLoadingMore(true) : setFeedLoading(true);
 		try {
 			const result = await api.records({ projectId: activeProjectId, type: filter, cursor: cursor || undefined });
@@ -321,6 +324,7 @@ export function App() {
 				setFeedLoading(false);
 				setLoadingMore(false);
 			}
+			feedLoaded();
 		}
 	}, [api, activeProjectId, filter]);
 
@@ -337,6 +341,9 @@ export function App() {
 	const applyChanges = useCallback(async () => {
 		if (!api || !activeProjectId || !changeCursor.current) return;
 		const epoch = sessionEpoch.current;
+		// Apply changes only after the first-page snapshot lands, or that older snapshot would overwrite them.
+		for (let pending: Promise<void> | null = null; pending !== feedLoad.current;) { pending = feedLoad.current; await pending; }
+		if (epoch !== sessionEpoch.current) return;
 		let result = await api.changes(changeCursor.current, activeProjectId);
 		while (true) {
 			if (epoch !== sessionEpoch.current) return;

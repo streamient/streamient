@@ -226,11 +226,9 @@ export async function updateSettings(hostId, payload = {}, { billingUser = null,
 			updates['settings.white_label.cloudflare_status'] = '';
 			updates['settings.white_label.cloudflare_ssl_status'] = '';
 			updates['settings.white_label.last_error'] = '';
-			if (current.cloudflare_custom_hostname_id) {
-				await deleteHostnameFn(current.cloudflare_custom_hostname_id).catch((err) => log.error({ err, host_id: hostId }, 'Failed to delete Cloudflare custom hostname'));
-			}
 		}
 	}
+	const staleHostnameId = updates['settings.white_label.dns_name_custom'] !== undefined ? tenant.settings?.white_label?.cloudflare_custom_hostname_id : '';
 
 	if (!Object.keys(updates).length) {
 		return getSettings(hostId, { billingUser, isHosted });
@@ -242,6 +240,8 @@ export async function updateSettings(hostId, payload = {}, { billingUser = null,
 			{ $set: updates },
 			{ new: true },
 		).select('plan settings.white_label').lean();
+		// Delete the old Cloudflare hostname only after the new domain is saved, so a rejected change keeps it working.
+		if (staleHostnameId) await deleteHostnameFn(staleHostnameId).catch((err) => log.error({ err, host_id: hostId }, 'Failed to delete Cloudflare custom hostname'));
 		return serializeWhiteLabelSettings(updated, {
 			canUsePro: canUseProFeature(billingUser, updated?.plan || tenant.plan || 'free', isHosted),
 		});

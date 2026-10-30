@@ -23,6 +23,7 @@ function block(start, end) { return app.slice(app.indexOf(start), app.indexOf(en
 
 const serverA = { baseUrl: 'https://a.example', resourceUrl: 'https://a.example/api/v1' };
 const serverB = { baseUrl: 'https://b.example', resourceUrl: 'https://b.example/api/v1' };
+const serverC = { baseUrl: 'https://c.example', resourceUrl: 'https://c.example/api/v1' };
 
 function storage() {
 	const saved = new Map();
@@ -168,7 +169,7 @@ describe('Streamient Mobile client regressions', () => {
 			{ changes: [{ action: 'upsert', record: record('last') }], next_cursor: 'page-2', has_more: false },
 		];
 		const { exports: f } = await compile(block('function upsertRecord(', '\nfunction relativeTime') + block('const applyChanges = useCallback', '\n\trealtimeEventHandler.current =') + '\nexport { applyChanges };', {
-			api: { changes: async (cursor) => { calls.push(cursor); return pages.shift(); } }, changeCursor, sessionEpoch: { current: 0 }, activeProjectId: 'P', filter: 'all', useCallback: (fn) => fn,
+			api: { changes: async (cursor) => { calls.push(cursor); return pages.shift(); } }, changeCursor, feedLoad: { current: Promise.resolve() }, sessionEpoch: { current: 0 }, activeProjectId: 'P', filter: 'all', useCallback: (fn) => fn,
 			setRecords: (fn) => { state.records = fn(state.records); },
 		});
 		await f.applyChanges();
@@ -176,6 +177,21 @@ describe('Streamient Mobile client regressions', () => {
 		assert.equal(state.records.length, 101);
 		assert.equal(state.records.some((r) => r.id === 'last'), true);
 		assert.equal(changeCursor.current, 'page-2');
+	});
+
+	it('finding 15: catch-up waits for the in-flight first-page feed load', async () => {
+		let release;
+		const feedLoad = { current: new Promise((resolve) => { release = resolve; }) };
+		const calls = [];
+		const { exports: f } = await compile(block('function upsertRecord(', '\nfunction relativeTime') + block('const applyChanges = useCallback', '\n\trealtimeEventHandler.current =') + '\nexport { applyChanges };', {
+			api: { changes: async (cursor) => { calls.push(cursor); return { changes: [], next_cursor: 'next', has_more: false }; } }, changeCursor: { current: 'start' }, feedLoad, sessionEpoch: { current: 0 }, activeProjectId: 'P', filter: 'all', useCallback: (fn) => fn, setRecords: noop,
+		});
+		const pending = f.applyChanges();
+		await new Promise((resolve) => setImmediate(resolve));
+		assert.equal(calls.length, 0);
+		release();
+		await pending;
+		assert.deepEqual(calls, ['start']);
 	});
 
 	it('finding 15: an obsolete feed response cannot overwrite the current project', async () => {
@@ -186,7 +202,7 @@ describe('Streamient Mobile client regressions', () => {
 		const make = async (project) => (await compile(block('const loadFeed = useCallback', '\n\tuseEffect(() => { if (view === "projects")') + '\nexport { loadFeed };', {
 			api: { records: () => project === 'A' ? new Promise((resolve) => { resolveA = resolve; }) : Promise.resolve({ value: { records: [record('B-note', 'B')], next_cursor: null }, offline: false }) },
 			activeProjectId: project, filter: 'all', useCallback: (fn) => fn, setRecords,
-			setLoadingMore: noop, setFeedLoading: noop, setNextCursor: noop, setOffline: noop, Swal: { fire: noop }, feedSeq,
+			setLoadingMore: noop, setFeedLoading: noop, setNextCursor: noop, setOffline: noop, Swal: { fire: noop }, feedSeq, feedLoad: { current: Promise.resolve() },
 		})).exports.loadFeed;
 		const loadA = await make('A');
 		const loadB = await make('B');
@@ -557,6 +573,22 @@ describe('Streamient Mobile client regressions', () => {
 		// Another server with the same token string never receives the rotated tokens.
 		await new StreamientApi(serverB, stale, noop).projects().catch(noop);
 		assert.equal(refreshes, 2);
+	});
+
+	it('finding 13: a long-lived instance adopts current tokens after many rotations instead of signing out', async () => {
+		let n = 1;
+		const refreshTokens = async (server, token) => { if (token !== `R${n}`) throw Object.assign(new Error('invalid_grant'), { status: 400 }); n++; return { access_token: `A${n}`, refresh_token: `R${n}`, expires_in: 1, obtained_at: Date.now() + n, token_type: 'Bearer', scope: '' }; };
+		const { exports: { StreamientApi } } = await compile(read('apps/mobile/src/lib/api.ts'), { refreshTokens, getCachedJson: async () => null, setCachedJson: async () => {}, fetch: async (url, init) => new Response('{}', { status: init.headers.get('Authorization') === `Bearer A${n}` ? 200 : 401 }) });
+		const signedOut = [];
+		const old = new StreamientApi(serverC, { access_token: 'A1', refresh_token: 'R1', expires_in: 1, obtained_at: Date.now(), token_type: 'Bearer', scope: '' }, (next) => { if (!next) signedOut.push(true); });
+		let tokens = { access_token: 'A1', refresh_token: 'R1', expires_in: 1, obtained_at: Date.now(), token_type: 'Bearer', scope: '' };
+		for (let i = 0; i < 40; i += 1) {
+			const current = new StreamientApi(serverC, tokens, (next) => { tokens = next; });
+			await current.projects();
+		}
+		await old.projects();
+		assert.deepEqual(signedOut, []);
+		assert.equal(n, 41);
 	});
 
 	it('finding 14: realtime start does not create a socket after cleanup during socketToken', async () => {

@@ -149,6 +149,16 @@ describe('white-label service', () => {
 		assert.equal(tenant.settings.white_label.cloudflare_status, '');
 	});
 
+	it('keeps the old Cloudflare hostname when the new domain is rejected as a duplicate', async () => {
+		tenant.plan = 'pro';
+		Object.assign(tenant.settings.white_label, { dns_name_custom: 'old.example.com', cloudflare_custom_hostname_id: 'cf-1' });
+		Tenant.findOneAndUpdate = () => ({ select: () => ({ lean: async () => { throw Object.assign(new Error('dup'), { code: 11000 }); } }) });
+		await assert.rejects(() => whiteLabelService.updateSettings('host-1', { dns_name_custom: 'taken.example.com' }, {
+			isHosted: true,
+			deleteHostnameFn: async () => assert.fail('must not delete'),
+		}), (err) => err.status === 409);
+	});
+
 	it('keeps the Cloudflare hostname when the custom domain is unchanged', async () => {
 		tenant.plan = 'pro';
 		Object.assign(tenant.settings.white_label, { dns_name_custom: 'brand.example.com', dns_verified: true, cloudflare_custom_hostname_id: 'cf-1', cloudflare_status: 'active' });
