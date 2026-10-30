@@ -720,7 +720,11 @@ const schemas = {
  */
 export async function ensureCollections(host_id) {
 	if (collectionSetupPromises.has(host_id)) return collectionSetupPromises.get(host_id);
-	if (ensuredCollectionHosts.has(host_id)) return;
+	if (ensuredCollectionHosts.has(host_id)) {
+		const collections = await getTypesenseClient().collections().retrieve();
+		if (Object.values(schemas).every((schema) => collections.some((collection) => collection.name === schema(host_id).name))) return;
+		ensuredCollectionHosts.delete(host_id);
+	}
 	const generation = collectionSetupGenerations.get(host_id);
 	const setup = (async () => {
 	const releaseAccountWork = await acquireTenantWork(host_id);

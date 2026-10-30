@@ -37,7 +37,7 @@ for (const failure of ['later batch', 'final parent check']) test(`partial impor
 	deps.removeCrawledPages = remove;
 	await cleanupCrawlPublications(deps);
 	assert.equal(chunks.size, 0);
-	assert.equal(model.rows.size, 0);
+	assert.equal(model.rows.size, 1);
 });
 
 test('parent ownership excludes an overlapping publisher; replacement preserves newer chunks', async () => {
@@ -104,4 +104,19 @@ test('real batch loop removes an earlier successful import when a later batch th
 	await assert.rejects(publishCrawledPages(parent, { urlId: 'url', projectId: 'project', crawledAt: 1, pages: ['a', 'b'].map((path) => ({ url: `https://example.com/${path}`, title: path, text_content: path })) }, deps), /second batch failed/);
 	assert.equal(batches, 2);
 	assert.equal(chunks.size, 0);
+});
+
+test('timed-out imports keep recovery tombstones for writes landing after first cleanup', async () => {
+ const { model, parent, chunks, deps } = fixture();
+ let claim;
+ deps.bulkIndexCrawledPages = async (_host, input) => { claim = input.claim; throw new Error('request timed out'); };
+ await assert.rejects(publishCrawledPages(parent, {}, deps), /timed out/);
+ assert.equal(model.rows.size, 1);
+ chunks.set('late', claim);
+ await cleanupCrawlPublications(deps);
+ assert.equal(chunks.size, 0);
+ assert.equal(model.rows.size, 1);
+ chunks.set('later', claim);
+ await cleanupCrawlPublications(deps);
+ assert.equal(chunks.size, 0);
 });

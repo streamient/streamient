@@ -598,11 +598,10 @@ export async function crawlSite(urlDoc, deps = {}) {
 		queued: [...discoveredInRun.values()],
 		failed: [...failedInRun.values()],
 	});
-	const summary = await publishCrawlStep(urlDoc, urlModel, crawlStateModel, stateOps, deps);
-
-	if (!summary) return 0;
 	const indexResult = await publishCrawledPages(urlDoc, { urlId, projectId, pages, crawledAt: Math.floor(Date.now() / 1000) }, { ...deps, bulkIndexCrawledPages: bulkIndexPagesFn });
 	if (!indexResult) return 0;
+	const summary = await publishCrawlStep(urlDoc, urlModel, crawlStateModel, stateOps, deps);
+	if (!summary) return 0;
 
 	if (indexResult.attemptedCount > indexResult.indexedCount) {
 		log.error({ attempted: indexResult.attemptedCount, indexed: indexResult.indexedCount, url: urlDoc.url }, 'Page index error');
@@ -637,6 +636,7 @@ export async function publishCrawledPages(urlDoc, input, deps = {}) {
 	await model.create({ _id: claim, host_id: hostId, parent_url_id: urlDoc._id, expires_at: expires });
 	const ownership = { _id: urlDoc._id, host_id: hostId, ...version, in_trash: { $ne: true }, crawl_claim: claim, crawl_claim_expires_at: { $gt: new Date() } };
 	let completed = false;
+	let importStarted = false;
 	try {
 		const parent = await urlModel.findOneAndUpdate({ _id: urlDoc._id, host_id: hostId, ...version, in_trash: { $ne: true }, $or: [{ crawl_claim: null }, { crawl_claim_expires_at: { $lte: new Date() } }] }, { $set: { crawl_claim: claim, crawl_claim_expires_at: expires } }, { timestamps: false, returnDocument: 'after' }).lean();
 		if (!parent) return null;
@@ -645,6 +645,7 @@ export async function publishCrawledPages(urlDoc, input, deps = {}) {
 			if (!await urlModel.findOneAndUpdate(ownership, { $inc: { __v: 1 } }, { timestamps: false, returnDocument: 'after' }).lean()) throw new Error('Crawl publication lost ownership');
 			await model.updateOne({ _id: claim }, { $addToSet: { displaced_ids: { $each: ids } } });
 		};
+		importStarted = true;
 		const result = await (deps.bulkIndexCrawledPages || bulkIndexCrawledPages)(hostId, { ...input, claim, beforeImport });
 		if (result.attemptedCount > result.indexedCount) throw new Error('Crawl import incomplete');
 		await beforeImport([]);
@@ -654,11 +655,12 @@ export async function publishCrawledPages(urlDoc, input, deps = {}) {
 		return result;
 	} finally {
 		// Persist cleanup before attempting external deletion, including thrown imports and parent checks.
-		const cleanup = await model.findOneAndUpdate({ _id: claim }, { $set: { cleanup: !completed, finished: true, expires_at: new Date() } }, { returnDocument: 'after' }).lean();
+		const cleanup = await model.findOneAndUpdate({ _id: claim }, { $set: { cleanup: !completed, finished: completed || !importStarted, expires_at: new Date() } }, { returnDocument: 'after' }).lean();
 		try {
 			await (deps.removeDocumentsByIds || removeDocumentsByIds)(hostId, 'pages', cleanup?.displaced_ids || []);
 			if (!completed) await (deps.removeCrawledPages || removeCrawledPages)(hostId, [String(urlDoc._id)], { claim });
-			await model.deleteOne({ _id: claim });
+			// A timed-out import can still land after deletion; retain its cleanup tombstone.
+			if (completed || !importStarted) await model.deleteOne({ _id: claim });
 		} catch (err) { log.error({ err, claim }, 'Crawl cleanup retained for retry'); }
 		await urlModel.updateOne({ _id: urlDoc._id, host_id: hostId, crawl_claim: claim }, { $set: { crawl_claim: null, crawl_claim_expires_at: null } }, { timestamps: false });
 	}

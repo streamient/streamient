@@ -350,6 +350,18 @@ describe('crawler indexing and state', () => {
 		assert.equal(ops[0].updateOne.update.$setOnInsert.crawl_visited, undefined);
 	});
 
+	it('a rejected publication leaves the captured page queued for retry', async () => {
+		const urlDoc = makeUrlDoc({ crawl_partial: true });
+		const stateModel = makeCrawlStateModel([{ host_id: urlDoc.host_id, parent_url_id: urlDoc._id, normalized_url: 'https://example.com/start', url: 'https://example.com/start', status: 'queued' }]);
+		class FakeCrawler {
+			constructor(options) { this.options = options; }
+			async run(batch) { for (const url of batch) await this.options.requestHandler({ request: { url, loadedUrl: url }, response: makeHtmlResponse(), $: makeHtml('Page'), enqueueLinks: async () => {} }); }
+		}
+		const result = await crawlSite(urlDoc, { CrawlState: stateModel, Url: { findOneAndUpdate: (query) => ({ lean: async () => query.$or ? null : {} }), updateOne: async () => {} }, CheerioCrawler: FakeCrawler, ensureCollections: async () => {}, bulkIndexCrawledPages: async () => { throw new Error('must not import'); } });
+		assert.equal(result, 0);
+		assert.equal(stateModel.store.find((row) => row.url === 'https://example.com/start').status, 'queued');
+	});
+
 	it('resumes partial crawls from queued crawl-state docs', async () => {
 		const urlDoc = makeUrlDoc({ crawl_partial: true, crawl_frontier: ['https://legacy.example.com'] });
 		const stateModel = makeCrawlStateModel([
@@ -408,9 +420,9 @@ describe('crawler indexing and state', () => {
 		assert.deepEqual(crawlerRuns, [['https://example.com/start']]);
 		assert.ok(stateModel.store.some((state) => state.normalized_url === 'https://example.com/next' && state.status === 'queued'));
 		assert.ok(stateModel.store.some((state) => state.normalized_url === 'https://example.com/start' && state.status === 'visited'));
-		assert.equal(urlUpdates[0].update.$set.crawl_frontier.length, 0);
-		assert.equal(urlUpdates[0].update.$set.crawl_visited.length, 0);
-		assert.equal(urlUpdates[0].update.$set.crawl_partial, true);
+		assert.equal(urlUpdates.find((entry) => entry.update.$set.crawl_frontier).update.$set.crawl_frontier.length, 0);
+		assert.equal(urlUpdates.find((entry) => entry.update.$set.crawl_frontier).update.$set.crawl_visited.length, 0);
+		assert.equal(urlUpdates.find((entry) => entry.update.$set.crawl_frontier).update.$set.crawl_partial, true);
 	});
 
 	it('queues only discovered links under the saved URL path', async () => {

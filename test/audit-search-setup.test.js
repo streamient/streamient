@@ -11,9 +11,10 @@ test('collection setup cache avoids tenant writes, retries failures, and isolate
 	let locks = 0;
 	let requests = 0;
 	let fail = true;
+	const names = new Set();
 	accountWork.acquire = async () => { locks++; return async () => {}; };
 	Typesense.Client = class {
-		collections() { return { retrieve: async () => { requests++; if (fail) throw new Error('offline'); return { fields: [] }; }, update: async () => {} }; }
+		collections(name) { return { retrieve: async () => { requests++; if (!name) return [...names].map((name) => ({ name })); if (fail) throw new Error('offline'); names.add(name); return { fields: [] }; }, update: async () => {} }; }
 	};
 	t.after(() => { Typesense.Client = original; accountWork.acquire = acquire; });
 	const ts = await import(`../modules/typesense.js?setup-audit=${Date.now()}`);
@@ -22,7 +23,8 @@ test('collection setup cache avoids tenant writes, retries failures, and isolate
 	await Promise.all([ts.ensureCollections('one'), ts.ensureCollections('one')]);
 	const previous = { locks, requests };
 	await ts.ensureCollections('one');
-	assert.deepEqual({ locks, requests }, previous);
+	assert.equal(locks, previous.locks);
+	assert.equal(requests, previous.requests + 1);
 	await ts.ensureCollections('two');
 	assert.ok(locks > previous.locks);
 });
@@ -89,10 +91,11 @@ test('reindex fences in-flight setup and failed recreation cannot leave a cache 
 	let drops = 0;
 	let blocked = true;
 	let failCreate = true;
+	const names = new Set();
 	t.mock.method(accountWork, 'acquire', async () => async () => {});
 	const original = Typesense.Client;
-	Typesense.Client = class { collections() { return {
-		retrieve: async () => { requests++; if (blocked) { blocked = false; started(); await new Promise((resolve) => { release = resolve; }); } return { fields: [] }; },
+	Typesense.Client = class { collections(name) { return {
+		retrieve: async () => { requests++; if (!name) return [...names].map((name) => ({ name })); names.add(name); if (blocked) { blocked = false; started(); await new Promise((resolve) => { release = resolve; }); } return { fields: [] }; },
 		update: async () => {}, delete: async () => { drops++; },
 		create: async () => { if (failCreate) throw new Error('rebuild offline'); },
 	}; } };
@@ -114,5 +117,27 @@ test('reindex fences in-flight setup and failed recreation cannot leave a cache 
 	assert.equal(requests - before, before);
 	const after = requests;
 	await ts.ensureCollections('host');
-	assert.equal(requests, after);
+	assert.equal(requests, after + 1);
+});
+
+test('a warm process repairs collections destroyed by another process', async (t) => {
+ const original = Typesense.Client;
+ const names = new Set();
+ let creates = 0;
+ t.mock.method(accountWork, 'acquire', async () => async () => {});
+ Typesense.Client = class { collections(name) { return {
+  retrieve: async () => { if (!name) return [...names].map((name) => ({ name })); if (!names.has(name)) throw { httpStatus: 404 }; return { fields: [] }; },
+  create: async (schema) => { names.add(schema.name); creates++; }, update: async () => {},
+ }; } };
+ t.after(() => { Typesense.Client = original; });
+ const first = await import(`../modules/typesense.js?process-first=${Date.now()}`);
+ const second = await import(`../modules/typesense.js?process-second=${Date.now()}`);
+ await first.ensureCollections('host');
+ await second.ensureCollections('host');
+ const before = creates;
+ names.clear();
+ await first.ensureCollections('host');
+ assert.equal(creates, before * 2);
+ await second.ensureCollections('host');
+ assert.equal(creates, before * 2);
 });
