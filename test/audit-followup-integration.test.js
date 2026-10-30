@@ -57,6 +57,12 @@ test('isolated Mongo verifies reset consumption and upload recovery', { skip: pr
 		assert.equal(await jobs.countDocuments({ queue: 'note-import', 'data.upload_id': String(upload._id) }), 2);
 		assert.equal((await MongoQueue.getJob(String(upload._id))).attempts, 3);
 		assert.equal((await MongoQueue.getJob(String(upload._id) + ':retry:1')).attempts, 0);
+		const legacy = await NoteImportUpload.create({ host_id: host, user: user._id, project: user._id, original_name: 'legacy.txt', total_bytes: 0, state: 'processing', expires_at: new Date(Date.now() + 60000) });
+		const legacyJob = await MongoQueue.add('note-import', { upload_id: String(legacy._id), host_id: host }, { dedupKey: String(legacy._id), maxAttempts: 3 });
+		await jobs.updateOne({ _id: legacyJob._id }, { $set: { status: 'failed', attempts: 3 } });
+		await recoverNoteImports();
+		const legacyFailed = await NoteImportUpload.findOneAndUpdate({ _id: legacy._id }, { $inc: { __v: 0 } }, { returnDocument: 'after', timestamps: false }).lean();
+		assert.equal(legacyFailed.state, 'failed');
 	});
 
 	await t.test('Obsidian completion retries real encrypted chunks after a failed save', async (t) => {
