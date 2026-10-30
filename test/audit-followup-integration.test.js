@@ -22,10 +22,11 @@ test('isolated Mongo verifies reset consumption and upload recovery', { skip: pr
 	const dbName = 'streamient_followup_test_' + crypto.randomUUID().replaceAll('-', '');
 	await mongoose.connect(config.mongoUri, { ...config.mongoOptions, dbName });
 	const root = await mkdtemp(path.join(os.tmpdir(), 'streamient-followup-'));
-	const old = { dir: config.obsidian.vaultsDir, key: config.obsidian.encryptionKey };
+	const old = { dir: config.obsidian.vaultsDir, key: config.obsidian.encryptionKey, adapter: config.socketIO.adapter };
+	config.socketIO.adapter = 'memory';
 	config.obsidian.vaultsDir = root;
 	config.obsidian.encryptionKey = 'b'.repeat(64);
-	t.after(async () => { config.obsidian.vaultsDir = old.dir; config.obsidian.encryptionKey = old.key; await mongoose.connection.dropDatabase(); await mongoose.disconnect(); await rm(root, { recursive: true, force: true }); });
+	t.after(async () => { config.obsidian.vaultsDir = old.dir; config.obsidian.encryptionKey = old.key; config.socketIO.adapter = old.adapter; await mongoose.connection.dropDatabase(); await mongoose.disconnect(); await rm(root, { recursive: true, force: true }); });
 	const host = 'followup-' + crypto.randomUUID();
 	const user = await User.create({ name: 'Isolated audit test', email: 'followup@example.test', password: 'old-password', host_id: host, password_reset_token: 'single-use', password_reset_expires: new Date(Date.now() + 60000) });
 	await Tenant.create({ host_id: host, name: 'Isolated audit test', owner: user._id });
