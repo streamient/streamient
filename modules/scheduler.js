@@ -32,7 +32,16 @@ async function sendTrialReminder(userModel, user, fieldName, now, sendEmail) {
 	const claim = await userModel.updateOne({ _id: user._id, trial_source: 'no_card', subscription_status: 'trialing', trial_ends_at: user.trial_ends_at, [fieldName]: null }, { $set: { [fieldName]: now } });
 	if (!claim.matchedCount) return false;
 	const endDate = new Date(user.trial_ends_at).toLocaleDateString();
-	await sendEmail(user.email, user.name, endDate);
+	try {
+		const result = await sendEmail(user.email, user.name, endDate);
+		if (result?.accepted?.length === 0) throw Object.assign(new Error('Reminder was not accepted'), { deliveryConfirmedFailed: true });
+	} catch (error) {
+		// SMTP rejection or a failure before DATA confirms nondelivery; a lost DATA reply does not.
+		if (error.deliveryConfirmedFailed || error.responseCode >= 400 || ['CONN', 'AUTH', 'MAIL FROM', 'RCPT TO'].includes(error.command)) {
+			await userModel.updateOne({ _id: user._id, trial_ends_at: user.trial_ends_at, [fieldName]: now }, { $unset: { [fieldName]: '' } });
+		}
+		throw error;
+	}
 	return true;
 }
 

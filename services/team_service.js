@@ -1,3 +1,5 @@
+import config from '../config.js';
+import { requireResourceQuota } from './subscription_access_service.js';
 import { disconnectMemberSockets } from '../modules/socket.js';
 import mongoose from '../model/mongoose.js';
 import { User } from '../model/user.js';
@@ -59,7 +61,7 @@ export async function countMembers(host_id) {
 	return Math.max(count, 1);
 }
 
-export async function createTeamMember(userId, host_id, data, ctx = {}) {
+export async function createTeamMember(userId, host_id, data, ctx = {}, { isHosted = config.isHosted } = {}) {
 	const tenant = await Tenant.findOne({ host_id, is_active: true });
 	if (!tenant) throw new Error('Tenant not found');
 
@@ -68,6 +70,7 @@ export async function createTeamMember(userId, host_id, data, ctx = {}) {
 
 	const existingUser = await User.findOne({ email }).lean();
 	let user = existingUser;
+	let newUser;
 	if (existingUser) {
 		const existingMembership = await TenantMember.findOne({ tenant: tenant._id, user: existingUser._id }).lean();
 		if (existingMembership) throw new Error('User is already a member of this account');
@@ -78,16 +81,18 @@ export async function createTeamMember(userId, host_id, data, ctx = {}) {
 		const password = typeof data.password === 'string' ? data.password : '';
 		if (password.length < 8) throw new Error('Password must be at least 8 characters for new users');
 
-		user = await User.create({
+		newUser = {
 			email,
 			password,
 			name,
 			is_verified: true,
 			is_active: true,
-		});
+		};
 	}
 
 	const membership = await mongoose.connection.transaction(async (session) => {
+		if (isHosted) await requireResourceQuota(host_id, 'users', session);
+		if (newUser) user = (await User.create([newUser], { session }))[0];
 		// Conflict with orphan cleanup before linking an existing user to another account.
 		const current = await User.updateOne({ _id: user._id, is_active: true }, { $inc: { __v: 1 } }, { session });
 		if (!current.matchedCount) throw new Error('User is no longer available');

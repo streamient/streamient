@@ -457,6 +457,8 @@ router.get('/memories/tags/suggest', async (req, res) => {
 
 // ---- Project emails (storage only) ----
 
+router.use('/emails', requireEmailFeatureAccess);
+
 router.get('/emails', async (req, res) => {
 	const emails = await emailIngestService.listEmails(req.host_id, req.query.project, {
 		page: parseInt(req.query.page, 10) || 1,

@@ -149,9 +149,10 @@ describe('team membership helpers', () => {
 				return null;
 			},
 		});
-		User.create = async (payload) => {
+		User.create = async ([payload], options) => {
+			assert.ok(options.session);
 			createdUserPayload = payload;
-			return user;
+			return [user];
 		};
 		TenantMember.findOne = () => ({
 			lean: async () => null,

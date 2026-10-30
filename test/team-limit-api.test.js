@@ -3,7 +3,7 @@ import { mockTenantWork } from './helpers/tenant-work.js';
 let restoreAccountWork;
 beforeAccountWork(() => { restoreAccountWork = mockTenantWork(); });
 afterAccountWork(() => { restoreAccountWork(); });
-import { describe, it, beforeEach, afterEach } from 'node:test';
+import { describe, it, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 
@@ -103,11 +103,17 @@ describe('stored account team user limit', () => {
 				select: () => ({ lean: async () => tenant }),
 			};
 		};
+		const findOneAndUpdate = Tenant.findOneAndUpdate;
+		mock.method(Tenant, 'findOneAndUpdate', function (filter, update, options) {
+			if (options?.session) return { lean: async () => tenant };
+			return findOneAndUpdate.call(this, filter, update, options);
+		});
 		TeamInvite.deleteMany = async () => ({ deletedCount: 0 });
 		AuditLog.create = async (payload) => payload;
 	});
 
 	afterEach(() => {
+		mock.restoreAll();
 		config.appUrl = originalAppUrl;
 		config.isHosted = originalIsHosted;
 		User.findById = originalUserFindById;

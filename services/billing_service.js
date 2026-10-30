@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { acquireTenantWork, assertTenantAvailable } from '../modules/tenancy.js';
 import { getStripe } from '../modules/stripe.js';
 import mongoose from '../model/mongoose.js';
@@ -507,9 +508,31 @@ export async function createCheckoutSession(user, options = {}) {
 
 	const subscriptions = await listDeletionBillingObjects(stripe.subscriptions, { customer: customerId, status: 'all' });
 	if (subscriptions.some((subscription) => !['canceled', 'incomplete_expired'].includes(subscription.status) && !isFreePriceSubscription(subscription))) throw new Error('Manage your existing subscription in the billing portal.');
-    const session = await stripe.checkout.sessions.create(buildCheckoutSessionParams(user, customerId, priceId));
-
-    return session.url;
+	const userModel = options.userModel || User;
+	const now = Math.floor(Date.now() / 1000);
+	const sessions = await listDeletionBillingObjects(stripe.checkout.sessions, { customer: customerId, status: 'open' });
+	const open = sessions.filter((session) => session.mode === 'subscription');
+	if (open.length > 1) throw new Error('Multiple open checkout sessions require billing support.');
+	const candidate = { key: randomUUID(), session_id: open[0]?.id, params: { ...buildCheckoutSessionParams(user, customerId, priceId), expires_at: now + 3600 } };
+	// Persist exact parameters or the adopted session before Stripe I/O; all processes use the winner.
+	const reserved = await userModel.findOneAndUpdate({ _id: user._id }, [{ $set: { stripe_checkout_attempt: { $ifNull: ['$stripe_checkout_attempt', { $literal: candidate }] } } }], { new: true, updatePipeline: true }).select('+stripe_checkout_attempt').lean();
+	if (!reserved) throw new Error('Billing owner is unavailable');
+	const attempt = reserved.stripe_checkout_attempt;
+	if (attempt.session_id) {
+		const existing = await stripe.checkout.sessions.retrieve(attempt.session_id);
+		if (existing.status === 'open' && existing.url) return existing.url;
+		if (existing.status !== 'expired') throw new Error('Checkout is already complete. Please refresh billing.');
+		await userModel.updateOne({ _id: user._id, 'stripe_checkout_attempt.key': attempt.key }, { $unset: { stripe_checkout_attempt: '' } });
+		throw new Error('Checkout expired. Please try again.');
+	}
+	// Fixed expiry makes a delayed old request unable to create a payable session after rotation.
+	if (attempt.params.expires_at <= now) {
+		await userModel.updateOne({ _id: user._id, 'stripe_checkout_attempt.key': attempt.key }, { $unset: { stripe_checkout_attempt: '' } });
+		throw new Error('Checkout expired. Please try again.');
+	}
+	const session = await stripe.checkout.sessions.create(attempt.params, { idempotencyKey: attempt.key });
+	if (session.status !== 'open' || !session.url) throw new Error('Checkout is already complete or expired. Please refresh billing.');
+	return session.url;
 	} finally { if (release) await release(); }
 }
 

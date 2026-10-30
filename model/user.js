@@ -25,6 +25,7 @@ export function toSafeUser(user) {
 	delete obj.password_reset_token;
 	delete obj.password_reset_expires;
 	delete obj.stripe_customer_id;
+	delete obj.stripe_checkout_attempt;
 	delete obj.stripe_subscription_id;
 	delete obj.stripe_free_subscription_id;
 	delete obj.stripe_subscription_event_at;
@@ -57,6 +58,7 @@ const userSchema = new mongoose.Schema(
 		totp_enabled: { type: Boolean, default: false },
 		// Billing (hosted edition only)
 		stripe_customer_id: { type: String, select: false },
+		stripe_checkout_attempt: { type: mongoose.Schema.Types.Mixed, select: false },
 		stripe_subscription_id: { type: String, select: false },
 		// $0 tracking subscription for Free accounts — never mirrored into
 		// subscription_status, so it can't block checkout or the trial flow.

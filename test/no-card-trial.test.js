@@ -117,6 +117,7 @@ describe('no-card trial signup and billing helpers', () => {
 			},
 		};
 		const userModel = {
+			findOneAndUpdate(filter, pipeline) { return { select() { return this; }, lean: async () => ({ stripe_checkout_attempt: pipeline[0].$set.stripe_checkout_attempt.$ifNull[1].$literal }) }; },
 			findByIdAndUpdate: async (...args) => {
 				updateCall = args;
 				return null;
@@ -156,6 +157,7 @@ describe('no-card trial signup and billing helpers', () => {
 			},
 		};
 		const userModel = {
+			findOneAndUpdate(filter, pipeline) { return { select() { return this; }, lean: async () => ({ stripe_checkout_attempt: pipeline[0].$set.stripe_checkout_attempt.$ifNull[1].$literal }) }; },
 			findByIdAndUpdate: async (...args) => {
 				updateCall = args;
 				return null;
@@ -221,14 +223,16 @@ describe('no-card trial signup and billing helpers', () => {
 			},
 			checkout: {
 				sessions: {
+					list: async () => ({ data: [], has_more: false }),
 					create: async (params) => {
 						checkoutParams = params;
-						return { url: 'https://checkout.example/session' };
+						return { status: 'open', url: 'https://checkout.example/session' };
 					},
 				},
 			},
 		};
 		const userModel = {
+			findOneAndUpdate(filter, pipeline) { return { select() { return this; }, lean: async () => ({ stripe_checkout_attempt: pipeline[0].$set.stripe_checkout_attempt.$ifNull[1].$literal }) }; },
 			findByIdAndUpdate: async (...args) => {
 				updateCall = args;
 				return null;

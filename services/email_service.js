@@ -62,7 +62,7 @@ async function sendMail({ to, subject, html, text, from, replyTo }) {
 
 	if (!picked.server) {
 		log.info({ to, subject }, 'Email (no SMTP)');
-		return;
+		return { accepted: [], rejected: [to] };
 	}
 
 	const t = getTransporter(picked.server);
