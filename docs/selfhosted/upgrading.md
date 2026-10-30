@@ -51,6 +51,10 @@ curl https://your-instance.com/api/v1/urls \
 
 ## Migration Notes
 
+### Release build checks
+
+The GitHub image workflow defaults to a dry run. It builds the image without pushing it or publishing a GitHub release. A non-dry-run build on a dated release tag publishes the GitHub release only after the image build and push succeed.
+
 Breaking changes, if any, are documented in the [GitHub releases](https://github.com/streamient/streamient/releases). Check the release notes before upgrading to a new major version.
 
 ### Account-scoped email Message-IDs

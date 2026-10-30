@@ -48,3 +48,5 @@ Use the [Browser Extension](/guide/browser-extension/) to write a note from any 
 Notes store both HTML content (for the editor) and extracted plain text (for search indexing). When you create or update a note, it's indexed in Typesense with a vector embedding, making it searchable by meaning across the AI Chat, MCP tools, and the search bar.
 
 All changes emit real-time events, so other open tabs or connected tools stay in sync.
+
+The Notes list shows the most recently updated notes first. Saving an edit moves that note to its current position without reloading the list. Your selection, keyboard focus, and scroll position stay in place.

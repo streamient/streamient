@@ -103,6 +103,30 @@ describe('URLs section UI', () => {
 		assert.equal(harness.root.scrollTop, 240);
 	});
 
+	it('repositions edited notes and ordinary memories while preserving focus, selection and scroll', async () => {
+		for (const [type, endpoint] of [['note', 'notes'], ['memory', 'memories']]) {
+			const harness = new UrlListHarness(type, endpoint);
+			await harness.handlers.onUrlUpdated({ detail: harness.url('newer', '2026-09-17T06:00:00Z') });
+			await harness.handlers.onUrlUpdated({ detail: harness.url('older', '2026-09-17T05:00:00Z') });
+			const row = harness.rows[1];
+			row.checkbox.checked = true;
+			harness.context.document.activeElement = row.checkbox;
+			await harness.handlers.onUrlUpdated({ detail: harness.url('older', '2026-09-17T07:00:00Z', { html: row.html }) });
+			assert.deepEqual(harness.rows.map((item) => item.dataset.id), ['older', 'newer']);
+			assert.equal(harness.rows[0].checkbox.checked, true);
+			assert.equal(harness.rows[0].checkbox.focused, true);
+			assert.equal(harness.root.scrollTop, 240);
+		}
+	});
+
+	it('keeps Git memories sorted by commit date when only their update time changes', async () => {
+		const harness = new UrlListHarness('memory', 'memories');
+		await harness.handlers.onUrlUpdated({ detail: harness.url('newer', '2026-09-17T06:00:00Z', { git_commit: { committed_at: '2026-09-17T06:00:00Z' } }) });
+		await harness.handlers.onUrlUpdated({ detail: harness.url('older', '2026-09-17T05:00:00Z', { git_commit: { committed_at: '2026-09-17T05:00:00Z' } }) });
+		await harness.handlers.onUrlUpdated({ detail: harness.url('older', '2026-09-17T07:00:00Z', { git_commit: { committed_at: '2026-09-17T05:00:00Z' } }) });
+		assert.deepEqual(harness.rows.map((item) => item.dataset.id), ['newer', 'older']);
+	});
+
 	it('rejects stale updates, removes moved records, and never resurrects deleted records from delayed responses', async () => {
 		const harness = new UrlListHarness();
 		await harness.handlers.onUrlUpdated({ detail: harness.url('one', '2026-09-17T06:00:00Z') });

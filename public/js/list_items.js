@@ -28,7 +28,7 @@
 					existing?.remove();
 				} else {
 					if (!item.html) return;
-					if (existing && previous?.html === item.html) { records.set(id, item); return; }
+					if (existing && previous?.html === item.html && sortDate(previous) === sortDate(item)) { records.set(id, item); return; }
 					var template = document.createElement('template');
 					template.innerHTML = item.html;
 					var row = template.content.firstElementChild;
@@ -37,15 +37,13 @@
 					row.querySelector('.batch-cb').checked = !!existing?.querySelector('.batch-cb')?.checked;
 					options.bind(row);
 					records.set(id, item);
-					if (existing) existing.replaceWith(row);
-					else {
-						var date = sortDate(item);
-						var next = Array.from(list.querySelectorAll(selector)).find(function (other) {
-							var otherDate = sortDate(records.get(other.dataset.id));
-							return otherDate < date || (otherDate === date && other.dataset.id < id);
-						});
-						list.insertBefore(row, next || null);
-					}
+					existing?.remove();
+					var date = sortDate(item);
+					var next = Array.from(list.querySelectorAll(selector)).find(function (other) {
+						var otherDate = sortDate(records.get(other.dataset.id));
+						return otherDate < date || (otherDate === date && other.dataset.id < id);
+					});
+					list.insertBefore(row, next || null);
 					window.StreamientDateFormat?.refresh(row);
 					if (focused) (focused.matches('.batch-cb') ? row.querySelector('.batch-cb') : focused.matches('.url-link') ? row.querySelector('.url-link') : row)?.focus({ preventScroll: true });
 				}
