@@ -533,4 +533,52 @@ describe('Streamient Mobile client regressions', () => {
 		const current = { user: { _id: 'B', name: 'B user' }, projects: [] };
 		assert.deepEqual(queuedUpdater(current), current);
 	});
+	it('finding 13: sibling instances share one refresh per token and a rotated token never signs out', async () => {
+		let refreshes = 0;
+		let release;
+		const gate = new Promise((resolve) => { release = resolve; });
+		const refreshTokens = async (server, token) => { refreshes++; await gate; if (token !== 'R1') throw Object.assign(new Error('invalid_grant'), { status: 400, code: 'invalid_grant' }); return { access_token: 'A2', refresh_token: 'R2', expires_in: 3600, obtained_at: Date.now(), token_type: 'Bearer', scope: '' }; };
+		const { exports: { StreamientApi } } = await compile(read('apps/mobile/src/lib/api.ts'), { refreshTokens, getCachedJson: async () => null, setCachedJson: async () => {}, fetch: async (url, init) => new Response('{}', { status: init.headers.get('Authorization') === 'Bearer A2' ? 200 : 401 }) });
+		const stale = { access_token: 'A1', refresh_token: 'R1', expires_in: 3600, obtained_at: Date.now(), token_type: 'Bearer', scope: '' };
+		const seen = [];
+		const first = new StreamientApi(serverA, stale, (next) => seen.push(next?.refresh_token ?? null));
+		const second = new StreamientApi(serverA, stale, (next) => seen.push(next?.refresh_token ?? null));
+		const pending = [first.projects(), second.projects()];
+		await new Promise((resolve) => setImmediate(resolve));
+		release();
+		await Promise.all(pending);
+		assert.equal(refreshes, 1);
+		assert.deepEqual(seen, ['R2', 'R2']);
+		// A later request on an instance that still holds R1 adopts the rotated tokens instead of replaying R1.
+		const late = new StreamientApi(serverA, stale, (next) => seen.push(next?.refresh_token ?? null));
+		await late.projects();
+		assert.equal(refreshes, 1);
+		assert.deepEqual(seen, ['R2', 'R2']);
+		// Another server with the same token string never receives the rotated tokens.
+		await new StreamientApi(serverB, stale, noop).projects().catch(noop);
+		assert.equal(refreshes, 2);
+	});
+
+	it('finding 14: realtime start does not create a socket after cleanup during socketToken', async () => {
+		let created = 0;
+		let release;
+		const gate = new Promise((resolve) => { release = resolve; });
+		const { exports: { startRealtime } } = await compile(read('apps/mobile/src/lib/realtime.ts'), { io: () => { created++; return { io: { on: noop, removeAllListeners: noop }, on: noop, removeAllListeners: noop, connect: noop, disconnect: noop, connected: false }; }, window: { setTimeout, clearTimeout } });
+		const stop = startRealtime({ socketToken: async () => { await gate; return { token: 't', refresh_after: 60 }; } }, serverA, { hostId: 'h', userId: 'u' }, noop);
+		stop();
+		release();
+		await new Promise((resolve) => setImmediate(resolve));
+		assert.equal(created, 0);
+	});
+
+	it('finding 15: every socket connect, including a restarted realtime first connect, triggers catch-up', async () => {
+		const handlers = {};
+		const events = [];
+		const { exports: { startRealtime } } = await compile(read('apps/mobile/src/lib/realtime.ts'), { io: () => ({ io: { on: noop, removeAllListeners: noop }, on: (event, fn) => { handlers[event] = fn; }, emit: noop, removeAllListeners: noop, connect: noop, disconnect: noop, connected: false }), window: { setTimeout, clearTimeout } });
+		const stop = startRealtime({ socketToken: async () => ({ token: 't', refresh_after: 60 }) }, serverA, { hostId: 'h', userId: 'u' }, (event) => events.push(event));
+		await new Promise((resolve) => setImmediate(resolve));
+		handlers.connect();
+		assert.deepEqual(events, ['connection:reconnected']);
+		stop();
+	});
 });

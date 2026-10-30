@@ -20,8 +20,12 @@ export class ApiError extends Error {
 	}
 }
 
+// Refresh tokens are single-use, so every StreamientApi instance shares one in-flight refresh per server+token and adopts the rotated result.
+const refreshKey = (server: ServerOption, refreshToken: string) => `${server.baseUrl}\n${refreshToken}`;
+const inflightRefreshes = new Map<string, Promise<TokenSet>>();
+const rotatedTokens = new Map<string, TokenSet>();
+
 export class StreamientApi {
-	private refreshPromise: Promise<TokenSet> | null = null;
 	private cacheNamespace: string;
 
 	constructor(private server: ServerOption, private tokens: TokenSet, private onTokens: (tokens: TokenSet | null) => void) {
@@ -33,15 +37,38 @@ export class StreamientApi {
 		return Date.now() >= this.tokens.obtained_at + this.tokens.expires_in * 1000 - 30_000;
 	}
 
+	private latestTokens() {
+		let latest = this.tokens;
+		while (latest.refresh_token) {
+			const next = rotatedTokens.get(refreshKey(this.server, latest.refresh_token));
+			if (!next) break;
+			latest = next;
+		}
+		return latest;
+	}
+
 	private async replaceTokens() {
-		if (!this.tokens.refresh_token) throw new Error("Your session has expired");
-		if (!this.refreshPromise) this.refreshPromise = refreshTokens(this.server, this.tokens.refresh_token).finally(() => { this.refreshPromise = null; });
-		this.tokens = await this.refreshPromise;
+		const refreshToken = this.tokens.refresh_token;
+		if (!refreshToken) throw new Error("Your session has expired");
+		const latest = this.latestTokens();
+		if (latest !== this.tokens) { this.tokens = latest; return; } // A sibling instance already rotated this token; the app received the result from it.
+		const key = refreshKey(this.server, refreshToken);
+		let pending = inflightRefreshes.get(key);
+		if (!pending) {
+			pending = refreshTokens(this.server, refreshToken).then((next) => {
+				if (next.refresh_token && next.refresh_token !== refreshToken) rotatedTokens.set(key, next);
+				if (rotatedTokens.size > 32) rotatedTokens.delete(rotatedTokens.keys().next().value as string);
+				return next;
+			}).finally(() => { inflightRefreshes.delete(key); });
+			inflightRefreshes.set(key, pending);
+		}
+		this.tokens = await pending;
 		this.onTokens(this.tokens);
 	}
 
 	private handleRefreshFailure(error: unknown) {
 		if (error instanceof TypeError || !navigator.onLine) return;
+		if (this.tokens.refresh_token && rotatedTokens.has(refreshKey(this.server, this.tokens.refresh_token))) return; // Token was already rotated elsewhere; the next request adopts the latest tokens.
 		const status = (error as { status?: number }).status;
 		if (status && (status >= 500 || status === 429)) return; // Transient server/rate-limit failure preserves the session.
 		this.onTokens(null);
