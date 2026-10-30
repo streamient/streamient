@@ -5,6 +5,7 @@ import { Tenant } from '../modules/tenancy.js';
 import { previewAccountDeletion, requestAccountDeletion, pruneDeletedAccountSession } from '../services/account_cleanup_service.js';
 import { Router } from 'express';
 import crypto from 'node:crypto';
+import bcrypt from 'bcryptjs';
 import { generateSecret, verifySync, generateURI } from 'otplib';
 import { queryForSave } from '../model/mongoose.js';
 import { User, compareUserPassword, toSafeUser } from '../model/user.js';
@@ -393,15 +394,12 @@ router.post('/reset-password/confirm', async (req, res) => {
 			return res.render('auth/reset_password', { error: 'Invalid reset session. Please request a new link.' });
 		}
 
-		const user = await queryForSave(User.findById(pending.userId).select('+password +password_reset_token +password_reset_expires'));
-		if (!user || user.password_reset_token !== token || user.password_reset_expires < new Date()) {
+		// Query updates bypass the User save hook, so hash before consuming the token.
+		const password = await bcrypt.hash(pending.newPassword, 12);
+		const result = await User.updateOne({ _id: pending.userId, password_reset_token: token, password_reset_expires: { $gt: new Date() } }, { $set: { password }, $unset: { password_reset_token: '', password_reset_expires: '' } });
+		if (!result.matchedCount) {
 			return res.render('auth/reset_password', { error: 'Reset link has expired.' });
 		}
-
-		user.password = pending.newPassword;
-		user.password_reset_token = undefined;
-		user.password_reset_expires = undefined;
-		await user.save();
 
 		delete req.session.pendingReset;
 		res.redirect('/login?reset=true');
