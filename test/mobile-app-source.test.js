@@ -27,7 +27,7 @@ describe('Streamient Mobile source contracts', () => {
 		const uploads = read('apps/mobile/src/lib/uploads.ts');
 		const shares = read('apps/mobile/src/lib/shareTarget.ts');
 
-		assert.match(realtime, /socket\.io\.on\("reconnect"/);
+		assert.match(realtime, /socket\.on\("connect"[\s\S]*connection:reconnected/);
 		assert.match(app, /connection:reconnected[\s\S]*applyChanges\(\)/);
 		assert.match(app, /startRealtime\(api, server, \{ hostId: realtimeHostId, userId: realtimeUserId \}/);
 		assert.doesNotMatch(app, /startRealtime\(api, server, bootstrap/);

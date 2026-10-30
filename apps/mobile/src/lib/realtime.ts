@@ -12,16 +12,18 @@ export function startRealtime(api: StreamientApi, server: ServerOption, identity
 		if (stopped) return;
 		try {
 			const result = await api.socketToken();
+			if (stopped) return;
 			if (!socket) {
 				socket = io(server.baseUrl, { autoConnect: false, auth: { token: result.token }, reconnection: true, transports: ["websocket"] });
-				socket.on("connect", () => socket?.emit("subscribe", `tenant:${identity.hostId}`, identity.userId, identity.hostId, "mobile"));
-				socket.io.on("reconnect", () => onEvent("connection:reconnected", {}));
+				// Catch up on every connect, including a restarted realtime's first one, so events in the gap are not lost.
+				socket.on("connect", () => { socket?.emit("subscribe", `tenant:${identity.hostId}`, identity.userId, identity.hostId, "mobile"); onEvent("connection:reconnected", {}); });
 				for (const event of RECORD_EVENTS) socket.on(event, (payload: Record<string, unknown> = {}) => onEvent(event, payload));
 			} else socket.auth = { token: result.token };
 			if (!socket.connected) socket.connect();
 			window.clearTimeout(refreshTimer);
 			refreshTimer = window.setTimeout(renew, Math.max(30, result.refresh_after) * 1000);
 		} catch {
+			if (stopped) return;
 			refreshTimer = window.setTimeout(renew, 10_000);
 		}
 	};
