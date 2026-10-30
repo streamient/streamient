@@ -34,7 +34,7 @@ function fixture(t, initial = {}) {
 		if (failEnqueue) throw new Error('Queue unavailable');
 		if (!jobs.has(options.jobId)) jobs.set(options.jobId, { status: 'pending', attempts: 0 });
 	});
-	t.mock.method(MongoQueue, 'getJob', async (id) => jobs.get(id));
+	t.mock.method(MongoQueue, 'getJob', async (id, options) => { assert.equal(options.queue, 'note-import'); return jobs.get(id); });
 	return { row, jobs, calls, fail(value) { failEnqueue = value; } };
 }
 

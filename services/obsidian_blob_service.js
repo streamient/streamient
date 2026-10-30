@@ -296,7 +296,7 @@ export async function completeUpload(userId, hostId, id) {
 		} catch (err) {
 			blob = await ObsidianBlob.findOneAndUpdate({ host_id: hostId, sha256 }, { $inc: { __v: 0 } }, { timestamps: false, returnDocument: 'after' }).lean();
 			if (!blob) throw err;
-			if (installed && blob.storage_key !== path.relative(storageRoot(), destination)) await rm(destination, { recursive: true, force: true });
+			if (installed && blob.storage_key !== path.relative(storageRoot(), destination)) await rm(destination, { recursive: true, force: true }).catch(() => {});
 		}
 	}
 	upload.state = 'complete';

@@ -97,7 +97,9 @@ export const MongoQueue = {
 
 	async getJob(jobId, options = {}) {
 		const col = getCollection();
-		return col.findOne(namespaced({ _id: String(jobId) }, getAppInstance(options)));
+		// Legacy deduplicated jobs used generated IDs instead of their dedup key.
+		const filter = options.queue ? { queue: options.queue, $or: [{ _id: String(jobId) }, { dedup_key: String(jobId) }] } : { _id: String(jobId) };
+		return col.findOne(namespaced(filter, getAppInstance(options)));
 	},
 
 	async removeJob(jobId, options = {}) {

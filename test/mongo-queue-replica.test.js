@@ -33,3 +33,16 @@ test('job references return the acknowledged host without a replica lookup', asy
 	const host = await resolveJobHost({ upload_id: '507f1f77bcf86cd799439011' }, { db: { collection: () => ({ findOne: async () => null, findOneAndUpdate: async () => ({ host_id: 'new-host' }) }) } });
 	assert.equal(host, 'new-host');
 });
+
+test('queue-scoped lookup finds a legacy generated job ID by its dedup key', async (t) => {
+	const original = Object.getOwnPropertyDescriptor(mongoose.connection, 'db');
+	const legacy = { _id: new mongoose.Types.ObjectId(), queue: 'note-import', dedup_key: 'upload', status: 'failed', attempts: 3 };
+	Object.defineProperty(mongoose.connection, 'db', { configurable: true, value: { collection: () => ({ findOne: async (filter) => {
+		assert.equal(filter.app_instance, 'streamient');
+		assert.equal(filter.queue, 'note-import');
+		assert.deepEqual(filter.$or, [{ _id: 'upload' }, { dedup_key: 'upload' }]);
+		return legacy;
+	} }) } });
+	t.after(() => original ? Object.defineProperty(mongoose.connection, 'db', original) : delete mongoose.connection.db);
+	assert.equal(await MongoQueue.getJob('upload', { queue: 'note-import' }), legacy);
+});

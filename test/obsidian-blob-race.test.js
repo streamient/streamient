@@ -144,6 +144,33 @@ describe('Obsidian blob publication', () => {
 });
 
 describe('completed upload publication', () => {
+	it('completes both duplicate uploads when losing-candidate cleanup fails', async (t) => {
+		const fixture = new BlobFixture(t);
+		const plain = Buffer.from('Winning blob survives cleanup errors');
+		await fixture.stageUpload(plain, 'first-cleanup');
+		await fixture.stageUpload(plain, 'second-cleanup');
+		let release, arrived;
+		const held = new Promise((resolve) => { release = resolve; });
+		const firstArrived = new Promise((resolve) => { arrived = resolve; });
+		let calls = 0;
+		fixture.beforeCreate = async () => { if (++calls === 1) { arrived(); await held; } };
+		fixture.afterCreate = async () => release();
+		const originalRm = fsPromises.rm;
+		t.mock.method(fsPromises, 'rm', async (target, options) => {
+			const winner = [...fixture.rows.values()][0];
+			if (winner && String(target).includes(path.sep + 'blobs' + path.sep) && target !== path.join(fixture.root, winner.storage_key)) throw new Error('Losing candidate cleanup failed');
+			return originalRm(target, options);
+		});
+		syncBuiltinESMExports();
+		t.after(() => { fsPromises.rm = originalRm; syncBuiltinESMExports(); });
+		const first = completeUpload('owner', 'host', 'first-cleanup');
+		await firstArrived;
+		const second = completeUpload('owner', 'host', 'second-cleanup');
+		const completed = await Promise.all([first, second]);
+		assert.ok(completed.every((upload) => upload.state === 'complete'));
+		assert.equal(fixture.rows.size, 1);
+		assert.deepEqual(await readBlobBuffer([...fixture.rows.values()][0], 'host'), plain);
+	});
 	for (const deduplicated of [false, true]) {
 		it(`keeps staged chunks after completion save fails (${deduplicated ? 'existing' : 'new'} blob)`, async (t) => {
 			const fixture = new BlobFixture(t);

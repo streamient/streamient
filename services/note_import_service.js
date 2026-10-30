@@ -275,7 +275,7 @@ export async function recoverNoteImports() {
 	for await (const upload of NoteImportUpload.find({ state: 'processing' }).lean().cursor()) {
 		try {
 			await enqueueImport(upload);
-			const job = await MongoQueue.getJob(importJobId(upload));
+			const job = await MongoQueue.getJob(importJobId(upload), { queue: NOTE_IMPORT_QUEUE });
 			if (job?.status === 'failed' || job?.status === 'completed') {
 				const failed = await NoteImportUpload.findOneAndUpdate({ _id: upload._id, state: 'processing', queue_attempt: upload.queue_attempt || { $in: [null, 0] } }, { $set: { state: 'failed', error: 'Import interrupted; please retry' } }, { returnDocument: 'after' }).lean();
 				if (failed) emitToTenant(upload.host_id, 'note-import:failed', publicUpload(failed));
