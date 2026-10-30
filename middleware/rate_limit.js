@@ -5,6 +5,7 @@ import { Tenant } from '../modules/tenancy.js';
 import { resolveStoredTenantLimits } from '../modules/tenant_limits.js';
 import { createLogger } from '../modules/logger.js';
 import { hasStreamientDemoSessionEntry } from '../services/streamient_demo_service.js';
+import { isPublicAddress } from '../modules/public_url.js';
 
 const log = createLogger('api-rate-limit');
 
@@ -113,23 +114,24 @@ export function getRequestPath(request) {
 	return strippedPath;
 }
 
+// Forwarding headers are client-controlled unless the direct peer is our own proxy on a private network.
 export function getClientIp(request) {
+	const peer = normalizeIp(request.socket?.remoteAddress || request.connection?.remoteAddress || '127.0.0.1');
+	if (isPublicAddress(peer)) return peer;
 	return normalizeIp(
 		request.headers?.['cf-connecting-ip'] ||
 		request.headers?.['fastly-client-ip'] ||
 		request.headers?.['true-client-ip'] ||
 		request.headers?.['x-real-ip'] ||
 		request.headers?.['x-forwarded-for'] ||
-		request['ip'] ||
-		request.connection?.remoteAddress ||
-		request.socket?.remoteAddress ||
-		'127.0.0.1'
+		peer
 	);
 }
 
-// Authorization headers are unverified before auth runs; keying by them lets random tokens mint fresh buckets.
+// Authorization headers are unverified before auth runs; key by the identity requireAuth verified, else by IP.
 export function getRateLimitKey(request) {
-	if (request.session?.userId) return `user:${hashValue(request.session.userId)}`;
+	const userId = request.userId || request.session?.userId;
+	if (userId) return `user:${hashValue(String(userId))}`;
 	return `ip:${hashValue(getClientIp(request))}`;
 }
 
@@ -326,6 +328,28 @@ export function createAiDailyLimiter() {
 	});
 }
 
+/** Pre-auth guard: counts only rejected credentials per IP, so invalid tokens cannot hammer token lookups. */
+export function createApiAuthFailureLimiter() {
+	const rateLimitConfig = getConfig();
+	if (!rateLimitConfig.enabled) return createNoopLimiter();
+	return rateLimit({
+		windowMs: rateLimitConfig.windowMs,
+		limit: rateLimitConfig.generalPerMinute,
+		keyGenerator: (request) => `auth-fail:${hashValue(getClientIp(request))}`,
+		store: getCacheStore('api-auth-failure'),
+		passOnStoreError: true,
+		standardHeaders: 'draft-7',
+		legacyHeaders: false,
+		skip: shouldSkipCommon,
+		requestWasSuccessful: (_request, response) => response.statusCode !== 401,
+		skipSuccessfulRequests: true,
+		handler: (request, response) => {
+			log.warn({ method: request.method, path: getRequestPath(request), bucket: 'api-auth-failure' }, 'API auth failure limit exceeded');
+			return response.status(429).json({ error: 'Rate limit exceeded. Please slow down and try again later.' });
+		},
+	});
+}
+
 export function createApiLimiters() {
 	return [
 		createExpensiveApiLimiter(),
@@ -334,8 +358,4 @@ export function createApiLimiters() {
 		createObsidianApiLimiter(),
 		createGeneralApiLimiter(),
 	];
-}
-
-export function createApiLimiter() {
-	return createGeneralApiLimiter();
 }

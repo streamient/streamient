@@ -425,8 +425,9 @@ router.post('/2fa/verify', twoFactorLimiter, async (req, res) => {
 		const user = await User.findById(pending.userId).select('+totp_secret');
 		if (!user) return res.status(401).json({ error: 'User not found' });
 
-		const result = verifySync({ token: code, secret: user.totp_secret });
-		if (!result.valid) {
+		// Malformed codes make verifySync throw; count them as failures instead of a 500.
+		const valid = /^\d{6}$/.test(code) && Boolean(user.totp_secret) && verifySync({ token: code, secret: user.totp_secret }).valid;
+		if (!valid) {
 			pending.failures = (pending.failures || 0) + 1;
 			if (pending.failures < MAX_2FA_FAILURES) return res.status(401).json({ error: 'Invalid 2FA code' });
 			delete req.session.pending2FA;

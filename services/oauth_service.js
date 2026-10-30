@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { getPublicUrl } from '../modules/public_url.js';
 import { isIP } from 'node:net';
 import bcrypt from 'bcryptjs';
-import { createLocalJWKSet, createRemoteJWKSet, jwtVerify } from 'jose';
+import { createLocalJWKSet, jwtVerify } from 'jose';
 
 import mongoose, { queryForSave } from '../model/mongoose.js';
 import { OAuthAuthorizationCode } from '../model/oauth_authorization_code.js';
@@ -339,7 +339,7 @@ async function fetchClientMetadataDocument(clientId) {
 	let response;
 	let json;
 	try {
-		response = await getPublicUrl(url, { headers: { Accept: 'application/json' }, timeout: 5000, maxRedirects: 0, maxContentLength: 1024 * 1024, responseType: 'text' });
+		response = await getPublicUrl(url, { headers: { Accept: 'application/json' }, timeout: 5000, signal: AbortSignal.timeout(5000), maxRedirects: 0, maxContentLength: 1024 * 1024, responseType: 'text' });
 		json = JSON.parse(response.data);
 	} catch {
 		throw new OAuthError('invalid_client', 'Failed to fetch client metadata', 400);
@@ -386,14 +386,14 @@ function getTokenEndpointUrl() {
 	return `${getAuthorizationServerMetadataUrls().issuer}/token`;
 }
 
-function getClientJwksResolver(client) {
+async function getClientJwksResolver(client) {
 	if (client.jwks) {
 		return createLocalJWKSet(client.jwks);
 	}
 	if (client.jwks_uri) {
-		return createRemoteJWKSet(new URL(client.jwks_uri), {
-			timeoutDuration: 5000,
-		});
+		// Fetch through the SSRF guard (pinned public DNS) instead of jose's unguarded remote fetch.
+		const response = await getPublicUrl(client.jwks_uri, { headers: { Accept: 'application/json' }, timeout: 5000, signal: AbortSignal.timeout(5000), maxRedirects: 0, maxContentLength: 256 * 1024, responseType: 'text' });
+		return createLocalJWKSet(JSON.parse(response.data));
 	}
 	throw new OAuthError('invalid_client', 'private_key_jwt clients must provide jwks or jwks_uri', 401);
 }
@@ -409,7 +409,7 @@ async function verifyPrivateKeyJwtClientAssertion({ client, clientAssertionType,
 
 	let result;
 	try {
-		result = await jwtVerify(clientAssertion, getClientJwksResolver(client), {
+		result = await jwtVerify(clientAssertion, await getClientJwksResolver(client), {
 			issuer: client.client_id,
 			subject: client.client_id,
 			audience: [getTokenEndpointUrl(), getOauthIssuer()],

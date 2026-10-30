@@ -61,3 +61,24 @@ it('clears the pending 2FA login after five wrong codes', async (t) => {
 	await handler('/2fa/verify')({ body: { code: generateSync({ secret }), tempToken: 'temp-token' }, session }, res);
 	assert.equal(res.body.error, 'Invalid 2FA session');
 });
+
+it('counts malformed 2FA codes as failures instead of erroring', async (t) => {
+	const secret = generateSecret();
+	t.mock.method(User, 'findById', () => ({ select: async () => ({ _id: 'user-1', totp_secret: secret }) }));
+	const session = { pending2FA: { userId: 'user-1', token: 'temp-token' } };
+	for (const code of ['1', 'abcdef', '', '12345', '1234567']) {
+		const res = response();
+		await handler('/2fa/verify')({ body: { code, tempToken: 'temp-token' }, session }, res);
+		assert.equal(res.statusCode, 401);
+	}
+	assert.equal(session.pending2FA, undefined);
+});
+
+it('ignores forwarding headers from a public peer and keys verified callers by user', async () => {
+	const { getClientIp, getRateLimitKey } = await import('../middleware/rate_limit.js');
+	const spoofed = { 'x-forwarded-for': '1.2.3.4', 'cf-connecting-ip': '5.6.7.8' };
+	assert.equal(getClientIp({ headers: spoofed, socket: { remoteAddress: '8.8.8.8' } }), '8.8.8.8');
+	assert.equal(getClientIp({ headers: { 'cf-connecting-ip': '5.6.7.8' }, socket: { remoteAddress: '10.0.0.2' } }), '5.6.7.8');
+	const peer = { headers: {}, socket: { remoteAddress: '10.0.0.2' } };
+	assert.notEqual(getRateLimitKey({ ...peer, userId: 'user-a' }), getRateLimitKey({ ...peer, userId: 'user-b' }));
+});

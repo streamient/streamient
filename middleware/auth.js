@@ -29,6 +29,8 @@ async function applyTenantContext(req, userId, preferredTenantId = null, preferr
 }
 
 export async function requireAuth(req, res, next) {
+	// Already authenticated earlier in this request (app-level API mount); skip the repeat lookup.
+	if (req.authMethod) return next();
 	if (req.session?.userId && !/^(Bearer|Token) /.test(req.headers.authorization || '')) {
 		if (req.csrfDeferred) {
 			let verified = false;

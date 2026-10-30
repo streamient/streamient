@@ -89,6 +89,10 @@ const userSchema = new mongoose.Schema(
 	{ timestamps: true, read: 'secondaryPreferred' },
 );
 
+// Token auth looks users up by these fields; the plaintext index serves only legacy tokens until the hash migration runs.
+userSchema.index({ 'access_tokens.token_hash': 1 }, { sparse: true });
+userSchema.index({ 'access_tokens.token': 1 }, { sparse: true });
+
 userSchema.pre('save', async function () {
 	if (!this.isModified('password')) return;
 	this.password = await bcrypt.hash(this.password, 12);
