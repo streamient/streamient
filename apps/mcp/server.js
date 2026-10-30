@@ -75,22 +75,16 @@ async function resolveDefaultProjectId(api, projectIdOverride) {
 }
 
 async function resolveBootstrap(api, { projectId, cacheKey }) {
+  // Validate credentials on every request, including cached bootstrap and project overrides.
+  const { features } = await api.get('/features');
+  const emailFeatureEnabled = features?.email_ingest !== false;
+  const gitSyncFeatureEnabled = features?.git_sync !== false;
   const now = Date.now();
   if (cacheKey) {
     const cached = bootstrapCache.get(cacheKey);
-    if (cached && cached.expires > now) return { ...cached.value, cacheHit: true };
+    if (cached && cached.expires > now) return { ...cached.value, emailFeatureEnabled, gitSyncFeatureEnabled, cacheHit: true };
   }
   const defaultProjectId = await resolveDefaultProjectId(api, projectId);
-  let emailFeatureEnabled = true;
-  let gitSyncFeatureEnabled = true;
-  try {
-    const { features } = await api.get('/features');
-    emailFeatureEnabled = features?.email_ingest !== false;
-    gitSyncFeatureEnabled = features?.git_sync !== false;
-  } catch {
-    emailFeatureEnabled = true;
-    gitSyncFeatureEnabled = true;
-  }
   const value = { defaultProjectId, emailFeatureEnabled, gitSyncFeatureEnabled };
   if (cacheKey) {
     bootstrapCache.set(cacheKey, { value, expires: now + BOOTSTRAP_TTL_MS });
