@@ -15,10 +15,10 @@ export function gitSyncTools(api, defaultProjectId) {
 			annotations: READ_ONLY,
 			outputSchema: MCP_JSON_OUTPUT_SCHEMA,
 			inputSchema: {
-				project_id: z.string().optional().describe('Project ID (defaults to the default project)'),
+				project_id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').optional().describe('Project ID (defaults to the default project)'),
 			},
 			handler: async (args) => {
-				const pid = args.project_id || defaultProjectId;
+				const pid = z.string().regex(/^[a-f0-9]{24}$/).parse(args.project_id || defaultProjectId);
 				const { repos } = await api.get(`/projects/${pid}/git-repos`);
 				return mcpJson(repos);
 			},
@@ -40,11 +40,11 @@ export function gitSyncTools(api, defaultProjectId) {
 				sync_interval: z.number().optional().describe('Sync interval in minutes (default: 10)'),
 				commit_sync_enabled: z.boolean().optional().describe('Import git commits as memories (default: true)'),
 				commit_history_days: z.number().optional().describe('Days of commit history to backfill on first sync (default: 90)'),
-				project_id: z.string().optional().describe('Project ID (defaults to the default project)'),
+				project_id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').optional().describe('Project ID (defaults to the default project)'),
 			},
 			handler: async (args) => {
 				const { project_id, ...rest } = args;
-				const pid = project_id || defaultProjectId;
+				const pid = z.string().regex(/^[a-f0-9]{24}$/).parse(project_id || defaultProjectId);
 				const { repo } = await api.post(`/projects/${pid}/git-repos`, rest);
 				return mcpJson(repo);
 			},
@@ -55,7 +55,7 @@ export function gitSyncTools(api, defaultProjectId) {
 			annotations: OVERWRITE_INTERNAL,
 			outputSchema: MCP_JSON_OUTPUT_SCHEMA,
 			inputSchema: {
-				id: z.string().describe('Git repo ID'),
+				id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').describe('Git repo ID'),
 				name: z.string().optional(),
 				repo_url: z.string().optional(),
 				branch: z.string().optional(),
@@ -82,7 +82,7 @@ export function gitSyncTools(api, defaultProjectId) {
 			annotations: OVERWRITE_INTERNAL,
 			outputSchema: MCP_JSON_OUTPUT_SCHEMA,
 			inputSchema: {
-				id: z.string().describe('Git repo ID'),
+				id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').describe('Git repo ID'),
 			},
 			handler: async (args) => {
 				await api.delete(`/git-repos/${args.id}`);
@@ -95,7 +95,7 @@ export function gitSyncTools(api, defaultProjectId) {
 			annotations: REACHES_GIT,
 			outputSchema: MCP_JSON_OUTPUT_SCHEMA,
 			inputSchema: {
-				id: z.string().describe('Git repo ID'),
+				id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').describe('Git repo ID'),
 			},
 			handler: async (args) => {
 				const result = await api.post(`/git-repos/${args.id}/sync`, {});
@@ -108,7 +108,7 @@ export function gitSyncTools(api, defaultProjectId) {
 			annotations: READ_ONLY,
 			outputSchema: MCP_JSON_OUTPUT_SCHEMA,
 			inputSchema: {
-				id: z.string().describe('Git repo ID'),
+				id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').describe('Git repo ID'),
 			},
 			handler: async (args) => {
 				const status = await api.get(`/git-repos/${args.id}/status`);

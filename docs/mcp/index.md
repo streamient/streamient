@@ -34,6 +34,12 @@ Public app submissions can use the curated `/mcp/app` endpoint on the same serve
 
 App-only authorization stays restricted when a client changes endpoints. Each OAuth connection is bound to the account and permissions approved during sign-in; reconnect when changing that account or authorization.
 
+## Request validation
+
+Record and project IDs must contain exactly 24 lowercase hexadecimal characters. MCP rejects malformed IDs before calling the API.
+
+HTTP and SSE requests forward the resolved client IP to the API. Both services use the same proxy trust policy: forwarding headers are accepted only from private-network peers. Keep these listeners behind trusted proxies that replace client-supplied IP headers. Rejected credentials count toward a per-IP limit, including attempts that change tokens. Stdio does not forward a client IP. An SSE connection must reconnect if its client IP changes.
+
 ## How it works
 
 1. **Connect once** — add the Streamient MCP server to your AI client.

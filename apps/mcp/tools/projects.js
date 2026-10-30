@@ -26,7 +26,7 @@ export function projectTools(api) {
       annotations: READ_ONLY,
       outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
-        id: z.string().describe('Project ID'),
+        id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').describe('Project ID'),
       },
       handler: async (args) => {
         const { project } = await api.get(`/projects/${args.id}`);
@@ -53,7 +53,7 @@ export function projectTools(api) {
       annotations: OVERWRITE_INTERNAL,
       outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
-        id: z.string().describe('Project ID'),
+        id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').describe('Project ID'),
         name: z.string().optional().describe('Project name'),
         color: z.string().optional().describe('Project color (hex code)'),
       },
@@ -69,7 +69,7 @@ export function projectTools(api) {
       annotations: OVERWRITE_INTERNAL,
       outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
-        id: z.string().describe('Project ID'),
+        id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').describe('Project ID'),
       },
       handler: async (args) => {
         await api.delete(`/projects/${args.id}`);

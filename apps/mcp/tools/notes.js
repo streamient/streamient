@@ -23,7 +23,7 @@ export function noteTools(api, defaultProjectId) {
         content: z.string().optional().describe('Note content (HTML)'),
         text_content: z.string().optional().describe('Plain text content for search'),
         tags: z.array(z.string()).optional().describe('Tags'),
-        project_id: z.string().optional().describe('Project ID (defaults to the default project)'),
+        project_id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').optional().describe('Project ID (defaults to the default project)'),
       },
       handler: async (args) => {
         const { project_id, ...rest } = args;
@@ -37,7 +37,7 @@ export function noteTools(api, defaultProjectId) {
       annotations: READ_ONLY,
       outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
-        id: z.string().describe('Note ID'),
+        id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').describe('Note ID'),
         include_markdown: z.boolean().default(true).describe('Include original Markdown for an Obsidian-synced note'),
       },
       handler: async (args) => {
@@ -51,7 +51,7 @@ export function noteTools(api, defaultProjectId) {
       annotations: OVERWRITE_INTERNAL,
       outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
-        id: z.string().describe('Note ID'),
+        id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').describe('Note ID'),
         title: z.string().optional(),
         content: z.string().optional().describe('HTML content for notes not synced with Obsidian'),
         markdown_content: z.string().optional().describe('Full Markdown for an Obsidian-synced note, including preserved frontmatter. Put title/tag changes in frontmatter when editing Markdown.'),
@@ -70,7 +70,7 @@ export function noteTools(api, defaultProjectId) {
       annotations: OVERWRITE_INTERNAL,
       outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
-        id: z.string().describe('Note ID'),
+        id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').describe('Note ID'),
       },
       handler: async (args) => {
         await api.delete(`/notes/${args.id}`);
@@ -83,7 +83,7 @@ export function noteTools(api, defaultProjectId) {
       annotations: READ_ONLY,
       outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
-        project_id: z.string().optional().describe('Project ID filter'),
+        project_id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').optional().describe('Project ID filter'),
         page: z.number().optional(),
         limit: z.number().optional(),
       },
@@ -104,7 +104,7 @@ export function noteTools(api, defaultProjectId) {
       inputSchema: {
         ...MCP_SEARCH_FILTER_SCHEMA,
         query: z.string().describe('Search query'),
-        project_id: z.string().optional().describe('Filter results to a specific project (optional; omit to search all projects)'),
+        project_id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').optional().describe('Filter results to a specific project (optional; omit to search all projects)'),
         per_page: MCP_PER_PAGE_SCHEMA,
       },
       handler: async (args) => {

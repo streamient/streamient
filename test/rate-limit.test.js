@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, it } from 'node:test';
 import express from 'express';
 import { MemoryStore } from 'express-rate-limit';
 
+import { ApiClient } from '../apps/mcp/lib/api-client.js';
 import * as ApiRateLimit from '../middleware/rate_limit.js';
 import * as McpRateLimit from '../modules/mcp_rate_limit.js';
 
@@ -281,6 +282,51 @@ describe('API rate-limit helpers', () => {
 });
 
 describe('MCP rate-limit helpers', () => {
+	it('shares the API client IP trust policy and ignores public-peer spoofing', () => {
+		assert.equal(McpRateLimit.getClientIp, ApiRateLimit.getClientIp);
+		for (const header of ['cf-connecting-ip', 'fastly-client-ip', 'true-client-ip', 'x-real-ip', 'x-forwarded-for']) {
+			assert.equal(McpRateLimit.getClientIp({ socket: { remoteAddress: '8.8.8.8' }, headers: { [header]: '1.1.1.1' } }), '8.8.8.8');
+		}
+		assert.equal(McpRateLimit.getClientIp({ socket: { remoteAddress: '10.0.0.2' }, headers: { 'x-forwarded-for': '8.8.8.8' } }), '8.8.8.8');
+	});
+
+	it('keeps rejected MCP API tokens isolated by forwarded transport IP', async () => {
+		setEnv({ ...API_RATE_LIMIT_ENV, API_RATE_LIMIT_GENERAL_PER_MINUTE: '2' });
+		const app = express();
+		app.use(ApiRateLimit.createApiAuthFailureLimiter());
+		app.get('/api/v1/projects', (_req, res) => res.sendStatus(401));
+		const server = app.listen(0);
+		await new Promise((resolve) => server.once('listening', resolve));
+		const base = `http://127.0.0.1:${server.address().port}`;
+		try {
+			for (const token of ['invalid-a', 'invalid-b']) await assert.rejects(new ApiClient(base, token, '9.9.9.9').get('/projects'), { status: 401 });
+			await assert.rejects(new ApiClient(base, 'invalid-c', '9.9.9.9').get('/projects'), { status: 429 });
+			await assert.rejects(new ApiClient(base, 'invalid-d', '1.0.0.1').get('/projects'), { status: 401 });
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
+	it('counts rotating invalid tokens per IP without charging successful requests', async () => {
+		setEnv({ ...MCP_RATE_LIMIT_ENV, MCP_UNAUTH_PER_MINUTE: '2' });
+		const app = express();
+		app.use(McpRateLimit.createUnauthLimiter(`rotation-${Date.now()}`));
+		app.post('/mcp', (req, res) => res.sendStatus(req.headers.authorization === 'Token valid' ? 200 : 401));
+		const server = app.listen(0);
+		await new Promise((resolve) => server.once('listening', resolve));
+		const url = `http://127.0.0.1:${server.address().port}/mcp`;
+		const send = (token, ip = '8.8.4.4') => fetch(url, { method: 'POST', headers: { authorization: `Token ${token}`, 'x-forwarded-for': ip } });
+		try {
+			for (let i = 0; i < 3; i++) assert.equal((await send('valid')).status, 200);
+			assert.equal((await send('invalid-a')).status, 401);
+			assert.equal((await send('invalid-b')).status, 401);
+			assert.equal((await send('invalid-c')).status, 429);
+			assert.equal((await send('valid', '1.1.1.1')).status, 200);
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
 	it('requires env config and reads compose-provided values', () => {
 		assert.throws(() => McpRateLimit.getConfig(), /missing required env 'MCP_RATE_LIMIT_ENABLED'/);
 

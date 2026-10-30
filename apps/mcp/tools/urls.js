@@ -25,7 +25,7 @@ export function urlTools(api, defaultProjectId) {
         description: z.string().optional().describe('Optional description'),
         tags: z.array(z.string()).optional().describe('Optional tags'),
         crawl_enabled: z.boolean().optional().describe('Enable full-site crawling'),
-        project_id: z.string().optional().describe('Project ID (defaults to the default project)'),
+        project_id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').optional().describe('Project ID (defaults to the default project)'),
       },
       handler: async (args) => {
         const { project_id, ...rest } = args;
@@ -39,7 +39,7 @@ export function urlTools(api, defaultProjectId) {
       annotations: READ_ONLY,
       outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
-        project_id: z.string().optional().describe('Project ID filter'),
+        project_id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').optional().describe('Project ID filter'),
         page: z.number().optional(),
         limit: z.number().optional(),
       },
@@ -60,7 +60,7 @@ export function urlTools(api, defaultProjectId) {
       inputSchema: {
         ...MCP_SEARCH_FILTER_SCHEMA,
         query: z.string().describe('Search query'),
-        project_id: z.string().optional().describe('Filter by project'),
+        project_id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').optional().describe('Filter by project'),
         per_page: MCP_PER_PAGE_SCHEMA,
       },
       handler: async (args) => {
@@ -84,7 +84,7 @@ export function urlTools(api, defaultProjectId) {
       annotations: READ_ONLY,
       outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
-        id: z.string().describe('URL ID'),
+        id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').describe('URL ID'),
       },
       handler: async (args) => {
         const { url } = await api.get(`/urls/${args.id}`);
@@ -97,7 +97,7 @@ export function urlTools(api, defaultProjectId) {
       annotations: OVERWRITE_INTERNAL,
       outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
-        id: z.string().describe('URL ID'),
+        id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').describe('URL ID'),
         title: z.string().optional(),
         description: z.string().optional(),
         tags: z.array(z.string()).optional(),
@@ -115,7 +115,7 @@ export function urlTools(api, defaultProjectId) {
       annotations: OVERWRITE_INTERNAL,
       outputSchema: MCP_JSON_OUTPUT_SCHEMA,
       inputSchema: {
-        id: z.string().describe('URL ID'),
+        id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').describe('URL ID'),
       },
       handler: async (args) => {
         await api.delete(`/urls/${args.id}`);

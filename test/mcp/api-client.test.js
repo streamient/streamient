@@ -46,6 +46,18 @@ describe('ApiClient', () => {
         await new Promise((r) => backend.close(r));
     });
 
+    it('forwards only the resolved transport IP and leaves stdio unforwarded', async () => {
+        const api = new ApiClient(backendUrl, 'token', '198.51.100.7');
+        await api.get('/test');
+        assert.equal(requests.at(-1).headers['x-forwarded-for'], '198.51.100.7');
+        await new ApiClient(backendUrl, 'token').get('/test');
+        assert.equal(requests.at(-1).headers['x-forwarded-for'], undefined);
+    });
+
+    it('preserves upstream status for rejected credential accounting', async () => {
+        await assert.rejects(new ApiClient(backendUrl, 'token').get('/fail-404'), { status: 404 });
+    });
+
     it('sends Authorization: Token header', async () => {
         const api = new ApiClient(backendUrl, 'my-secret-token');
         await api.get('/test');

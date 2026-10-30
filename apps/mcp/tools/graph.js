@@ -15,9 +15,9 @@ export function graphTools(api) {
             annotations: WRITE_INTERNAL,
             outputSchema: MCP_JSON_OUTPUT_SCHEMA,
             inputSchema: {
-                source_id: z.string().describe('Source item ID'),
+                source_id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').describe('Source item ID'),
                 source_type: z.enum(['notes', 'memory', 'urls', 'emails']).describe('Source item type'),
-                target_id: z.string().describe('Target item ID'),
+                target_id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').describe('Target item ID'),
                 target_type: z.enum(['notes', 'memory', 'urls', 'emails']).describe('Target item type'),
                 label: z.string().optional().describe('Link label/description'),
             },
@@ -32,7 +32,7 @@ export function graphTools(api) {
             annotations: READ_ONLY,
             outputSchema: MCP_JSON_OUTPUT_SCHEMA,
             inputSchema: {
-                item_id: z.string().describe('Item ID to get links for'),
+                item_id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').describe('Item ID to get links for'),
             },
             handler: async (args) => {
                 const { links } = await api.get(`/links/${args.item_id}`);
@@ -45,7 +45,7 @@ export function graphTools(api) {
             annotations: READ_ONLY,
             outputSchema: MCP_JSON_OUTPUT_SCHEMA,
             inputSchema: {
-                project_id: z.string().optional().describe('Filter by project ID'),
+                project_id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').optional().describe('Filter by project ID'),
                 include_tags: z.boolean().optional().describe('Include tag-based edges (default: true)'),
                 include_semantic: z.boolean().optional().describe('Include semantic similarity edges (default: false)'),
                 semantic_threshold: z.number().optional().describe('Semantic similarity threshold 0-1 (default: 0.7)'),
@@ -66,7 +66,7 @@ export function graphTools(api) {
             annotations: READ_ONLY,
             outputSchema: MCP_JSON_OUTPUT_SCHEMA,
             inputSchema: {
-                item_id: z.string().describe('Starting item ID'),
+                item_id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').describe('Starting item ID'),
             },
             handler: async (args) => {
                 const { links } = await api.get(`/links/${args.item_id}`);
@@ -89,7 +89,7 @@ export function graphTools(api) {
             annotations: OVERWRITE_INTERNAL,
             outputSchema: MCP_JSON_OUTPUT_SCHEMA,
             inputSchema: {
-                link_id: z.string().describe('Link ID to delete'),
+                link_id: z.string().regex(/^[a-f0-9]{24}$/, 'Expected a 24-character lowercase hexadecimal ID').describe('Link ID to delete'),
             },
             handler: async (args) => {
                 await api.delete(`/links/${args.link_id}`);
