@@ -39,6 +39,8 @@ The extracted content is stored as both plain text (for search indexing) and HTM
 
 Mobile imports send pieces of up to 4 MB to limit memory use. The server also accepts pieces of up to 20 MB from older clients. Each piece must match its SHA-256 checksum and the current upload offset. Interrupted uploads resume from the server's confirmed offset.
 
+After the upload finishes, Streamient queues extraction. If queue insertion is interrupted, retrying completion or the server's recovery check queues the same attempt once. Recovery runs at startup and every 30 seconds. Failed jobs keep their three-attempt limit; select retry to start a new attempt.
+
 On iOS, Streamient removes its copied shared file after an import completes or you cancel it. Paused and failed imports keep their copy for retry. Your original file stays in place.
 
 Renewing your sign-in keeps the current feed, connection, pending share, and draft open. Signing out clears the session's cached records.

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import fsPromises from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
@@ -142,6 +144,52 @@ describe('Obsidian blob publication', () => {
 });
 
 describe('completed upload publication', () => {
+	for (const deduplicated of [false, true]) {
+		it(`keeps staged chunks after completion save fails (${deduplicated ? 'existing' : 'new'} blob)`, async (t) => {
+			const fixture = new BlobFixture(t);
+			const plain = Buffer.from('Retry completion persistence');
+			await fixture.stageUpload(plain, 'save-failure');
+			if (deduplicated) await storeBuffer('host', plain);
+			let failSave = true;
+			t.mock.method(ObsidianUpload, 'findOneAndUpdate', () => BlobFixture.query({
+				...fixture.uploads.get('save-failure'),
+				async save() {
+					if (failSave) throw new Error('Completion save unavailable');
+					fixture.uploads.set('save-failure', { ...this });
+				},
+			}));
+			await assert.rejects(completeUpload('owner', 'host', 'save-failure'), /Completion save unavailable/);
+			assert.equal(fixture.uploads.get('save-failure').state, 'uploading');
+			const staging = path.join(fixture.root, 'uploads', 'host', 'save-failure');
+			assert.ok(fs.existsSync(path.join(staging, '0.part')));
+			failSave = false;
+			assert.equal((await completeUpload('owner', 'host', 'save-failure')).state, 'complete');
+			assert.equal(fs.existsSync(staging), false);
+			assert.equal(fixture.rows.size, 1);
+			assert.deepEqual(await readBlobBuffer([...fixture.rows.values()][0], 'host'), plain);
+		});
+	}
+	it('returns durable completion despite cleanup failure and retries cleanup on completion retry', async (t) => {
+		const fixture = new BlobFixture(t);
+		const plain = Buffer.from('Cleanup must not lose completion');
+		await fixture.stageUpload(plain, 'cleanup-failure');
+		const staging = path.join(fixture.root, 'uploads', 'host', 'cleanup-failure');
+		const originalRm = fsPromises.rm;
+		let failCleanup = true;
+		t.mock.method(fsPromises, 'rm', async (target, options) => {
+			if (target === staging && failCleanup) throw new Error('Cleanup unavailable');
+			return originalRm(target, options);
+		});
+		syncBuiltinESMExports();
+		t.after(() => { fsPromises.rm = originalRm; syncBuiltinESMExports(); });
+		assert.equal((await completeUpload('owner', 'host', 'cleanup-failure')).state, 'complete');
+		assert.equal(fixture.uploads.get('cleanup-failure').state, 'complete');
+		assert.ok(fs.existsSync(staging));
+		failCleanup = false;
+		assert.equal((await completeUpload('owner', 'host', 'cleanup-failure')).state, 'complete');
+		assert.equal(fs.existsSync(staging), false);
+		assert.deepEqual(await readBlobBuffer([...fixture.rows.values()][0], 'host'), plain);
+	});
 	it('publishes only accepted chunk files, excluding overlapping attempts', async (t) => {
 		const fixture = new BlobFixture(t);
 		const plain = Buffer.from('Accepted final chunk');

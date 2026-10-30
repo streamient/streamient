@@ -13,7 +13,7 @@ import { cleanupExpiredExports, createExportWorker, recoverExports } from '../se
 import { runScheduledSync } from '../services/git_sync_service.js';
 import { reconcileActiveTrashTenants } from '../services/trash_reconciliation_service.js';
 import { runEmailRetentionCleanup, runTrashRetentionCleanup } from '../services/trash_retention_service.js';
-import { cleanupOrphanedImportFiles, createNoteImportWorker, logImportWorkerError } from '../services/note_import_service.js';
+import { cleanupOrphanedImportFiles, createNoteImportWorker, logImportWorkerError, recoverNoteImports } from '../services/note_import_service.js';
 import { startHelpmonksSignupSequenceWorker } from '../services/helpmonks_signup_sequence_service.js';
 import { cleanupOrphanedUploads } from '../services/obsidian_blob_service.js';
 import { cleanupObsidianRetention, createObsidianExtractionWorker } from '../services/obsidian_sync_service.js';
@@ -144,6 +144,8 @@ export function startScheduler() {
 	new Cron('*/30 * * * * *', () => recoverExports().catch((err) => log.error({ err }, 'Export recovery failed')));
 	const noteImportWorker = createNoteImportWorker();
 	noteImportWorker.start().catch(logImportWorkerError);
+	void recoverNoteImports().catch(logImportWorkerError);
+	new Cron('*/30 * * * * *', () => recoverNoteImports().catch(logImportWorkerError));
 	startHelpmonksSignupSequenceWorker().catch((err) => log.error({ err }, 'Helpmonks signup sequence worker failed to start'));
 	if (config.obsidian.enabled) {
 		const obsidianExtractionWorker = createObsidianExtractionWorker();

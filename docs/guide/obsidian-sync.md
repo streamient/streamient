@@ -85,7 +85,7 @@ Every file has a server revision. When both sides changed from the same older re
 
 Project settings shows the conflict history. API responses include the losing revision identifier and authenticated download URL while that recovery snapshot is retained.
 
-Duplicate operations, repeated file hashes, and changes relayed through Obsidian Sync are idempotent. Concurrent retries of an upload chunk keep one accepted copy, and cleanup preserves active uploads. Renaming onto an unrelated existing path creates a conflict-suffixed file instead of destroying either file.
+Duplicate operations, repeated file hashes, and changes relayed through Obsidian Sync are idempotent. Concurrent retries of an upload chunk keep one accepted copy, and cleanup preserves active uploads. Staged chunks remain available until upload completion is saved. If saving fails, retry completion without uploading the chunks again. Cleanup failures do not fail a completed upload; retrying completion also retries cleanup. Renaming onto an unrelated existing path creates a conflict-suffixed file instead of destroying either file.
 
 ## Trash and Disconnect
 

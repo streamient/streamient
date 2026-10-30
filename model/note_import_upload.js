@@ -17,6 +17,7 @@ const noteImportUploadSchema = new mongoose.Schema({
 	total_bytes: { type: Number, required: true, min: 0 },
 	received_bytes: { type: Number, default: 0, min: 0 },
 	state: { type: String, enum: ['uploading', 'processing', 'complete', 'failed', 'canceled'], default: 'uploading' },
+	queue_attempt: { type: Number, default: 0 },
 	chunks: { type: [noteImportChunkSchema], default: [] },
 	note: { type: mongoose.Schema.Types.ObjectId, ref: 'Note', default: null },
 	error: { type: String, default: '' },
