@@ -73,7 +73,7 @@ describe('trash retention service', () => {
 		assert.equal(summary.errors[0].operation, 'typesense_cleanup');
 	});
 
-	it('leaves the Typesense orphan for reconciliation when graph cleanup fails', async () => {
+	it('removes search documents even when graph cleanup fails', async () => {
 		const observations = { queries: {}, limits: [], reads: [], leans: [], deletes: [] };
 		const models = { notes: { model: fakeRetentionModel('notes', { _id: 'note-1', host_id: 'host-1' }, observations), tsType: 'notes' } };
 		let searchCleanup = 0;
@@ -85,7 +85,7 @@ describe('trash retention service', () => {
 		});
 
 		assert.equal(summary.deleted, 1);
-		assert.equal(searchCleanup, 0);
+		assert.equal(searchCleanup, 1);
 		assert.equal(summary.errors[0].operation, 'graph_cleanup');
 	});
 });

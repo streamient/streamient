@@ -140,7 +140,7 @@ function resolveType(filePath, gitRepo) {
 }
 
 function parseMarkdownFile(content) {
-	const { data: frontmatter, content: body } = matter(content);
+	const { data: frontmatter, content: body } = matter(content, {});
 	return {
 		title: frontmatter.title || '',
 		tags: Array.isArray(frontmatter.tags) ? frontmatter.tags : [],

@@ -51,10 +51,7 @@ async function readByIds(model, hostId, ids, batchSize, isValidId) {
 	const docs = [];
 	const validIds = ids.filter((id) => isValidId(id));
 	for (const batch of splitBatches(validIds, batchSize)) {
-		for (const id of batch) {
-			const row = await model.findOneAndUpdate({ _id: id, host_id: hostId }, { $inc: { __v: 0 } }, { timestamps: false, returnDocument: 'after' }).lean();
-			if (row) docs.push(row);
-		}
+		docs.push(...await model.find({ _id: { $in: batch }, host_id: hostId }).lean());
 	}
 	return docs;
 }
@@ -141,15 +138,12 @@ async function reconcileType(hostId, type, entry, options) {
 	if (dryRun) return summary;
 
 	for (const batch of splitBatches(uniqueOrphanIds, batchSize)) {
-		let graphCleaned = false;
 		try {
 			await removeGraphLinks(hostId, batch);
 			summary.graph_cleaned += batch.length;
-			graphCleaned = true;
 		} catch (err) {
 			summary.errors.push(summarizeError(type, 'delete_orphan_graph_links', err, batch.length));
 		}
-		if (!graphCleaned) continue;
 		try {
 			await removeSearchDocuments(hostId, tsType, batch);
 			summary.deleted += batch.length;

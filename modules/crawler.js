@@ -3,7 +3,7 @@ import { validatePublicUrl, publicLookup } from './public_url.js';
 import { acquireTenantWork } from './tenancy.js';
 import { CheerioCrawler, Configuration } from 'crawlee';
 import { randomUUID } from 'node:crypto';
-import { ensureCollections, importDocuments, removeDocumentsBySourceIds, toIndexDocs } from '../modules/typesense.js';
+import { ensureCollections, importDocuments, removeDocumentsBySourceIds, removeCrawledPages, toIndexDocs } from '../modules/typesense.js';
 import { Url } from '../model/url.js';
 import { CrawlState } from '../model/crawl_state.js';
 import { createLogger } from './logger.js';
@@ -255,11 +255,9 @@ async function bulkWriteCrawlState(crawlStateModel, ops, session) {
 async function countCrawlStates(crawlStateModel, urlDoc, session) {
 	const filter = { host_id: urlDoc.host_id, parent_url_id: urlDoc._id };
 	const options = { timestamps: false, ...(session ? { session } : {}) };
-	const [queued, visited, failed] = await Promise.all([
-		crawlStateModel.updateMany({ ...filter, status: 'queued' }, { $set: { status: 'queued' } }, options),
-		crawlStateModel.updateMany({ ...filter, status: 'visited' }, { $set: { status: 'visited' } }, options),
-		crawlStateModel.updateMany({ ...filter, status: 'failed' }, { $set: { status: 'failed' } }, options),
-	]);
+	const queued = await crawlStateModel.updateMany({ ...filter, status: 'queued' }, { $set: { status: 'queued' } }, options);
+	const visited = await crawlStateModel.updateMany({ ...filter, status: 'visited' }, { $set: { status: 'visited' } }, options);
+	const failed = await crawlStateModel.updateMany({ ...filter, status: 'failed' }, { $set: { status: 'failed' } }, options);
 	return { queued: queued.matchedCount, visited: visited.matchedCount, failed: failed.matchedCount };
 }
 
@@ -275,36 +273,34 @@ async function updateUrlCrawlSummary(urlModel, crawlStateModel, urlDoc, session)
 		crawl_partial: partial,
 	};
 	if (!partial) update.last_crawled = new Date();
-	await urlModel.updateOne({ _id: urlDoc._id, host_id: urlDoc.host_id }, { $set: update }, session ? { session } : {});
+	await urlModel.updateOne({ _id: urlDoc._id, host_id: urlDoc.host_id }, { $set: update }, { timestamps: false, ...(session ? { session } : {}) });
 	return { ...counts, partial };
 }
 
-async function resetCrawlState(urlDoc, crawlStateModel, { resetFailed = false } = {}) {
+async function resetCrawlState(urlDoc, crawlStateModel, { resetFailed = false, session } = {}) {
 	const filter = { host_id: urlDoc.host_id, parent_url_id: urlDoc._id };
 	if (resetFailed) {
-		await crawlStateModel.deleteMany(filter);
+		await crawlStateModel.deleteMany(filter, session ? { session } : {});
 		return;
 	}
 
-	await Promise.all([
-		crawlStateModel.deleteMany({ ...filter, status: 'queued' }),
-		crawlStateModel.deleteMany({ ...filter, status: 'visited' }),
-	]);
+	await crawlStateModel.deleteMany({ ...filter, status: 'queued' }, session ? { session } : {});
+	await crawlStateModel.deleteMany({ ...filter, status: 'visited' }, session ? { session } : {});
 }
 
-async function seedInitialCrawlState(urlDoc, crawlStateModel, { reset = false, resetFailed = false } = {}) {
+async function seedInitialCrawlState(urlDoc, crawlStateModel, { reset = false, resetFailed = false, session } = {}) {
 	const filter = { host_id: urlDoc.host_id, parent_url_id: urlDoc._id };
 	if (reset) {
-		await resetCrawlState(urlDoc, crawlStateModel, { resetFailed });
+		await resetCrawlState(urlDoc, crawlStateModel, { resetFailed, session });
 	} else {
-		const existing = await crawlStateModel.countDocuments(filter);
+		const existing = (await crawlStateModel.updateMany(filter, { $inc: { __v: 0 } }, { timestamps: false, ...(session ? { session } : {}) })).matchedCount;
 		if (existing > 0) return;
 	}
 
 	const legacyVisited = Array.isArray(urlDoc.crawl_visited) ? urlDoc.crawl_visited : [];
 	const legacyFrontier = Array.isArray(urlDoc.crawl_frontier) && urlDoc.crawl_frontier.length ? urlDoc.crawl_frontier : [urlDoc.url];
 	const ops = buildCrawlStateBulkOps(urlDoc, { visited: legacyVisited, queued: legacyFrontier });
-	await bulkWriteCrawlState(crawlStateModel, ops);
+	await bulkWriteCrawlState(crawlStateModel, ops, session);
 }
 
 async function getQueuedCrawlStates(urlDoc, crawlStateModel, limit) {
@@ -383,7 +379,7 @@ export async function bulkIndexCrawledPages(hostId, input, deps = {}) {
 		const entries = [];
 		const expectedChunks = new Map();
 		for (const doc of batch) {
-			const chunks = toIndexDocsFn('pages', doc);
+			const chunks = toIndexDocsFn('pages', doc, input.claim);
 			expectedChunks.set(doc.id, chunks.length);
 			for (const chunk of chunks) entries.push({ sourceId: doc.id, doc: chunk });
 		}
@@ -425,6 +421,10 @@ function skippedCrawlEntry(rawUrl, scope) {
 	return failureEntry(rawUrl, message, { failureType: 'skipped' });
 }
 
+async function claimActiveUrl(urlDoc, urlModel, session) {
+	return urlModel.findOneAndUpdate({ _id: urlDoc._id, host_id: urlDoc.host_id, in_trash: { $ne: true }, ...(urlDoc.updatedAt ? { updatedAt: urlDoc.updatedAt } : {}) }, { $inc: { __v: 1 } }, { timestamps: false, returnDocument: 'after', ...(session ? { session } : {}) }).lean();
+}
+
 /**
  * Persist a crawl step's captured states and the parent URL summary under a
  * project write lease. Network work completes before the lease is acquired, and
@@ -434,6 +434,7 @@ async function publishCrawlStep(urlDoc, urlModel, crawlStateModel, stateOps, dep
 	const { release, publish } = await acquireProjectWrite(urlDoc.host_id, urlDoc.project, deps);
 	try {
 		return await publish(async (session) => {
+			if (!await claimActiveUrl(urlDoc, urlModel, session)) return null;
 			if (stateOps?.length) await bulkWriteCrawlState(crawlStateModel, stateOps, session);
 			return updateUrlCrawlSummary(urlModel, crawlStateModel, urlDoc, session);
 		});
@@ -465,7 +466,16 @@ export async function crawlSite(urlDoc, deps = {}) {
 	const failedInRun = new Map();
 
 	await ensureCollectionsFn(hostId);
-	await seedInitialCrawlState(urlDoc, crawlStateModel, { reset: resetFailed || urlDoc.crawl_partial !== true, resetFailed });
+	const { release, publish } = await acquireProjectWrite(hostId, urlDoc.project, deps);
+	let active;
+	try {
+		active = await publish(async (session) => {
+			if (!await claimActiveUrl(urlDoc, urlModel, session)) return false;
+			await seedInitialCrawlState(urlDoc, crawlStateModel, { reset: resetFailed || urlDoc.crawl_partial !== true, resetFailed, session });
+			return true;
+		});
+	} finally { await release(); }
+	if (!active) return 0;
 
 	const failed = await getFailedUrlSet(urlDoc, crawlStateModel);
 	let queuedStates = await getQueuedCrawlStates(urlDoc, crawlStateModel, stepLimit);
@@ -476,6 +486,7 @@ export async function crawlSite(urlDoc, deps = {}) {
 	queuedStates = queuedStates.filter((state) => !failed.has(state.normalized_url));
 	if (!queuedStates.length) {
 		const summary = await publishCrawlStep(urlDoc, urlModel, crawlStateModel, [], deps);
+		if (!summary) return 0;
 		log.info({ url: urlDoc.url, partial: summary.partial, frontierRemaining: summary.queued }, 'Crawl step skipped: no queued URLs');
 		return 0;
 	}
@@ -493,6 +504,7 @@ export async function crawlSite(urlDoc, deps = {}) {
 	if (!batch.length) {
 		const stateOps = buildCrawlStateBulkOps(urlDoc, { failed: [...failedInRun.values()] });
 		const summary = await publishCrawlStep(urlDoc, urlModel, crawlStateModel, stateOps, deps);
+		if (!summary) return 0;
 		log.info({ requests: 0, url: urlDoc.url, indexed: 0, partial: summary.partial, frontierRemaining: summary.queued }, 'Crawl step complete');
 		return 0;
 	}
@@ -584,12 +596,20 @@ export async function crawlSite(urlDoc, deps = {}) {
 	});
 	const summary = await publishCrawlStep(urlDoc, urlModel, crawlStateModel, stateOps, deps);
 
+	const claim = randomUUID();
+	if (!summary) return 0;
 	const indexResult = await bulkIndexPagesFn(hostId, {
+		claim,
 		urlId,
 		projectId,
 		pages,
 		crawledAt: Math.floor(Date.now() / 1000),
 	});
+
+	if (!await claimActiveUrl(urlDoc, urlModel)) {
+		await (deps.removeCrawledPages || removeCrawledPages)(hostId, [urlId], { claim });
+		return 0;
+	}
 
 	if (indexResult.attemptedCount > indexResult.indexedCount) {
 		log.error({ attempted: indexResult.attemptedCount, indexed: indexResult.indexedCount, url: urlDoc.url }, 'Page index error');
@@ -601,22 +621,6 @@ export async function crawlSite(urlDoc, deps = {}) {
 }
 
 /**
-* Re-crawl all URLs with crawl_enabled.
-*/
-export async function reindexAll() {
-	const urls = await Url.find({ crawl_enabled: true });
-	log.info({ count: urls.length }, 'Reindexing crawl-enabled URLs');
-
-	for (const urlDoc of urls) {
-		try {
-			await crawlSite(urlDoc);
-		} catch (err) {
-			log.error({ err, url: urlDoc.url }, 'Reindex error');
-		}
-	}
-}
-
-/**
 * Re-crawl only URLs that are due based on last_crawled age.
 * This spreads crawling over time instead of a single daily spike.
 */
@@ -624,13 +628,14 @@ export async function reindexDue({ intervalHours = 24 } = {}) {
 	const cutoff = new Date(Date.now() - intervalHours * 60 * 60 * 1000);
 	const urls = await Url.find({
 		crawl_enabled: true,
+		in_trash: { $ne: true },
 		$or: [
 			{ crawl_partial: true },
 			{ last_crawled: { $exists: false } },
 			{ last_crawled: null },
 			{ last_crawled: { $lte: cutoff } },
 		],
-	}).sort({ crawl_partial: -1, last_crawled: 1 });
+	}).sort({ crawl_partial: -1, last_crawled: 1 }).lean();
 
 	if (!urls.length) return 0;
 	log.info({ count: urls.length }, 'Reindexing due crawl-enabled URLs');

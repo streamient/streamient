@@ -36,9 +36,11 @@ test('conversation reads and deletes fail closed on injected filter syntax', asy
 
 		const uuid = '123e4567-e89b-12d3-a456-426614174000';
 		await ts.getConversationMessages(hostId, userId, uuid);
-		assert.equal(filters[0], `conversation_id:=\`${uuid}\` && model_id:=\`${modelId}\``);
+		assert.equal(filters[0], `conversation_id:=\`${uuid}\` && model_id:=[\`${modelId}\`,\`${modelId}-email\`]`);
 		await ts.deleteConversation(hostId, userId, uuid);
-		assert.equal(filters[1], `conversation_id:=\`${uuid}\` && model_id:=\`${modelId}\``);
+		await ts.listConversations(hostId, userId);
+		assert.equal(filters[2], `model_id:=[\`${modelId}\`,\`${modelId}-email\`]`);
+		assert.equal(filters[1], `conversation_id:=\`${uuid}\` && model_id:=[\`${modelId}\`,\`${modelId}-email\`]`);
 	} finally {
 		Typesense.Client = originalClient;
 	}

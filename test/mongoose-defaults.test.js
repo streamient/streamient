@@ -43,7 +43,7 @@ function sourceFiles(dir) {
 
 const productionFiles = [
 	...['apps', 'middleware', 'model', 'modules', 'routes', 'scripts', 'services'].flatMap((dir) => sourceFiles(path.join(rootDir, dir))),
-	...['app.js', 'build.js', 'config.js', 'db.js', 'diag_chat2.mjs', 'swagger.js', 'tracing.js'].map((file) => path.join(rootDir, file)).filter((file) => fs.existsSync(file)),
+	...['app.js', 'build.js', 'config.js', 'db.js', 'swagger.js', 'tracing.js'].map((file) => path.join(rootDir, file)).filter((file) => fs.existsSync(file)),
 ].sort();
 const mongooseWrapperPath = path.join(modelDir, 'mongoose.js');
 

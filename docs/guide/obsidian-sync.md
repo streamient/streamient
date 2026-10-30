@@ -67,7 +67,7 @@ Each device authorizes separately. OAuth refresh credentials use Obsidian Secret
 
 Large scoped manifests are uploaded in ordered batches of 500 entries. The preview pass is non-mutating and returns a compact summary; Streamient creates export files only after confirmation. Server-side Note, Memory, and URL exports are then materialized in resumable batches of 25 so large projects stay below proxy timeouts. Projects run sequentially so one large profile cannot start competing scans or uploads.
 
-Changing **Project folder** moves existing synchronized files and history in resumable batches instead of disconnecting the old paths. The plugin removes source folders only when they are empty, preserves unrelated content, and requires a fresh review after the move.
+Changing **Project folder** moves existing synchronized files and history in resumable batches instead of disconnecting the old paths. Each file move and its change record commit together. Repeated moves between the same folders produce distinct revisions. The plugin removes source folders only when they are empty, preserves unrelated content, and requires a fresh review after the move.
 
 Moving a Note, Memory, or saved URL to another Streamient project keeps the same record and content. Its old linked Markdown file becomes a protected trash entry. If the destination has an enabled Obsidian connection, the record is exported into that project's managed folder; otherwise it remains in the destination without a vault link and can be exported when a connection is enabled later. Existing files are preserved when names collide.
 

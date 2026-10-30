@@ -155,7 +155,7 @@ describe('crawler indexing and state', () => {
 		}
 		const count = await crawlSite(makeUrlDoc(), {
 			CrawlState: stateModel,
-			Url: { updateOne: async (filter, update) => updates.push(update.$set) },
+			Url: { findOneAndUpdate: () => ({ lean: async () => ({}) }), updateOne: async (filter, update) => updates.push(update.$set) },
 			CheerioCrawler: FakeCrawler,
 			ensureCollections: async () => {},
 			bulkIndexCrawledPages: async (host, data) => ({ indexedCount: data.pages.length, attemptedCount: data.pages.length }),
@@ -179,7 +179,7 @@ describe('crawler indexing and state', () => {
 			}
 		}
 		for (const id of ['64f000000000000000000011', '64f000000000000000000012']) {
-			assert.equal(await crawlSite(makeUrlDoc({ _id: id }), { CheerioCrawler: FakeCrawler, CrawlState: makeCrawlStateModel(), Url: { updateOne: async () => {} }, ensureCollections: async () => {}, bulkIndexCrawledPages: async (_host, data) => { indexed.push(data); return { indexedCount: data.pages.length }; } }), 1);
+			assert.equal(await crawlSite(makeUrlDoc({ _id: id }), { CheerioCrawler: FakeCrawler, CrawlState: makeCrawlStateModel(), Url: { findOneAndUpdate: () => ({ lean: async () => ({}) }), updateOne: async () => {} }, ensureCollections: async () => {}, bulkIndexCrawledPages: async (_host, data) => { indexed.push(data); return { indexedCount: data.pages.length }; } }), 1);
 		}
 		assert.notEqual(indexed[0].urlId, indexed[1].urlId);
 	});
@@ -189,7 +189,7 @@ describe('crawler indexing and state', () => {
 		const server = createServer((_req, res) => { requests++; res.end('private'); });
 		await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 		try {
-			const count = await crawlSite(makeUrlDoc({ url: `http://127.0.0.1:${server.address().port}/` }), { CrawlState: makeCrawlStateModel(), Url: { updateOne: async () => {} }, ensureCollections: async () => {}, bulkIndexCrawledPages: async () => ({ indexedCount: 0 }) });
+			const count = await crawlSite(makeUrlDoc({ url: `http://127.0.0.1:${server.address().port}/` }), { CrawlState: makeCrawlStateModel(), Url: { findOneAndUpdate: () => ({ lean: async () => ({}) }), updateOne: async () => {} }, ensureCollections: async () => {}, bulkIndexCrawledPages: async () => ({ indexedCount: 0 }) });
 			assert.equal(count, 0);
 			assert.equal(requests, 0);
 		} finally { await new Promise((resolve) => server.close(resolve)); }
@@ -233,7 +233,7 @@ describe('crawler indexing and state', () => {
 
 		await crawlSite(urlDoc, {
 			CrawlState: stateModel,
-			Url: { updateOne: async () => {} },
+			Url: { findOneAndUpdate: () => ({ lean: async () => ({}) }), updateOne: async () => {} },
 			CheerioCrawler: FakeCrawler,
 			ensureCollections: async () => {},
 			bulkIndexCrawledPages: async () => ({ indexedCount: 1, attemptedCount: 1, chunkCount: 1 }),
@@ -251,7 +251,7 @@ describe('crawler indexing and state', () => {
 
 		await crawlSite(urlDoc, {
 			CrawlState: stateModel,
-			Url: { updateOne: async () => {} },
+			Url: { findOneAndUpdate: () => ({ lean: async () => ({}) }), updateOne: async () => {} },
 			CheerioCrawler: class {
 				constructor(options) {
 					this.options = options;
@@ -386,7 +386,7 @@ describe('crawler indexing and state', () => {
 
 		const indexed = await crawlSite(urlDoc, {
 			CrawlState: stateModel,
-			Url: {
+			Url: { findOneAndUpdate: () => ({ lean: async () => ({}) }),
 				updateOne: async (filter, update) => {
 					urlUpdates.push({ filter, update });
 				},
@@ -414,7 +414,7 @@ describe('crawler indexing and state', () => {
 
 		await crawlSite(urlDoc, {
 			CrawlState: stateModel,
-			Url: { updateOne: async () => {} },
+			Url: { findOneAndUpdate: () => ({ lean: async () => ({}) }), updateOne: async () => {} },
 			CheerioCrawler: class {
 				constructor(options) {
 					this.options = options;
@@ -481,7 +481,7 @@ describe('crawler indexing and state', () => {
 
 		await crawlSite(urlDoc, {
 			CrawlState: stateModel,
-			Url: { updateOne: async () => {} },
+			Url: { findOneAndUpdate: () => ({ lean: async () => ({}) }), updateOne: async () => {} },
 			CheerioCrawler: class {
 				constructor(options) {
 					this.options = options;
@@ -519,7 +519,7 @@ describe('crawler indexing and state', () => {
 		let indexedPages = null;
 		const indexed = await crawlSite(urlDoc, {
 			CrawlState: stateModel,
-			Url: { updateOne: async () => {} },
+			Url: { findOneAndUpdate: () => ({ lean: async () => ({}) }), updateOne: async () => {} },
 			CheerioCrawler: class {
 				async run() {
 					throw new Error('Crawler should not run for skipped URL');
@@ -543,7 +543,7 @@ describe('crawler indexing and state', () => {
 		let indexedPages = null;
 		const indexed = await crawlSite(urlDoc, {
 			CrawlState: stateModel,
-			Url: { updateOne: async () => {} },
+			Url: { findOneAndUpdate: () => ({ lean: async () => ({}) }), updateOne: async () => {} },
 			CheerioCrawler: class {
 				constructor(options) {
 					this.options = options;
@@ -577,7 +577,7 @@ describe('crawler indexing and state', () => {
 		const stateModel = makeCrawlStateModel();
 		const indexed = await crawlSite(urlDoc, {
 			CrawlState: stateModel,
-			Url: { updateOne: async () => {} },
+			Url: { findOneAndUpdate: () => ({ lean: async () => ({}) }), updateOne: async () => {} },
 			CheerioCrawler: class {
 				constructor(options) {
 					this.options = options;
@@ -625,7 +625,7 @@ describe('crawler indexing and state', () => {
 
 		await crawlSite(urlDoc, {
 			CrawlState: stateModel,
-			Url: { updateOne: async () => {} },
+			Url: { findOneAndUpdate: () => ({ lean: async () => ({}) }), updateOne: async () => {} },
 			CheerioCrawler: class {
 				constructor(options) {
 					this.options = options;
@@ -687,7 +687,7 @@ describe('crawler indexing and state', () => {
 
 		await crawlSite(urlDoc, {
 			CrawlState: stateModel,
-			Url: { updateOne: async () => {} },
+			Url: { findOneAndUpdate: () => ({ lean: async () => ({}) }), updateOne: async () => {} },
 			CheerioCrawler: class {
 				constructor(options) {
 					this.options = options;
@@ -733,7 +733,7 @@ describe('crawler indexing and state', () => {
 
 		await crawlSite(urlDoc, {
 			CrawlState: stateModel,
-			Url: { updateOne: async () => {} },
+			Url: { findOneAndUpdate: () => ({ lean: async () => ({}) }), updateOne: async () => {} },
 			CheerioCrawler: class {
 				constructor(options) {
 					this.options = options;
@@ -783,7 +783,7 @@ describe('crawler indexing and state', () => {
 			await assert.rejects(
 				crawlSite(urlDoc, {
 					CrawlState: stateModel,
-					Url: { updateOne: async (filter, update) => urlUpdates.push(update.$set) },
+					Url: { findOneAndUpdate: () => ({ lean: async () => ({}) }), updateOne: async (filter, update) => urlUpdates.push(update.$set) },
 					CheerioCrawler: FakeCrawler,
 					ensureCollections: async () => {},
 					bulkIndexCrawledPages: async () => ({ indexedCount: 0, attemptedCount: 0 }),
@@ -796,4 +796,45 @@ describe('crawler indexing and state', () => {
 			Project.updateOne = projectUpdateOne;
 		}
 	});
+});
+
+it('removes only the losing crawl publication if the URL is trashed during import', async () => {
+	let active = true;
+	let claim;
+	const removed = [];
+	class FakeCrawler {
+		constructor(options) { this.options = options; }
+		async run(batch) { await this.options.requestHandler({ request: { url: batch[0] }, response: makeHtmlResponse(), $: makeHtml(), enqueueLinks: async () => {} }); }
+	}
+	const count = await crawlSite(makeUrlDoc(), {
+		CheerioCrawler: FakeCrawler, CrawlState: makeCrawlStateModel(), ensureCollections: async () => {},
+		Url: { updateOne: async () => {}, findOneAndUpdate: (query) => ({ lean: async () => { assert.deepEqual(query.in_trash, { $ne: true }); return active ? {} : null; } }) },
+		bulkIndexCrawledPages: async (_host, input) => { claim = input.claim; active = false; return { indexedCount: 1 }; },
+		removeCrawledPages: async (...args) => removed.push(args),
+	});
+	assert.equal(count, 0);
+	assert.ok(claim);
+	assert.deepEqual(removed, [[makeUrlDoc().host_id, [String(makeUrlDoc()._id)], { claim }]]);
+});
+
+it('does not seed crawl state or publish pages for a trashed or purged URL', async () => {
+	let writes = 0;
+	assert.equal(await crawlSite(makeUrlDoc(), {
+		Url: { findOneAndUpdate: () => ({ lean: async () => null }) },
+		CrawlState: { bulkWrite: async () => { writes++; }, deleteMany: async () => { writes++; } },
+		ensureCollections: async () => {},
+		bulkIndexCrawledPages: async () => { throw new Error('Must not publish'); },
+	}), 0);
+	assert.equal(writes, 0);
+});
+
+it('stamps imported page chunks with the crawl claim for conditional cleanup', async () => {
+	const docs = [];
+	await bulkIndexCrawledPages('tenant', { urlId: 'url', projectId: 'project', claim: 'run-one', crawledAt: 10, pages: [{ url: 'https://example.com', title: 'Page', text_content: 'Body' }] }, {
+		removeDocumentsBySourceIds: async () => {},
+		importDocuments: async (_host, _type, rows) => { docs.push(...rows); return rows.map(() => ({ success: true })); },
+	});
+	assert.equal(docs.length, 1);
+	assert.equal(docs[0].claim, 'run-one');
+	assert.ok(docs[0].id.endsWith('_run-one'));
 });

@@ -140,10 +140,17 @@ function compareRecords(a, b) {
 	return b.id.localeCompare(a.id);
 }
 
+const LIST_FIELDS = {
+	notes: '_id project title text_content content tags createdAt updatedAt in_trash',
+	memories: '_id project title content tags source createdAt updatedAt in_trash',
+	urls: '_id project title url description text_content createdAt updatedAt in_trash',
+	emails: '_id project subject text_content attachment_text_content from to mailbox createdAt updatedAt in_trash',
+};
+
 async function queryType(type, host_id, projectId, cursor, limit, includeTrash = false) {
 	const query = { host_id, ...(includeTrash ? {} : { in_trash: { $ne: true } }), ...cursorFilter(cursor) };
 	if (projectId) query.project = projectId;
-	return MODEL_BY_TYPE[type].find(query).sort({ updatedAt: -1, _id: -1 }).limit(limit).lean();
+	return MODEL_BY_TYPE[type].find(query).select(LIST_FIELDS[type]).sort({ updatedAt: -1, _id: -1 }).limit(limit).lean();
 }
 
 export async function listProjects(host_id, { includeEmails = true } = {}) {
@@ -212,7 +219,7 @@ export async function getChanges(host_id, options = {}) {
 	const rows = await Promise.all(types.map(async (type) => {
 		const query = { host_id, ...forwardCursorFilter(cursor) };
 		if (options.projectId) query.project = options.projectId;
-		return MODEL_BY_TYPE[type].find(query).sort({ updatedAt: 1, _id: 1 }).limit(limit + 1).lean().then((docs) => docs.map((doc) => ({ type, doc })));
+		return MODEL_BY_TYPE[type].find(query).select(LIST_FIELDS[type]).sort({ updatedAt: 1, _id: 1 }).limit(limit + 1).lean().then((docs) => docs.map((doc) => ({ type, doc })));
 	}));
 	const selected = rows.flat().sort((a, b) => {
 		const dateComparison = new Date(a.doc.updatedAt) - new Date(b.doc.updatedAt);
