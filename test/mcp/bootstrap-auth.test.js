@@ -24,3 +24,18 @@ test('bootstrap validates credentials even with project overrides and a warm cac
     await assert.rejects(context.resolveBootstrap(api, options), { status: 401 });
     for (let i = 0; i < 3; i++) await assert.rejects(context.resolveBootstrap(api, { ...options, cacheKey: `invalid-${i}` }), { status: 401 });
 });
+
+test('request errors keep rate limits distinct from server failures', () => {
+    const send = (err) => {
+        const reply = { headers: {} };
+        const res = { setHeader: (name, value) => { reply.headers[name] = value; }, status: (code) => { reply.status = code; return res; }, json: (body) => { reply.body = body; return res; } };
+        context.sendRequestError(res, err);
+        return reply;
+    };
+    assert.equal(send({ status: 401 }).status, 401);
+    const limited = send({ status: 429, retryAfter: '30' });
+    assert.equal(limited.status, 429);
+    assert.equal(limited.headers['Retry-After'], '30');
+    assert.equal(send({ status: 503 }).status, 500);
+    assert.equal(send(new Error('boom')).body.error, 'Internal server error');
+});

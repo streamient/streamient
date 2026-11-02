@@ -40,6 +40,7 @@ export class ApiClient {
       const err = await response.text();
       const error = new Error(`API ${method} ${path} failed (${response.status}): ${err}`);
       error.status = response.status;
+      error.retryAfter = response.headers.get('retry-after');
       throw error;
     }
 

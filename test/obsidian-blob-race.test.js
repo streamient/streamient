@@ -82,6 +82,36 @@ class BlobFixture {
 }
 
 describe('Obsidian blob publication', () => {
+	it('retries a chunk write when the shared volume hides the new directory', async (t) => {
+		const fixture = new BlobFixture(t);
+		const original = fs.createWriteStream;
+		let calls = 0;
+		t.mock.method(fs, 'createWriteStream', (file, options) => {
+			if (++calls === 1) fs.rmSync(path.dirname(file), { recursive: true, force: true });
+			return original(file, options);
+		});
+		syncBuiltinESMExports();
+		t.after(() => { fs.createWriteStream = original; syncBuiltinESMExports(); });
+		const plain = Buffer.from('written after a missing directory');
+		const blob = await storeBuffer('host', plain, 'text/markdown');
+		assert.equal(calls, 2);
+		assert.deepEqual(await readBlobBuffer(blob, 'host'), plain);
+		assert.ok(fixture.rows.size === 1);
+	});
+
+	it('retries a chunk read while the path is briefly missing, then reports a lost blob', async (t) => {
+		const fixture = new BlobFixture(t);
+		const plain = Buffer.from('read after a missing path');
+		const blob = await storeBuffer('host', plain, 'text/markdown');
+		const directory = path.join(fixture.root, blob.storage_key);
+		fs.renameSync(directory, `${directory}.hidden`);
+		const restored = setTimeout(() => fs.renameSync(`${directory}.hidden`, directory), 50);
+		assert.deepEqual(await readBlobBuffer(blob, 'host'), plain);
+		clearTimeout(restored);
+		fs.rmSync(directory, { recursive: true });
+		await assert.rejects(readBlobBuffer(blob, 'host'), { code: 'ENOENT' });
+	});
+
 	it('stores new encrypted bytes despite an old non-empty hash directory', async (t) => {
 		const fixture = new BlobFixture(t);
 		const plain = Buffer.from('Identical URL Markdown');
