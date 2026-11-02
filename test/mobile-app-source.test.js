@@ -135,14 +135,14 @@ describe('Streamient Mobile source contracts', () => {
 		assert.doesNotMatch(assets, /size \* 0\.(?:75|58)/);
 		assert.match(playAssets, /resize\(288, 288/);
 		assert.match(playAssets, /left: 112, top: 112/);
-		assert.match(androidBuild, /versionCode 4/);
+		assert.match(androidBuild, /versionCode 5/);
 		assert.match(androidBuild, /versionName "1\.0"/);
-		assert.equal((iosProject.match(/CURRENT_PROJECT_VERSION = 6;/g) || []).length, 4);
+		assert.equal((iosProject.match(/CURRENT_PROJECT_VERSION = 7;/g) || []).length, 4);
 		assert.equal((iosProject.match(/MARKETING_VERSION = 1\.0;/g) || []).length, 4);
 		assert.equal((iosProject.match(/CODE_SIGN_STYLE = Automatic;/g) || []).length, 4);
 		assert.match(iosExport, /<key>signingStyle<\/key>\s*<string>automatic<\/string>/);
 		assert.match(iosUpload, /<key>signingStyle<\/key>\s*<string>automatic<\/string>/);
-		assert.match(iosRelease, /STREAMIENT_IOS_BUILD_NUMBER:-6/);
+		assert.match(iosRelease, /STREAMIENT_IOS_BUILD_NUMBER:-7/);
 		assert.match(iosRelease, /CODE_SIGNING_ALLOWED=NO/);
 		assert.match(iosRelease, /embedded\.mobileprovision/);
 		assert.match(iosRelease, /plutil -extract Entitlements/);

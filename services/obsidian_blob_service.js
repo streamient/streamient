@@ -1,8 +1,9 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
-import { createReadStream, createWriteStream } from 'node:fs';
-import { link, mkdir, readdir, rename, rm, statfs } from 'node:fs/promises';
+import { createWriteStream } from 'node:fs';
+import { link, mkdir, open, readdir, rename, rm, statfs } from 'node:fs/promises';
 import { once } from 'node:events';
+import { setTimeout as sleep } from 'node:timers/promises';
 
 import config from '../config.js';
 import { queryForSave } from '../model/mongoose.js';
@@ -10,6 +11,7 @@ import { ObsidianBlob } from '../model/obsidian_blob.js';
 import { ObsidianUpload } from '../model/obsidian_upload.js';
 
 export const OBSIDIAN_UPLOAD_CHUNK_SIZE = 20_000_000;
+const MISSING_PATH_RETRY_DELAYS_MS = [100, 500, 2000];
 export const OBSIDIAN_UPLOAD_INACTIVITY_MS = 7 * 24 * 60 * 60 * 1000;
 export const OBSIDIAN_UPLOAD_ACTIVE_LIMIT = 4;
 
@@ -167,10 +169,23 @@ async function encryptBufferChunk(value, destination) {
 	};
 }
 
+// App replicas share this volume, where a path can briefly appear missing to another operation.
+async function retryMissingPath(operation, prepare) {
+	for (const delay of MISSING_PATH_RETRY_DELAYS_MS) {
+		try { return await operation(); } catch (err) {
+			if (err?.code !== 'ENOENT') throw err;
+			await sleep(delay);
+			await prepare?.();
+		}
+	}
+	return operation();
+}
+
 async function *plainChunkStream(filePath, chunk) {
 	const decipher = crypto.createDecipheriv(ALGORITHM, encryptionKey(), Buffer.from(chunk.iv, 'hex'));
 	decipher.setAuthTag(Buffer.from(chunk.tag, 'hex'));
-	for await (const encrypted of createReadStream(filePath)) {
+	const file = await retryMissingPath(() => open(filePath));
+	for await (const encrypted of file.createReadStream()) {
 		const plain = decipher.update(encrypted);
 		if (plain.length) yield plain;
 	}
@@ -320,14 +335,14 @@ export async function storeBuffer(hostId, value, mimeType = 'application/octet-s
 		for (let offset = 0; offset < buffer.length; offset += OBSIDIAN_UPLOAD_CHUNK_SIZE) {
 			const plain = buffer.subarray(offset, Math.min(offset + OBSIDIAN_UPLOAD_CHUNK_SIZE, buffer.length));
 			const fileName = `${offset}.part`;
-			const encrypted = await encryptBufferChunk(plain, path.join(temporary, fileName));
+			const encrypted = await retryMissingPath(() => encryptBufferChunk(plain, path.join(temporary, fileName)), () => mkdir(temporary, { recursive: true }));
 			chunks.push({ ...encrypted, offset, file_name: fileName });
 		}
 		const destination = blobDir(hostId, sha256);
 		let installed = false;
 		await mkdir(path.dirname(destination), { recursive: true });
 		try {
-			await rename(temporary, destination);
+			await retryMissingPath(() => rename(temporary, destination), () => mkdir(path.dirname(destination), { recursive: true }));
 			installed = true;
 			return await ObsidianBlob.create({
 				host_id: hostId,

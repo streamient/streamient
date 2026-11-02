@@ -1,6 +1,6 @@
 {
 	"name": "@streamient/cli",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"description": "Command-line access to Streamient knowledge, memory, projects, and automation",
 	"keywords": [
 		"streamient",

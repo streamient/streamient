@@ -92,6 +92,13 @@ async function resolveBootstrap(api, { projectId, cacheKey }) {
   return { ...value, cacheHit: false };
 }
 
+function sendRequestError(res, err) {
+  if (err.status === 401) return res.status(401).json({ error: 'Invalid access token' });
+  if (err.status !== 429) return res.status(500).json({ error: 'Internal server error' });
+  if (err.retryAfter) res.setHeader('Retry-After', err.retryAfter);
+  return res.status(429).json({ error: 'Rate limit exceeded. Please slow down and try again later.' });
+}
+
 function logMcpRequest(event) {
   const level = event?.success === false ? 'error' : 'info';
   log[level]({ event: 'mcp_request', ...event }, `mcp ${event?.transport || 'http'} ${event?.method || ''}`.trim());
@@ -266,7 +273,7 @@ if (transportArg === '--stdio' || !transportArg) {
       recordException(err);
       log.error({ err }, 'Error starting Streamient MCP SSE connection');
       if (!res.headersSent) {
-        res.status(err.status === 401 ? 401 : 500).json({ error: err.status === 401 ? 'Invalid access token' : 'Internal server error' });
+        sendRequestError(res, err);
       }
     }
   });
@@ -297,7 +304,7 @@ if (transportArg === '--stdio' || !transportArg) {
       recordException(err);
       log.error({ err }, 'Error handling Streamient MCP SSE message');
       if (!res.headersSent) {
-        res.status(err.status === 401 ? 401 : 500).json({ error: err.status === 401 ? 'Invalid access token' : 'Internal server error' });
+        sendRequestError(res, err);
       }
     }
   });
@@ -344,7 +351,7 @@ if (transportArg === '--stdio' || !transportArg) {
         error: err?.message || 'unknown',
       });
       if (!res.headersSent) {
-        res.status(err.status === 401 ? 401 : 500).json({ error: err.status === 401 ? 'Invalid access token' : 'Internal server error' });
+        sendRequestError(res, err);
       }
     }
   };
