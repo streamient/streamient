@@ -6,7 +6,7 @@ import { Tenant } from '../modules/tenancy.js';
 import { User } from '../model/user.js';
 import { decrypt } from '../modules/encryption.js';
 import { getConversationModelId } from '../modules/typesense.js';
-import { getByoAiSettings, resolveLlmKeyContext, tenantHasByoKey, updateByoAiSettings } from '../services/byo_ai_service.js';
+import { getByoAiSettings, resolveLlmKeyContext, tenantHasByoKey, updateByoAiSettings, verifyProviderKey } from '../services/byo_ai_service.js';
 
 function baseByoAi() {
 	return {
@@ -214,6 +214,19 @@ describe('BYO AI service', () => {
 		assert.deepEqual(settings.instructions, {
 			global: 'Use account context.',
 		});
+	});
+
+	it('verifies OpenAI keys with max_completion_tokens (GPT-6 rejects max_tokens)', async () => {
+		const originalFetch = globalThis.fetch;
+		let body;
+		globalThis.fetch = async (url, options) => { body = JSON.parse(options.body); return new Response('{}', { status: 200 }); };
+		try {
+			assert.deepEqual(await verifyProviderKey('openai', 'sk-test'), { valid: true });
+		} finally {
+			globalThis.fetch = originalFetch;
+		}
+		assert.equal(body.max_tokens, undefined);
+		assert.ok(body.max_completion_tokens >= 256);
 	});
 
 	it('uses distinct Typesense conversation model IDs per LLM scope', () => {

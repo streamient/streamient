@@ -165,7 +165,7 @@ async function describeProviderError(label, res) {
 
 /**
  * Validate a user-supplied API key by making a minimal real generation call to the
- * provider (1 output token). Unlike an auth-only models-list check, this also
+ * provider (a few output tokens). Unlike an auth-only models-list check, this also
  * catches depleted credits / exhausted quota — so a key that authenticates but
  * can't actually generate is reported invalid. Returns { valid, error? }. Used by
  * the settings "Verify" button and the onboarding key-entry flow.
@@ -180,7 +180,7 @@ export async function verifyProviderKey(provider, apiKey) {
 			const res = await fetch('https://api.openai.com/v1/chat/completions', {
 				method: 'POST',
 				headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-				body: JSON.stringify({ model: config.llm.openaiModel, messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 }),
+				body: JSON.stringify({ model: config.llm.openaiModel, messages: [{ role: 'user', content: 'Reply with: ok' }], max_completion_tokens: 256 }),
 			});
 			if (res.ok) return { valid: true };
 			return { valid: false, error: await describeProviderError('OpenAI', res) };

@@ -29,7 +29,7 @@ describe('per-plan managed model routing', () => {
 		// Production-style global config points at OpenAI. Managed tenants must
 		// land on their plan's model matrix, not the global model.
 		config.llm.chatProvider = 'openai';
-		config.llm.chatModel = 'gpt-6-sol';
+		config.llm.chatModel = 'gpt-6.1-terra';
 		config.llm.planModels.free = {
 			provider: 'openai',
 			chatProvider: 'openai',
@@ -44,7 +44,7 @@ describe('per-plan managed model routing', () => {
 			chatProvider: 'openai',
 			nlSearchProvider: 'openai',
 			conversationProvider: 'openai',
-			chat: 'gpt-6-sol',
+			chat: 'gpt-6.1-terra',
 			nlSearch: 'gpt-6-luna',
 			conversation: 'gpt-6-luna',
 		};
@@ -94,7 +94,7 @@ describe('per-plan managed model routing', () => {
 		assert.equal(requests[0].options.headers.Authorization, 'Bearer env-openai');
 	});
 
-	it('routes managed Pro chat to GPT-6 Sol', async () => {
+	it('routes managed Pro chat to GPT-6.1 Terra', async () => {
 		tenant.plan = 'pro';
 
 		await chatCompletion({
@@ -105,7 +105,7 @@ describe('per-plan managed model routing', () => {
 		});
 
 		assert.match(requests[0].url, /api\.openai\.com/);
-		assert.equal(requests[0].body.model, 'gpt-6-sol');
+		assert.equal(requests[0].body.model, 'gpt-6.1-terra');
 		assert.equal(requests[0].body.reasoning_effort, 'none');
 	});
 
@@ -154,7 +154,7 @@ describe('per-plan managed model routing', () => {
 		});
 
 		assert.match(requests[0].url, /api\.openai\.com/);
-		assert.equal(requests[0].body.model, 'gpt-6-sol');
+		assert.equal(requests[0].body.model, 'gpt-6.1-terra');
 		assert.equal(requests[0].options.headers.Authorization, 'Bearer tenant-openai');
 	});
 
@@ -169,7 +169,7 @@ describe('per-plan managed model routing', () => {
 		});
 
 		assert.match(requests[0].url, /api\.openai\.com/);
-		assert.equal(requests[0].body.model, 'gpt-6-sol');
+		assert.equal(requests[0].body.model, 'gpt-6.1-terra');
 		assert.equal(requests[0].options.headers.Authorization, 'Bearer env-openai');
 	});
 
