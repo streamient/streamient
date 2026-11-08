@@ -163,7 +163,7 @@ const nlSearchProvider = process.env.NL_SEARCH_MODEL_PROVIDER || 'openai';
 const tsConversationProvider = process.env.TS_CONVERSATION_MODEL_PROVIDER || 'openai';
 
 function getDefaultLlmModel(provider, purpose) {
-	if (provider === 'openai') return purpose === 'chat' ? 'gpt-6-sol' : 'gpt-6-luna';
+	if (provider === 'openai') return purpose === 'chat' ? 'gpt-6.1-terra' : 'gpt-6-luna';
 	if (provider !== 'google') return '';
 	return purpose === 'chat' ? 'gemini-3.6-flash' : 'gemini-3.5-flash-lite';
 }
@@ -255,7 +255,7 @@ const config = {
 				chatProvider: process.env.PRO_CHAT_AI_MODEL_PROVIDER || process.env.PRO_AI_MODEL_PROVIDER || 'openai',
 				nlSearchProvider: process.env.PRO_NL_SEARCH_MODEL_PROVIDER || process.env.PRO_AI_MODEL_PROVIDER || 'openai',
 				conversationProvider: process.env.PRO_TS_CONVERSATION_MODEL_PROVIDER || process.env.PRO_AI_MODEL_PROVIDER || 'openai',
-				chat: process.env.PRO_CHAT_AI_MODEL || 'gpt-6-sol',
+				chat: process.env.PRO_CHAT_AI_MODEL || 'gpt-6.1-terra',
 				nlSearch: process.env.PRO_NL_SEARCH_MODEL || 'gpt-6-luna',
 				conversation: process.env.PRO_TS_CONVERSATION_MODEL || 'gpt-6-luna',
 				chatThinkingLevel: process.env.PRO_CHAT_AI_THINKING_LEVEL || '',

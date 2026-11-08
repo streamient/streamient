@@ -67,7 +67,7 @@ describe('LLM client model routing', () => {
 	it('uses GPT-6 Chat Completions with no reasoning overhead', async () => {
 		await chatCompletion({
 			provider: 'openai',
-			model: 'gpt-6-sol',
+			model: 'gpt-6.1-terra',
 			maxTokens: 400,
 			messages: [{ role: 'user', content: 'Summarize this note' }],
 		});
@@ -75,6 +75,15 @@ describe('LLM client model routing', () => {
 		assert.equal(requests[0].body.max_tokens, undefined);
 		assert.equal(requests[0].body.max_completion_tokens, 400);
 		assert.equal(requests[0].body.reasoning_effort, 'none');
+	});
+
+	it('uses low reasoning for GPT-6 models that reject none', async () => {
+		const efforts = {};
+		for (const model of ['gpt-6.1-sol', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna']) {
+			await chatCompletion({ provider: 'openai', model, messages: [{ role: 'user', content: 'Hi' }] });
+			efforts[model] = requests.at(-1).body.reasoning_effort;
+		}
+		assert.deepEqual(efforts, { 'gpt-6.1-sol': 'low', 'gpt-6-astra': 'low', 'gpt-6-sol': 'none', 'gpt-6-luna': 'none' });
 	});
 
 	it('sends the configured Gemini thinking level', async () => {

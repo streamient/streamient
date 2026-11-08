@@ -26,8 +26,11 @@ function usesMaxCompletionTokens(providerName, model = '') {
 	return /^(gpt-[56]|gpt-4\.1|o[134]|o\d)/i.test(String(model || ''));
 }
 
-function usesOpenAiReasoningEffort(providerName, model = '') {
-	return providerName === 'openai' && /^gpt-6(?:[-.]|$)/i.test(String(model || ''));
+// GPT-6 runs with the lowest reasoning effort; GPT-6 Astra and GPT-6.1 Sol reject 'none'.
+function getOpenAiReasoningEffort(providerName, model = '') {
+	const id = String(model || '');
+	if (providerName !== 'openai' || !/^gpt-6(?:[-.]|$)/i.test(id)) return '';
+	return /^gpt-6(?:\.\d+)?-astra|^gpt-6\.\d+-sol/i.test(id) ? 'low' : 'none';
 }
 
 function applyTokenLimit(body, providerName, model, maxTokens) {
@@ -150,7 +153,8 @@ export async function chatCompletion({ messages, stream = false, provider: provi
 			messages,
 			stream,
 		}, name, model, maxTokens);
-		if (usesOpenAiReasoningEffort(name, model)) body.reasoning_effort = 'none';
+		const reasoningEffort = getOpenAiReasoningEffort(name, model);
+		if (reasoningEffort) body.reasoning_effort = reasoningEffort;
 		const response = await fetch(`${provider.baseUrl}/chat/completions`, {
 			method: 'POST',
 			headers: {

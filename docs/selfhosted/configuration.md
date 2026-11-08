@@ -108,7 +108,7 @@ Streamient uses three separate model tiers for different tasks:
 
 | Variable | Description | Required | Default |
 | --- | --- | --- | --- |
-| `CHAT_AI_MODEL` | Model for analysis, stats, and general chat responses | No | `gpt-6-sol` |
+| `CHAT_AI_MODEL` | Model for analysis, stats, and general chat responses | No | `gpt-6.1-terra` |
 | `CHAT_AI_MODEL_PROVIDER` | Provider: `google` or `openai` | No | `openai` |
 | `CHAT_AI_THINKING_LEVEL` | Gemini thinking level for chat: `minimal`, `low`, `medium`, or `high` | No | — |
 | `NL_SEARCH_MODEL` | Lightweight model for intent classification | No | `gpt-6-luna` |
@@ -120,7 +120,7 @@ Streamient uses three separate model tiers for different tasks:
 | `OPENAI_API_KEY` | OpenAI API key (required when using OpenAI models) | Conditional | — |
 
 At least one API key is required for AI chat to function.
-Streamient sends `reasoning_effort: none` for GPT-6 Chat Completions to minimize latency and token use.
+Streamient sends the lowest supported reasoning effort for GPT-6 Chat Completions to minimize latency and token use: `none` for GPT-6.1 Terra, GPT-6 Sol, and GPT-6 Luna, and `low` for GPT-6.1 Sol and GPT-6 Astra.
 
 ### Email (SMTP)
 
