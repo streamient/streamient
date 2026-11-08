@@ -79,11 +79,11 @@ describe('LLM client model routing', () => {
 
 	it('uses low reasoning for GPT-6 models that reject none', async () => {
 		const efforts = {};
-		for (const model of ['gpt-6.1-sol', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna']) {
+		for (const model of ['gpt-6.1-sol', 'gpt-6.1-sol-2026-10-01', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.4-mini']) {
 			await chatCompletion({ provider: 'openai', model, messages: [{ role: 'user', content: 'Hi' }] });
 			efforts[model] = requests.at(-1).body.reasoning_effort;
 		}
-		assert.deepEqual(efforts, { 'gpt-6.1-sol': 'low', 'gpt-6-astra': 'low', 'gpt-6-sol': 'none', 'gpt-6-luna': 'none' });
+		assert.deepEqual(efforts, { 'gpt-6.1-sol': 'low', 'gpt-6.1-sol-2026-10-01': 'low', 'gpt-6-astra': 'low', 'gpt-6-sol': 'none', 'gpt-6-luna': 'none', 'gpt-5.4-mini': undefined });
 	});
 
 	it('sends the configured Gemini thinking level', async () => {
